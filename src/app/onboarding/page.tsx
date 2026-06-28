@@ -26,6 +26,13 @@ const ALERGENOS: { id: Alergeno; rotulo: string }[] = [
 
 const r0 = (n: number) => Math.round(n);
 
+const REFEICAO_LABEL: Record<string, string> = {
+  cafe: 'Café',
+  almoco: 'Almoço',
+  jantar: 'Jantar',
+  lanche: 'Lanche',
+};
+
 export default function Onboarding() {
   // Consentimentos
   const [aceite18, setA18] = useState(false);
@@ -275,21 +282,24 @@ function ResultadoView({ resultado }: { resultado: ResultadoMotor }) {
       {cardapio && (
         <div>
           <h3 className="font-label uppercase tracking-wide text-secundario">Exemplo de cardápio do dia</h3>
-          {cardapio.status === 'sem_candidatos' || cardapio.status === 'fora_da_janela' ? (
+          {cardapio.status === 'sem_candidatos' ? (
             <p className="mt-2 text-sm text-secundario">{cardapio.nota}</p>
           ) : (
-            <ul className="mt-2 flex flex-col gap-1 text-sm">
-              {cardapio.pratos.map((p) => (
-                <li key={p.id} className="flex justify-between">
-                  <span>{p.nome}</span>
-                  <span className="text-secundario capitalize">{p.refeicao}</span>
+            <>
+              {cardapio.nota && <p className="mt-2 text-sm text-secundario">{cardapio.nota}</p>}
+              <ul className="mt-2 flex flex-col gap-1 text-sm">
+                {cardapio.itens.map((it) => (
+                  <li key={it.prato.id} className="flex justify-between gap-3">
+                    <span>{it.prato.nome}</span>
+                    <span className="shrink-0 text-secundario">{REFEICAO_LABEL[it.refeicao]}</span>
+                  </li>
+                ))}
+                <li className="mt-1 flex justify-between border-t border-bone/10 pt-1 text-secundario">
+                  <span>Total</span>
+                  <span>{r0(cardapio.totais.kcal)} kcal</span>
                 </li>
-              ))}
-              <li className="mt-1 flex justify-between border-t border-bone/10 pt-1 text-secundario">
-                <span>Total</span>
-                <span>{r0(cardapio.totais.kcal)} kcal</span>
-              </li>
-            </ul>
+              </ul>
+            </>
           )}
         </div>
       )}

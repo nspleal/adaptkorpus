@@ -12,7 +12,8 @@
  *
  * Limitações conscientes do v0 (Bloco B em progresso, documentadas honestamente):
  *   - Seleciona 1 prato por refeição (café/almoço/jantar obrigatórios; lanche opcional),
- *     sem escalar porções nem relaxar proteína até o piso ainda. Busca exaustiva (banco pequeno).
+ *     pratos distintos entre os slots, sem escalar porções nem relaxar proteína até o piso.
+ *     Busca exaustiva determinística (banco finito; ~160k combinações no pior caso).
  */
 import { macrosDePrato } from '../data/nutrition';
 import type {
@@ -21,7 +22,6 @@ import type {
   Recipe,
   RecipeMacros,
   Refeicao,
-  TipoPrato,
 } from '../data/types';
 import type { PlanoDieta } from './types';
 
@@ -34,9 +34,14 @@ export interface RestricoesUsuario {
 
 export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
 
+export interface CardapioItem {
+  refeicao: Refeicao;
+  prato: Recipe;
+}
+
 export interface CardapioDia {
   status: StatusMontagem;
-  pratos: Recipe[];
+  itens: CardapioItem[];
   totais: RecipeMacros;
   /** Desvio absoluto entre kcal do cardápio e a kcal-alvo. */
   desvioKcal: number;
@@ -45,7 +50,7 @@ export interface CardapioDia {
 }
 
 function preferenciaAceita(
-  tipo: TipoPrato,
+  tipo: Recipe['tipo'],
   pref: RestricoesUsuario['preferencia'],
 ): boolean {
   if (!pref) return true;
@@ -58,7 +63,6 @@ function semAlergeno(recipe: Recipe, alergenos: readonly Alergeno[]): boolean {
   return !recipe.contemAlergenos.some((a) => alergenos.includes(a));
 }
 
-/** Ordena por id (determinismo). */
 function porId(a: Recipe, b: Recipe): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
@@ -76,19 +80,12 @@ function somar(...partes: RecipeMacros[]): RecipeMacros {
 }
 
 interface Candidato {
-  pratos: Recipe[];
+  itens: CardapioItem[];
   totais: RecipeMacros;
 }
 
-/**
- * Compara dois candidatos pela ordem de prioridade travada.
- * Retorna < 0 se `a` é melhor que `b`.
- */
-function compararCandidatos(
-  a: Candidato,
-  b: Candidato,
-  plano: PlanoDieta,
-): number {
+/** Compara candidatos pela ordem de prioridade travada. < 0 ⇒ `a` é melhor. */
+function compararCandidatos(a: Candidato, b: Candidato, plano: PlanoDieta): number {
   // 1) Menor desvio calórico (fidelidade calórica primeiro).
   const devA = Math.abs(a.totais.kcal - plano.kcalAlvo);
   const devB = Math.abs(b.totais.kcal - plano.kcalAlvo);
@@ -100,8 +97,8 @@ function compararCandidatos(
   if (protA !== protB) return protA - protB;
 
   // 3) Chave final reprodutível: ordem lexicográfica sobre o conjunto de ids do dia.
-  const chaveA = a.pratos.map((p) => p.id).sort().join('|');
-  const chaveB = b.pratos.map((p) => p.id).sort().join('|');
+  const chaveA = a.itens.map((i) => i.prato.id).sort().join('|');
+  const chaveB = b.itens.map((i) => i.prato.id).sort().join('|');
   return chaveA < chaveB ? -1 : chaveA > chaveB ? 1 : 0;
 }
 
@@ -117,7 +114,6 @@ export function montarCardapioDia(
   foodsById: ReadonlyMap<string, Food>,
   restricoes: RestricoesUsuario,
 ): CardapioDia {
-  // Filtro absoluto (alérgeno) + preferência, com ordenação determinística.
   const elegiveis = recipes
     .filter((r) => semAlergeno(r, restricoes.alergenos))
     .filter((r) => preferenciaAceita(r.tipo, restricoes.preferencia))
@@ -135,19 +131,18 @@ export function montarCardapioDia(
   };
 
   const porRefeicao = (ref: Refeicao): Recipe[] =>
-    elegiveis.filter((r) => r.refeicao === ref);
+    elegiveis.filter((r) => r.refeicoes.includes(ref));
 
   const cafes = porRefeicao('cafe');
   const almocos = porRefeicao('almoco');
   const jantares = porRefeicao('jantar');
-  // Lanche é opcional: inclui a opção "nenhum" (null).
   const lanches: (Recipe | null)[] = [null, ...porRefeicao('lanche')];
 
   const faltando = REFEICOES_OBRIGATORIAS.filter((ref) => porRefeicao(ref).length === 0);
   if (faltando.length > 0) {
     return {
       status: 'sem_candidatos',
-      pratos: [],
+      itens: [],
       totais: { kcal: 0, proteinaG: 0, carboidratoG: 0, gorduraG: 0 },
       desvioKcal: Infinity,
       nota: `Sem pratos elegíveis para: ${faltando.join(', ')} (após filtros de alergia/preferência).`,
@@ -159,26 +154,29 @@ export function montarCardapioDia(
 
   for (const c of cafes) {
     for (const a of almocos) {
+      if (a.id === c.id) continue;
       for (const j of jantares) {
+        if (j.id === c.id || j.id === a.id) continue;
         for (const l of lanches) {
-          const pratos = l ? [c, a, j, l] : [c, a, j];
-          const totais = somar(...pratos.map(macros));
-          const cand: Candidato = { pratos, totais };
+          if (l && (l.id === c.id || l.id === a.id || l.id === j.id)) continue;
+
+          const itens: CardapioItem[] = [
+            { refeicao: 'cafe', prato: c },
+            { refeicao: 'almoco', prato: a },
+            { refeicao: 'jantar', prato: j },
+          ];
+          if (l) itens.push({ refeicao: 'lanche', prato: l });
+
+          const totais = somar(...itens.map((i) => macros(i.prato)));
+          const cand: Candidato = { itens, totais };
 
           if (!melhorGeral || compararCandidatos(cand, melhorGeral, plano) < 0) {
             melhorGeral = cand;
           }
-
           const dentro =
-            totais.kcal >= plano.janela.minKcal &&
-            totais.kcal <= plano.janela.maxKcal;
-          if (dentro) {
-            if (
-              !melhorNaJanela ||
-              compararCandidatos(cand, melhorNaJanela, plano) < 0
-            ) {
-              melhorNaJanela = cand;
-            }
+            totais.kcal >= plano.janela.minKcal && totais.kcal <= plano.janela.maxKcal;
+          if (dentro && (!melhorNaJanela || compararCandidatos(cand, melhorNaJanela, plano) < 0)) {
+            melhorNaJanela = cand;
           }
         }
       }
@@ -187,19 +185,18 @@ export function montarCardapioDia(
 
   const escolhido = melhorNaJanela ?? melhorGeral!;
   const desvioKcal = Math.abs(escolhido.totais.kcal - plano.kcalAlvo);
+  // Ordem de exibição estável por refeição.
+  const ordem: Refeicao[] = ['cafe', 'almoco', 'lanche', 'jantar'];
+  const itensOrdenados = escolhido.itens
+    .slice()
+    .sort((x, y) => ordem.indexOf(x.refeicao) - ordem.indexOf(y.refeicao));
 
   if (melhorNaJanela) {
-    return {
-      status: 'ok',
-      pratos: escolhido.pratos.slice().sort(porId),
-      totais: escolhido.totais,
-      desvioKcal,
-    };
+    return { status: 'ok', itens: itensOrdenados, totais: escolhido.totais, desvioKcal };
   }
-
   return {
     status: 'fora_da_janela',
-    pratos: escolhido.pratos.slice().sort(porId),
+    itens: itensOrdenados,
     totais: escolhido.totais,
     desvioKcal,
     nota: 'Com os filtros atuais, o banco de pratos não fechou dentro da janela do objetivo. Sinalizado — nenhum alérgeno foi afrouxado.',

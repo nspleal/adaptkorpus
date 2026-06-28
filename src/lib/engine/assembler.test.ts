@@ -15,13 +15,13 @@ const foods: Food[] = [
 ];
 
 const recipes: Recipe[] = [
-  { id: 'cafe_aveia_banana', nome: 'Aveia com banana', refeicao: 'cafe', tipo: 'vegano', itens: [{ alimentoId: 'aveia', gramas: 40 }, { alimentoId: 'banana', gramas: 100 }], contemAlergenos: ['gluten'] },
-  { id: 'cafe_ovos', nome: 'Ovos cozidos', refeicao: 'cafe', tipo: 'vegetariano', itens: [{ alimentoId: 'ovo', gramas: 100 }], contemAlergenos: ['origem_animal', 'ovo'] },
-  { id: 'almoco_tofu_arroz', nome: 'Tofu com arroz', refeicao: 'almoco', tipo: 'vegano', itens: [{ alimentoId: 'tofu', gramas: 200 }, { alimentoId: 'arroz', gramas: 150 }], contemAlergenos: ['soja'] },
-  { id: 'almoco_frango', nome: 'Frango, arroz e feijão', refeicao: 'almoco', tipo: 'onivoro', itens: [{ alimentoId: 'frango', gramas: 150 }, { alimentoId: 'arroz', gramas: 150 }, { alimentoId: 'feijao', gramas: 100 }], contemAlergenos: ['origem_animal'] },
-  { id: 'jantar_feijao_arroz', nome: 'Feijão com arroz', refeicao: 'jantar', tipo: 'vegano', itens: [{ alimentoId: 'feijao', gramas: 150 }, { alimentoId: 'arroz', gramas: 150 }], contemAlergenos: [] },
-  { id: 'jantar_frango', nome: 'Frango com arroz', refeicao: 'jantar', tipo: 'onivoro', itens: [{ alimentoId: 'frango', gramas: 120 }, { alimentoId: 'arroz', gramas: 120 }], contemAlergenos: ['origem_animal'] },
-  { id: 'lanche_banana', nome: 'Banana', refeicao: 'lanche', tipo: 'vegano', itens: [{ alimentoId: 'banana', gramas: 120 }], contemAlergenos: [] },
+  { id: 'cafe_aveia_banana', nome: 'Aveia com banana', refeicoes: ['cafe'], tipo: 'vegano', itens: [{ alimentoId: 'aveia', gramas: 40 }, { alimentoId: 'banana', gramas: 100 }], contemAlergenos: ['gluten'] },
+  { id: 'cafe_ovos', nome: 'Ovos cozidos', refeicoes: ['cafe'], tipo: 'vegetariano', itens: [{ alimentoId: 'ovo', gramas: 100 }], contemAlergenos: ['origem_animal', 'ovo'] },
+  { id: 'almoco_tofu_arroz', nome: 'Tofu com arroz', refeicoes: ['almoco'], tipo: 'vegano', itens: [{ alimentoId: 'tofu', gramas: 200 }, { alimentoId: 'arroz', gramas: 150 }], contemAlergenos: ['soja'] },
+  { id: 'almoco_frango', nome: 'Frango, arroz e feijão', refeicoes: ['almoco'], tipo: 'onivoro', itens: [{ alimentoId: 'frango', gramas: 150 }, { alimentoId: 'arroz', gramas: 150 }, { alimentoId: 'feijao', gramas: 100 }], contemAlergenos: ['origem_animal'] },
+  { id: 'jantar_feijao_arroz', nome: 'Feijão com arroz', refeicoes: ['jantar'], tipo: 'vegano', itens: [{ alimentoId: 'feijao', gramas: 150 }, { alimentoId: 'arroz', gramas: 150 }], contemAlergenos: [] },
+  { id: 'jantar_frango', nome: 'Frango com arroz', refeicoes: ['jantar'], tipo: 'onivoro', itens: [{ alimentoId: 'frango', gramas: 120 }, { alimentoId: 'arroz', gramas: 120 }], contemAlergenos: ['origem_animal'] },
+  { id: 'lanche_banana', nome: 'Banana', refeicoes: ['lanche'], tipo: 'vegano', itens: [{ alimentoId: 'banana', gramas: 120 }], contemAlergenos: [] },
 ];
 
 const foodsById = indexarFoods(foods);
@@ -45,20 +45,19 @@ describe('montador de cardápio (Bloco B v0)', () => {
       alergenos: ['origem_animal'],
       preferencia: null,
     });
-    for (const p of r.pratos) {
-      expect(p.contemAlergenos).not.toContain('origem_animal');
+    for (const it of r.itens) {
+      expect(it.prato.contemAlergenos).not.toContain('origem_animal');
     }
   });
 
   it('mantém o alérgeno absoluto mesmo quando isso impede fechar a janela', () => {
-    // alvo altíssimo: nenhum combo vegano fecha, mas frango/ovo continuam BANIDOS
     const r = montarCardapioDia(plano({ kcalAlvo: 5000, janela: { minKcal: 4800, maxKcal: 5200 } }), recipes, foodsById, {
       alergenos: ['origem_animal'],
       preferencia: null,
     });
     expect(r.status).toBe('fora_da_janela');
-    for (const p of r.pratos) {
-      expect(p.contemAlergenos).not.toContain('origem_animal');
+    for (const it of r.itens) {
+      expect(it.prato.contemAlergenos).not.toContain('origem_animal');
     }
     expect(r.nota).toContain('nenhum alérgeno foi afrouxado');
   });
@@ -74,14 +73,12 @@ describe('montador de cardápio (Bloco B v0)', () => {
   });
 
   it('é determinístico (mesmo input → mesma saída)', () => {
-    const restr = { alergenos: ['origem_animal'] as const, preferencia: null };
-    const a = montarCardapioDia(plano(), recipes, foodsById, { ...restr, alergenos: [...restr.alergenos] });
-    const b = montarCardapioDia(plano(), recipes, foodsById, { ...restr, alergenos: [...restr.alergenos] });
-    expect(a.pratos.map((p) => p.id)).toEqual(b.pratos.map((p) => p.id));
+    const a = montarCardapioDia(plano(), recipes, foodsById, { alergenos: ['origem_animal'], preferencia: null });
+    const b = montarCardapioDia(plano(), recipes, foodsById, { alergenos: ['origem_animal'], preferencia: null });
+    expect(a.itens.map((i) => i.prato.id)).toEqual(b.itens.map((i) => i.prato.id));
   });
 
   it('sinaliza sem_candidatos quando uma refeição obrigatória fica vazia', () => {
-    // soja + origem_animal eliminam todos os almoços
     const r = montarCardapioDia(plano(), recipes, foodsById, {
       alergenos: ['origem_animal', 'soja'],
       preferencia: null,
@@ -94,8 +91,14 @@ describe('montador de cardápio (Bloco B v0)', () => {
       alergenos: [],
       preferencia: 'vegano',
     });
-    for (const p of r.pratos) {
-      expect(p.tipo).toBe('vegano');
+    for (const it of r.itens) {
+      expect(it.prato.tipo).toBe('vegano');
     }
+  });
+
+  it('não repete o mesmo prato em refeições diferentes', () => {
+    const r = montarCardapioDia(plano(), recipes, foodsById, { alergenos: [], preferencia: null });
+    const ids = r.itens.map((i) => i.prato.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

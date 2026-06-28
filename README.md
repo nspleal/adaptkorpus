@@ -43,13 +43,13 @@ src/
 ├── app/                      # rotas (landing, onboarding, plano, conta) + api/webhooks
 ├── lib/
 │   ├── engine/               # MOTOR determinístico (gate de saúde + dieta + montador) + testes
-│   ├── data/                 # tipos do banco curado + cálculo nutricional + seed de demo
+│   ├── data/                 # base curada (foods/recipes/exercises) + cálculo nutricional
 │   ├── brand/                # design system (SVG canônico do "K", wordmark)
 │   ├── validation/           # zod (defesa na borda; 18+)
 │   └── supabase/             # clients (browser/server/admin) + env
 supabase/
-├── migrations/               # 0001 schema · 0002 RLS · 0003 seed de referência
-└── README.md                 # como aplicar e importar a base completa
+├── migrations/               # 0001 schema · 0002 RLS · 0003 base completa · 0004 idempotência
+└── README.md                 # como aplicar as migrations
 docs/
 ├── security-lgpd.md          # postura de segurança e LGPD (prioridade do projeto)
 ├── access.md                 # como acessar, rodar e publicar
@@ -58,7 +58,8 @@ docs/
 
 ## Estado atual
 
-Fundação (bloco D do roteiro) + **motor de dieta** (spec A3 travada) + **gate de saúde**
-+ schema com RLS + onboarding funcional. **Pendente:** importar a base completa (163
-exercícios / 125 alimentos / 56 pratos), motor de **treino**, Auth, e a **revisão
-jurídica** (portão de lançamento). Detalhes em `docs/architecture.md`.
+Fundação (bloco D) + **motor de dieta** (spec A3 travada) + **gate de saúde** + schema com
+RLS + **base completa importada** (125 alimentos · 56 pratos · 163 exercícios, validada Δ≈0)
++ onboarding funcional. **Pendente:** motor de **treino** (FITT — números a travar no cofre),
+Auth + gating, e a **revisão jurídica** (portão de lançamento). Detalhes em
+`docs/architecture.md`.

@@ -44,11 +44,12 @@ create table if not exists public.foods (
   alergenos          text[] not null default '{}'
 );
 
--- Pratos (combinações de alimentos).
+-- Pratos (combinações de alimentos). Um prato pode servir mais de uma refeição
+-- (ex.: {almoco,jantar}) — por isso refeicoes é um array.
 create table if not exists public.recipes (
   id                text primary key,
   nome              text not null,
-  refeicao          text not null check (refeicao in ('cafe','almoco','jantar','lanche')),
+  refeicoes         text[] not null default '{}',
   tipo              text not null check (tipo in ('vegano','vegetariano','onivoro')),
   contem_alergenos  text[] not null default '{}'
 );
@@ -73,6 +74,7 @@ create table if not exists public.exercises (
   nivel             text not null check (nivel in ('iniciante','intermediario','avancado')),
   tipo              text not null check (tipo in ('forca_hipertrofia','cardio','pliometrico','mobilidade')),
   equipamento       text not null check (equipamento in ('nenhum','casa','academia')),
+  equipamento_detalhe text,
   local             text not null check (local in ('casa_sem','casa_com','academia')),
   tier              integer check (tier between 1 and 4),
   como_fazer        text not null

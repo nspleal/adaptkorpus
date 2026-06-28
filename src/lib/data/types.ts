@@ -1,6 +1,7 @@
 /**
  * Tipos do banco de dados curado (espelham o schema do Supabase e o banco do cofre).
- * Fonte: fontes/banco-alimentos-evokorpus (125 alimentos TACO + 56 pratos, Δ=0).
+ * Fonte: fontes/banco-alimentos-evokorpus (125 alimentos TACO + 56 pratos, Δ=0)
+ *        fontes/ranking-exercicios-evokorpus (163 exercícios).
  *
  * Estrutura RELACIONAL: foods → recipes → recipe_items (join).
  * kcal/macros de um prato = SOMA dos ingredientes (TACO × gramas), nunca por 4/4/9.
@@ -18,6 +19,7 @@ export type GrupoAlimentar =
 /** Alérgenos/restrições rastreados (base do filtro absoluto da substituição). */
 export type Alergeno =
   | 'origem_animal'
+  | 'carne'
   | 'gluten'
   | 'lactose'
   | 'ovo'
@@ -56,12 +58,13 @@ export interface RecipeItem {
 
 /**
  * Prato (combinação de alimentos). kcal/macros derivam dos ingredientes.
- * `contemAlergenos` é a UNIÃO dos alérgenos dos ingredientes (desnormalizado p/ filtro rápido).
+ * `refeicoes` é uma LISTA: um prato pode servir mais de uma refeição (ex.: almoço E jantar).
+ * `contemAlergenos` é a UNIÃO dos alérgenos dos ingredientes (derivada — mais segura).
  */
 export interface Recipe {
   id: string;
   nome: string;
-  refeicao: Refeicao;
+  refeicoes: Refeicao[];
   tipo: TipoPrato;
   itens: RecipeItem[];
   contemAlergenos: Alergeno[];
@@ -73,4 +76,40 @@ export interface RecipeMacros {
   proteinaG: number;
   carboidratoG: number;
   gorduraG: number;
+}
+
+// ---------------------------------------------------------------------------
+// Exercícios (biblioteca de treino)
+// ---------------------------------------------------------------------------
+
+export type PadraoMovimento =
+  | 'empurrar'
+  | 'puxar'
+  | 'agachar'
+  | 'dobradica_quadril'
+  | 'core'
+  | 'cardio'
+  | 'isolado';
+
+export type NivelExercicio = 'iniciante' | 'intermediario' | 'avancado';
+export type TipoExercicio = 'forca_hipertrofia' | 'cardio' | 'pliometrico' | 'mobilidade';
+/** Disponibilidade de equipamento exigida. */
+export type EquipamentoDisp = 'nenhum' | 'casa' | 'academia';
+export type LocalExercicio = 'casa_sem' | 'casa_com' | 'academia';
+
+export interface Exercise {
+  id: string;
+  nomePt: string;
+  nomeEn?: string;
+  grupoMuscular: string;
+  padraoMovimento: PadraoMovimento;
+  nivel: NivelExercicio;
+  tipo: TipoExercicio;
+  equipamento: EquipamentoDisp;
+  /** Equipamento específico (ex.: "Halteres", "Polia", "Peso corporal"). */
+  equipamentoDetalhe?: string;
+  local: LocalExercicio;
+  /** Faixa de popularidade (1 essencial → 4 específico), não dificuldade. */
+  tier?: number;
+  comoFazer: string;
 }

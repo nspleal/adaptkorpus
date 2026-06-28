@@ -4,7 +4,9 @@
 
 1. `migrations/0001_init.sql` — tabelas (conteúdo curado + usuário + assinatura).
 2. `migrations/0002_rls.sql` — **Row Level Security** em todas as tabelas (default-deny).
-3. `migrations/0003_seed_reference.sql` — **seed de referência** (subconjunto p/ demo).
+3. `migrations/0003_seed_reference.sql` — **base completa** (125 alimentos · 56 pratos ·
+   216 ingredientes · 163 exercícios), gerada do xlsx do autor e validada **Δ≈0**.
+4. `migrations/0004_webhook_idempotency.sql` — `webhook_events` (anti-replay).
 
 ### Opção A — SQL Editor (mais simples)
 Cole o conteúdo de cada arquivo, em ordem, no SQL Editor do projeto Supabase e rode.
@@ -26,26 +28,21 @@ where schemaname = 'public';
 Todas as tabelas do app devem ter `rowsecurity = true`. Sem política que case, o acesso é
 negado — isso é proposital.
 
-## Importar a base completa de conteúdo
+## Base completa de conteúdo (já importada)
 
-O seed `0003` é um **subconjunto** (8 alimentos, 7 pratos, 6 exercícios) só para o app
-rodar de ponta a ponta. A base curada e validada (no cofre) é maior:
+A base curada e validada **já está no repo** — tanto como seed SQL (`0003`) quanto como
+módulos TypeScript (`src/lib/data/{foods,recipes,exercises}.ts`, usados pelo app/motor):
 
-- **125 alimentos** (TACO 4ª ed.) + **56 pratos** + join de **216 linhas**, validados Δ=0 —
-  `fontes/banco-alimentos-evokorpus`.
-- **163 exercícios** com os atributos do motor — `fontes/ranking-exercicios-evokorpus`.
+- **125 alimentos** (TACO 4ª ed.) + **56 pratos** + join de **216 linhas**, validados **Δ≈0**.
+- **163 exercícios** com os atributos do motor (padrão de movimento, nível, tipo, local).
 
-Os arquivos-fonte são `.xlsx` (no Desktop do autor). Passo de import (a fazer):
+Foi gerada a partir dos `.xlsx` do autor. A verificação Δ recomputa cada prato a partir dos
+ingredientes (paleta × gramas) e compara aos totais declarados — resultado: **0 divergências**
+de macros (Δkcal ≤ 1 por arredondamento), **0 referências inválidas**, contagens batem. A
+mesma checagem roda nos testes (`src/lib/data/data.test.ts`).
 
-1. Exportar cada aba para **CSV** com colunas no formato das tabelas (`foods`, `recipes`,
-   `recipe_items`, `exercises`).
-2. Importar no Supabase (Table editor → Import CSV, ou `\copy` via psql), respeitando a
-   ordem: `foods` e `exercises` primeiro, depois `recipes`, por fim `recipe_items`.
-3. Conferir contagens e rodar uma checagem de integridade (todo `recipe_items.alimento_id`
-   existe em `foods`; soma de kcal do prato = soma dos itens — a regra Δ=0 do cofre).
-
-> Quando o formato dos CSVs estiver definido, dá para gerar um script de import determinístico
-> + uma verificação automática (mesma filosofia da validação Δ=0).
+> Para **atualizar** a base (novo xlsx): reprocessar as planilhas e regerar tanto os `.ts`
+> quanto o `0003`. Os dois devem sair da mesma fonte para não divergirem.
 
 ## Atenção de licença (conteúdo)
 

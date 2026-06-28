@@ -13,6 +13,7 @@ export {
   montarCardapioDia,
   type RestricoesUsuario,
   type CardapioDia,
+  type CardapioItem,
   type StatusMontagem,
 } from './assembler';
 

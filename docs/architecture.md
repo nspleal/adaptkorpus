@@ -38,8 +38,10 @@ Limitação do v0: 1 prato por refeição, sem escalar porções nem relaxar pro
 ## Dados (`src/lib/data`)
 
 Modelo **relacional**: `foods` → `recipes` → `recipe_items` (join). kcal/macros de um prato
-= **soma dos ingredientes** (TACO × gramas), nunca por 4/4/9 (`nutrition.ts`). O `seed.ts`
-espelha o seed SQL para a demo client-side.
+= **soma dos ingredientes** (TACO × gramas), nunca por 4/4/9 (`nutrition.ts`). A base completa
+(125 alimentos · 56 pratos · 163 exercícios, validada Δ≈0) vive em `foods.ts`/`recipes.ts`/
+`exercises.ts` (gerados do xlsx do autor) e espelha o seed SQL (`0003`). Pratos têm `refeicoes`
+como **lista** (um prato pode servir almoço E jantar).
 
 ## Banco (`supabase/`)
 
@@ -55,7 +57,7 @@ Tabelas: conteúdo curado (`foods/recipes/recipe_items/exercises`) + usuário
 
 ## O que falta (roadmap deste repo)
 
-- Importar a **base completa** (163 exercícios / 125 alimentos / 56 pratos).
+- ~~Importar a **base completa**~~ ✅ feito (125 alimentos · 56 pratos · 163 exercícios, Δ≈0).
 - Motor de **treino** (FITT) + **substituição** — quando os números (A3) forem travados no cofre.
 - **Auth** (Supabase) + gating de rotas + telas de plano/registro/conta reais.
 - **Webhook** completo (resolução de user_id, idempotência, rate limit).
