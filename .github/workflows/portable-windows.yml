@@ -57,7 +57,7 @@ jobs:
           Copy-Item (Get-Command node).Source "$dist\node\node.exe"
 
           # Lançador na raiz do pacote.
-          Copy-Item "build\portable-launcher.bat" "$dist\INICIAR APP EVOKORPUS.bat"
+          Copy-Item "packaging\portable-launcher.bat" "$dist\INICIAR APP EVOKORPUS.bat"
 
           # Verificação mínima: o build precisa existir dentro do pacote.
           if (-not (Test-Path "$dist\app\.next\BUILD_ID")) {
