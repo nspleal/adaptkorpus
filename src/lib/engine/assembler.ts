@@ -183,7 +183,18 @@ export function montarCardapioDia(
     }
   }
 
-  const escolhido = melhorNaJanela ?? melhorGeral!;
+  // Fail-safe: pode não existir combinação de pratos DISTINTOS para as 3 refeições
+  // obrigatórias mesmo havendo candidatos por slot (ex.: o único café = o único almoço).
+  const escolhido = melhorNaJanela ?? melhorGeral;
+  if (!escolhido) {
+    return {
+      status: 'sem_candidatos',
+      itens: [],
+      totais: { kcal: 0, proteinaG: 0, carboidratoG: 0, gorduraG: 0 },
+      desvioKcal: Infinity,
+      nota: 'Não há combinação de pratos distintos para café, almoço e jantar (após os filtros).',
+    };
+  }
   const desvioKcal = Math.abs(escolhido.totais.kcal - plano.kcalAlvo);
   // Ordem de exibição estável por refeição.
   const ordem: Refeicao[] = ['cafe', 'almoco', 'lanche', 'jantar'];

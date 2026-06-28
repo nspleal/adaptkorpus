@@ -21,6 +21,8 @@ const ALERGENOS: { id: Alergeno; rotulo: string }[] = [
   { id: 'soja', rotulo: 'Soja' },
   { id: 'amendoim', rotulo: 'Amendoim' },
   { id: 'castanhas', rotulo: 'Castanhas' },
+  { id: 'gergelim', rotulo: 'Gergelim' },
+  { id: 'coco', rotulo: 'Coco' },
   { id: 'peixe_frutos_do_mar', rotulo: 'Peixe / frutos do mar' },
 ];
 

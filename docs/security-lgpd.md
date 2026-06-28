@@ -70,6 +70,9 @@ motor tem um **backstop fail-safe** (input implausível → ROTEAR).
 
 - [ ] **Gating de rotas privadas** no middleware (login + assinatura ativa em `/plano`, `/conta`).
 - [ ] **Resolução de `user_id`** no webhook (espelho de e-mail com RLS) + **rate limiting**.
+- [ ] **Ordenação de eventos do webhook** por timestamp da Kiwify (evitar que um evento mais
+      antigo, entregue fora de ordem, sobrescreva um status mais recente). Depende de confirmar
+      o campo de timestamp no payload da Kiwify.
 - [ ] **Direito de portabilidade (LGPD art. 20)** — exportação dos dados na tela de conta.
 - [ ] **Direito ao esquecimento (LGPD art. 17/18)** — exclusão de conta com cascade já existe;
       falta UI + (opcional) soft-delete/janela de auditoria.

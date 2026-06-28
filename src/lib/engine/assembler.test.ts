@@ -101,4 +101,15 @@ describe('montador de cardápio (Bloco B v0)', () => {
     const ids = r.itens.map((i) => i.prato.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('NÃO crasha quando há candidatos por slot mas nenhuma combinação distinta (fail-safe)', () => {
+    // O mesmo prato serve café e almoço; só ele cobre esses dois slots → sem combo distinta.
+    const multi: Recipe[] = [
+      { id: 'x', nome: 'X', refeicoes: ['cafe', 'almoco'], tipo: 'vegano', itens: [{ alimentoId: 'arroz', gramas: 100 }], contemAlergenos: [] },
+      { id: 'y', nome: 'Y', refeicoes: ['jantar'], tipo: 'vegano', itens: [{ alimentoId: 'feijao', gramas: 100 }], contemAlergenos: [] },
+    ];
+    const r = montarCardapioDia(plano(), multi, foodsById, { alergenos: [], preferencia: null });
+    expect(r.status).toBe('sem_candidatos');
+    expect(r.itens).toHaveLength(0);
+  });
 });

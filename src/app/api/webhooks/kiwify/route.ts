@@ -11,7 +11,7 @@
  * algoritmo é configurável por env (KIWIFY_WEBHOOK_ALGO, default 'sha256') — não exige
  * editar código para alinhar. O header esperado é `x-kiwify-signature` (hex).
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -82,19 +82,19 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // 3) Idempotência: se o evento já foi processado, encerra (anti-replay/reentrega).
-  const eventId = extrairEventId(payload);
-  if (eventId) {
-    const { error: dupErr } = await admin
-      .from('webhook_events')
-      .insert({ event_id: eventId, origem: 'kiwify' });
-    // 23505 = unique_violation → já processado.
-    if (dupErr && dupErr.code === '23505') {
-      return NextResponse.json({ ok: true, duplicado: true });
-    }
-    if (dupErr) {
-      return NextResponse.json({ error: 'falha ao registrar evento' }, { status: 500 });
-    }
+  // 3) Idempotência SEMPRE ativa (anti-replay/reentrega): usa o event_id do payload ou,
+  //    na falta dele, um hash determinístico do corpo cru — nunca desliga a dedup.
+  const eventId =
+    extrairEventId(payload) ?? `body:${createHash('sha256').update(rawBody, 'utf8').digest('hex')}`;
+  const { error: dupErr } = await admin
+    .from('webhook_events')
+    .insert({ event_id: eventId, origem: 'kiwify' });
+  // 23505 = unique_violation → já processado.
+  if (dupErr && dupErr.code === '23505') {
+    return NextResponse.json({ ok: true, duplicado: true });
+  }
+  if (dupErr) {
+    return NextResponse.json({ error: 'falha ao registrar evento' }, { status: 500 });
   }
 
   // 4) Validação do e-mail (liga o evento ao usuário) + status.
