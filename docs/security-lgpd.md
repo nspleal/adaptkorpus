@@ -62,6 +62,10 @@ motor tem um **backstop fail-safe** (input implausível → ROTEAR).
 - [x] **HMAC sobre bytes** — comparação em tempo constante decodificando o hex; algoritmo
       **configurável por env** (`KIWIFY_WEBHOOK_ALGO`, default `sha256`); só header.
 - [x] **Validação de e-mail** no webhook antes de usar; `.finite()` na validação zod (borda).
+- [x] **CSP por nonce** — a Content-Security-Policy agora vem do middleware com **nonce por
+      requisição** + `'strict-dynamic'` (sem `'unsafe-inline'` em script). Rotas em render
+      dinâmico para o nonce ser aplicado. Verificado em navegador real (Playwright): app
+      hidrata e roda sem nenhuma violação de CSP.
 
 ## Pendências de hardening (dependem da Auth / lançamento)
 
@@ -78,7 +82,8 @@ motor tem um **backstop fail-safe** (input implausível → ROTEAR).
       falta UI + (opcional) soft-delete/janela de auditoria.
 - [ ] **E-mail no `profile`** (ou tabela espelho) — necessário para ligar o webhook ao usuário.
 - [ ] **Auditoria de consentimento** — versão da política + timestamp/origem do aceite.
-- [ ] **CSP por nonce** (remover `style-src 'unsafe-inline'`; nonce por requisição via middleware).
+- [ ] **Endurecer `style-src`** (hoje ainda `'unsafe-inline'` para os estilos do Next/Tailwind;
+      avaliar hash/nonce de estilo no futuro). O `script-src` já é nonce + strict-dynamic.
 - [ ] **Criptografia em repouso** de campos de saúde (avaliar pgcrypto/coluna vs. RLS-only).
 - [ ] **Retenção & logs de acesso** a dado sensível (política de prazos + observabilidade).
 - [ ] **Revisão jurídica** (portão de lançamento) — termo, disclaimer, privacidade, reembolso,

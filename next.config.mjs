@@ -11,43 +11,10 @@
  * passo em docs/security-lgpd.md.
  */
 
-/** @type {string} */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-
-/** Deriva a origem (scheme://host) do Supabase para liberar em connect-src. */
-function supabaseOrigin() {
-  if (!supabaseUrl) return '';
-  try {
-    return new URL(supabaseUrl).origin;
-  } catch {
-    return '';
-  }
-}
-
-const origin = supabaseOrigin();
-const wsOrigin = origin ? origin.replace(/^http/, 'ws') : '';
-
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  // 'unsafe-inline' em script só vale em dev (HMR). Em produção, ver hardening por nonce.
-  process.env.NODE_ENV === 'development'
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-    : "script-src 'self'",
-  `connect-src 'self' ${origin} ${wsOrigin}`.trim(),
-  'upgrade-insecure-requests',
-]
-  .filter(Boolean)
-  .join('; ');
-
+// A Content-Security-Policy é definida no middleware (com nonce por requisição), porque o
+// App Router precisa assinar seus scripts inline — ver src/middleware.ts. Aqui ficam só os
+// headers estáticos de segurança.
 const securityHeaders = [
-  { key: 'Content-Security-Policy', value: contentSecurityPolicy },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

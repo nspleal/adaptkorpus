@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 
+// Renderização dinâmica em todas as rotas: necessária para a CSP com NONCE por requisição
+// (HTML prerenderizado estático não recebe o nonce → scripts bloqueados). Ver middleware.ts.
+export const dynamic = 'force-dynamic';
+
 // Tipografia de marca — família única (brand board).
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
