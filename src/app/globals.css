@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  /* Tema escuro de marca: Floresta (fundo) + Bone (texto). */
+  background-color: #0d2818;
+  color: #eae5db;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Texto secundário = Bone com opacidade (regra do cofre; não inventar verdes-sálvia). */
+.text-secundario {
+  color: rgba(234, 229, 219, 0.62);
+}
+
+/* Pílula de alerta funcional (só p/ sinalizar erro/mito). */
+.pilula-alerta {
+  background: rgba(229, 72, 77, 0.14);
+  color: #e5484d;
+  border: 1px solid #e5484d;
+}
+
+/* Campo de formulário (input/select) no tema escuro. */
+.campo {
+  background: rgba(234, 229, 219, 0.06);
+  border: 1px solid rgba(234, 229, 219, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  color: #eae5db;
+  width: 100%;
+}
+.campo:focus {
+  outline: 2px solid #16a34a;
+  outline-offset: 1px;
+}
+.campo option {
+  background: #0d2818;
+}
