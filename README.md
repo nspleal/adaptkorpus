@@ -14,17 +14,28 @@ dados curados. Ferramenta educacional, dirigida pelo usuário, **18+**.
 - **Kiwify** (assinatura recorrente → webhook → Supabase)
 - **Tailwind CSS** com o design system de marca · **Vitest** (testes do motor)
 
-## Início rápido (local)
+## Início rápido — só quero testar (jeito fácil)
+
+> Precisa do **Node.js 20+** instalado (https://nodejs.org). Só isso.
+
+- **Windows:** dê **duplo-clique** em **`INICIAR APP EVOKORPUS.bat`**
+- **Mac / Linux:** dê duplo-clique em **`INICIAR APP EVOKORPUS (Mac e Linux).command`**
+  (no Mac, na 1ª vez: botão direito → Abrir)
+
+O lançador instala as dependências na 1ª vez (alguns minutos), sobe o app e **abre o
+navegador sozinho** em `http://localhost:3000`. Para parar, feche a janela.
+
+Na tela **Começar → /onboarding** o motor roda de ponta a ponta **no navegador** (gate de
+saúde → alvo calórico → macros → cardápio de exemplo), **sem precisar de backend**.
+
+## Início rápido — pela linha de comando
 
 ```bash
 npm install
-cp .env.example .env.local   # preencha as chaves do Supabase (opcional p/ rodar a demo)
 npm run dev                  # http://localhost:3000
 ```
 
-A tela **/onboarding** roda o motor de ponta a ponta **no navegador** (gate de saúde →
-alvo calórico → macros → cardápio de exemplo), sem precisar de backend. Persistência
-(conta + histórico) exige configurar o Supabase — ver `docs/access.md`.
+Persistência (conta + histórico) exige configurar o Supabase — ver `docs/access.md`.
 
 ## Scripts
 

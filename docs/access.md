@@ -7,6 +7,16 @@ O código está no GitHub (`nspleal/evokorpus`), na branch de desenvolvimento
 
 Pré-requisito: **Node 20+** (recomendado 22; há um `.nvmrc`).
 
+### Jeito fácil — lançador (duplo-clique)
+Depois de baixar/clonar o projeto:
+- **Windows:** duplo-clique em **`INICIAR APP EVOKORPUS.bat`**
+- **Mac / Linux:** duplo-clique em **`INICIAR APP EVOKORPUS (Mac e Linux).command`**
+  (Mac, 1ª vez: botão direito → Abrir)
+
+Ele instala tudo na primeira vez, sobe o app e abre o navegador em
+**http://localhost:3000**. Para parar, feche a janela.
+
+### Pela linha de comando
 ```bash
 git clone https://github.com/nspleal/evokorpus.git
 cd evokorpus
