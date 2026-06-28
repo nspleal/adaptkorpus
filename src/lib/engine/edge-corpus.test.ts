@@ -77,7 +77,7 @@ describe('error-hunt: corpus de bordas do gate + dieta', () => {
       const piso = PISO_SPEC[p.sexo];
 
       const gate = avaliarGateSaude(p);
-      contagem[gate.comportamento]++;
+      contagem[gate.comportamento] = (contagem[gate.comportamento] ?? 0) + 1;
 
       // Cat 1 — aritmética: derivados batem com o recálculo independente.
       if (Math.abs(gate.derivados.tmb - tmb) > 1e-4) viol.push(`TMB ${rotulo(p)}: ${gate.derivados.tmb} vs ${tmb}`);

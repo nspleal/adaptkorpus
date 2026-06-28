@@ -102,7 +102,9 @@ function calcularMacros(
 
 function notaTransparencia(gate: ResultadoGate): string | undefined {
   if (gate.comportamento === 'PISAR') {
-    return 'Ajustamos para um mínimo seguro de calorias — ainda dentro de um déficit saudável.';
+    // Honesto (sem promessa de resultado): no PISAR o déficit fica mais suave — não
+    // prometemos magnitude. Para um corte mais agressivo com segurança, profissional.
+    return 'Ajustamos suas calorias para um mínimo seguro; por isso o déficit fica mais suave que o usual. Para um plano de emagrecimento mais intenso com segurança, procure um profissional.';
   }
   if (gate.comportamento === 'RESTRINGIR') {
     return 'Por segurança, geramos um plano de manutenção (sem déficit). Procure um profissional para um corte seguro.';

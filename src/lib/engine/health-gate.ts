@@ -103,12 +103,14 @@ export function avaliarGateSaude(perfil: PerfilUsuario): ResultadoGate {
     imc < IMC_LIMITES.baixoPeso &&
     perfil.objetivo === 'emagrecimento';
 
-  // PISAR — só faz sentido no corte: alvo abaixo do piso, mas GET acima do piso
+  // PISAR — só faz sentido no corte: alvo abaixo do piso, mas GET acima do piso.
+  // Usa `>=` para bater literalmente com a spec (`GET ≥ piso_seguro`); o caso GET==piso
+  // já é capturado pelo ROTEAR acima (`get <= pisoSeguro`), que vence por precedência.
   const kcalAlvoCand = get * FATOR_OBJETIVO[perfil.objetivo];
   const pisar =
     perfil.objetivo === 'emagrecimento' &&
     kcalAlvoCand < pisoSeguro &&
-    get > pisoSeguro;
+    get >= pisoSeguro;
 
   // --- Resolução por precedência: ROTEAR > RESTRINGIR > PISAR > PERMITIR. ------
   if (rotearTriggers.length > 0) {

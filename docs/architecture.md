@@ -58,6 +58,10 @@ Tabelas: conteúdo curado (`foods/recipes/recipe_items/exercises`) + usuário
 ## O que falta (roadmap deste repo)
 
 - ~~Importar a **base completa**~~ ✅ feito (125 alimentos · 56 pratos · 163 exercícios, Δ≈0).
+- **Montador (Bloco B) — completar o Passo 5 da spec:** hoje o v0 mira menor desvio calórico
+  (proteína só como desempate). Falta: relaxar **proteína até o piso** e usar **toda a largura
+  da janela** antes de sinalizar; e relaxar **preferência** (vegano/veg) como último recurso —
+  **nunca o alérgeno**. Apontado pela error-hunt (cold-pass); roteado como implementação.
 - Motor de **treino** (FITT) + **substituição** — quando os números (A3) forem travados no cofre.
 - **Auth** (Supabase) + gating de rotas + telas de plano/registro/conta reais.
 - **Webhook** completo (resolução de user_id, idempotência, rate limit).
