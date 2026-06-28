@@ -7,10 +7,11 @@ import { z } from 'zod';
 
 export const perfilSchema = z.object({
   sexo: z.enum(['masculino', 'feminino']),
-  pesoKg: z.coerce.number().min(30, 'Peso fora da faixa').max(300, 'Peso fora da faixa'),
-  alturaCm: z.coerce.number().min(100, 'Altura fora da faixa').max(250, 'Altura fora da faixa'),
+  pesoKg: z.coerce.number().finite('Peso inválido').min(30, 'Peso fora da faixa').max(300, 'Peso fora da faixa'),
+  alturaCm: z.coerce.number().finite('Altura inválida').min(100, 'Altura fora da faixa').max(250, 'Altura fora da faixa'),
   idade: z.coerce
     .number()
+    .finite('Idade inválida')
     .int()
     .min(18, 'O app é exclusivo para maiores de 18 anos.')
     .max(100, 'Idade fora da faixa'),

@@ -55,13 +55,28 @@ motor tem um **backstop fail-safe** (input implausível → ROTEAR).
 - **Direitos do titular:** políticas `*_delete_own` permitem **excluir** o próprio dado;
   exclusão da conta faz **cascade** em tudo do usuário. Exportação de dados: ver pendências.
 
-## Pendências de hardening (próximos passos honestos)
+## Hardening já aplicado (auditoria adversarial 2026-06-28)
 
+- [x] **Webhook idempotente** — tabela `webhook_events` (RLS, service_role) deduplica
+      reentregas/replay (`0004_webhook_idempotency.sql`).
+- [x] **HMAC sobre bytes** — comparação em tempo constante decodificando o hex; algoritmo
+      **configurável por env** (`KIWIFY_WEBHOOK_ALGO`, default `sha256`); só header.
+- [x] **Validação de e-mail** no webhook antes de usar; `.finite()` na validação zod (borda).
+
+## Pendências de hardening (dependem da Auth / lançamento)
+
+> A maioria abaixo só faz sentido depois que a **Supabase Auth** existir (hoje as telas
+> privadas são placeholders e não há login). Estão rastreadas para entrar com a Auth.
+
+- [ ] **Gating de rotas privadas** no middleware (login + assinatura ativa em `/plano`, `/conta`).
+- [ ] **Resolução de `user_id`** no webhook (espelho de e-mail com RLS) + **rate limiting**.
+- [ ] **Direito de portabilidade (LGPD art. 20)** — exportação dos dados na tela de conta.
+- [ ] **Direito ao esquecimento (LGPD art. 17/18)** — exclusão de conta com cascade já existe;
+      falta UI + (opcional) soft-delete/janela de auditoria.
+- [ ] **E-mail no `profile`** (ou tabela espelho) — necessário para ligar o webhook ao usuário.
+- [ ] **Auditoria de consentimento** — versão da política + timestamp/origem do aceite.
 - [ ] **CSP por nonce** (remover `style-src 'unsafe-inline'`; nonce por requisição via middleware).
-- [ ] **Gating de rotas privadas** no middleware (exigir login + assinatura ativa em `/plano`).
-- [ ] **Resolução de `user_id`** no webhook (espelho de e-mail com RLS) + **idempotência**
-      (deduplicar reentregas) + **rate limiting**.
-- [ ] **Exportação de dados** (direito de portabilidade LGPD) na tela de conta.
-- [ ] **Revisão jurídica** (portão de lançamento) — textos legais (termo, disclaimer,
-      privacidade, reembolso) e base legal do tratamento.
-- [ ] **Auditoria/logs de acesso** a dado sensível + retenção definida.
+- [ ] **Criptografia em repouso** de campos de saúde (avaliar pgcrypto/coluna vs. RLS-only).
+- [ ] **Retenção & logs de acesso** a dado sensível (política de prazos + observabilidade).
+- [ ] **Revisão jurídica** (portão de lançamento) — termo, disclaimer, privacidade, reembolso,
+      base legal do tratamento.
