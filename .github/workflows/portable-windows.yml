@@ -1,0 +1,86 @@
+name: Pacote portátil (Windows)
+
+# Constrói, na nuvem, um pacote portátil do app com o Node EMBUTIDO e publica como
+# Release (mesma estratégia do PIRAXIS). O autor baixa o .zip, extrai e dá duplo-clique —
+# sem instalar nada. Roda a cada push de código na branch (ignora mudanças só de docs).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/evokorpus-app-dev-9in0hs]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: portatil-windows
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build (saída standalone)
+        run: npm run build
+
+      - name: Montar pacote portátil
+        shell: pwsh
+        run: |
+          $dist = "evokorpus-portatil"
+          Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "$dist\app","$dist\node" | Out-Null
+
+          # Servidor standalone (Get-ChildItem -Force inclui a pasta .next).
+          Get-ChildItem -Path ".next\standalone" -Force |
+            Copy-Item -Destination "$dist\app" -Recurse -Force
+
+          # static + public (o standalone não os inclui).
+          Copy-Item -Path ".next\static" -Destination "$dist\app\.next\static" -Recurse -Force
+          if (Test-Path "public") {
+            Copy-Item -Path "public" -Destination "$dist\app\public" -Recurse -Force
+          }
+
+          # Node embutido — no Windows o node.exe roda scripts sozinho (1 arquivo).
+          Copy-Item (Get-Command node).Source "$dist\node\node.exe"
+
+          # Lançador na raiz do pacote.
+          Copy-Item "build\portable-launcher.bat" "$dist\INICIAR APP EVOKORPUS.bat"
+
+          # Verificação mínima: o build precisa existir dentro do pacote.
+          if (-not (Test-Path "$dist\app\.next\BUILD_ID")) {
+            throw "Build ausente no pacote (.next/BUILD_ID não encontrado)."
+          }
+
+          Compress-Archive -Path "$dist\*" -DestinationPath "evokorpus-portatil-windows.zip" -Force
+          "Pacote: $((Get-Item evokorpus-portatil-windows.zip).Length / 1MB) MB"
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: portatil-windows
+          name: App Evokorpus — pacote portátil (Windows)
+          body: |
+            **Pacote portátil do App Evokorpus para Windows — não precisa instalar nada.**
+
+            1. Baixe **evokorpus-portatil-windows.zip** abaixo (em *Assets*).
+            2. Botão direito no zip → **Extrair tudo**.
+            3. Abra a pasta extraída e dê **duplo-clique** em **INICIAR APP EVOKORPUS.bat**.
+
+            O app abre sozinho no navegador em http://localhost:3000. Para parar, feche a janela.
+            Se aparecer o aviso azul do Windows, clique em *Mais informações → Executar assim mesmo*.
+
+            _Gerado automaticamente a cada atualização do código._
+          files: evokorpus-portatil-windows.zip

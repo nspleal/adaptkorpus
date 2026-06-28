@@ -14,9 +14,20 @@ dados curados. Ferramenta educacional, dirigida pelo usuário, **18+**.
 - **Kiwify** (assinatura recorrente → webhook → Supabase)
 - **Tailwind CSS** com o design system de marca · **Vitest** (testes do motor)
 
-## Início rápido — só quero testar (jeito fácil)
+## Início rápido — Windows, SEM instalar nada (pacote portátil)
 
-> Precisa do **Node.js 20+** instalado (https://nodejs.org). Só isso.
+Igual ao PIRAXIS: um pacote com o **Node embutido**, construído na nuvem.
+
+1. Vá na aba **Releases** do repositório → **"App Evokorpus — pacote portátil (Windows)"**.
+2. Baixe **`evokorpus-portatil-windows.zip`**, **extraia** e dê **duplo-clique** em
+   **`INICIAR APP EVOKORPUS.bat`**. O app abre sozinho em `http://localhost:3000`.
+
+(O pacote é gerado automaticamente a cada atualização do código — ver
+`.github/workflows/portable-windows.yml`.)
+
+## Início rápido — a partir do código (precisa do Node)
+
+> Precisa do **Node.js 20+** instalado (https://nodejs.org).
 
 - **Windows:** dê **duplo-clique** em **`INICIAR APP EVOKORPUS.bat`**
 - **Mac / Linux:** dê duplo-clique em **`INICIAR APP EVOKORPUS (Mac e Linux).command`**

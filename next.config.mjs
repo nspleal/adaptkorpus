@@ -66,6 +66,9 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Servidor auto-contido para o pacote portátil (Node embutido) — ver
+  // .github/workflows/portable-windows.yml. Não afeta dev nem deploy na Vercel.
+  output: 'standalone',
   async headers() {
     return [
       {
