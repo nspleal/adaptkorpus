@@ -222,6 +222,10 @@ body {
 .modal-opt:hover { border-color: #BDFF00; background: rgba(189,255,0,.08); transform: translateX(3px); }
 .modal-more { transition: background .25s ease; }
 .modal-more:hover { background: rgba(189,255,0,.16); }
+.evk-troca { transition: all .25s ease; }
+.evk-troca:hover { border-color: #BDFF00 !important; color: #BDFF00 !important; }
+.evk-perfil-link:hover { background: rgba(234,229,219,.05); }
+.evk-voltar:hover { border-color: rgba(234,229,219,.5) !important; background: rgba(234,229,219,.04); }
 
 /* Animações (do protótipo). */
 @keyframes evkStepIn {

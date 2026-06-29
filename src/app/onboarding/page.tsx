@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { gerarDieta, gerarTreino, type ResultadoMotor, type ResultadoTreino } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilTreino, PerfilUsuario, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
@@ -68,7 +69,7 @@ const HEALTH: { id: string; q: string; fem?: boolean }[] = [
   { id: 'diabetes', q: 'Tem diabetes?' },
 ];
 
-type Fase = 'wizard' | 'gerando' | 'resultado';
+type Fase = 'login' | 'wizard' | 'gerando' | 'resultado';
 type SimNaoV = 'sim' | 'nao';
 
 export default function Onboarding() {
@@ -89,7 +90,7 @@ export default function Onboarding() {
   const [naoGosto, setNaoGosto] = useState('');
 
   const [step, setStep] = useState(0);
-  const [fase, setFase] = useState<Fase>('wizard');
+  const [fase, setFase] = useState<Fase>('login');
   const [erro, setErro] = useState('');
   const [genPct, setGenPct] = useState(0);
 
@@ -154,6 +155,8 @@ export default function Onboarding() {
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
       <Backdrop />
+
+      {fase === 'login' && <Login onEntrar={() => { setStep(0); setFase('wizard'); }} />}
 
       {fase === 'wizard' && (
         <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px 56px', animation: `evkScreenIn .5s ${EASE}` }}>
@@ -358,6 +361,33 @@ function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGos
       <div style={{ ...labelCap, marginBottom: 6 }}>Alimentos que você não curte <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: 'rgba(234,229,219,.4)' }}>(opcional)</span></div>
       <textarea value={naoGosto} onChange={(e) => setNaoGosto(e.target.value)} placeholder="Ex.: jiló, fígado…" rows={2} style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.96rem', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
       <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>A gente tenta evitar; se faltar opção, avisamos. Diferente de alergia — esta é uma preferência relaxável.</p>
+    </div>
+  );
+}
+
+/* ════════════════════ Login ════════════════════ */
+
+function Login({ onEntrar }: { onEntrar: () => void }) {
+  const inp: CSSProperties = { width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '13px 15px', color: '#EAE5DB', fontSize: '1rem', outline: 'none' };
+  const cap: CSSProperties = { display: 'block', fontSize: '.74rem', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 8 };
+  return (
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+      <div style={{ width: '100%', maxWidth: 430, animation: `evkScreenIn .55s ${EASE}` }}>
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+          <div style={{ animation: 'evkFloat 7s ease-in-out infinite', marginBottom: 18 }}><Logo size={52} /></div>
+          <Marca size="1.5rem" />
+        </div>
+        <div style={{ background: 'linear-gradient(168deg, rgba(15,42,26,.9), rgba(15,15,14,.92))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 24, padding: '36px 32px', boxShadow: '0 40px 90px -40px rgba(0,0,0,.7)' }}>
+          <h1 style={{ margin: '0 0 6px', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-.02em' }}>Que bom te ver de novo.</h1>
+          <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.6)', fontSize: '.96rem' }}>Entre para continuar de onde parou.</p>
+          <label style={cap}>E-mail</label>
+          <input type="email" placeholder="voce@email.com" style={{ ...inp, marginBottom: 18 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}><label style={cap}>Senha</label><a href="#" style={{ fontSize: '.82rem', color: '#BDFF00' }}>Esqueci minha senha</a></div>
+          <input type="password" placeholder="••••••••" style={{ ...inp, marginBottom: 26 }} />
+          <button onClick={onEntrar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.05rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Entrar</button>
+        </div>
+        <p style={{ textAlign: 'center', margin: '22px 0 0', fontSize: '.85rem', color: 'rgba(234,229,219,.45)' }}>Novo por aqui? <Link href="/" style={{ color: '#EAE5DB', textDecoration: 'underline' }}>Conhecer o Evokorpus</Link> · <span style={{ border: '1px solid rgba(234,229,219,.25)', borderRadius: 6, padding: '1px 7px', fontSize: '.72rem', fontWeight: 700, color: 'rgba(234,229,219,.6)' }}>18+</span></p>
+      </div>
     </div>
   );
 }
