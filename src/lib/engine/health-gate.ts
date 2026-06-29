@@ -82,6 +82,18 @@ export function avaliarGateSaude(perfil: PerfilUsuario): ResultadoGate {
     );
   }
 
+  // --- Sobrepeso leve (25 ≤ IMC < 30) + massa → SÓ AVISO (não redireciona). ----
+  // IMC não distingue gordura de músculo — pode ser ganho legítimo (lean bulk).
+  if (
+    imc >= IMC_LIMITES.sobrepeso &&
+    imc < IMC_LIMITES.obesidade &&
+    perfil.objetivo === 'massa'
+  ) {
+    avisos.push(
+      'Seu IMC indica sobrepeso. Como o IMC não distingue gordura de músculo, mantivemos seu objetivo; acompanhe com um profissional se tiver dúvida.',
+    );
+  }
+
   // --- Coleta de gatilhos por comportamento. ----------------------------------
   const clinica = condicaoClinica(perfil);
 
@@ -97,11 +109,17 @@ export function avaliarGateSaude(perfil: PerfilUsuario): ResultadoGate {
     rotearTriggers.push('gasto energético (GET) já abaixo do piso de segurança');
   }
 
-  // RESTRINGIR — 16 ≤ IMC < 18.5 e objetivo = emagrecimento (corte)
-  const restringir =
+  // RESTRINGIR — simetria baixo × alto peso (DF 2026-06-29):
+  //   baixo: 16 ≤ IMC < 18.5 + emagrecimento (corte) → manutenção
+  //   alto:  IMC ≥ 30 + massa (superávit) → manutenção (sem superávit). Emagrecer no alto
+  //          continua PERMITIR; sem ROTEAR no alto (risco clínico já é pego pelo PAR-Q).
+  const restringirBaixoPeso =
     imc >= IMC_LIMITES.magrezaSevera &&
     imc < IMC_LIMITES.baixoPeso &&
     perfil.objetivo === 'emagrecimento';
+  const restringirAltoPeso =
+    imc >= IMC_LIMITES.obesidade && perfil.objetivo === 'massa';
+  const restringir = restringirBaixoPeso || restringirAltoPeso;
 
   // PISAR — só faz sentido no corte: alvo abaixo do piso, mas GET acima do piso.
   // Usa `>=` para bater literalmente com a spec (`GET ≥ piso_seguro`); o caso GET==piso
@@ -124,13 +142,21 @@ export function avaliarGateSaude(perfil: PerfilUsuario): ResultadoGate {
   }
 
   if (restringir) {
-    motivos.push('16 ≤ IMC < 18,5 no corte — gera apenas manutenção');
+    if (restringirBaixoPeso) {
+      motivos.push('16 ≤ IMC < 18,5 no corte — gera apenas manutenção');
+    }
+    if (restringirAltoPeso) {
+      motivos.push('IMC ≥ 30 com objetivo de ganho de massa — superávit redirecionado para manutenção (saúde)');
+      avisos.push(
+        'Com IMC elevado, priorizamos saúde/manutenção em vez de superávit calórico. Para um ganho de massa específico, considere um profissional.',
+      );
+    }
     return {
       comportamento: 'RESTRINGIR',
       motivos,
       avisos,
       derivados,
-      objetivoEfetivo: 'saude', // força manutenção
+      objetivoEfetivo: 'saude', // força manutenção (×1.00, sem déficit/superávit)
     };
   }
 

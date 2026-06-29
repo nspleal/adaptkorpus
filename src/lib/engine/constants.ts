@@ -64,6 +64,8 @@ export const ESCALA_PORCAO = { min: 0.5, max: 3.0 } as const;
 export const IMC = {
   magrezaSevera: 16, // < 16 → ROTEAR (qualquer objetivo)
   baixoPeso: 18.5, // < 18.5 → aviso universal; no corte → RESTRINGIR
+  sobrepeso: 25, // 25 ≤ IMC < 30 + massa → SÓ AVISO (pode ser músculo)
+  obesidade: 30, // ≥ 30 + massa → RESTRINGIR → saúde (simetria do alto peso, DF 2026-06-29)
 } as const;
 
 /** Faixas de plausibilidade (backstop fail-safe; entrada fora → ROTEAR). */

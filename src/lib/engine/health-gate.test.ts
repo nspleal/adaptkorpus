@@ -125,3 +125,60 @@ describe('gate de saúde', () => {
     expect(['PERMITIR', 'PISAR']).toContain(r.comportamento);
   });
 });
+
+// Corpus cruzado {6 bandas de IMC} × {3 objetivos} contra a tabela do gate
+// (gate-de-saude-evokorpus, DF 2026-06-29 — simetria baixo × alto peso).
+// Altura fixa 170 cm, nível MUITO INTENSO (GET bem acima do piso → isola a regra de IMC
+// dos gatilhos calóricos PISAR/ROTEAR). Pesos calculados p/ cair no meio de cada banda.
+describe('gate de saúde — simetria baixo × alto peso (corpus IMC × objetivo)', () => {
+  const bandas = [
+    { nome: '<16', peso: 43 }, // IMC 14,9
+    { nome: '16-18.5', peso: 49 }, // 17,0
+    { nome: '18.5-25', peso: 64 }, // 22,1
+    { nome: '25-30', peso: 78 }, // 27,0
+    { nome: '30-35', peso: 92 }, // 31,8
+    { nome: '>=35', peso: 107 }, // 37,0
+  ] as const;
+  const objetivos = ['emagrecimento', 'saude', 'massa'] as const;
+
+  type Obj = (typeof objetivos)[number];
+  function esperado(banda: string, obj: Obj): [string, Obj | 'saude'] {
+    if (banda === '<16') return ['ROTEAR', obj]; // qualquer objetivo
+    if (banda === '16-18.5') return obj === 'emagrecimento' ? ['RESTRINGIR', 'saude'] : ['PERMITIR', obj];
+    if (banda === '18.5-25' || banda === '25-30') return ['PERMITIR', obj];
+    // 30-35 e >=35 (obesidade): massa → RESTRINGIR→saúde; emagrecer/saúde → PERMITIR
+    return obj === 'massa' ? ['RESTRINGIR', 'saude'] : ['PERMITIR', obj];
+  }
+
+  for (const b of bandas) {
+    for (const obj of objetivos) {
+      it(`IMC ${b.nome} + ${obj} → ${esperado(b.nome, obj)[0]}`, () => {
+        const r = avaliarGateSaude(perfil({ pesoKg: b.peso, alturaCm: 170, idade: 30, nivelAtividade: 'muito_intenso', objetivo: obj }));
+        const [comp, objEf] = esperado(b.nome, obj);
+        expect(r.comportamento).toBe(comp);
+        expect(r.objetivoEfetivo).toBe(objEf);
+      });
+    }
+  }
+
+  it('emagrecer NUNCA é ROTEAR/RESTRINGIR só por IMC alto (continua PERMITIR)', () => {
+    for (const peso of [78, 92, 107]) {
+      const r = avaliarGateSaude(perfil({ pesoKg: peso, alturaCm: 170, idade: 30, nivelAtividade: 'muito_intenso', objetivo: 'emagrecimento' }));
+      expect(r.comportamento).toBe('PERMITIR');
+    }
+  });
+
+  it('25 ≤ IMC < 30 + massa → PERMITIR com aviso (não redireciona)', () => {
+    const r = avaliarGateSaude(perfil({ pesoKg: 78, alturaCm: 170, idade: 30, nivelAtividade: 'muito_intenso', objetivo: 'massa' }));
+    expect(r.comportamento).toBe('PERMITIR');
+    expect(r.objetivoEfetivo).toBe('massa');
+    expect(r.avisos.join(' ').toLowerCase()).toContain('sobrepeso');
+  });
+
+  it('IMC ≥ 30 + massa → RESTRINGIR→saúde com aviso', () => {
+    const r = avaliarGateSaude(perfil({ pesoKg: 92, alturaCm: 170, idade: 30, nivelAtividade: 'muito_intenso', objetivo: 'massa' }));
+    expect(r.comportamento).toBe('RESTRINGIR');
+    expect(r.objetivoEfetivo).toBe('saude');
+    expect(r.avisos.length).toBeGreaterThan(0);
+  });
+});

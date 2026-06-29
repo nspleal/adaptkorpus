@@ -106,4 +106,4 @@ export const DIFICULDADE_LIBERADA: Record<NivelExperiencia, NivelExercicio[]> = 
 };
 
 /** Limiares de IMC do gate (reaproveitados — espelham gate-de-saude). */
-export const IMC_LIMITES = { magrezaSevera: 16, baixoPeso: 18.5 } as const;
+export const IMC_LIMITES = { magrezaSevera: 16, baixoPeso: 18.5, sobrepeso: 25, obesidade: 30 } as const;

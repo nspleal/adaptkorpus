@@ -61,3 +61,45 @@ describe('gate de treino', () => {
     expect([...comportamentos].every((c) => ['ROTEAR', 'RESTRINGIR', 'PERMITIR'].includes(c))).toBe(true);
   });
 });
+
+// Corpus cruzado {6 bandas de IMC} × {3 objetivos} — simetria baixo × alto peso (DF 2026-06-29).
+// O treino não tem PISAR/ROTEAR calórico, então o nível de atividade é irrelevante aqui.
+describe('gate de treino — simetria baixo × alto peso (corpus IMC × objetivo)', () => {
+  const bandas = [
+    { nome: '<16', peso: 43 },
+    { nome: '16-18.5', peso: 49 },
+    { nome: '18.5-25', peso: 64 },
+    { nome: '25-30', peso: 78 },
+    { nome: '30-35', peso: 92 },
+    { nome: '>=35', peso: 107 },
+  ] as const;
+  const objetivos = ['emagrecimento', 'saude', 'massa'] as const;
+  type Obj = (typeof objetivos)[number];
+
+  function esperado(banda: string, obj: Obj): [string, Obj | 'saude'] {
+    if (banda === '<16') return ['ROTEAR', obj];
+    if (banda === '16-18.5') return obj === 'emagrecimento' ? ['RESTRINGIR', 'saude'] : ['PERMITIR', obj];
+    if (banda === '18.5-25' || banda === '25-30') return ['PERMITIR', obj];
+    return obj === 'massa' ? ['RESTRINGIR', 'saude'] : ['PERMITIR', obj];
+  }
+
+  for (const b of bandas) {
+    for (const obj of objetivos) {
+      it(`IMC ${b.nome} + ${obj} → ${esperado(b.nome, obj)[0]}`, () => {
+        const r = avaliarGateTreino(perfil({ pesoKg: b.peso, alturaCm: 170, idade: 30, objetivo: obj }));
+        const [comp, objEf] = esperado(b.nome, obj);
+        expect(r.comportamento).toBe(comp);
+        expect(r.objetivoEfetivo).toBe(objEf);
+      });
+    }
+  }
+
+  it('25 ≤ IMC < 30 + massa → PERMITIR com aviso; IMC ≥ 30 + massa → RESTRINGIR→saúde', () => {
+    const sobre = avaliarGateTreino(perfil({ pesoKg: 78, alturaCm: 170, objetivo: 'massa' }));
+    expect(sobre.comportamento).toBe('PERMITIR');
+    expect(sobre.avisos.join(' ').toLowerCase()).toContain('sobrepeso');
+    const obeso = avaliarGateTreino(perfil({ pesoKg: 92, alturaCm: 170, objetivo: 'massa' }));
+    expect(obeso.comportamento).toBe('RESTRINGIR');
+    expect(obeso.objetivoEfetivo).toBe('saude');
+  });
+});

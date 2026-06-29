@@ -58,7 +58,7 @@ export function avaliarGateTreino(perfil: PerfilTreino): ResultadoGateTreino {
     return { comportamento: 'ROTEAR', objetivoEfetivo: perfil.objetivo, motivos, avisos, derivados: { imc } };
   }
 
-  // 16 ≤ IMC < 18.5
+  // 16 ≤ IMC < 18.5 (baixo peso não-severo)
   if (imc < IMC_LIMITES.baixoPeso) {
     if (perfil.objetivo === 'emagrecimento') {
       return {
@@ -71,6 +71,34 @@ export function avaliarGateTreino(perfil: PerfilTreino): ResultadoGateTreino {
     }
     // massa/saúde: massa é apropriada p/ baixo peso — só avisa
     return { comportamento: 'PERMITIR', objetivoEfetivo: perfil.objetivo, motivos: [], avisos, derivados: { imc } };
+  }
+
+  // Simetria do alto peso (DF 2026-06-29): espelha o baixo peso, sem ROTEAR.
+  //   IMC ≥ 30 + massa → RESTRINGIR → treino conservador de saúde + aviso.
+  //   25 ≤ IMC < 30 + massa → só aviso (pode ser músculo). Emagrecer sempre PERMITIR.
+  if (perfil.objetivo === 'massa' && imc >= IMC_LIMITES.obesidade) {
+    return {
+      comportamento: 'RESTRINGIR',
+      objetivoEfetivo: 'saude',
+      motivos: ['IMC ≥ 30 com objetivo de ganho de massa — treino redirecionado para Saúde (conservador)'],
+      avisos: [
+        ...avisos,
+        'Com IMC elevado, priorizamos um treino de saúde/conservador. Para hipertrofia específica, considere um profissional.',
+      ],
+      derivados: { imc },
+    };
+  }
+  if (perfil.objetivo === 'massa' && imc >= IMC_LIMITES.sobrepeso) {
+    return {
+      comportamento: 'PERMITIR',
+      objetivoEfetivo: perfil.objetivo,
+      motivos: [],
+      avisos: [
+        ...avisos,
+        'Seu IMC indica sobrepeso. Como o IMC não distingue gordura de músculo, mantivemos seu objetivo; acompanhe com um profissional se tiver dúvida.',
+      ],
+      derivados: { imc },
+    };
   }
 
   return { comportamento: 'PERMITIR', objetivoEfetivo: perfil.objetivo, motivos: [], avisos, derivados: { imc } };

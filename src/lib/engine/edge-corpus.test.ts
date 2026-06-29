@@ -89,6 +89,7 @@ describe('error-hunt: corpus de bordas do gate + dieta', () => {
       let esperado: string;
       if (imc < 16 || get <= piso) esperado = 'ROTEAR';
       else if (imc >= 16 && imc < 18.5 && p.objetivo === 'emagrecimento') esperado = 'RESTRINGIR';
+      else if (imc >= 30 && p.objetivo === 'massa') esperado = 'RESTRINGIR'; // simetria alto peso (DF 2026-06-29)
       else if (p.objetivo === 'emagrecimento' && cand < piso && get > piso) esperado = 'PISAR';
       else esperado = 'PERMITIR';
       if (gate.comportamento !== esperado) {

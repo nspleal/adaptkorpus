@@ -24,7 +24,7 @@ montagem de cardápio com escala de porções; treino FITT → montagem de rotin
 de prato e exercício), uma **camada de API** rudimentar sobre esse motor, uma **demo web** para
 testar tudo, e a **base de segurança/LGPD** (RLS, validação na borda, segredos server-only, CSP
 com nonce). Os dados reais já estão embutidos: **125 alimentos, 56 pratos, 163 exercícios**.
-Cobertura de testes: **90 testes, 10 arquivos, 100% verdes** (inclui corpus de bordas com 2700
+Cobertura de testes: **130 testes, 10 arquivos, 100% verdes** (inclui corpus de bordas com 2700
 casos). Nada de IA em runtime; tudo é fórmula + dado curado, auditável.
 
 A correção mais recente (e a que destrava o uso real) foi a **escala de porções no montador** +
@@ -74,9 +74,11 @@ montagem de rotina**. Substituição F.2 roda sobre planos já gerados.
 ### 4.1 Gate de saúde ([[gate-de-saude-evokorpus]])
 Precedência **ROTEAR > RESTRINGIR > PISAR > PERMITIR**.
 - Qualquer flag de PAR-Q verdadeira (gestação/amamentação, renal, cardíaca, lesão, diabetes) → **ROTEAR** (não gera plano).
-- IMC < 16 → **ROTEAR**; IMC < 18,5 → aviso universal; baixo peso fora do corte → **RESTRINGIR** (objetivo efetivo vira `saude`).
-- **PISAR** quando o alvo cairia abaixo do piso calórico de segurança.
-- O treino herda o mesmo gate (sem `PISAR` — esse é só da dieta).
+- **IMC < 16** → **ROTEAR** (qualquer objetivo). **IMC < 18,5** → aviso universal.
+- **Baixo peso (16 ≤ IMC < 18,5) + emagrecimento (corte)** → **RESTRINGIR** (objetivo efetivo vira `saude`). *(Correção de redação do handoff anterior: o gatilho é **no corte/emagrecimento**, não "fora do corte". O código sempre esteve correto.)*
+- **Simetria do alto peso (DF 2026-06-29):** **IMC ≥ 30 + massa** → **RESTRINGIR** → `saude` (dieta ×1,00, sem superávit) + aviso. **25 ≤ IMC < 30 + massa** → **só aviso** (IMC não distingue gordura de músculo). **Emagrecer continua `PERMITIR` em qualquer IMC alto; sem `ROTEAR` no alto** (risco clínico já é pego pelo PAR-Q).
+- **PISAR** quando o alvo de corte cairia abaixo do piso calórico de segurança (mas GET ≥ piso).
+- O treino **herda** o mesmo gate, incluindo a simetria do alto peso (massa→saúde conservador), **sem `PISAR`** (esse é só da dieta).
 
 ### 4.2 Dieta — alvo e macros ([[parametros-motor-dieta-evokorpus]])
 - **TMB** Mifflin-St Jeor → **GET** = TMB × **PAL** (sedentário 1,2 · leve 1,375 · moderado 1,55 · intenso 1,725 · muito intenso 1,9).
@@ -91,7 +93,7 @@ Monta 1 prato por refeição (café/almoço/jantar obrigatórios; lanche opciona
 - **Filtros:** alérgeno = **absoluto** (nunca relaxa, nem que isso impeça fechar a janela); identidade vegano/veg = absoluta por default; gosto = relaxável por último.
 - **Janela do objetivo:** déficit `[0,80–0,85]×GET` · superávit `[1,10–1,15]×GET` · manutenção `±5%` · PISAR `[piso, min(GET, piso×1,05)]`.
 - **ESCALA (Passo 3 — "combinar/escalar pratos"):** uma **escala única do dia** multiplica as gramas dos pratos para **mira a kcal-alvo** (kcal = alvo mais protegido); proteína do ponto→piso é secundária. Cada item do cardápio carrega `escala` e `macros` (= base × escala).
-- **Limite de escala:** `ESCALA_PORCAO = 0,5×–3,0×` — **default de implementação, NÃO número travado da spec** (o cofre manda escalar mas não fixa o limite). Revisável; tende a encolher conforme o banco cresce. **→ candidato a decisão no cofre.**
+- **Limite de escala:** `ESCALA_PORCAO = 0,5×–3,0×` — **TRAVADO v1 (DF 2026-06-29, spec oficial)**. Prioridade = **fidelidade calórica** (o total bate o alvo); comum ~0,8×–1,5×, o 3× é válvula rara. Apertar sem perder cobertura é **refino futuro** (escala por prato + banco maior).
 - **Desempate determinístico:** menor desvio calórico → proteína → chave final lexicográfica sobre o conjunto de ids.
 - **Status:** `ok` / `fora_da_janela` (banco não fecha mesmo escalando) / `sem_candidatos`.
 
@@ -211,8 +213,9 @@ Demo local (cálculo no dispositivo, motor determinístico) para **testar tudo**
 Cada motor seguiu: **build → corpus determinístico → cold-pass adversarial → correção**, com
 postura de falsificação e "achado só com prova".
 
-- **90 testes / 10 arquivos / 100% verdes**, incluindo corpus de bordas da dieta (**2700 casos**)
-  e do treino. Invariantes do corpus intactos após a escala.
+- **130 testes / 10 arquivos / 100% verdes**, incluindo corpus de bordas da dieta (**2700 casos**)
+  e do treino, e o **corpus cruzado do gate** (6 bandas de IMC × 3 objetivos, dieta + treino).
+  Invariantes do corpus intactos após a escala e a simetria do alto peso.
 - **Sweep da escala:** **54/54** perfis normais e **18/18** veganos agora fecham `ok` (antes,
   **todos** `fora_da_janela`).
 - **E2E no navegador (Playwright):** as 4 refeições trocam de prato; dia = **1856 kcal** (dentro
@@ -221,18 +224,16 @@ postura de falsificação e "achado só com prova".
 
 ---
 
-## 11. Decisões que voltam para você arquivar no cofre
+## 11. Decisões — estado (DF 2026-06-29)
 
-1. **Limite de escala de porção `ESCALA_PORCAO = 0,5×–3,0×`** — default de implementação (o cofre
-   manda escalar, não fixa o limite). Decidir se é o intervalo desejado ou se quer porções mais
-   conservadoras. Vale virar parâmetro travado em [[parametros-motor-dieta-evokorpus]].
-2. **Escala de dia única vs. por prato** — hoje a escala é **uma só para o dia** (simples,
-   determinística). Refinamento futuro: escala por prato (afina a proteína ao ponto). Decisão de
-   produto/algoritmo.
-3. **Banco vegano/vegetariano** — você já sinalizou que vai expandir alimentos; o cofre já anota a
-   pendência da proteína vegetal (8 itens). Prioridade para destravar otimização vegana.
-4. **Equivalência calórica na troca** — implementada conforme "mínimo = equivalência calórica";
-   confirmar que é o comportamento desejado (vs. exigir também proximidade de macros).
+**Travadas e já implementadas (spec oficial):**
+1. ✅ **`ESCALA_PORCAO = 0,5×–3,0×`** (escala única do dia, prioridade = fidelidade calórica) — **travado v1**.
+2. ✅ **Troca de prato = equivalência só-kcal** (escala o prato novo p/ igualar kcal; macros só na ordenação; proteína já é piso duro) — **travado v1**.
+3. ✅ **Simetria do alto peso no gate** (IMC ≥ 30 + massa → RESTRINGIR→saúde; 25–30 + massa → só aviso; emagrecer sempre PERMITIR; sem ROTEAR no alto) — **implementado na dieta e no treino**.
+
+**Refinos futuros (não fazer agora — decisão já registrada):**
+4. **Escala por prato** (afina proteína ao ponto) + **expandir o banco** → aí dá para **apertar** a faixa de escala sem perder cobertura.
+5. **Banco vegano/vegetariano** — proteína vegetal tem só 8 itens; expandir destrava a otimização vegana (a dieta onívora normal já está coberta).
 
 ---
 
