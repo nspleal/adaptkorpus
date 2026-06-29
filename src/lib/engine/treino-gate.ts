@@ -1,0 +1,77 @@
+/**
+ * Gate de saúde — caminho do TREINO (herdado do gate compartilhado).
+ * Fonte: parametros-motor-treino-evokorpus §"Passo 0" + gate-de-saude-evokorpus.
+ *
+ * Diferenças vs. a dieta: NÃO há `PISAR` (piso é só calórico). `RESTRINGIR` no treino
+ * = 16≤IMC<18.5 + emagrecimento → redireciona objetivo p/ Saúde (treino conservador).
+ * Precedência: ROTEAR > RESTRINGIR > PERMITIR. Fail-safe: input implausível → ROTEAR.
+ */
+import { PLAUSIBILIDADE } from './constants';
+import { calcularIMC } from './formulas';
+import { IMC_LIMITES } from './treino-constants';
+import type { PerfilTreino, ResultadoGateTreino } from './treino-types';
+
+function inputImplausivel(p: PerfilTreino): boolean {
+  const okPeso = p.pesoKg >= PLAUSIBILIDADE.pesoKg.min && p.pesoKg <= PLAUSIBILIDADE.pesoKg.max;
+  const okAltura =
+    p.alturaCm >= PLAUSIBILIDADE.alturaCm.min && p.alturaCm <= PLAUSIBILIDADE.alturaCm.max;
+  const okIdade = p.idade >= PLAUSIBILIDADE.idade.min && p.idade <= PLAUSIBILIDADE.idade.max;
+  const finitos = [p.pesoKg, p.alturaCm, p.idade].every((n) => Number.isFinite(n));
+  return !(okPeso && okAltura && okIdade && finitos);
+}
+
+function condicaoClinica(p: PerfilTreino): string[] {
+  const f = p.flagsSaude;
+  const m: string[] = [];
+  if (f.gestacaoAmamentacao) m.push('gestação/amamentação');
+  if (f.renal) m.push('condição renal');
+  if (f.cardiaca) m.push('condição cardíaca');
+  if (f.lesao) m.push('lesão/limitação física');
+  if (f.diabetes) m.push('diabetes');
+  return m;
+}
+
+/** Avalia o gate de treino. Função PURA e determinística. */
+export function avaliarGateTreino(perfil: PerfilTreino): ResultadoGateTreino {
+  if (inputImplausivel(perfil)) {
+    return {
+      comportamento: 'ROTEAR',
+      objetivoEfetivo: perfil.objetivo,
+      motivos: ['dados fora de faixa plausível (peso/altura/idade)'],
+      avisos: ['Confira seus dados; em caso de dúvida, procure um profissional.'],
+      derivados: { imc: NaN },
+    };
+  }
+
+  const imc = calcularIMC(perfil.pesoKg, perfil.alturaCm);
+  const avisos: string[] = [];
+  if (imc < IMC_LIMITES.baixoPeso) {
+    avisos.push('Seu IMC indica baixo peso. Recomendamos acompanhamento de um profissional.');
+  }
+
+  const clinica = condicaoClinica(perfil);
+  if (clinica.length > 0 || imc < IMC_LIMITES.magrezaSevera) {
+    const motivos =
+      clinica.length > 0
+        ? [`condição clínica declarada: ${clinica.join(', ')}`]
+        : ['IMC < 16 (magreza severa)'];
+    return { comportamento: 'ROTEAR', objetivoEfetivo: perfil.objetivo, motivos, avisos, derivados: { imc } };
+  }
+
+  // 16 ≤ IMC < 18.5
+  if (imc < IMC_LIMITES.baixoPeso) {
+    if (perfil.objetivo === 'emagrecimento') {
+      return {
+        comportamento: 'RESTRINGIR',
+        objetivoEfetivo: 'saude', // redireciona p/ treino conservador de saúde
+        motivos: ['16 ≤ IMC < 18,5 no corte — treino redirecionado para Saúde (conservador)'],
+        avisos,
+        derivados: { imc },
+      };
+    }
+    // massa/saúde: massa é apropriada p/ baixo peso — só avisa
+    return { comportamento: 'PERMITIR', objetivoEfetivo: perfil.objetivo, motivos: [], avisos, derivados: { imc } };
+  }
+
+  return { comportamento: 'PERMITIR', objetivoEfetivo: perfil.objetivo, motivos: [], avisos, derivados: { imc } };
+}

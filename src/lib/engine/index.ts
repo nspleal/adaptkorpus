@@ -17,11 +17,32 @@ export {
   type StatusMontagem,
 } from './assembler';
 
+// --- Treino (FITT) ---
+export * from './treino-types';
+export {
+  prescreverTreino,
+  progredirExercicio,
+  precisaDeload,
+  aplicarDeload,
+  dificuldadesLiberadas,
+} from './treino';
+export { avaliarGateTreino } from './treino-gate';
+export { montarRotina } from './treino-montador';
+
 import { montarCardapioDia, type RestricoesUsuario, type CardapioDia } from './assembler';
 import { gerarPlanoDieta } from './diet';
 import { avaliarGateSaude } from './health-gate';
-import type { Food, Recipe } from '../data/types';
+import { avaliarGateTreino } from './treino-gate';
+import { prescreverTreino } from './treino';
+import { montarRotina } from './treino-montador';
+import type { Exercise, Food, Recipe } from '../data/types';
 import type { PerfilUsuario, PlanoDieta, ResultadoGate } from './types';
+import type {
+  PerfilTreino,
+  PrescricaoFITT,
+  ResultadoGateTreino,
+  RotinaSemanal,
+} from './treino-types';
 
 export interface ResultadoMotor {
   gate: ResultadoGate;
@@ -62,4 +83,32 @@ export function gerarDieta(
   }
 
   return { gate, plano, cardapio };
+}
+
+export interface ResultadoTreino {
+  gate: ResultadoGateTreino;
+  /** null quando o gate é ROTEAR (nenhum treino gerado — orienta profissional). */
+  prescricao: PrescricaoFITT | null;
+  /** null quando não há prescrição ou quando a biblioteca não foi passada. */
+  rotina: RotinaSemanal | null;
+}
+
+/**
+ * Executa o pipeline completo de treino. Função PURA e determinística.
+ * `exercises` é opcional: sem ele, devolve só a prescrição FITT (sem montar a rotina).
+ */
+export function gerarTreino(
+  perfil: PerfilTreino,
+  opcoes?: { exercises?: readonly Exercise[] },
+): ResultadoTreino {
+  const gate = avaliarGateTreino(perfil);
+
+  if (gate.comportamento === 'ROTEAR') {
+    return { gate, prescricao: null, rotina: null };
+  }
+
+  const prescricao = prescreverTreino(perfil, gate);
+  const rotina = opcoes?.exercises ? montarRotina(prescricao, perfil, opcoes.exercises) : null;
+
+  return { gate, prescricao, rotina };
 }
