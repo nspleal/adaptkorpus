@@ -28,8 +28,8 @@ interface DiaSpec {
 const FB: PadraoMovimento[] = ['empurrar', 'puxar', 'agachar', 'dobradica_quadril', 'core'];
 const UPPER: PadraoMovimento[] = ['empurrar', 'puxar', 'isolado', 'core'];
 const LOWER: PadraoMovimento[] = ['agachar', 'dobradica_quadril', 'core'];
-const PUSH: PadraoMovimento[] = ['empurrar', 'isolado'];
-const PULL: PadraoMovimento[] = ['puxar', 'isolado'];
+const PUSH: PadraoMovimento[] = ['empurrar', 'isolado', 'core'];
+const PULL: PadraoMovimento[] = ['puxar', 'isolado', 'core'];
 const LEGS: PadraoMovimento[] = ['agachar', 'dobradica_quadril', 'core'];
 
 /** Split por dias de força agendados (3 dias depende do nível). */
@@ -57,13 +57,11 @@ function tempoPorExercicioSeg(p: PrescricaoFITT): number {
   return p.seriesPorExercicio.min * (40 + p.descansoCompostoSeg.min);
 }
 
-/**
- * Ordem de demanda por rodada (codifica os invariantes):
- * - puxar SEMPRE antes de empurrar → garante puxar ≥ empurrar em qualquer prefixo;
- * - dobradiça na rodada de presença → garante presença.
- */
-const DEMANDA_PRESENCA: PadraoMovimento[] = ['puxar', 'empurrar', 'agachar', 'dobradica_quadril', 'core'];
-const DEMANDA_FREQUENCIA: PadraoMovimento[] = ['puxar', 'empurrar', 'agachar', 'dobradica_quadril', 'isolado', 'core'];
+/** Padrões fundamentais (puxar SEMPRE antes de empurrar → sustenta puxar ≥ empurrar). */
+const FUNDAMENTAIS: PadraoMovimento[] = ['puxar', 'empurrar', 'agachar', 'dobradica_quadril'];
+/** Core: invariante 2–3×/semana (travado na spec). */
+const CORE_MIN = 2;
+const CORE_MAX = 3;
 
 /**
  * Monta a rotina semanal. Função PURA e determinística.
@@ -112,41 +110,48 @@ export function montarRotina(
   const { split, dias: spec } = montarSplit(diasForca, perfil.nivelExperiencia);
 
   // --- Alocador semanal de padrões -----------------------------------------
-  // Distribui os padrões pelos dias (respeitando o template de cada dia e a capacidade
-  // por tempo), em rodadas: a 1ª garante PRESENÇA de cada padrão; as seguintes adicionam
-  // frequência. Como `puxar` vem antes de `empurrar` em toda rodada, puxar ≥ empurrar
-  // vale por construção, mesmo quando o tempo corta exercícios.
+  // Distribui os padrões pelos dias (respeitando o template e a capacidade por tempo),
+  // garantindo por construção: dobradiça presente, puxar ≥ empurrar, e core ∈ [2,3].
   const temPool = (p: PadraoMovimento) => (porPadrao.get(p)?.length ?? 0) > 0;
   const capDia = spec.map((d) => Math.min(d.padroes.length, maxExercicios));
   const capTotal = capDia.reduce((a, b) => a + b, 0);
   const escolhidos: PadraoMovimento[][] = spec.map(() => []);
-
   let alocados = 0;
-  let rodada = 0;
-  while (alocados < capTotal) {
-    const demandas = rodada === 0 ? DEMANDA_PRESENCA : DEMANDA_FREQUENCIA;
-    let progrediu = false;
-    for (const pat of demandas) {
-      if (alocados >= capTotal) break;
-      if (!temPool(pat)) continue;
-      const cands = spec
-        .map((d, i) => ({ i, d }))
-        .filter(({ i, d }) => d.padroes.includes(pat) && escolhidos[i]!.length < capDia[i]!);
-      if (cands.length === 0) continue;
-      // prefere dia que ainda não tem esse padrão → depois o menos cheio → depois índice.
-      cands.sort((a, b) => {
-        const aTem = escolhidos[a.i]!.includes(pat) ? 1 : 0;
-        const bTem = escolhidos[b.i]!.includes(pat) ? 1 : 0;
-        if (aTem !== bTem) return aTem - bTem;
-        if (escolhidos[a.i]!.length !== escolhidos[b.i]!.length) return escolhidos[a.i]!.length - escolhidos[b.i]!.length;
-        return a.i - b.i;
-      });
-      escolhidos[cands[0]!.i]!.push(pat);
-      alocados++;
-      progrediu = true;
-    }
-    rodada++;
-    if (!progrediu) break; // nada mais cabe
+  const conta = (p: PadraoMovimento) => escolhidos.reduce((n, arr) => n + arr.filter((x) => x === p).length, 0);
+
+  /** Coloca 1 slot do padrão no melhor dia. Guarda: empurrar nunca ultrapassa puxar. */
+  function place(pat: PadraoMovimento): boolean {
+    if (alocados >= capTotal || !temPool(pat)) return false;
+    if (pat === 'empurrar' && conta('empurrar') >= conta('puxar')) return false; // puxar ≥ empurrar
+    const cands = spec
+      .map((d, i) => ({ i, d }))
+      .filter(({ i, d }) => d.padroes.includes(pat) && escolhidos[i]!.length < capDia[i]!);
+    if (cands.length === 0) return false;
+    cands.sort((a, b) => {
+      const aTem = escolhidos[a.i]!.includes(pat) ? 1 : 0;
+      const bTem = escolhidos[b.i]!.includes(pat) ? 1 : 0;
+      if (aTem !== bTem) return aTem - bTem; // prefere dia sem esse padrão (espalha)
+      if (escolhidos[a.i]!.length !== escolhidos[b.i]!.length) return escolhidos[a.i]!.length - escolhidos[b.i]!.length;
+      return a.i - b.i;
+    });
+    escolhidos[cands[0]!.i]!.push(pat);
+    alocados++;
+    return true;
+  }
+
+  // 1) Presença dos fundamentais (puxar antes de empurrar).
+  for (const pat of FUNDAMENTAIS) place(pat);
+  // 2) Core até o piso de 2× (invariante).
+  while (conta('core') < CORE_MIN && place('core')) {
+    /* repete */
+  }
+  // 3) Frequência: fundamentais + isolado; core só até o teto de 3×. Até encher.
+  let progrediu = true;
+  while (alocados < capTotal && progrediu) {
+    progrediu = false;
+    for (const pat of FUNDAMENTAIS) progrediu = place(pat) || progrediu;
+    progrediu = place('isolado') || progrediu;
+    if (conta('core') < CORE_MAX) progrediu = place('core') || progrediu;
   }
 
   const diasTreino: DiaTreino[] = spec.map((d, i) => {
@@ -165,6 +170,9 @@ export function montarRotina(
   }
   if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
     avisos.push('Atenção: padrão de dobradiça/quadril (cadeia posterior) não foi coberto.');
+  }
+  if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
+    avisos.push('Atenção: core fora da faixa de 2–3×/semana.');
   }
   if (maxExercicios < 3) {
     avisos.push('Tempo por sessão curto: priorizamos os exercícios fundamentais.');

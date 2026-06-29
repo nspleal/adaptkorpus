@@ -14,10 +14,13 @@ import type { NivelExperiencia, PerfilTreino } from './treino-types';
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 
 // Spec REESCRITA do cofre (independente do motor).
-const SPEC_FITT: Record<Objetivo, { repsComp: [number, number]; rir: [number, number]; descComp: [number, number] }> = {
-  saude: { repsComp: [8, 15], rir: [2, 4], descComp: [60, 90] },
-  massa: { repsComp: [6, 12], rir: [1, 3], descComp: [90, 120] },
-  emagrecimento: { repsComp: [8, 12], rir: [1, 3], descComp: [60, 90] },
+const SPEC_FITT: Record<
+  Objetivo,
+  { repsComp: [number, number]; repsIsol: [number, number]; rir: [number, number]; descComp: [number, number]; descIsol: [number, number] }
+> = {
+  saude: { repsComp: [8, 15], repsIsol: [10, 15], rir: [2, 4], descComp: [60, 90], descIsol: [60, 90] },
+  massa: { repsComp: [6, 12], repsIsol: [8, 15], rir: [1, 3], descComp: [90, 120], descIsol: [60, 90] },
+  emagrecimento: { repsComp: [8, 12], repsIsol: [10, 15], rir: [1, 3], descComp: [60, 90], descIsol: [60, 90] },
 };
 const SPEC_VOL: Record<NivelExperiencia, { sessoes: [number, number]; vol: Record<Objetivo, [number, number]> }> = {
   iniciante: { sessoes: [2, 3], vol: { saude: [6, 10], massa: [10, 12], emagrecimento: [8, 10] } },
@@ -61,6 +64,8 @@ describe('error-hunt: corpus do motor de treino', () => {
               const rirMinEsp = Math.max(spec.rir[0], nivel === 'iniciante' ? 2 : 1);
               if (p.rir.min !== rirMinEsp || p.rir.max !== spec.rir[1]) viol.push(`rir ${rot}: ${JSON.stringify(p.rir)} esp min ${rirMinEsp}`);
               if (p.descansoCompostoSeg.min !== spec.descComp[0] || p.descansoCompostoSeg.max !== spec.descComp[1]) viol.push(`descanso ${rot}`);
+              if (p.repsIsolado.min !== spec.repsIsol[0] || p.repsIsolado.max !== spec.repsIsol[1]) viol.push(`repsIsolado ${rot}: ${JSON.stringify(p.repsIsolado)}`);
+              if (p.descansoIsoladoSeg.min !== spec.descIsol[0] || p.descansoIsoladoSeg.max !== spec.descIsol[1]) viol.push(`descansoIsolado ${rot}`);
               if (p.volumePorGrupoSemana.min !== vol.vol[objetivo][0] || p.volumePorGrupoSemana.max !== vol.vol[objetivo][1]) viol.push(`volume ${rot}: ${JSON.stringify(p.volumePorGrupoSemana)}`);
               if (p.sessoesForcaSemana.min !== vol.sessoes[0] || p.sessoesForcaSemana.max !== vol.sessoes[1]) viol.push(`sessoes ${rot}`);
 
@@ -78,6 +83,7 @@ describe('error-hunt: corpus do motor de treino', () => {
               const conta = (pad: string) => r.rotina!.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === pad).length, 0);
               if (conta('puxar') < conta('empurrar')) viol.push(`puxar<empurrar ${rot}`);
               if (diasForcaEsp >= 2 && conta('dobradica_quadril') < 1) viol.push(`sem dobradiça ${rot}`);
+              if (diasForcaEsp >= 2 && (conta('core') < 2 || conta('core') > 3)) viol.push(`core fora 2-3x ${rot}: ${conta('core')}`);
 
               // Elegibilidade dos exercícios (equipamento/local + dificuldade).
               const liberadas = new Set(nivel === 'iniciante' ? ['iniciante'] : nivel === 'intermediario' ? ['iniciante', 'intermediario'] : ['iniciante', 'intermediario', 'avancado']);

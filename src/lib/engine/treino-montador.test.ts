@@ -54,6 +54,16 @@ describe('montador de rotina (base real, 163 exercícios)', () => {
     expect(temDobradica).toBe(true);
   });
 
+  it('invariante: core 2–3×/semana em qualquer split (≥ 2 dias)', () => {
+    for (const dias of [2, 3, 4, 5, 6])
+      for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
+        const r = rotina({ diasDisponiveis: dias, nivelExperiencia: nivel });
+        const core = r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === 'core').length, 0);
+        expect(core).toBeGreaterThanOrEqual(2);
+        expect(core).toBeLessThanOrEqual(3);
+      }
+  });
+
   it('tempo curto: nº de exercícios por dia cai (cabe no tempo)', () => {
     const curto = rotina({ tempoPorSessaoMin: 20 });
     const longo = rotina({ tempoPorSessaoMin: 90 });
