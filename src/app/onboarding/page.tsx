@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { KAscendente } from '@/lib/brand/Logo';
+import { KAscendente, Wordmark } from '@/lib/brand/Logo';
 import {
   gerarDieta,
   gerarTreino,
@@ -24,6 +24,8 @@ import type { CardapioItem, DiaTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 
+/* ─── tabelas de exibição ──────────────────────────────────────────────── */
+
 const ALERGENOS: { id: Alergeno; rotulo: string }[] = [
   { id: 'lactose', rotulo: 'Lactose' },
   { id: 'gluten', rotulo: 'Glúten' },
@@ -36,58 +38,69 @@ const ALERGENOS: { id: Alergeno; rotulo: string }[] = [
   { id: 'peixe_frutos_do_mar', rotulo: 'Peixe / frutos do mar' },
 ];
 
+const ATIVIDADES: { id: NivelAtividade; rotulo: string; sub: string }[] = [
+  { id: 'sedentario', rotulo: 'Sedentário', sub: 'pouco ou nenhum exercício' },
+  { id: 'leve', rotulo: 'Leve', sub: '1–2 dias/semana' },
+  { id: 'moderado', rotulo: 'Moderado', sub: '3–4 dias/semana' },
+  { id: 'intenso', rotulo: 'Intenso', sub: '5–6 dias/semana' },
+  { id: 'muito_intenso', rotulo: 'Muito intenso', sub: 'treino diário / trabalho físico' },
+];
+
+const REFEICAO_LABEL: Record<string, string> = { cafe: 'Café', almoco: 'Almoço', jantar: 'Jantar', lanche: 'Lanche' };
+
 const r0 = (n: number) => Math.round(n);
+const TOTAL_PASSOS = 8;
 
-const REFEICAO_LABEL: Record<string, string> = {
-  cafe: 'Café',
-  almoco: 'Almoço',
-  jantar: 'Jantar',
-  lanche: 'Lanche',
-};
-
-/** Contexto da geração (snapshot) — necessário para as substituições. */
 interface Contexto {
   restricoes: { alergenos: Alergeno[]; preferencia: 'vegano' | 'vegetariano' | null };
   equipamento: EquipamentoDisp;
   nivelExperiencia: NivelExperiencia;
 }
 
+type Fase = 'wizard' | 'gerando' | 'resultado';
+
 export default function Onboarding() {
-  // Consentimentos
+  // Consentimentos (passo 1)
   const [aceite18, setA18] = useState(false);
   const [aceiteTermos, setATermos] = useState(false);
   const [aceiteLgpd, setALgpd] = useState(false);
 
-  // Questionário (perfil)
+  // Perfil
   const [sexo, setSexo] = useState<Sexo>('feminino');
-  const [pesoKg, setPeso] = useState('70');
-  const [alturaCm, setAltura] = useState('170');
   const [idade, setIdade] = useState('30');
-  const [nivelAtividade, setNivel] = useState<NivelAtividade>('moderado');
-  const [objetivo, setObjetivo] = useState<Objetivo>('emagrecimento');
-  const [preferencia, setPreferencia] = useState<'' | 'vegano' | 'vegetariano'>('');
-  const [alergenos, setAlergenos] = useState<Alergeno[]>([]);
+  const [alturaCm, setAltura] = useState('170');
+  const [pesoKg, setPeso] = useState('70');
 
-  // Treino
-  const [nivelExperiencia, setNivelExp] = useState<NivelExperiencia>('iniciante');
-  const [equipamento, setEquipamento] = useState<EquipamentoDisp>('casa');
-  const [diasDisponiveis, setDias] = useState('3');
-  const [tempoPorSessaoMin, setTempo] = useState('45');
-
-  // PAR-Q
+  // Triagem (PAR-Q)
   const [gestacaoAmamentacao, setGest] = useState(false);
   const [renal, setRenal] = useState(false);
   const [cardiaca, setCardiaca] = useState(false);
   const [lesao, setLesao] = useState(false);
   const [diabetes, setDiabetes] = useState(false);
 
+  // Objetivo / atividade / treino
+  const [objetivo, setObjetivo] = useState<Objetivo>('emagrecimento');
+  const [nivelAtividade, setNivel] = useState<NivelAtividade>('moderado');
+  const [nivelExperiencia, setNivelExp] = useState<NivelExperiencia>('iniciante');
+  const [equipamento, setEquipamento] = useState<EquipamentoDisp>('casa');
+  const [diasDisponiveis, setDias] = useState(3);
+  const [tempoPorSessaoMin, setTempo] = useState(45);
+
+  // Preferência alimentar
+  const [preferencia, setPreferencia] = useState<'' | 'vegano' | 'vegetariano'>('');
+  const [alergenos, setAlergenos] = useState<Alergeno[]>([]);
+  const [naoGosto, setNaoGosto] = useState('');
+
+  // Fluxo
+  const [passo, setPasso] = useState(0);
+  const [fase, setFase] = useState<Fase>('wizard');
   const [erros, setErros] = useState<string[]>([]);
+
+  // Resultado
   const [dieta, setDieta] = useState<ResultadoMotor | null>(null);
   const [treino, setTreino] = useState<ResultadoTreino | null>(null);
   const [ctx, setCtx] = useState<Contexto | null>(null);
   const [aba, setAba] = useState<'dieta' | 'treino'>('dieta');
-
-  // Estado MUTÁVEL das telas (para as trocas refletirem na UI)
   const [cardItens, setCardItens] = useState<CardapioItem[]>([]);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>([]);
@@ -98,122 +111,119 @@ export default function Onboarding() {
     setAlergenos((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
   }
 
-  function gerar() {
-    setErros([]);
-    setDieta(null);
-    setTreino(null);
-    setMsgPrato(null);
-    setMsgEx(null);
+  /* ─── validação por passo ───────────────────────────────────────────── */
+  function passoValido(p: number): boolean {
+    switch (p) {
+      case 0:
+        return aceite18 && aceiteTermos && aceiteLgpd;
+      case 1: {
+        const i = Number(idade), a = Number(alturaCm), pe = Number(pesoKg);
+        return Number.isFinite(i) && i >= 18 && i <= 100 && Number.isFinite(a) && a >= 100 && a <= 250 && Number.isFinite(pe) && pe >= 30 && pe <= 300;
+      }
+      default:
+        return true; // demais passos têm default selecionado
+    }
+  }
 
+  function avancar() {
+    setErros([]);
+    if (!passoValido(passo)) return;
+    if (passo < TOTAL_PASSOS - 1) {
+      setPasso((p) => p + 1);
+    } else {
+      gerar();
+    }
+  }
+  function voltar() {
+    setErros([]);
+    setPasso((p) => Math.max(0, p - 1));
+  }
+
+  /* ─── geração (gate → dieta + treino) ───────────────────────────────── */
+  function gerar() {
     const consent = consentimentoSchema.safeParse({ aceite18, aceiteTermos, aceiteLgpd });
     const perfilParse = perfilSchema.safeParse({
-      sexo,
-      pesoKg,
-      alturaCm,
-      idade,
-      nivelAtividade,
-      objetivo,
+      sexo, pesoKg, alturaCm, idade, nivelAtividade, objetivo,
       flagsSaude: { gestacaoAmamentacao, renal, cardiaca, lesao, diabetes },
       preferenciaAlimentar: preferencia || null,
       alergenos,
     });
-
     if (!consent.success || !perfilParse.success) {
-      const msgs: string[] = [];
-      if (!consent.success) msgs.push(...consent.error.issues.map((i) => i.message));
-      if (!perfilParse.success) msgs.push(...perfilParse.error.issues.map((i) => i.message));
+      const msgs = [
+        ...(consent.success ? [] : consent.error.issues.map((i) => i.message)),
+        ...(perfilParse.success ? [] : perfilParse.error.issues.map((i) => i.message)),
+      ];
       setErros(Array.from(new Set(msgs)));
       return;
     }
 
     const p = perfilParse.data;
-    const restricoes = {
-      alergenos: p.alergenos as Alergeno[],
-      preferencia: p.preferenciaAlimentar ?? null,
-    };
+    const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null };
     const perfil: PerfilUsuario = {
-      sexo: p.sexo,
-      pesoKg: p.pesoKg,
-      alturaCm: p.alturaCm,
-      idade: p.idade,
-      nivelAtividade: p.nivelAtividade,
-      objetivo: p.objetivo,
-      flagsSaude: p.flagsSaude,
+      sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade,
+      nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude,
     };
-
     const perfilTreino: PerfilTreino = {
-      pesoKg: p.pesoKg,
-      alturaCm: p.alturaCm,
-      idade: p.idade,
-      flagsSaude: p.flagsSaude,
-      objetivo: p.objetivo,
-      nivelExperiencia,
-      equipamento,
-      diasDisponiveis: Number(diasDisponiveis),
-      tempoPorSessaoMin: Number(tempoPorSessaoMin),
+      pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, flagsSaude: p.flagsSaude,
+      objetivo: p.objetivo, nivelExperiencia, equipamento, diasDisponiveis, tempoPorSessaoMin,
     };
 
-    const resDieta = gerarDieta(perfil, {
-      recipes: RECIPES_SEED,
-      foodsById: FOODS_BY_ID_SEED,
-      restricoes,
-    });
+    const resDieta = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
     const resTreino = gerarTreino(perfilTreino, { exercises: EXERCISES_SEED });
 
     setDieta(resDieta);
     setTreino(resTreino);
     setCtx({ restricoes, equipamento, nivelExperiencia });
-
-    // Inicializa os estados mutáveis das telas
     if (resDieta.cardapio && resDieta.cardapio.status !== 'sem_candidatos') {
       setCardItens(resDieta.cardapio.itens);
       setCardTotais(resDieta.cardapio.totais);
     } else {
-      setCardItens([]);
-      setCardTotais(null);
+      setCardItens([]); setCardTotais(null);
     }
     setRotinaDias(resTreino.rotina ? resTreino.rotina.dias : []);
     setAba('dieta');
+    setMsgPrato(null); setMsgEx(null);
+
+    // Tela "gerando o plano" (UX; o motor é instantâneo e puro).
+    setFase('gerando');
+    setTimeout(() => setFase('resultado'), 1300);
   }
 
-  // --- Substituição de prato (F.2) ---
+  function recomecar() {
+    setFase('wizard');
+    setPasso(0);
+    setDieta(null);
+    setTreino(null);
+  }
+
+  /* ─── substituições (F.2) ───────────────────────────────────────────── */
   function trocarPrato(idx: number) {
     if (!dieta?.plano || !ctx || !cardTotais) return;
     const item = cardItens[idx]!;
     const outrosIds = cardItens.filter((_, i) => i !== idx).map((c) => c.prato.id);
     const res = substituirPrato({
-      pratoAtual: item.prato,
-      slot: item.refeicao,
-      recipes: RECIPES_SEED,
-      foodsById: FOODS_BY_ID_SEED,
-      plano: dieta.plano,
-      totaisDiaAtual: cardTotais,
-      escalaAtual: item.escala,
-      restricoes: ctx.restricoes,
-      gosto: { excluirPratoIds: outrosIds }, // evita repetir prato já usado no dia
+      pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED,
+      plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala,
+      restricoes: ctx.restricoes, gosto: { excluirPratoIds: outrosIds },
     });
     if (res.status === 'ok' && res.prato && res.totaisDiaNovo && res.escala != null && res.macrosNovo) {
       const novos = cardItens.slice();
       novos[idx] = { refeicao: item.refeicao, prato: res.prato, escala: res.escala, macros: res.macrosNovo };
       setCardItens(novos);
       setCardTotais(res.totaisDiaNovo);
-      setMsgPrato({ idx, texto: res.gostoRelaxado ? 'Trocado (preferência de gosto relaxada).' : 'Trocado.' });
+      setMsgPrato({ idx, texto: res.gostoRelaxado ? 'Trocado (preferência relaxada).' : 'Trocado.' });
     } else {
-      setMsgPrato({ idx, texto: res.nota ?? 'Sem troca que mantenha o dia equilibrado.' });
+      setMsgPrato({ idx, texto: res.nota ?? 'Sem troca disponível.' });
     }
   }
 
-  // --- Substituição de exercício (F.2) ---
   function trocarExercicio(d: number, s: number) {
     if (!ctx) return;
     const atual = rotinaDias[d]!.slots[s]!.exercicio;
     const usados = rotinaDias.flatMap((dia) => dia.slots.map((sl) => sl.exercicio.id));
     const res = substituirExercicio({
-      exercicioAtual: atual,
-      equipamento: ctx.equipamento,
-      nivelExperiencia: ctx.nivelExperiencia,
-      exercises: EXERCISES_SEED,
-      historicoRecenteIds: usados, // variedade: evita repetir o que já está na semana
+      exercicioAtual: atual, equipamento: ctx.equipamento, nivelExperiencia: ctx.nivelExperiencia,
+      exercises: EXERCISES_SEED, historicoRecenteIds: usados,
     });
     const chave = `${d}-${s}`;
     if (res.status === 'ok' && res.exercicio) {
@@ -226,331 +236,378 @@ export default function Onboarding() {
     }
   }
 
+  /* ─── render ────────────────────────────────────────────────────────── */
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-6 py-10">
-      <header className="flex items-center gap-3">
-        <KAscendente size={40} />
-        <Link href="/" className="text-sm text-secundario hover:text-bone">
-          ← início
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-5 py-8">
+      <header className="flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2">
+          <KAscendente size={32} />
+          <Wordmark className="text-lg" />
         </Link>
+        {fase === 'wizard' && <span className="label-cap">Passo {passo + 1} de {TOTAL_PASSOS}</span>}
       </header>
 
-      <h1 className="text-2xl font-bold">Vamos montar seu ponto de partida</h1>
-      <p className="text-sm text-secundario">
-        O Evokorpus é uma ferramenta educacional dirigida por você — não substitui um
-        profissional. Em algumas condições, o app não gera plano e orienta procurar ajuda.
-      </p>
-
-      {/* Consentimentos */}
-      <section className="rounded-xl border border-bone/15 p-4">
-        <h2 className="font-label uppercase tracking-wide text-secundario">Antes de começar</h2>
-        <div className="mt-3 flex flex-col gap-2 text-sm">
-          <Check checked={aceite18} onChange={setA18} label="Confirmo que tenho 18 anos ou mais." />
-          <Check checked={aceiteTermos} onChange={setATermos} label="Li e aceito o termo de conscientização e o disclaimer." />
-          <Check checked={aceiteLgpd} onChange={setALgpd} label="Consinto com o tratamento dos meus dados (LGPD) para gerar meu plano." />
-        </div>
-      </section>
-
-      {/* Questionário */}
-      <section className="rounded-xl border border-bone/15 p-4">
-        <h2 className="font-label uppercase tracking-wide text-secundario">Seus dados</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <Campo label="Sexo biológico">
-            <select className="campo" value={sexo} onChange={(e) => setSexo(e.target.value as Sexo)}>
-              <option value="feminino">Feminino</option>
-              <option value="masculino">Masculino</option>
-            </select>
-          </Campo>
-          <Campo label="Idade">
-            <input className="campo" type="number" value={idade} onChange={(e) => setIdade(e.target.value)} />
-          </Campo>
-          <Campo label="Peso (kg)">
-            <input className="campo" type="number" value={pesoKg} onChange={(e) => setPeso(e.target.value)} />
-          </Campo>
-          <Campo label="Altura (cm)">
-            <input className="campo" type="number" value={alturaCm} onChange={(e) => setAltura(e.target.value)} />
-          </Campo>
-          <Campo label="Nível de atividade">
-            <select className="campo" value={nivelAtividade} onChange={(e) => setNivel(e.target.value as NivelAtividade)}>
-              <option value="sedentario">Sedentário</option>
-              <option value="leve">Leve</option>
-              <option value="moderado">Moderado</option>
-              <option value="intenso">Intenso</option>
-              <option value="muito_intenso">Muito intenso</option>
-            </select>
-          </Campo>
-          <Campo label="Objetivo">
-            <select className="campo" value={objetivo} onChange={(e) => setObjetivo(e.target.value as Objetivo)}>
-              <option value="emagrecimento">Emagrecimento</option>
-              <option value="massa">Ganho de massa</option>
-              <option value="saude">Saúde / manutenção</option>
-            </select>
-          </Campo>
-          <Campo label="Preferência alimentar">
-            <select className="campo" value={preferencia} onChange={(e) => setPreferencia(e.target.value as '' | 'vegano' | 'vegetariano')}>
-              <option value="">Sem preferência</option>
-              <option value="vegetariano">Vegetariano</option>
-              <option value="vegano">Vegano</option>
-            </select>
-          </Campo>
-        </div>
-
-        <div className="mt-4">
-          <span className="text-xs text-secundario">Alergias (filtro absoluto — nunca entram no cardápio)</span>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {ALERGENOS.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => toggleAlergeno(a.id)}
-                className={`rounded-full px-3 py-1 text-xs ${alergenos.includes(a.id) ? 'bg-folha text-bone' : 'border border-bone/25 text-secundario'}`}
-              >
-                {a.rotulo}
-              </button>
-            ))}
+      {fase === 'wizard' && (
+        <>
+          <div className="progress">
+            <span style={{ width: `${((passo + 1) / TOTAL_PASSOS) * 100}%` }} />
           </div>
-        </div>
-      </section>
 
-      {/* Treino */}
-      <section className="rounded-xl border border-bone/15 p-4">
-        <h2 className="font-label uppercase tracking-wide text-secundario">Seu treino</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <Campo label="Experiência">
-            <select className="campo" value={nivelExperiencia} onChange={(e) => setNivelExp(e.target.value as NivelExperiencia)}>
-              <option value="iniciante">Iniciante</option>
-              <option value="intermediario">Intermediário</option>
-              <option value="avancado">Avançado</option>
-            </select>
-          </Campo>
-          <Campo label="Equipamento">
-            <select className="campo" value={equipamento} onChange={(e) => setEquipamento(e.target.value as EquipamentoDisp)}>
-              <option value="nenhum">Nenhum (peso corporal)</option>
-              <option value="casa">Em casa (halteres/elásticos)</option>
-              <option value="academia">Academia</option>
-            </select>
-          </Campo>
-          <Campo label="Dias por semana">
-            <input className="campo" type="number" min={1} max={7} value={diasDisponiveis} onChange={(e) => setDias(e.target.value)} />
-          </Campo>
-          <Campo label="Minutos por sessão">
-            <input className="campo" type="number" min={10} max={180} value={tempoPorSessaoMin} onChange={(e) => setTempo(e.target.value)} />
-          </Campo>
-        </div>
-      </section>
+          <div key={passo} className="anim-step flex flex-col gap-5">
+            {passo === 0 && <PassoTermos {...{ aceite18, setA18, aceiteTermos, setATermos, aceiteLgpd, setALgpd }} />}
+            {passo === 1 && <PassoSobre {...{ sexo, setSexo, idade, setIdade, alturaCm, setAltura, pesoKg, setPeso }} />}
+            {passo === 2 && <PassoTriagem {...{ sexo, gestacaoAmamentacao, setGest, renal, setRenal, cardiaca, setCardiaca, lesao, setLesao, diabetes, setDiabetes }} />}
+            {passo === 3 && <PassoObjetivo {...{ objetivo, setObjetivo }} />}
+            {passo === 4 && <PassoAtividade {...{ nivelAtividade, setNivel }} />}
+            {passo === 5 && <PassoExperiencia {...{ nivelExperiencia, setNivelExp }} />}
+            {passo === 6 && <PassoOndeQuando {...{ equipamento, setEquipamento, diasDisponiveis, setDias, tempoPorSessaoMin, setTempo }} />}
+            {passo === 7 && <PassoPreferencia {...{ preferencia, setPreferencia, alergenos, toggleAlergeno, naoGosto, setNaoGosto }} />}
+          </div>
 
-      {/* PAR-Q */}
-      <section className="rounded-xl border border-bone/15 p-4">
-        <h2 className="font-label uppercase tracking-wide text-secundario">Triagem de saúde (sim/não)</h2>
-        <p className="mt-1 text-xs text-secundario">Autodeclaração mínima. Não é ficha médica.</p>
-        <div className="mt-3 flex flex-col gap-2 text-sm">
-          <Check checked={gestacaoAmamentacao} onChange={setGest} label="Estou gestante ou amamentando" />
-          <Check checked={renal} onChange={setRenal} label="Tenho condição renal" />
-          <Check checked={cardiaca} onChange={setCardiaca} label="Tenho condição cardíaca" />
-          <Check checked={lesao} onChange={setLesao} label="Tenho lesão ou limitação física" />
-          <Check checked={diabetes} onChange={setDiabetes} label="Tenho diabetes" />
-        </div>
-      </section>
+          {erros.length > 0 && (
+            <div className="pilula-alerta rounded-xl p-3 text-sm">
+              <ul className="list-disc pl-4">{erros.map((e) => <li key={e}>{e}</li>)}</ul>
+            </div>
+          )}
 
-      {erros.length > 0 && (
-        <div className="pilula-alerta rounded-xl p-4 text-sm">
-          <ul className="list-disc pl-4">
-            {erros.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <button className="btn btn-ghost" onClick={voltar} disabled={passo === 0}>← Voltar</button>
+            <button className="btn btn-neon flex-1" onClick={avancar} disabled={!passoValido(passo)}>
+              {passo === TOTAL_PASSOS - 1 ? 'Gerar meu plano' : 'Continuar'}
+            </button>
+          </div>
+        </>
       )}
 
-      <button
-        onClick={gerar}
-        className="rounded-full bg-pulso px-8 py-3 font-label uppercase tracking-wide text-floresta transition hover:opacity-90"
-      >
-        Gerar meu plano
-      </button>
+      {fase === 'gerando' && <TelaGerando />}
 
-      {(dieta || treino) && (
-        <section className="flex flex-col gap-4">
-          {/* Abas */}
-          <div className="flex gap-2">
-            <Tab ativo={aba === 'dieta'} onClick={() => setAba('dieta')}>
-              Dieta
-            </Tab>
-            <Tab ativo={aba === 'treino'} onClick={() => setAba('treino')}>
-              Treino
-            </Tab>
-          </div>
-
-          {aba === 'dieta' && dieta && (
-            <DietaView
-              dieta={dieta}
-              itens={cardItens}
-              totais={cardTotais}
-              msg={msgPrato}
-              onTrocar={trocarPrato}
-            />
-          )}
-
-          {aba === 'treino' && treino && (
-            <TreinoView treino={treino} dias={rotinaDias} msg={msgEx} onTrocar={trocarExercicio} />
-          )}
-        </section>
+      {fase === 'resultado' && dieta && (
+        dieta.gate.comportamento === 'ROTEAR'
+          ? <Encaminhamento motivos={dieta.gate.motivos} onRevisar={recomecar} />
+          : (
+            <section className="anim-screen flex flex-col gap-4">
+              <BannerAjuste dieta={dieta} />
+              <div className="seg">
+                <button className="opt" aria-pressed={aba === 'dieta'} onClick={() => setAba('dieta')}>Dieta</button>
+                <button className="opt" aria-pressed={aba === 'treino'} onClick={() => setAba('treino')}>Treino</button>
+              </div>
+              {aba === 'dieta' && <DietaView dieta={dieta} itens={cardItens} totais={cardTotais} msg={msgPrato} onTrocar={trocarPrato} />}
+              {aba === 'treino' && treino && <TreinoView treino={treino} dias={rotinaDias} msg={msgEx} onTrocar={trocarExercicio} />}
+              <button className="btn btn-ghost" onClick={recomecar}>Refazer questionário</button>
+            </section>
+          )
       )}
 
       <p className="mt-2 text-center text-xs text-secundario">
-        Demonstração local: plano e trocas são calculados no seu dispositivo (motor
-        determinístico). A persistência (conta + histórico) exige a configuração do Supabase —
-        ver docs/access.md.
+        Demonstração local: plano e trocas são calculados no seu dispositivo (motor determinístico,
+        sem IA). Estimativa de referência, não prescrição. Ferramenta educacional, 18+.
       </p>
     </main>
   );
 }
 
-function DietaView({
-  dieta,
-  itens,
-  totais,
-  msg,
-  onTrocar,
-}: {
-  dieta: ResultadoMotor;
-  itens: CardapioItem[];
-  totais: RecipeMacros | null;
-  msg: { idx: number; texto: string } | null;
-  onTrocar: (idx: number) => void;
-}) {
-  const { gate, plano } = dieta;
+/* ════════════════════ Passos do wizard ════════════════════ */
 
-  if (gate.comportamento === 'ROTEAR') return <RotearCard motivos={gate.motivos} />;
-  if (!plano) return null;
-
+function StepHead({ titulo, sub }: { titulo: string; sub?: string }) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-bone/15 p-5">
-      {plano.notaTransparencia && (
-        <p className="rounded-lg bg-bone/5 p-3 text-sm text-secundario">{plano.notaTransparencia}</p>
-      )}
-      {plano.avisos.map((a) => (
-        <p key={a} className="rounded-lg bg-bone/5 p-3 text-sm text-secundario">{a}</p>
-      ))}
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight">{titulo}</h1>
+      {sub && <p className="mt-1 text-sm text-secundario">{sub}</p>}
+    </div>
+  );
+}
 
-      <div>
-        <span className="text-xs text-secundario">Estimativa de referência (ponto de partida)</span>
-        <p className="text-3xl font-bold text-pulso">{r0(plano.kcalAlvo)} kcal/dia</p>
+function PassoTermos(p: {
+  aceite18: boolean; setA18: (v: boolean) => void;
+  aceiteTermos: boolean; setATermos: (v: boolean) => void;
+  aceiteLgpd: boolean; setALgpd: (v: boolean) => void;
+}) {
+  return (
+    <>
+      <StepHead titulo="Antes de começar" sub="O Evokorpus é uma ferramenta educacional dirigida por você — não substitui um profissional." />
+      <div className="surface flex flex-col gap-1 p-2">
+        <Check checked={p.aceite18} onChange={p.setA18} label="Confirmo que tenho 18 anos ou mais." />
+        <Check checked={p.aceiteTermos} onChange={p.setATermos} label="Li e aceito o termo de conscientização e o disclaimer." />
+        <Check checked={p.aceiteLgpd} onChange={p.setALgpd} label="Consinto com o tratamento dos meus dados (LGPD) para gerar meu plano." />
       </div>
+    </>
+  );
+}
 
-      <div className="grid grid-cols-3 gap-3 text-center text-sm">
+function PassoSobre(p: {
+  sexo: Sexo; setSexo: (v: Sexo) => void;
+  idade: string; setIdade: (v: string) => void;
+  alturaCm: string; setAltura: (v: string) => void;
+  pesoKg: string; setPeso: (v: string) => void;
+}) {
+  return (
+    <>
+      <StepHead titulo="Sobre você" sub="Usamos isso só para calcular seu ponto de partida." />
+      <div>
+        <span className="label-cap">Sexo biológico</span>
+        <div className="seg mt-2">
+          <button className="opt" aria-pressed={p.sexo === 'feminino'} onClick={() => p.setSexo('feminino')}>Feminino</button>
+          <button className="opt" aria-pressed={p.sexo === 'masculino'} onClick={() => p.setSexo('masculino')}>Masculino</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <NumField label="Idade" value={p.idade} onChange={p.setIdade} suf="anos" />
+        <NumField label="Altura" value={p.alturaCm} onChange={p.setAltura} suf="cm" />
+        <NumField label="Peso" value={p.pesoKg} onChange={p.setPeso} suf="kg" />
+      </div>
+    </>
+  );
+}
+
+function PassoTriagem(p: {
+  sexo: Sexo;
+  gestacaoAmamentacao: boolean; setGest: (v: boolean) => void;
+  renal: boolean; setRenal: (v: boolean) => void;
+  cardiaca: boolean; setCardiaca: (v: boolean) => void;
+  lesao: boolean; setLesao: (v: boolean) => void;
+  diabetes: boolean; setDiabetes: (v: boolean) => void;
+}) {
+  return (
+    <>
+      <StepHead titulo="Triagem de saúde" sub="Autodeclaração mínima (sim/não). Não é ficha médica. Em algumas condições o app orienta procurar um profissional em vez de gerar um plano." />
+      <div className="flex flex-col gap-2">
+        {p.sexo === 'feminino' && <SimNao label="Estou gestante ou amamentando" value={p.gestacaoAmamentacao} onChange={p.setGest} />}
+        <SimNao label="Tenho condição renal" value={p.renal} onChange={p.setRenal} />
+        <SimNao label="Tenho condição cardíaca" value={p.cardiaca} onChange={p.setCardiaca} />
+        <SimNao label="Tenho lesão ou limitação física" value={p.lesao} onChange={p.setLesao} />
+        <SimNao label="Tenho diabetes" value={p.diabetes} onChange={p.setDiabetes} />
+      </div>
+    </>
+  );
+}
+
+function PassoObjetivo(p: { objetivo: Objetivo; setObjetivo: (v: Objetivo) => void }) {
+  const opts: { id: Objetivo; rotulo: string; sub: string }[] = [
+    { id: 'emagrecimento', rotulo: 'Emagrecer', sub: 'reduzir gordura com constância' },
+    { id: 'massa', rotulo: 'Ganhar massa', sub: 'construir músculo' },
+    { id: 'saude', rotulo: 'Manter / Saúde', sub: 'manutenção e bem-estar' },
+  ];
+  return (
+    <>
+      <StepHead titulo="Seu objetivo" sub="Você pode mudar depois." />
+      <CardOptions opts={opts} sel={p.objetivo} onSel={p.setObjetivo} />
+    </>
+  );
+}
+
+function PassoAtividade(p: { nivelAtividade: NivelAtividade; setNivel: (v: NivelAtividade) => void }) {
+  return (
+    <>
+      <StepHead titulo="Nível de atividade" sub="Fora dos treinos — sua rotina do dia a dia." />
+      <CardOptions opts={ATIVIDADES} sel={p.nivelAtividade} onSel={p.setNivel} />
+    </>
+  );
+}
+
+function PassoExperiencia(p: { nivelExperiencia: NivelExperiencia; setNivelExp: (v: NivelExperiencia) => void }) {
+  const opts: { id: NivelExperiencia; rotulo: string; sub: string }[] = [
+    { id: 'iniciante', rotulo: 'Iniciante', sub: 'começando agora ou voltando' },
+    { id: 'intermediario', rotulo: 'Intermediário', sub: 'treino há alguns meses' },
+    { id: 'avancado', rotulo: 'Avançado', sub: 'treino consistente há anos' },
+  ];
+  return (
+    <>
+      <StepHead titulo="Experiência de treino" sub="Define a progressão e a dificuldade liberada." />
+      <CardOptions opts={opts} sel={p.nivelExperiencia} onSel={p.setNivelExp} />
+    </>
+  );
+}
+
+function PassoOndeQuando(p: {
+  equipamento: EquipamentoDisp; setEquipamento: (v: EquipamentoDisp) => void;
+  diasDisponiveis: number; setDias: (v: number) => void;
+  tempoPorSessaoMin: number; setTempo: (v: number) => void;
+}) {
+  const eq: { id: EquipamentoDisp; rotulo: string }[] = [
+    { id: 'nenhum', rotulo: 'Sem equipamento' },
+    { id: 'casa', rotulo: 'Em casa' },
+    { id: 'academia', rotulo: 'Academia' },
+  ];
+  return (
+    <>
+      <StepHead titulo="Onde e quando" sub="Adaptamos os exercícios ao que você tem." />
+      <div>
+        <span className="label-cap">Equipamento</span>
+        <div className="seg mt-2">
+          {eq.map((e) => <button key={e.id} className="opt" aria-pressed={p.equipamento === e.id} onClick={() => p.setEquipamento(e.id)}>{e.rotulo}</button>)}
+        </div>
+      </div>
+      <div>
+        <span className="label-cap">Dias por semana</span>
+        <div className="seg mt-2">
+          {[1, 2, 3, 4, 5, 6].map((d) => <button key={d} className="opt" aria-pressed={p.diasDisponiveis === d} onClick={() => p.setDias(d)}>{d}</button>)}
+        </div>
+      </div>
+      <div>
+        <span className="label-cap">Minutos por sessão</span>
+        <div className="seg mt-2">
+          {[30, 45, 60, 75].map((t) => <button key={t} className="opt" aria-pressed={p.tempoPorSessaoMin === t} onClick={() => p.setTempo(t)}>{t === 75 ? '75+' : t}</button>)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PassoPreferencia(p: {
+  preferencia: '' | 'vegano' | 'vegetariano'; setPreferencia: (v: '' | 'vegano' | 'vegetariano') => void;
+  alergenos: Alergeno[]; toggleAlergeno: (a: Alergeno) => void;
+  naoGosto: string; setNaoGosto: (v: string) => void;
+}) {
+  const pad: { id: '' | 'vegetariano' | 'vegano'; rotulo: string }[] = [
+    { id: '', rotulo: 'Onívoro' },
+    { id: 'vegetariano', rotulo: 'Vegetariano' },
+    { id: 'vegano', rotulo: 'Vegano' },
+  ];
+  return (
+    <>
+      <StepHead titulo="Preferência alimentar" sub="Alergia e padrão são regras absolutas; “não curto” é só uma preferência." />
+      <div>
+        <span className="label-cap">Padrão alimentar</span>
+        <div className="seg mt-2">
+          {pad.map((x) => <button key={x.id || 'oni'} className="opt" aria-pressed={p.preferencia === x.id} onClick={() => p.setPreferencia(x.id)}>{x.rotulo}</button>)}
+        </div>
+      </div>
+      <div>
+        <span className="label-cap">Alergias <span className="normal-case opacity-70">(filtro absoluto — nunca entram no cardápio)</span></span>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {ALERGENOS.map((a) => <button key={a.id} className="chip" aria-pressed={p.alergenos.includes(a.id)} onClick={() => p.toggleAlergeno(a.id)}>{a.rotulo}</button>)}
+        </div>
+      </div>
+      <div>
+        <span className="label-cap">Não curto <span className="normal-case opacity-70">(opcional)</span></span>
+        <input className="campo mt-2" placeholder="ex.: jiló, fígado…" value={p.naoGosto} onChange={(e) => p.setNaoGosto(e.target.value)} />
+      </div>
+    </>
+  );
+}
+
+/* ════════════════════ Gerando / Desfechos ════════════════════ */
+
+function TelaGerando() {
+  return (
+    <section className="anim-screen flex min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
+      <div style={{ width: 56, height: 56, borderRadius: '50%', border: '3px solid rgba(234,229,219,.15)', borderTopColor: '#BDFF00', animation: 'evkSpin .9s linear infinite' }} />
+      <div>
+        <p className="text-lg font-bold">Montando seu ponto de partida…</p>
+        <p className="mt-1 text-sm text-secundario">Aplicando regras adaptativas ao seu perfil.</p>
+      </div>
+    </section>
+  );
+}
+
+function Encaminhamento({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => void }) {
+  return (
+    <section className="anim-screen surface flex flex-col gap-4 p-6">
+      <KAscendente size={44} />
+      <h1 className="text-2xl font-bold tracking-tight">Aqui, o cuidado certo é com um profissional</h1>
+      <p className="text-sm text-secundario">
+        Com base no que você informou, o Evokorpus <strong className="text-bone">não gera um plano</strong> neste
+        momento. Isso é proposital: algumas situações pedem o acompanhamento de um profissional de saúde.
+      </p>
+      <ul className="flex flex-col gap-1 text-sm text-secundario">
+        {motivos.map((m) => <li key={m} className="flex gap-2"><span className="text-folha">•</span>{m}</li>)}
+      </ul>
+      <div className="flex gap-3">
+        <button className="btn btn-ghost flex-1" onClick={onRevisar}>Revisar respostas</button>
+      </div>
+    </section>
+  );
+}
+
+/** Banner do Desfecho C — ajuste honesto (RESTRINGIR ou PISAR). */
+function BannerAjuste({ dieta }: { dieta: ResultadoMotor }) {
+  const c = dieta.gate.comportamento;
+  if (c !== 'RESTRINGIR' && c !== 'PISAR') return null;
+  const linhas = [dieta.plano?.notaTransparencia, ...(dieta.plano?.avisos ?? [])].filter(Boolean) as string[];
+  return (
+    <div className="pilula-ajuste p-4 text-sm">
+      <p className="label-cap" style={{ color: '#BDFF00' }}>Ajuste honesto</p>
+      <p className="mt-1">Ajustamos seu plano para manter você em segurança. Tudo continua editável.</p>
+      {linhas.length > 0 && <ul className="mt-2 flex flex-col gap-1 text-secundario">{linhas.map((l) => <li key={l}>{l}</li>)}</ul>}
+    </div>
+  );
+}
+
+/* ════════════════════ Plano: Dieta / Treino ════════════════════ */
+
+function DietaView({ dieta, itens, totais, msg, onTrocar }: {
+  dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null;
+  msg: { idx: number; texto: string } | null; onTrocar: (idx: number) => void;
+}) {
+  const plano = dieta.plano;
+  if (!plano) return null;
+  return (
+    <div className="surface flex flex-col gap-5 p-5">
+      <div>
+        <span className="label-cap">Seu ponto de partida</span>
+        <p className="text-4xl font-extrabold text-pulso">{r0(plano.kcalAlvo)}<span className="ml-1 text-lg font-medium text-secundario">kcal/dia</span></p>
+        <p className="mt-1 text-xs text-secundario">É um guia, não uma meta exata.</p>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-center">
         <Macro nome="Proteína" g={r0(plano.macros.proteinaG)} />
         <Macro nome="Carboidrato" g={r0(plano.macros.carboidratoG)} />
         <Macro nome="Gordura" g={r0(plano.macros.gorduraG)} />
       </div>
 
-      {dieta.cardapio?.status === 'fora_da_janela' && (
-        <p className="pilula-alerta rounded-lg p-3 text-xs">
-          Prévia v0: este cardápio de exemplo ainda fica fora da janela calórica do objetivo
-          (o banco de pratos com porções fixas não alcança o alvo). O montador com escala de
-          porções está em desenvolvimento. As trocas só fecham quando o dia está dentro da janela.
-        </p>
-      )}
-
       {itens.length > 0 ? (
         <div>
-          <h3 className="font-label uppercase tracking-wide text-secundario">Cardápio do dia</h3>
-          <ul className="mt-2 flex flex-col gap-2 text-sm">
+          <span className="label-cap">Cardápio do dia</span>
+          <ul className="mt-2 flex flex-col gap-2">
             {itens.map((it, idx) => (
-              <li key={`${it.refeicao}-${it.prato.id}`} className="rounded-lg bg-bone/5 p-3">
+              <li key={`${it.refeicao}-${it.prato.id}`} className="surface-soft p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <span className="block text-xs uppercase text-secundario">{REFEICAO_LABEL[it.refeicao]}</span>
-                    <span>{it.prato.nome}</span>
-                    <span className="block text-xs text-secundario">
-                      {r0(it.macros.kcal)} kcal · {r0(it.macros.proteinaG)} g prot · porção {it.escala.toFixed(2)}×
-                    </span>
+                    <span className="text-sm">{it.prato.nome}</span>
+                    <span className="block text-xs text-secundario">{r0(it.macros.kcal)} kcal · {r0(it.macros.proteinaG)} g prot · porção {it.escala.toFixed(2)}×</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onTrocar(idx)}
-                    className="shrink-0 rounded-full border border-pulso/60 px-3 py-1 text-xs uppercase tracking-wide text-pulso hover:bg-pulso/10"
-                  >
-                    Trocar
-                  </button>
+                  <button className="btn btn-ghost shrink-0" style={{ padding: '0.5rem 0.9rem', fontSize: '.8rem' }} onClick={() => onTrocar(idx)}>Trocar</button>
                 </div>
                 {msg?.idx === idx && <p className="mt-1 text-xs text-secundario">{msg.texto}</p>}
               </li>
             ))}
           </ul>
-          {totais && (
-            <p className="mt-2 flex justify-between border-t border-bone/10 pt-2 text-sm text-secundario">
-              <span>Total do dia</span>
-              <span>{r0(totais.kcal)} kcal · {r0(totais.proteinaG)} g proteína</span>
-            </p>
-          )}
+          {totais && <p className="mt-2 flex justify-between border-t border-bone/10 pt-2 text-sm text-secundario"><span>Total do dia</span><span>{r0(totais.kcal)} kcal · {r0(totais.proteinaG)} g prot</span></p>}
         </div>
       ) : (
-        <p className="text-sm text-secundario">
-          {dieta.cardapio?.nota ?? 'Não foi possível montar um cardápio com as restrições atuais.'}
-        </p>
+        <p className="text-sm text-secundario">{dieta.cardapio?.nota ?? 'Não foi possível montar um cardápio com as restrições atuais.'}</p>
       )}
-
-      <p className="text-xs text-secundario">
-        Os valores são orientação geral, não prescrição. Tudo é editável — você está no comando.
-      </p>
     </div>
   );
 }
 
-function TreinoView({
-  treino,
-  dias,
-  msg,
-  onTrocar,
-}: {
-  treino: ResultadoTreino;
-  dias: DiaTreino[];
-  msg: { chave: string; texto: string } | null;
-  onTrocar: (d: number, s: number) => void;
+function TreinoView({ treino, dias, msg, onTrocar }: {
+  treino: ResultadoTreino; dias: DiaTreino[];
+  msg: { chave: string; texto: string } | null; onTrocar: (d: number, s: number) => void;
 }) {
-  const { gate, prescricao, rotina } = treino;
-
-  if (gate.comportamento === 'ROTEAR') return <RotearCard motivos={gate.motivos} />;
+  const { prescricao, rotina } = treino;
   if (!prescricao || !rotina) return null;
-
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-bone/15 p-5">
-      {rotina.avisos.map((a) => (
-        <p key={a} className="rounded-lg bg-bone/5 p-3 text-sm text-secundario">{a}</p>
-      ))}
-
+    <div className="surface flex flex-col gap-4 p-5">
       <div>
-        <span className="text-xs text-secundario">Prescrição ({prescricao.nivel} · {prescricao.objetivoEfetivo})</span>
-        <p className="text-sm">
-          {rotina.split} · {rotina.diasForcaAgendados}× força/semana
-        </p>
+        <span className="label-cap">{rotina.split} · {rotina.diasForcaAgendados}× força/semana</span>
         <p className="mt-1 text-xs text-secundario">
-          Compostos {prescricao.repsComposto.min}–{prescricao.repsComposto.max} reps · isolados{' '}
-          {prescricao.repsIsolado.min}–{prescricao.repsIsolado.max} reps · {prescricao.seriesPorExercicio.min}–
-          {prescricao.seriesPorExercicio.max} séries · RIR {prescricao.rir.min}–{prescricao.rir.max}
+          Compostos {prescricao.repsComposto.min}–{prescricao.repsComposto.max} reps · {prescricao.seriesPorExercicio.min}–{prescricao.seriesPorExercicio.max} séries · RIR {prescricao.rir.min}–{prescricao.rir.max}
         </p>
       </div>
-
       {dias.map((dia, d) => (
         <div key={`${dia.nome}-${d}`}>
-          <h3 className="font-label uppercase tracking-wide text-secundario">{dia.nome}</h3>
-          <ul className="mt-2 flex flex-col gap-2 text-sm">
+          <span className="label-cap">{dia.nome}</span>
+          <ul className="mt-2 flex flex-col gap-2">
             {dia.slots.map((sl, s) => (
-              <li key={`${d}-${s}-${sl.exercicio.id}`} className="rounded-lg bg-bone/5 p-3">
+              <li key={`${d}-${s}-${sl.exercicio.id}`} className="surface-soft p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <span className="block text-xs uppercase text-secundario">{sl.padrao}</span>
-                    <span>{sl.exercicio.nomePt}</span>
+                    <span className="text-sm">{sl.exercicio.nomePt}</span>
                     <span className="block text-xs text-secundario">{sl.exercicio.grupoMuscular}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onTrocar(d, s)}
-                    className="shrink-0 rounded-full border border-pulso/60 px-3 py-1 text-xs uppercase tracking-wide text-pulso hover:bg-pulso/10"
-                  >
-                    Trocar
-                  </button>
+                  <button className="btn btn-ghost shrink-0" style={{ padding: '0.5rem 0.9rem', fontSize: '.8rem' }} onClick={() => onTrocar(d, s)}>Trocar</button>
                 </div>
                 {msg?.chave === `${d}-${s}` && <p className="mt-1 text-xs text-secundario">{msg.texto}</p>}
               </li>
@@ -558,82 +615,66 @@ function TreinoView({
           </ul>
         </div>
       ))}
-
-      <p className="text-xs text-secundario">
-        Iniciante não treina até a falha; carga/dificuldade sobem por dupla progressão guiada pelo
-        seu feedback. Orientação geral, não prescrição clínica.
-      </p>
+      <p className="text-xs text-secundario">Iniciante não treina até a falha; carga sobe por dupla progressão guiada pelo seu feedback.</p>
     </div>
   );
 }
 
-function RotearCard({ motivos }: { motivos: string[] }) {
+/* ════════════════════ Primitivos de UI ════════════════════ */
+
+function CardOptions<T extends string>({ opts, sel, onSel }: {
+  opts: { id: T; rotulo: string; sub: string }[]; sel: T; onSel: (v: T) => void;
+}) {
   return (
-    <div className="rounded-xl border border-alerta/40 p-5">
-      <span className="pilula-alerta rounded-full px-3 py-1 text-xs uppercase">Procure um profissional</span>
-      <p className="mt-3 text-sm">
-        Com base no que você informou, o Evokorpus <strong>não gera um plano</strong> neste
-        momento — o cuidado certo aqui é o acompanhamento de um profissional de saúde.
-      </p>
-      <ul className="mt-3 list-disc pl-5 text-sm text-secundario">
-        {motivos.map((m) => (
-          <li key={m}>{m}</li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-2">
+      {opts.map((o) => (
+        <button key={o.id} className="opt text-left" aria-pressed={sel === o.id} onClick={() => onSel(o.id)} style={{ flex: 'none' }}>
+          <span className="block font-semibold text-bone">{o.rotulo}</span>
+          <span className="block text-xs text-secundario">{o.sub}</span>
+        </button>
+      ))}
     </div>
   );
 }
 
-function Tab({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
+function NumField({ label, value, onChange, suf }: { label: string; value: string; onChange: (v: string) => void; suf: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-5 py-2 font-label text-sm uppercase tracking-wide transition ${
-        ativo ? 'bg-pulso text-floresta' : 'border border-bone/25 text-secundario hover:text-bone'
-      }`}
-    >
-      {children}
-    </button>
+    <label className="flex flex-col gap-1">
+      <span className="label-cap">{label}</span>
+      <div className="relative">
+        <input className="campo" type="number" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-secundario">{suf}</span>
+      </div>
+    </label>
+  );
+}
+
+function SimNao({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="surface-soft flex items-center justify-between gap-3 p-3">
+      <span className="text-sm">{label}</span>
+      <div className="seg shrink-0" style={{ width: 140 }}>
+        <button className="opt" aria-pressed={!value} onClick={() => onChange(false)}>Não</button>
+        <button className="opt" aria-pressed={value} onClick={() => onChange(true)}>Sim</button>
+      </div>
+    </div>
   );
 }
 
 function Macro({ nome, g }: { nome: string; g: number }) {
   return (
-    <div className="rounded-lg bg-bone/5 p-3">
+    <div className="surface-soft p-3">
       <p className="text-lg font-bold">{g} g</p>
       <p className="text-xs text-secundario">{nome}</p>
     </div>
   );
 }
 
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs text-secundario">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function Check({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex items-start gap-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 accent-folha"
-      />
-      <span>{label}</span>
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl p-3 transition hover:bg-bone/5">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 accent-pulso" />
+      <span className="text-sm">{label}</span>
     </label>
   );
 }

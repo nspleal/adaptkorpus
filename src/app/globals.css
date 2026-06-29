@@ -41,3 +41,190 @@ body {
 .campo option {
   background: #0d2818;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Sistema visual (estética do handoff de design — tokens do brand board).
+   Neon Pulso só no escuro; superfícies translúcidas sobre Floresta.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+::selection {
+  background: #bdff00;
+  color: #0d2818;
+}
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(234, 229, 219, 0.18);
+  border-radius: 8px;
+}
+
+/* Superfície / cartão. */
+.surface {
+  background: #0f0f0e;
+  border: 1px solid rgba(234, 229, 219, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 30px 70px -34px rgba(0, 0, 0, 0.7);
+}
+.surface-soft {
+  background: rgba(234, 229, 219, 0.04);
+  border: 1px solid rgba(234, 229, 219, 0.08);
+  border-radius: 16px;
+}
+
+/* Botões. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 13px;
+  padding: 0.85rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+  border: 1px solid transparent;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+.btn-neon {
+  background: #bdff00;
+  color: #0d2818;
+  box-shadow: 0 14px 34px -12px rgba(189, 255, 0, 0.6);
+}
+.btn-neon:not(:disabled):hover {
+  background: #c9ff2b;
+}
+.btn-ghost {
+  background: transparent;
+  color: #eae5db;
+  border-color: rgba(234, 229, 219, 0.22);
+}
+.btn-ghost:not(:disabled):hover {
+  background: rgba(234, 229, 219, 0.06);
+}
+
+/* Controle segmentado / opções selecionáveis. */
+.seg {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.opt {
+  flex: 1 1 auto;
+  min-width: max-content;
+  text-align: center;
+  padding: 0.8rem 1rem;
+  border-radius: 13px;
+  border: 1px solid rgba(234, 229, 219, 0.16);
+  background: rgba(234, 229, 219, 0.03);
+  color: rgba(234, 229, 219, 0.62);
+  cursor: pointer;
+  transition: all 0.14s ease;
+  font-weight: 500;
+}
+.opt:hover {
+  border-color: rgba(234, 229, 219, 0.3);
+  color: #eae5db;
+}
+.opt[aria-pressed='true'] {
+  border-color: #bdff00;
+  background: rgba(189, 255, 0, 0.1);
+  color: #eae5db;
+}
+
+/* Chips (alergias). */
+.chip {
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(234, 229, 219, 0.22);
+  background: transparent;
+  color: rgba(234, 229, 219, 0.62);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+.chip[aria-pressed='true'] {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #eae5db;
+}
+
+/* Selo de label (uppercase, tracking). */
+.label-cap {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  color: rgba(234, 229, 219, 0.62);
+}
+
+/* Barra de progresso do onboarding. */
+.progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(234, 229, 219, 0.1);
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: #bdff00;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Pílula de transparência (Desfecho C — ajuste honesto). */
+.pilula-ajuste {
+  background: rgba(189, 255, 0, 0.08);
+  border: 1px solid rgba(189, 255, 0, 0.22);
+  border-radius: 14px;
+  color: #eae5db;
+}
+
+/* Animações (do protótipo). */
+@keyframes evkStepIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes evkScreenIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes evkSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.anim-step {
+  animation: evkStepIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.anim-screen {
+  animation: evkScreenIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-step,
+  .anim-screen {
+    animation: none;
+  }
+}
