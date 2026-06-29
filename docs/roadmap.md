@@ -48,7 +48,8 @@
 | A1 — exercícios | ✅ importado (163) |
 | A2 — alimentos | ✅ importado (125 + 56 pratos, Δ≈0) |
 | A3 — dieta | ✅ implementado + testado |
-| **A3 — treino (FITT) + substituição (números)** | ⏳ **autor pesquisa e traz** (cofre) |
+| **A3 — treino (FITT)** | ✅ **implementado + testado** (gate herdado, FITT, progressão, montador; corpus) |
+| **A3 — substituição (F.2)** | ⏳ spec travada no cofre; **implementar** (próximo) |
 | Gate de saúde | ✅ implementado + testado |
 | B — schema + questionário/gates | ✅ desenhado; **montador v0** (faltam passos do Bloco B) |
 | C — pacote legal | ⏳ textos em rascunho + **revisão jurídica** (portão) |
@@ -92,10 +93,12 @@
 - Persistir `profile`/`plans`/`logs`/`feedback`; **exportar** e **excluir** dados (direitos LGPD).
 - **Webhook Kiwify** real: resolver `user_id` (espelho de e-mail c/ RLS), confirmar payload/assinatura.
 
-### Fase 2 — Motor de treino + montador completo *(precisa de números do cofre)*
-- Autor traz **A3 treino (FITT/progressão)** + **limiares de substituição** → implemento como a
-  dieta (constantes + testes + corpus de bordas).
-- Completar o **montador (Bloco B)**: relaxar proteína→piso, largura total da janela, relaxar
+### Fase 2 — Motores de conteúdo *(Bloco A — fechando)*
+- ✅ **Motor de treino (FITT)** implementado (gate herdado, prescrição, progressão, montador) + testes/corpus.
+- ⏳ **Motor de substituição (F.2)** — spec travada no cofre; implementar o seletor (alimento + exercício:
+  filtros duros → preferência → desempate determinístico → fallback; identidade vegana absoluta; piso de
+  proteína da troca; mais-familiar para exercício) + testes.
+- ⏳ Completar o **montador de dieta (Bloco B)**: relaxar proteína→piso, largura total da janela, relaxar
   preferência por último, ordem de busca/chave final + testes.
 
 ### Fase 3 — Superfícies do produto & loop de feedback
