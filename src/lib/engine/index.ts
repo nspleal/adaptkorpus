@@ -27,7 +27,11 @@ export {
   dificuldadesLiberadas,
 } from './treino';
 export { avaliarGateTreino } from './treino-gate';
-export { montarRotina } from './treino-montador';
+export { montarRotina, locaisPermitidos } from './treino-montador';
+
+// --- Substituição (F.2) ---
+export * from './substituicao-types';
+export { substituirPrato, substituirExercicio } from './substituicao';
 
 import { montarCardapioDia, type RestricoesUsuario, type CardapioDia } from './assembler';
 import { gerarPlanoDieta } from './diet';

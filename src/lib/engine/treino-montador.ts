@@ -14,7 +14,7 @@ import type { PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SlotExerci
 import type { EquipamentoDisp, Exercise, LocalExercicio, PadraoMovimento } from '../data/types';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
-function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
+export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
   if (equip === 'nenhum') return ['casa_sem'];
   if (equip === 'casa') return ['casa_sem', 'casa_com'];
   return ['casa_sem', 'casa_com', 'academia'];
