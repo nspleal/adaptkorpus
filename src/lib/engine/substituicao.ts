@@ -144,13 +144,14 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
   function tipoCompativel(y: typeof atual): boolean {
     if (y.tipo === atual.tipo) return true;
     // Pliométrico sem pliométrico elegível → força do MESMO padrão; se nem isso (ex.: skater,
-    // padrão Cardio, sem força nesse padrão) → preserva o GRUPO muscular (último recurso).
+    // padrão Cardio, sem força nesse padrão) → último recurso = MESMO PADRÃO, qualquer tipo
+    // ("cruzar tipo dentro do padrão" — opção travada da spec p/ o caso skater #151).
     if (atual.tipo === 'pliometrico' && !temMesmoTipo) {
       if (y.tipo === 'forca_hipertrofia' && y.padraoMovimento === atual.padraoMovimento) return true;
       const temForcaMesmoPadrao = p.exercises.some(
         (z) => baseElegivel(z) && z.tipo === 'forca_hipertrofia' && z.padraoMovimento === atual.padraoMovimento,
       );
-      if (!temForcaMesmoPadrao && y.grupoMuscular === atual.grupoMuscular) return true;
+      if (!temForcaMesmoPadrao && y.padraoMovimento === atual.padraoMovimento) return true;
     }
     return false;
   }

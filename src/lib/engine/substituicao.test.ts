@@ -112,13 +112,23 @@ describe('substituição de exercício (F.2)', () => {
     expect(r.exercicio).toBeTruthy();
   });
 
-  it('skater (pliométrico, padrão cardio) degrada sem crashar', () => {
-    const skater = EXERCISES.find((e) => e.nomePt.toLowerCase().includes('patinador'));
-    if (skater) {
-      const r = substituirExercicio({ exercicioAtual: skater, equipamento: 'nenhum', nivelExperiencia: 'avancado', exercises: EXERCISES });
-      expect(['ok', 'sinalizado']).toContain(r.status);
-      if (r.exercicio) expect(r.exercicio.local).toBe('casa_sem');
-    }
+  it('skater (pliométrico, padrão cardio): intermediário → outro pliométrico; iniciante → cardio (cruza tipo no padrão)', () => {
+    const skater = EXERCISES.find((e) => e.nomePt.toLowerCase().includes('patinador'))!;
+    expect(skater.padraoMovimento).toBe('cardio');
+    expect(skater.tipo).toBe('pliometrico');
+
+    // intermediário: existe pliométrico elegível → mantém o tipo (pliométrico)
+    const rI = substituirExercicio({ exercicioAtual: skater, equipamento: 'nenhum', nivelExperiencia: 'intermediario', exercises: EXERCISES });
+    expect(rI.status).toBe('ok');
+    expect(rI.exercicio!.tipo).toBe('pliometrico');
+    expect(rI.exercicio!.local).toBe('casa_sem');
+
+    // iniciante: sem pliométrico liberado → degrada para MESMO padrão (cardio), sem ficar sem opção
+    const rIni = substituirExercicio({ exercicioAtual: skater, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES });
+    expect(rIni.status).toBe('ok');
+    expect(rIni.exercicio!.padraoMovimento).toBe('cardio');
+    expect(rIni.exercicio!.nivel).toBe('iniciante');
+    expect(rIni.exercicio!.id).not.toBe(skater.id);
   });
 
   it('gosto/variedade cedem por último (fallback)', () => {
