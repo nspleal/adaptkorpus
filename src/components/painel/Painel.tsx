@@ -57,9 +57,9 @@ function escalar(m: RecipeMacros, s: number): RecipeMacros {
 type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'perfil';
 type Feedback = 'facil' | 'na_medida' | 'dificil';
 type Modal =
-  | { tipo: 'prato'; idx: number; opcoes: OpcaoPrato[]; excl: string[] }
-  | { tipo: 'porcao'; idx: number }
-  | { tipo: 'exercicio'; d: number; s: number; opcoes: Exercise[]; excl: string[] }
+  | { tipo: 'prato'; idx: number; base: string; opcoes: OpcaoPrato[]; excl: string[] }
+  | { tipo: 'porcao'; idx: number; base: string }
+  | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
@@ -108,7 +108,7 @@ export default function Painel({ perfil, dieta, treino, onSair }: {
   }
   function abrirTrocaPrato(idx: number) {
     const opcoes = gerarOpcoesPrato(idx, []);
-    setModal({ tipo: 'prato', idx, opcoes, excl: opcoes.map((o) => o.prato.id) });
+    setModal({ tipo: 'prato', idx, base: cardItens[idx]!.prato.nome, opcoes, excl: opcoes.map((o) => o.prato.id) });
   }
   function maisVariedadePrato() {
     if (modal?.tipo !== 'prato') return;
@@ -159,7 +159,7 @@ export default function Painel({ perfil, dieta, treino, onSair }: {
   }
   function abrirTrocaEx(d: number, s: number) {
     const opcoes = gerarOpcoesEx(d, s, []);
-    setModal({ tipo: 'exercicio', d, s, opcoes, excl: opcoes.map((e) => e.id) });
+    setModal({ tipo: 'exercicio', d, s, base: rotinaDias[d]!.slots[s]!.exercicio.nomePt, opcoes, excl: opcoes.map((e) => e.id) });
   }
   function maisVariedadeEx() {
     if (modal?.tipo !== 'exercicio') return;
@@ -214,14 +214,14 @@ export default function Painel({ perfil, dieta, treino, onSair }: {
         )}
         {aba === 'dieta' && (
           <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados}
-            onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx })} />
+            onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} />
         )}
         {aba === 'progresso' && <Progresso pesos={pesos} treinos={Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {aba === 'perfil' && <Perfil perfil={perfil} onSair={onSair} />}
       </main>
 
       {modal && (
-        <ModalTroca modal={modal} cardItens={cardItens}
+        <ModalTroca modal={modal}
           onFechar={() => setModal(null)}
           onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato}
           onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />
@@ -462,59 +462,61 @@ function Perfil({ perfil, onSair }: { perfil: PerfilResumo; onSair: () => void }
 
 /* ════════════════════ Modal ════════════════════ */
 
-function ModalTroca({ modal, cardItens, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx }: {
-  modal: NonNullable<Modal>; cardItens: CardapioItem[];
+function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx }: {
+  modal: NonNullable<Modal>;
   onFechar: () => void;
   onAplicarPrato: (idx: number, o: OpcaoPrato) => void; onMaisPrato: () => void;
   onAplicarPorcao: (idx: number, f: number) => void;
   onAplicarEx: (d: number, s: number, ex: Exercise) => void; onMaisEx: () => void;
 }) {
+  // Lista unificada de opções (fiel ao protótipo: linhas com seta; 3 opções + "gerar mais").
+  let titulo = 'Trocar';
+  let sub = '';
+  let showMore = false;
+  let onMore = () => {};
+  const opcoes: { chave: string; nome: string; detalhe?: string; onClick: () => void }[] = [];
+  if (modal.tipo === 'prato') {
+    sub = 'Três opções que mantêm o equilíbrio do dia (equivalência calórica). Não curtiu? Gere mais.';
+    showMore = true; onMore = onMaisPrato;
+    modal.opcoes.forEach((o) => opcoes.push({ chave: o.prato.id, nome: o.prato.nome, detalhe: `${r0(o.macros.kcal)} kcal · ${r0(o.macros.proteinaG)} g prot`, onClick: () => onAplicarPrato(modal.idx, o) }));
+  } else if (modal.tipo === 'exercicio') {
+    sub = 'Mantém o grupo e o padrão, respeitando seu equipamento. Não curtiu? Gere mais.';
+    showMore = true; onMore = onMaisEx;
+    modal.opcoes.forEach((ex) => opcoes.push({ chave: ex.id, nome: ex.nomePt, detalhe: `${ex.grupoMuscular}${ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}`, onClick: () => onAplicarEx(modal.d, modal.s, ex) }));
+  } else {
+    titulo = 'Editar porção';
+    sub = 'Ajuste a quantidade do prato — a estimativa de referência acompanha.';
+    PORCOES.forEach((p) => opcoes.push({ chave: String(p.f), nome: `${p.r} porção${p.f === 1 ? ' (padrão)' : ''}`, onClick: () => onAplicarPorcao(modal.idx, p.f) }));
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={onFechar}
-      style={{ background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}>
-      <div className="surface anim-step w-full max-w-md p-5" style={{ borderRadius: 22 }} onClick={(e) => e.stopPropagation()}>
-        {modal.tipo === 'prato' && (
-          <>
-            <Cabecalho titulo="Trocar prato" sub="Equilíbrio do dia preservado (equivalência calórica)." onFechar={onFechar} />
-            <div className="mt-3 flex flex-col gap-2">
-              {modal.opcoes.length === 0 && <p className="text-sm text-secundario">Sem alternativas que mantenham o dia equilibrado.</p>}
-              {modal.opcoes.map((o) => (
-                <button key={o.prato.id} className="surface-soft p-3 text-left transition hover:border-pulso/40" onClick={() => onAplicarPrato(modal.idx, o)}>
-                  <p className="text-sm font-semibold">{o.prato.nome}</p>
-                  <p className="text-xs text-secundario">{r0(o.macros.kcal)} kcal · {r0(o.macros.proteinaG)} g prot</p>
-                </button>
-              ))}
-            </div>
-            <button className="btn btn-ghost mt-3 w-full" onClick={onMaisPrato}>Gerar mais variedade</button>
-          </>
-        )}
-
-        {modal.tipo === 'porcao' && (
-          <>
-            <Cabecalho titulo="Editar porção" sub={cardItens[modal.idx]?.prato.nome} onFechar={onFechar} />
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {PORCOES.map((p) => (
-                <button key={p.f} className="opt" onClick={() => onAplicarPorcao(modal.idx, p.f)}>{p.r}</button>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-secundario">1 = porção atual. As kcal do dia se ajustam.</p>
-          </>
-        )}
-
-        {modal.tipo === 'exercicio' && (
-          <>
-            <Cabecalho titulo="Trocar exercício" sub="Mesmo grupo/padrão, respeitando seu equipamento." onFechar={onFechar} />
-            <div className="mt-3 flex flex-col gap-2">
-              {modal.opcoes.length === 0 && <p className="text-sm text-secundario">Sem substituto elegível para o equipamento/nível.</p>}
-              {modal.opcoes.map((ex) => (
-                <button key={ex.id} className="surface-soft p-3 text-left transition hover:border-pulso/40" onClick={() => onAplicarEx(modal.d, modal.s, ex)}>
-                  <p className="text-sm font-semibold">{ex.nomePt}</p>
-                  <p className="text-xs text-secundario">{ex.grupoMuscular}{ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}</p>
-                </button>
-              ))}
-            </div>
-            <button className="btn btn-ghost mt-3 w-full" onClick={onMaisEx}>Gerar mais variedade</button>
-          </>
+    <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(234,229,219,.14)', borderRadius: 22, padding: 24, boxShadow: '0 40px 90px -30px rgba(0,0,0,.8)', animation: 'evkPop .3s cubic-bezier(.22,.61,.36,1)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00' }}>{titulo}</div>
+          <button onClick={onFechar} aria-label="Fechar" style={{ background: 'none', border: 'none', color: 'rgba(234,229,219,.5)', fontSize: '1.3rem', lineHeight: 1, cursor: 'pointer', padding: 0, marginTop: -2 }}>×</button>
+        </div>
+        <div style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-.01em', marginBottom: 6 }}>{modal.base}</div>
+        <p style={{ margin: '0 0 18px', fontSize: '.86rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>{sub}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: showMore ? 14 : 0 }}>
+          {opcoes.length === 0 && <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>Sem alternativa elegível agora. Tente ajustar suas preferências.</p>}
+          {opcoes.map((o) => (
+            <button key={o.chave} onClick={o.onClick} className="modal-opt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 14, padding: '15px 17px', color: '#EAE5DB', cursor: 'pointer' }}>
+              <span>
+                <span style={{ display: 'block', fontSize: '1rem', fontWeight: 600 }}>{o.nome}</span>
+                {o.detalhe && <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.55)', marginTop: 2 }}>{o.detalhe}</span>}
+              </span>
+              <span style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', border: '1px solid rgba(234,229,219,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#BDFF00' }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </span>
+            </button>
+          ))}
+        </div>
+        {showMore && (
+          <button onClick={onMore} className="modal-more" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 700, fontSize: '.94rem', padding: 13, borderRadius: 13, cursor: 'pointer' }}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M4 5v5h5M20 19v-5h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /><path d="M19 9a7.5 7.5 0 00-13-2.5L4 10M5 15a7.5 7.5 0 0013 2.5L20 14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Não curti nenhuma — gerar mais variedade
+          </button>
         )}
       </div>
     </div>
@@ -522,15 +524,6 @@ function ModalTroca({ modal, cardItens, onFechar, onAplicarPrato, onMaisPrato, o
 }
 
 /* ════════════════════ Primitivos ════════════════════ */
-
-function Cabecalho({ titulo, sub, onFechar }: { titulo: string; sub?: string; onFechar: () => void }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div><h3 className="text-lg font-bold">{titulo}</h3>{sub && <p className="text-xs text-secundario">{sub}</p>}</div>
-      <button className="text-secundario hover:text-bone" onClick={onFechar} aria-label="Fechar">✕</button>
-    </div>
-  );
-}
 
 function RegistrarPeso({ pesoAtual, onRegistrar }: { pesoAtual: number; onRegistrar: (v: number) => void }) {
   const [v, setV] = useState('');

@@ -216,6 +216,13 @@ body {
 .evk-foot-link { color: rgba(234,229,219,.65); transition: color .2s ease; }
 .evk-foot-link:hover { color: #BDFF00; }
 
+/* Modal de troca (fiel ao protótipo). */
+@keyframes evkPop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+.modal-opt { transition: transform .25s cubic-bezier(.22,.61,.36,1), border-color .25s ease, background .25s ease; }
+.modal-opt:hover { border-color: #BDFF00; background: rgba(189,255,0,.08); transform: translateX(3px); }
+.modal-more { transition: background .25s ease; }
+.modal-more:hover { background: rgba(189,255,0,.16); }
+
 /* Animações (do protótipo). */
 @keyframes evkStepIn {
   from {
