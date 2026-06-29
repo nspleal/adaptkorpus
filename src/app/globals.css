@@ -190,6 +190,32 @@ body {
   color: #eae5db;
 }
 
+/* ─── Movimento da landing (fiel ao protótipo) ─────────────────────────── */
+@keyframes evkFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+@keyframes evkPulse { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.18); opacity: 1; } }
+@keyframes evkRingGlow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(189,255,0,.4)); } 50% { filter: drop-shadow(0 0 10px rgba(189,255,0,.75)); } }
+@keyframes evkDrift { 0% { transform: translate(0,0); } 50% { transform: translate(-22px,18px); } 100% { transform: translate(0,0); } }
+@keyframes evkBlink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Nav da landing (blur ao rolar — classe .scrolled via JS). */
+#evk-nav { border-bottom: 1px solid transparent; transition: background .4s ease, border-color .4s ease, backdrop-filter .4s ease; }
+#evk-nav.scrolled { background: rgba(13,40,24,.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom-color: rgba(234,229,219,.1); }
+
+/* Reveal em scroll (data-reveal → .rv; IntersectionObserver adiciona .rv-in). */
+.rv { opacity: 0; transform: translateY(30px); transition: opacity .85s cubic-bezier(.22,.61,.36,1), transform .85s cubic-bezier(.22,.61,.36,1); }
+.rv.rv-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .rv { opacity: 1; transform: none; transition: none; } }
+
+/* Hovers da landing (sobrepõem o transform do reveal por especificidade de classe). */
+.hov-lift { transition: transform .4s cubic-bezier(.22,.61,.36,1), border-color .4s ease, background .4s ease; }
+.rv.hov-lift:hover, .hov-lift:hover { transform: translateY(-6px); border-color: rgba(189,255,0,.32); background: rgba(234,229,219,.06); }
+.hov-btn { transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .3s ease; }
+.hov-btn:hover { transform: translateY(-3px); box-shadow: 0 16px 40px -12px rgba(189,255,0,.6); }
+.evk-navlink { color: rgba(234,229,219,.72); transition: color .25s ease; }
+.evk-navlink:hover, .evk-navlink.is-active { color: #BDFF00; }
+.evk-foot-link { color: rgba(234,229,219,.65); transition: color .2s ease; }
+.evk-foot-link:hover { color: #BDFF00; }
+
 /* Animações (do protótipo). */
 @keyframes evkStepIn {
   from {
