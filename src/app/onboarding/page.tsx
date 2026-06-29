@@ -48,6 +48,11 @@ const ATIVIDADES: { id: NivelAtividade; rotulo: string; sub: string }[] = [
 
 const REFEICAO_LABEL: Record<string, string> = { cafe: 'Café', almoco: 'Almoço', jantar: 'Jantar', lanche: 'Lanche' };
 
+const PADRAO_LABEL: Record<string, string> = {
+  empurrar: 'Empurrar', puxar: 'Puxar', agachar: 'Agachar',
+  dobradica_quadril: 'Dobradiça', core: 'Core', cardio: 'Cardio', isolado: 'Isolado',
+};
+
 const r0 = (n: number) => Math.round(n);
 const TOTAL_PASSOS = 8;
 
@@ -237,8 +242,10 @@ export default function Onboarding() {
   }
 
   /* ─── render ────────────────────────────────────────────────────────── */
+  // O resultado (plano) aproveita a largura no desktop; o wizard fica centrado.
+  const planoLargo = fase === 'resultado' && !!dieta && dieta.gate.comportamento !== 'ROTEAR';
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-5 py-8">
+    <main className={`mx-auto flex min-h-screen flex-col gap-6 px-5 py-8 ${planoLargo ? 'max-w-5xl' : 'max-w-xl'}`}>
       <header className="flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <KAscendente size={32} />
@@ -287,13 +294,26 @@ export default function Onboarding() {
           : (
             <section className="anim-screen flex flex-col gap-4">
               <BannerAjuste dieta={dieta} />
-              <div className="seg">
-                <button className="opt" aria-pressed={aba === 'dieta'} onClick={() => setAba('dieta')}>Dieta</button>
-                <button className="opt" aria-pressed={aba === 'treino'} onClick={() => setAba('treino')}>Treino</button>
+
+              {/* Mobile/tablet: abas. */}
+              <div className="lg:hidden">
+                <div className="seg">
+                  <button className="opt" aria-pressed={aba === 'dieta'} onClick={() => setAba('dieta')}>Dieta</button>
+                  <button className="opt" aria-pressed={aba === 'treino'} onClick={() => setAba('treino')}>Treino</button>
+                </div>
+                <div className="mt-4">
+                  {aba === 'dieta' && <DietaView dieta={dieta} itens={cardItens} totais={cardTotais} msg={msgPrato} onTrocar={trocarPrato} />}
+                  {aba === 'treino' && treino && <TreinoView treino={treino} dias={rotinaDias} msg={msgEx} onTrocar={trocarExercicio} />}
+                </div>
               </div>
-              {aba === 'dieta' && <DietaView dieta={dieta} itens={cardItens} totais={cardTotais} msg={msgPrato} onTrocar={trocarPrato} />}
-              {aba === 'treino' && treino && <TreinoView treino={treino} dias={rotinaDias} msg={msgEx} onTrocar={trocarExercicio} />}
-              <button className="btn btn-ghost" onClick={recomecar}>Refazer questionário</button>
+
+              {/* Desktop: dieta e treino lado a lado. */}
+              <div className="hidden gap-4 lg:grid lg:grid-cols-2 lg:items-start">
+                <DietaView dieta={dieta} itens={cardItens} totais={cardTotais} msg={msgPrato} onTrocar={trocarPrato} />
+                {treino && <TreinoView treino={treino} dias={rotinaDias} msg={msgEx} onTrocar={trocarExercicio} />}
+              </div>
+
+              <button className="btn btn-ghost w-fit" onClick={recomecar}>Refazer questionário</button>
             </section>
           )
       )}
@@ -603,7 +623,7 @@ function TreinoView({ treino, dias, msg, onTrocar }: {
               <li key={`${d}-${s}-${sl.exercicio.id}`} className="surface-soft p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <span className="block text-xs uppercase text-secundario">{sl.padrao}</span>
+                    <span className="block text-xs uppercase text-secundario">{PADRAO_LABEL[sl.padrao] ?? sl.padrao}</span>
                     <span className="text-sm">{sl.exercicio.nomePt}</span>
                     <span className="block text-xs text-secundario">{sl.exercicio.grupoMuscular}</span>
                   </div>
