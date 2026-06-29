@@ -9,8 +9,11 @@ Pré-requisito: **Node 20+** (recomendado 22; há um `.nvmrc`).
 
 ### Jeito fácil — lançador (duplo-clique)
 Depois de baixar/clonar o projeto:
-- **Windows:** duplo-clique em **`INICIAR APP EVOKORPUS.bat`**
-- **Mac / Linux:** duplo-clique em **`INICIAR APP EVOKORPUS (Mac e Linux).command`**
+- **Windows:** duplo-clique em **`[DEV] iniciar (precisa Node instalado).bat`**
+- **Mac / Linux:** duplo-clique em **`[DEV] iniciar (Mac e Linux, precisa Node).command`**
+
+> Para testar **SEM instalar nada**, NÃO use estes — baixe o **pacote portátil**
+> (`evokorpus-portatil-windows.zip`) na aba **Releases**. Ver seção abaixo.
   (Mac, 1ª vez: botão direito → Abrir)
 
 Ele instala tudo na primeira vez, sobe o app e abre o navegador em

@@ -29,8 +29,8 @@ Igual ao PIRAXIS: um pacote com o **Node embutido**, construído na nuvem.
 
 > Precisa do **Node.js 20+** instalado (https://nodejs.org).
 
-- **Windows:** dê **duplo-clique** em **`INICIAR APP EVOKORPUS.bat`**
-- **Mac / Linux:** dê duplo-clique em **`INICIAR APP EVOKORPUS (Mac e Linux).command`**
+- **Windows:** dê **duplo-clique** em **`[DEV] iniciar (precisa Node instalado).bat`**
+- **Mac / Linux:** dê duplo-clique em **`[DEV] iniciar (Mac e Linux, precisa Node).command`**
   (no Mac, na 1ª vez: botão direito → Abrir)
 
 O lançador instala as dependências na 1ª vez (alguns minutos), sobe o app e **abre o
