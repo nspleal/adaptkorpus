@@ -64,8 +64,8 @@ type Modal =
 
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
 
-export default function Painel({ perfil, dieta, treino, onSair }: {
-  perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void;
+export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
+  perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void; desfechoC?: boolean;
 }) {
   const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
 
@@ -206,6 +206,7 @@ export default function Painel({ perfil, dieta, treino, onSair }: {
       <main className="mx-auto max-w-5xl px-5 py-6">
         {aba === 'hoje' && (
           <Hoje data={dataHoje} dieta={dieta} rotinaDias={rotinaDias} cardTotais={cardTotais}
+            mostrarC={desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR')}
             onIrTreino={() => setAba('treino')} onRegistrar={registrarPeso} pesoAtual={pesos[pesos.length - 1]!} />
         )}
         {aba === 'treino' && prescricao && (
@@ -232,13 +233,12 @@ export default function Painel({ perfil, dieta, treino, onSair }: {
 
 /* ════════════════════ Abas ════════════════════ */
 
-function Hoje({ data, dieta, rotinaDias, cardTotais, onIrTreino, onRegistrar, pesoAtual }: {
-  data: string; dieta: ResultadoMotor; rotinaDias: DiaTreino[]; cardTotais: RecipeMacros | null;
+function Hoje({ data, dieta, rotinaDias, cardTotais, mostrarC, onIrTreino, onRegistrar, pesoAtual }: {
+  data: string; dieta: ResultadoMotor; rotinaDias: DiaTreino[]; cardTotais: RecipeMacros | null; mostrarC: boolean;
   onIrTreino: () => void; onRegistrar: (v: number) => void; pesoAtual: number;
 }) {
   const plano = dieta.plano;
   const diaHoje = rotinaDias[0];
-  const c = dieta.gate.comportamento;
   return (
     <div className="anim-screen flex flex-col gap-4">
       <div>
@@ -246,7 +246,7 @@ function Hoje({ data, dieta, rotinaDias, cardTotais, onIrTreino, onRegistrar, pe
         <h1 className="text-2xl font-extrabold tracking-tight">Bom treino 👊</h1>
       </div>
 
-      {(c === 'RESTRINGIR' || c === 'PISAR') && (
+      {mostrarC && (
         <div className="pilula-ajuste p-4 text-sm">
           <p className="label-cap" style={{ color: '#BDFF00' }}>Ajuste honesto</p>
           <p className="mt-1">Ajustamos seu plano para manter você em segurança. Tudo continua editável.</p>

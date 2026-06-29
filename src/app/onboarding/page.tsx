@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { KAscendente, Wordmark } from '@/lib/brand/Logo';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { gerarDieta, gerarTreino, type ResultadoMotor, type ResultadoTreino } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilTreino, PerfilUsuario, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
@@ -10,358 +8,421 @@ import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed'
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import Painel, { type PerfilResumo } from '@/components/painel/Painel';
 
-const ALERGENOS: { id: Alergeno; rotulo: string }[] = [
-  { id: 'lactose', rotulo: 'Lactose' }, { id: 'gluten', rotulo: 'Glúten' }, { id: 'ovo', rotulo: 'Ovo' },
-  { id: 'soja', rotulo: 'Soja' }, { id: 'amendoim', rotulo: 'Amendoim' }, { id: 'castanhas', rotulo: 'Castanhas' },
-  { id: 'gergelim', rotulo: 'Gergelim' }, { id: 'coco', rotulo: 'Coco' }, { id: 'peixe_frutos_do_mar', rotulo: 'Peixe / frutos do mar' },
+/**
+ * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
+ * stepper com pontos ascendentes + barra com glow, card em gradiente, evkStepIn por
+ * passo, estilos exatos de cada opção. Ligado ao motor real (gate A/B/C + Painel).
+ */
+
+const EASE = 'cubic-bezier(.22,.61,.36,1)';
+const TOTAL = 8;
+
+// estilos exatos do protótipo
+const cardBase: CSSProperties = { cursor: 'pointer', position: 'relative', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: '18px 20px', transition: `transform .3s ${EASE},border-color .3s ease,background .3s ease,box-shadow .3s ease` };
+const cardSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.07)', boxShadow: '0 0 0 1px rgba(189,255,0,.35)' };
+const segBase: CSSProperties = { cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'center', padding: '13px 8px', borderRadius: 12, fontWeight: 600, fontSize: '.95rem', transition: 'all .25s ease', border: '1px solid rgba(234,229,219,.12)', background: 'rgba(234,229,219,.04)', color: 'rgba(234,229,219,.7)' };
+const segSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.1)', color: '#BDFF00' };
+const chipBase: CSSProperties = { cursor: 'pointer', padding: '10px 16px', borderRadius: 999, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: '1px solid rgba(234,229,219,.15)', background: 'rgba(234,229,219,.04)', color: 'rgba(234,229,219,.75)' };
+const chipSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.1)', color: '#BDFF00' };
+const labelCap: CSSProperties = { fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 10 };
+const inputBox: CSSProperties = { display: 'flex', alignItems: 'center', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '0 14px' };
+const inputInner: CSSProperties = { width: '100%', background: 'none', border: 'none', color: '#EAE5DB', fontSize: '1.1rem', fontWeight: 600, padding: '13px 0', outline: 'none' };
+const h2: CSSProperties = { margin: '0 0 22px', fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-.02em' };
+
+const ALERGENOS: { id: Alergeno; t: string }[] = [
+  { id: 'lactose', t: 'Lactose' }, { id: 'gluten', t: 'Glúten' }, { id: 'ovo', t: 'Ovo' }, { id: 'soja', t: 'Soja' },
+  { id: 'amendoim', t: 'Amendoim' }, { id: 'castanhas', t: 'Castanhas' }, { id: 'gergelim', t: 'Gergelim' }, { id: 'coco', t: 'Coco' }, { id: 'peixe_frutos_do_mar', t: 'Peixe / frutos do mar' },
+];
+const ATIVIDADES: { id: NivelAtividade; t: string; d: string }[] = [
+  { id: 'sedentario', t: 'Sedentário', d: 'Pouco ou nenhum exercício' },
+  { id: 'leve', t: 'Leve', d: '1–2 dias por semana' },
+  { id: 'moderado', t: 'Moderado', d: '3–4 dias por semana' },
+  { id: 'intenso', t: 'Intenso', d: '5–6 dias por semana' },
+  { id: 'muito_intenso', t: 'Muito intenso', d: 'Treino diário / trabalho físico' },
+];
+const OBJETIVOS: { id: Objetivo; t: string; d: string }[] = [
+  { id: 'emagrecimento', t: 'Emagrecer', d: 'Reduzir gordura com constância.' },
+  { id: 'massa', t: 'Ganhar massa', d: 'Construir músculo de forma estruturada.' },
+  { id: 'saude', t: 'Manter / Saúde', d: 'Manutenção e bem-estar no longo prazo.' },
+];
+const EXPERIENCIAS: { id: NivelExperiencia; t: string; d: string }[] = [
+  { id: 'iniciante', t: 'Iniciante', d: 'Começando agora ou voltando.' },
+  { id: 'intermediario', t: 'Intermediário', d: 'Treino há alguns meses.' },
+  { id: 'avancado', t: 'Avançado', d: 'Treino consistente há anos.' },
+];
+const LOCAIS: { id: EquipamentoDisp; t: string; d: string }[] = [
+  { id: 'nenhum', t: 'Sem equipamento', d: 'Só o peso do corpo.' },
+  { id: 'casa', t: 'Em casa', d: 'Halteres, elásticos, o que tiver.' },
+  { id: 'academia', t: 'Academia', d: 'Equipamento completo.' },
+];
+const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
+  { id: '', t: 'Onívoro', d: 'Como de tudo' },
+  { id: 'vegetariano', t: 'Vegetariano', d: 'Sem carne' },
+  { id: 'vegano', t: 'Vegano', d: 'Sem origem animal' },
+];
+const HEALTH: { id: string; q: string; fem?: boolean }[] = [
+  { id: 'gestante', q: 'Está gestante ou amamentando?', fem: true },
+  { id: 'renal', q: 'Tem alguma condição renal?' },
+  { id: 'cardiaca', q: 'Tem alguma condição cardíaca?' },
+  { id: 'lesao', q: 'Tem lesão ou limitação física?' },
+  { id: 'diabetes', q: 'Tem diabetes?' },
 ];
 
-const ATIVIDADES: { id: NivelAtividade; rotulo: string; sub: string }[] = [
-  { id: 'sedentario', rotulo: 'Sedentário', sub: 'pouco ou nenhum exercício' },
-  { id: 'leve', rotulo: 'Leve', sub: '1–2 dias/semana' },
-  { id: 'moderado', rotulo: 'Moderado', sub: '3–4 dias/semana' },
-  { id: 'intenso', rotulo: 'Intenso', sub: '5–6 dias/semana' },
-  { id: 'muito_intenso', rotulo: 'Muito intenso', sub: 'treino diário / trabalho físico' },
-];
-
-const TOTAL_PASSOS = 8;
 type Fase = 'wizard' | 'gerando' | 'resultado';
+type SimNaoV = 'sim' | 'nao';
 
 export default function Onboarding() {
-  const [aceite18, setA18] = useState(false);
-  const [aceiteTermos, setATermos] = useState(false);
-  const [aceiteLgpd, setALgpd] = useState(false);
-
+  const [terms, setTerms] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [sexo, setSexo] = useState<Sexo>('feminino');
   const [idade, setIdade] = useState('30');
-  const [alturaCm, setAltura] = useState('170');
-  const [pesoKg, setPeso] = useState('70');
-
-  const [gestacaoAmamentacao, setGest] = useState(false);
-  const [renal, setRenal] = useState(false);
-  const [cardiaca, setCardiaca] = useState(false);
-  const [lesao, setLesao] = useState(false);
-  const [diabetes, setDiabetes] = useState(false);
-
+  const [altura, setAltura] = useState('170');
+  const [peso, setPeso] = useState('70');
+  const [healthAns, setHealthAns] = useState<Record<string, SimNaoV>>({});
   const [objetivo, setObjetivo] = useState<Objetivo>('emagrecimento');
-  const [nivelAtividade, setNivel] = useState<NivelAtividade>('moderado');
-  const [nivelExperiencia, setNivelExp] = useState<NivelExperiencia>('iniciante');
-  const [equipamento, setEquipamento] = useState<EquipamentoDisp>('casa');
-  const [diasDisponiveis, setDias] = useState(3);
-  const [tempoPorSessaoMin, setTempo] = useState(45);
-
-  const [preferencia, setPreferencia] = useState<'' | 'vegano' | 'vegetariano'>('');
-  const [alergenos, setAlergenos] = useState<Alergeno[]>([]);
+  const [atividade, setAtividade] = useState<NivelAtividade>('moderado');
+  const [experiencia, setExperiencia] = useState<NivelExperiencia>('iniciante');
+  const [local, setLocal] = useState<EquipamentoDisp>('casa');
+  const [dias, setDias] = useState(3);
+  const [tempo, setTempo] = useState(45);
+  const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>('');
+  const [alergias, setAlergias] = useState<Alergeno[]>([]);
   const [naoGosto, setNaoGosto] = useState('');
 
-  const [passo, setPasso] = useState(0);
+  const [step, setStep] = useState(0);
   const [fase, setFase] = useState<Fase>('wizard');
-  const [erros, setErros] = useState<string[]>([]);
+  const [erro, setErro] = useState('');
+  const [genPct, setGenPct] = useState(0);
 
   const [dieta, setDieta] = useState<ResultadoMotor | null>(null);
   const [treino, setTreino] = useState<ResultadoTreino | null>(null);
   const [perfilResumo, setPerfilResumo] = useState<PerfilResumo | null>(null);
+  const giRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (giRef.current) clearInterval(giRef.current); }, []);
 
-  function toggleAlergeno(a: Alergeno) {
-    setAlergenos((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
-  }
+  const toggleAlergia = (a: Alergeno) => setAlergias((p) => (p.includes(a) ? p.filter((x) => x !== a) : [...p, a]));
+  const setHealth = (id: string, v: SimNaoV) => setHealthAns((p) => ({ ...p, [id]: v }));
+  const reqHealth = HEALTH.filter((q) => !q.fem || sexo === 'feminino');
 
-  function passoValido(p: number): boolean {
-    if (p === 0) return aceite18 && aceiteTermos && aceiteLgpd;
-    if (p === 1) {
-      const i = Number(idade), a = Number(alturaCm), pe = Number(pesoKg);
-      return i >= 18 && i <= 100 && a >= 100 && a <= 250 && pe >= 30 && pe <= 300;
-    }
+  function canCont(): boolean {
+    if (step === 0) return terms.every(Boolean);
+    if (step === 1) { const i = +idade, a = +altura, p = +peso; return i >= 18 && i <= 100 && a >= 100 && a <= 250 && p >= 30 && p <= 300; }
+    if (step === 2) return reqHealth.every((q) => healthAns[q.id]);
     return true;
   }
 
-  function avancar() {
-    setErros([]);
-    if (!passoValido(passo)) return;
-    if (passo < TOTAL_PASSOS - 1) setPasso((p) => p + 1);
-    else gerar();
+  function continuar() {
+    setErro('');
+    if (!canCont()) return;
+    if (step === TOTAL - 1) gerar();
+    else { setStep((s) => s + 1); window.scrollTo(0, 0); }
   }
-  const voltar = () => { setErros([]); setPasso((p) => Math.max(0, p - 1)); };
+  const voltar = () => { setErro(''); setStep((s) => Math.max(0, s - 1)); window.scrollTo(0, 0); };
 
   function gerar() {
-    const consent = consentimentoSchema.safeParse({ aceite18, aceiteTermos, aceiteLgpd });
-    const perfilParse = perfilSchema.safeParse({
-      sexo, pesoKg, alturaCm, idade, nivelAtividade, objetivo,
-      flagsSaude: { gestacaoAmamentacao, renal, cardiaca, lesao, diabetes },
-      preferenciaAlimentar: preferencia || null, alergenos,
-    });
-    if (!consent.success || !perfilParse.success) {
-      setErros(Array.from(new Set([
-        ...(consent.success ? [] : consent.error.issues.map((i) => i.message)),
-        ...(perfilParse.success ? [] : perfilParse.error.issues.map((i) => i.message)),
-      ])));
-      return;
-    }
-    const p = perfilParse.data;
+    const flags = {
+      gestacaoAmamentacao: healthAns.gestante === 'sim', renal: healthAns.renal === 'sim',
+      cardiaca: healthAns.cardiaca === 'sim', lesao: healthAns.lesao === 'sim', diabetes: healthAns.diabetes === 'sim',
+    };
+    const consent = consentimentoSchema.safeParse({ aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+    const parse = perfilSchema.safeParse({ sexo, pesoKg: peso, alturaCm: altura, idade, nivelAtividade: atividade, objetivo, flagsSaude: flags, preferenciaAlimentar: padrao || null, alergenos: alergias });
+    if (!consent.success || !parse.success) { setErro('Confira seus dados antes de gerar.'); return; }
+    const p = parse.data;
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null };
-    const perfil: PerfilUsuario = {
-      sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade,
-      nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude,
-    };
-    const perfilTreino: PerfilTreino = {
-      pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, flagsSaude: p.flagsSaude,
-      objetivo: p.objetivo, nivelExperiencia, equipamento, diasDisponiveis, tempoPorSessaoMin,
-    };
+    const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
+    const perfilTreino: PerfilTreino = { pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, flagsSaude: p.flagsSaude, objetivo: p.objetivo, nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: dias, tempoPorSessaoMin: tempo };
     setDieta(gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }));
     setTreino(gerarTreino(perfilTreino, { exercises: EXERCISES_SEED }));
-    setPerfilResumo({
-      sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo,
-      nivelAtividade: p.nivelAtividade, nivelExperiencia, equipamento,
-      preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[],
-      diasDisponiveis, tempoPorSessaoMin,
-    });
-    setFase('gerando');
-    setTimeout(() => setFase('resultado'), 1300);
+    setPerfilResumo({ sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo });
+
+    setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
+    let pct = 0;
+    if (giRef.current) clearInterval(giRef.current);
+    giRef.current = setInterval(() => {
+      pct = Math.min(100, pct + 9);
+      setGenPct(pct);
+      if (pct >= 100) { if (giRef.current) clearInterval(giRef.current); setTimeout(() => setFase('resultado'), 450); }
+    }, 150);
   }
 
-  const recomecar = () => { setFase('wizard'); setPasso(0); setDieta(null); setTreino(null); setPerfilResumo(null); };
+  const recomecar = () => { setFase('wizard'); setStep(0); setDieta(null); setTreino(null); setPerfilResumo(null); };
 
-  // Plano gerado (Desfecho A/C) → painel completo (área logada), tela cheia.
+  // Plano gerado (Desfecho A/C) → painel completo, tela cheia.
   if (fase === 'resultado' && dieta && treino && perfilResumo && dieta.gate.comportamento !== 'ROTEAR') {
-    return <Painel perfil={perfilResumo} dieta={dieta} treino={treino} onSair={recomecar} />;
+    return <Painel perfil={perfilResumo} dieta={dieta} treino={treino} onSair={recomecar} desfechoC={dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'} />;
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-5 py-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2"><KAscendente size={32} /><Wordmark className="text-lg" /></Link>
-        {fase === 'wizard' && <span className="label-cap">Passo {passo + 1} de {TOTAL_PASSOS}</span>}
-      </header>
+    <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
+      <Backdrop />
 
       {fase === 'wizard' && (
-        <>
-          <div className="progress"><span style={{ width: `${((passo + 1) / TOTAL_PASSOS) * 100}%` }} /></div>
-          <div key={passo} className="anim-step flex flex-col gap-5">
-            {passo === 0 && <PassoTermos {...{ aceite18, setA18, aceiteTermos, setATermos, aceiteLgpd, setALgpd }} />}
-            {passo === 1 && <PassoSobre {...{ sexo, setSexo, idade, setIdade, alturaCm, setAltura, pesoKg, setPeso }} />}
-            {passo === 2 && <PassoTriagem {...{ sexo, gestacaoAmamentacao, setGest, renal, setRenal, cardiaca, setCardiaca, lesao, setLesao, diabetes, setDiabetes }} />}
-            {passo === 3 && <PassoObjetivo {...{ objetivo, setObjetivo }} />}
-            {passo === 4 && <PassoAtividade {...{ nivelAtividade, setNivel }} />}
-            {passo === 5 && <PassoExperiencia {...{ nivelExperiencia, setNivelExp }} />}
-            {passo === 6 && <PassoOndeQuando {...{ equipamento, setEquipamento, diasDisponiveis, setDias, tempoPorSessaoMin, setTempo }} />}
-            {passo === 7 && <PassoPreferencia {...{ preferencia, setPreferencia, alergenos, toggleAlergeno, naoGosto, setNaoGosto }} />}
+        <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px 56px', animation: `evkScreenIn .5s ${EASE}` }}>
+          <div style={{ width: '100%', maxWidth: 620 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 30 }}><Logo size={26} /><Marca size="1.05rem" /></div>
+
+            {/* stepper */}
+            <div style={{ marginBottom: 30 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 11 }}>
+                <span style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)' }}>Passo {step + 1} de {TOTAL}</span>
+                <svg width={56} height={22} viewBox="0 0 56 22" fill="none"><path d="M4 18 Q22 14 34 8 T52 3" stroke="rgba(189,255,0,.4)" strokeWidth={1.6} fill="none" strokeLinecap="round" /><circle cx={20} cy={12} r={2.4} fill="#BDFF00" opacity={0.55} /><circle cx={34} cy={8} r={3} fill="#BDFF00" opacity={0.8} /><circle cx={52} cy={3} r={3.6} fill="#BDFF00" /></svg>
+              </div>
+              <div style={{ height: 6, background: 'rgba(234,229,219,.1)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${((step + 1) / TOTAL) * 100}%`, background: '#BDFF00', borderRadius: 99, boxShadow: '0 0 12px rgba(189,255,0,.5)', transition: `width .55s ${EASE}` }} />
+              </div>
+            </div>
+
+            {/* card */}
+            <div style={{ background: 'linear-gradient(168deg, rgba(15,42,26,.55), rgba(15,15,14,.6))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 24, padding: '34px 32px', boxShadow: '0 30px 70px -40px rgba(0,0,0,.6)' }}>
+              <div key={step} style={{ animation: `evkStepIn .45s ${EASE}` }}>
+                {step === 0 && <Step0 terms={terms} setTerms={setTerms} />}
+                {step === 1 && <Step1 {...{ sexo, setSexo, idade, setIdade, altura, setAltura, peso, setPeso }} />}
+                {step === 2 && <Step2 {...{ reqHealth, healthAns, setHealth }} />}
+                {step === 3 && <StepCards titulo="Qual é o seu objetivo?" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />}
+                {step === 4 && <StepCards titulo="Seu nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} />}
+                {step === 5 && <StepCards titulo="Sua experiência de treino" sub="É diferente do seu dia a dia — aqui é há quanto tempo você treina de forma consistente." opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} />}
+                {step === 6 && <Step6 {...{ local, setLocal, dias, setDias, tempo, setTempo }} />}
+                {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGosto }} />}
+              </div>
+            </div>
+
+            {erro && <p style={{ color: '#E5484D', fontSize: '.9rem', marginTop: 14 }}>{erro}</p>}
+
+            {/* footer */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, gap: 14 }}>
+              {step > 0 ? <button onClick={voltar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: '14px 24px', borderRadius: 13, cursor: 'pointer', transition: 'border-color .25s ease, background .25s ease' }}>Voltar</button> : <span />}
+              <button onClick={continuar} className={canCont() ? 'hov-btn' : ''} style={{ border: 'none', cursor: canCont() ? 'pointer' : 'default', fontWeight: 700, fontSize: '1.02rem', padding: '15px 30px', borderRadius: 13, transition: `transform .25s ${EASE},box-shadow .3s ease,opacity .25s ease`, ...(canCont() ? { background: '#BDFF00', color: '#0D2818' } : { background: 'rgba(234,229,219,.1)', color: 'rgba(234,229,219,.4)', pointerEvents: 'none' }) }}>
+                {step === TOTAL - 1 ? 'Gerar meu plano' : 'Continuar'}
+              </button>
+            </div>
           </div>
-          {erros.length > 0 && (
-            <div className="pilula-alerta rounded-xl p-3 text-sm"><ul className="list-disc pl-4">{erros.map((e) => <li key={e}>{e}</li>)}</ul></div>
-          )}
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <button className="btn btn-ghost" onClick={voltar} disabled={passo === 0}>← Voltar</button>
-            <button className="btn btn-neon flex-1" onClick={avancar} disabled={!passoValido(passo)}>
-              {passo === TOTAL_PASSOS - 1 ? 'Gerar meu plano' : 'Continuar'}
-            </button>
-          </div>
-        </>
+        </div>
       )}
 
-      {fase === 'gerando' && <TelaGerando />}
+      {fase === 'gerando' && <Gerando pct={genPct} />}
 
-      {fase === 'resultado' && dieta?.gate.comportamento === 'ROTEAR' && (
-        <Encaminhamento motivos={dieta.gate.motivos} onRevisar={recomecar} />
-      )}
-
-      <p className="mt-2 text-center text-xs text-secundario">
-        Demonstração local: plano e trocas são calculados no seu dispositivo (motor determinístico, sem IA).
-        Estimativa de referência, não prescrição. Ferramenta educacional, 18+.
-      </p>
-    </main>
+      {fase === 'resultado' && dieta?.gate.comportamento === 'ROTEAR' && <GateB motivos={dieta.gate.motivos} onRevisar={recomecar} />}
+    </div>
   );
 }
 
 /* ════════════════════ Passos ════════════════════ */
 
-function StepHead({ titulo, sub }: { titulo: string; sub?: string }) {
-  return <div><h1 className="text-2xl font-bold tracking-tight">{titulo}</h1>{sub && <p className="mt-1 text-sm text-secundario">{sub}</p>}</div>;
-}
-
-function PassoTermos(p: {
-  aceite18: boolean; setA18: (v: boolean) => void; aceiteTermos: boolean; setATermos: (v: boolean) => void;
-  aceiteLgpd: boolean; setALgpd: (v: boolean) => void;
-}) {
+function Step0({ terms, setTerms }: { terms: [boolean, boolean, boolean]; setTerms: (t: [boolean, boolean, boolean]) => void }) {
+  const linhas = [
+    <>Confirmo que tenho <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>18 anos ou mais</strong>.</>,
+    <>Li e aceito os <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Termos de Uso</strong> e o <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Aviso (disclaimer)</strong>.</>,
+    <>Autorizo o tratamento dos meus dados para gerar meu plano, conforme a <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Política de Privacidade</strong> (LGPD).</>,
+  ];
+  const tog = (i: number) => { const n = [...terms] as [boolean, boolean, boolean]; n[i] = !n[i]; setTerms(n); };
   return (
-    <>
-      <StepHead titulo="Antes de começar" sub="O Evokorpus é uma ferramenta educacional dirigida por você — não substitui um profissional." />
-      <div className="surface flex flex-col gap-1 p-2">
-        <Check checked={p.aceite18} onChange={p.setA18} label="Confirmo que tenho 18 anos ou mais." />
-        <Check checked={p.aceiteTermos} onChange={p.setATermos} label="Li e aceito o termo de conscientização e o disclaimer." />
-        <Check checked={p.aceiteLgpd} onChange={p.setALgpd} label="Consinto com o tratamento dos meus dados (LGPD) para gerar meu plano." />
+    <div>
+      <h2 style={{ ...h2, marginBottom: 14 }}>Antes de começar</h2>
+      <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.98rem' }}>O Evokorpus é uma ferramenta de uso geral e educacional. Ele <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>sugere</strong> um plano de treino e dieta — você está sempre no comando e pode ajustar tudo. Não é prescrição médica, nutricional ou de educação física, e não substitui um profissional.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {linhas.map((l, i) => (
+          <div key={i} onClick={() => tog(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 13, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 16, cursor: 'pointer' }}>
+            <Box on={!!terms[i]} />
+            <span style={{ fontSize: '.96rem', lineHeight: 1.45, paddingTop: 1 }}>{l}</span>
+          </div>
+        ))}
       </div>
-    </>
+    </div>
   );
 }
 
-function PassoSobre(p: {
+function Step1({ sexo, setSexo, idade, setIdade, altura, setAltura, peso, setPeso }: {
   sexo: Sexo; setSexo: (v: Sexo) => void; idade: string; setIdade: (v: string) => void;
-  alturaCm: string; setAltura: (v: string) => void; pesoKg: string; setPeso: (v: string) => void;
+  altura: string; setAltura: (v: string) => void; peso: string; setPeso: (v: string) => void;
 }) {
   return (
-    <>
-      <StepHead titulo="Sobre você" sub="Usamos isso só para calcular seu ponto de partida." />
-      <div>
-        <span className="label-cap">Sexo biológico</span>
-        <div className="seg mt-2">
-          <button className="opt" aria-pressed={p.sexo === 'feminino'} onClick={() => p.setSexo('feminino')}>Feminino</button>
-          <button className="opt" aria-pressed={p.sexo === 'masculino'} onClick={() => p.setSexo('masculino')}>Masculino</button>
+    <div>
+      <h2 style={h2}>Sobre você</h2>
+      <div style={labelCap}>Sexo biológico</div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+        {(['feminino', 'masculino'] as Sexo[]).map((sx) => (
+          <div key={sx} onClick={() => setSexo(sx)} style={{ ...segBase, ...(sexo === sx ? segSel : {}) }}>{sx === 'feminino' ? 'Feminino' : 'Masculino'}</div>
+        ))}
+      </div>
+      <p style={{ margin: '0 0 26px', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Usamos só para estimar seu gasto calórico.</p>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        {[['Idade', idade, setIdade, 'anos'], ['Altura', altura, setAltura, 'cm'], ['Peso', peso, setPeso, 'kg']].map(([lb, v, set, u]) => (
+          <div key={lb as string} style={{ flex: 1, minWidth: 120 }}>
+            <div style={labelCap}>{lb as string}</div>
+            <div style={inputBox}><input type="number" inputMode="numeric" value={v as string} onChange={(e) => (set as (s: string) => void)(e.target.value)} style={inputInner} /><span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.45)' }}>{u as string}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Step2({ reqHealth, healthAns, setHealth }: { reqHealth: { id: string; q: string }[]; healthAns: Record<string, SimNaoV>; setHealth: (id: string, v: SimNaoV) => void }) {
+  const hBtn = (id: string, val: SimNaoV): CSSProperties => {
+    const on = healthAns[id] === val; const danger = val === 'sim';
+    return { cursor: 'pointer', flex: 1, padding: 12, borderRadius: 11, fontWeight: 600, fontSize: '.92rem', transition: 'all .25s ease', textAlign: 'center',
+      border: `1px solid ${on ? (danger ? 'rgba(229,72,77,.6)' : 'rgba(189,255,0,.5)') : 'rgba(234,229,219,.14)'}`,
+      background: on ? (danger ? 'rgba(229,72,77,.14)' : 'rgba(189,255,0,.1)') : 'rgba(234,229,219,.04)',
+      color: on ? (danger ? '#E5484D' : '#BDFF00') : 'rgba(234,229,219,.7)' };
+  };
+  return (
+    <div>
+      <h2 style={{ ...h2, marginBottom: 12 }}>Sua segurança em primeiro lugar</h2>
+      <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.96rem' }}>Não somos médicos e não fazemos diagnóstico. Responda com sinceridade — se algo se aplicar, vamos <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>recomendar acompanhamento profissional</strong> em vez de gerar um plano automático.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {reqHealth.map((q) => (
+          <div key={q.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '14px 16px' }}>
+            <span style={{ fontSize: '.96rem', fontWeight: 500, flex: 1, minWidth: 160 }}>{q.q}</span>
+            <div style={{ display: 'flex', gap: 8, width: 160 }}>
+              <button onClick={() => setHealth(q.id, 'sim')} style={hBtn(q.id, 'sim')}>Sim</button>
+              <button onClick={() => setHealth(q.id, 'nao')} style={hBtn(q.id, 'nao')}>Não</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{ margin: '18px 0 0', fontSize: '.85rem', color: 'rgba(234,229,219,.45)' }}>Guardamos só o necessário para isso.</p>
+    </div>
+  );
+}
+
+function StepCards<T extends string>({ titulo, sub, opts, sel, onSel }: { titulo: string; sub?: string; opts: { id: T; t: string; d: string }[]; sel: T; onSel: (v: T) => void }) {
+  return (
+    <div>
+      <h2 style={{ ...h2, marginBottom: sub ? 8 : 22 }}>{titulo}</h2>
+      {sub && <p style={{ margin: '0 0 22px', fontSize: '.9rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>{sub}</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {opts.map((o) => (
+          <div key={o.id} onClick={() => onSel(o.id)} style={{ ...cardBase, ...(sel === o.id ? cardSel : {}) }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+              <div><div style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 2 }}>{o.t}</div><div style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div></div>
+              {sel === o.id && <CheckCircle />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Step6({ local, setLocal, dias, setDias, tempo, setTempo }: {
+  local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void; dias: number; setDias: (v: number) => void; tempo: number; setTempo: (v: number) => void;
+}) {
+  return (
+    <div>
+      <h2 style={h2}>Onde e quando você treina</h2>
+      <div style={labelCap}>Local e equipamento</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+        {LOCAIS.map((o) => (
+          <div key={o.id} onClick={() => setLocal(o.id)} style={{ ...cardBase, ...(local === o.id ? cardSel : {}) }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+              <div><div style={{ fontSize: '1.02rem', fontWeight: 700, marginBottom: 2 }}>{o.t}</div><div style={{ fontSize: '.88rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div></div>
+              {local === o.id && <CheckCircle />}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={labelCap}>Dias por semana</div>
+          <div style={{ display: 'flex', gap: 7 }}>{[1, 2, 3, 4, 5, 6].map((d) => <div key={d} onClick={() => setDias(d)} style={{ ...segBase, ...(dias === d ? segSel : {}) }}>{d}</div>)}</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={labelCap}>Tempo por sessão</div>
+          <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...segBase, ...(tempo === t ? segSel : {}) }}>{t === 75 ? '75+' : t}</div>)}</div>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <NumField label="Idade" value={p.idade} onChange={p.setIdade} suf="anos" />
-        <NumField label="Altura" value={p.alturaCm} onChange={p.setAltura} suf="cm" />
-        <NumField label="Peso" value={p.pesoKg} onChange={p.setPeso} suf="kg" />
-      </div>
-    </>
+    </div>
   );
 }
 
-function PassoTriagem(p: {
-  sexo: Sexo; gestacaoAmamentacao: boolean; setGest: (v: boolean) => void; renal: boolean; setRenal: (v: boolean) => void;
-  cardiaca: boolean; setCardiaca: (v: boolean) => void; lesao: boolean; setLesao: (v: boolean) => void;
-  diabetes: boolean; setDiabetes: (v: boolean) => void;
+function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGosto }: {
+  padrao: '' | 'vegetariano' | 'vegano'; setPadrao: (v: '' | 'vegetariano' | 'vegano') => void;
+  alergias: Alergeno[]; toggleAlergia: (a: Alergeno) => void; naoGosto: string; setNaoGosto: (v: string) => void;
 }) {
   return (
-    <>
-      <StepHead titulo="Triagem de saúde" sub="Autodeclaração mínima (sim/não). Não é ficha médica. Em algumas condições o app orienta procurar um profissional em vez de gerar um plano." />
-      <div className="flex flex-col gap-2">
-        {p.sexo === 'feminino' && <SimNao label="Estou gestante ou amamentando" value={p.gestacaoAmamentacao} onChange={p.setGest} />}
-        <SimNao label="Tenho condição renal" value={p.renal} onChange={p.setRenal} />
-        <SimNao label="Tenho condição cardíaca" value={p.cardiaca} onChange={p.setCardiaca} />
-        <SimNao label="Tenho lesão ou limitação física" value={p.lesao} onChange={p.setLesao} />
-        <SimNao label="Tenho diabetes" value={p.diabetes} onChange={p.setDiabetes} />
+    <div>
+      <h2 style={h2}>Preferência alimentar</h2>
+      <div style={labelCap}>Padrão alimentar</div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+        {PADROES.map((o) => (
+          <div key={o.id || 'oni'} onClick={() => setPadrao(o.id)} style={{ ...cardBase, ...(padrao === o.id ? cardSel : {}), minWidth: 130, flex: 1, padding: '16px 18px' }}>
+            <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 2 }}>{o.t}</div><div style={{ fontSize: '.84rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div>
+          </div>
+        ))}
       </div>
-    </>
-  );
-}
-
-function PassoObjetivo(p: { objetivo: Objetivo; setObjetivo: (v: Objetivo) => void }) {
-  const opts: { id: Objetivo; rotulo: string; sub: string }[] = [
-    { id: 'emagrecimento', rotulo: 'Emagrecer', sub: 'reduzir gordura com constância' },
-    { id: 'massa', rotulo: 'Ganhar massa', sub: 'construir músculo' },
-    { id: 'saude', rotulo: 'Manter / Saúde', sub: 'manutenção e bem-estar' },
-  ];
-  return <><StepHead titulo="Seu objetivo" sub="Você pode mudar depois." /><CardOptions opts={opts} sel={p.objetivo} onSel={p.setObjetivo} /></>;
-}
-
-function PassoAtividade(p: { nivelAtividade: NivelAtividade; setNivel: (v: NivelAtividade) => void }) {
-  return <><StepHead titulo="Nível de atividade" sub="Fora dos treinos — sua rotina do dia a dia." /><CardOptions opts={ATIVIDADES} sel={p.nivelAtividade} onSel={p.setNivel} /></>;
-}
-
-function PassoExperiencia(p: { nivelExperiencia: NivelExperiencia; setNivelExp: (v: NivelExperiencia) => void }) {
-  const opts: { id: NivelExperiencia; rotulo: string; sub: string }[] = [
-    { id: 'iniciante', rotulo: 'Iniciante', sub: 'começando agora ou voltando' },
-    { id: 'intermediario', rotulo: 'Intermediário', sub: 'treino há alguns meses' },
-    { id: 'avancado', rotulo: 'Avançado', sub: 'treino consistente há anos' },
-  ];
-  return <><StepHead titulo="Experiência de treino" sub="Define a progressão e a dificuldade liberada." /><CardOptions opts={opts} sel={p.nivelExperiencia} onSel={p.setNivelExp} /></>;
-}
-
-function PassoOndeQuando(p: {
-  equipamento: EquipamentoDisp; setEquipamento: (v: EquipamentoDisp) => void; diasDisponiveis: number; setDias: (v: number) => void;
-  tempoPorSessaoMin: number; setTempo: (v: number) => void;
-}) {
-  const eq: { id: EquipamentoDisp; rotulo: string }[] = [
-    { id: 'nenhum', rotulo: 'Sem equipamento' }, { id: 'casa', rotulo: 'Em casa' }, { id: 'academia', rotulo: 'Academia' },
-  ];
-  return (
-    <>
-      <StepHead titulo="Onde e quando" sub="Adaptamos os exercícios ao que você tem." />
-      <div><span className="label-cap">Equipamento</span><div className="seg mt-2">{eq.map((e) => <button key={e.id} className="opt" aria-pressed={p.equipamento === e.id} onClick={() => p.setEquipamento(e.id)}>{e.rotulo}</button>)}</div></div>
-      <div><span className="label-cap">Dias por semana</span><div className="seg mt-2">{[1, 2, 3, 4, 5, 6].map((d) => <button key={d} className="opt" aria-pressed={p.diasDisponiveis === d} onClick={() => p.setDias(d)}>{d}</button>)}</div></div>
-      <div><span className="label-cap">Minutos por sessão</span><div className="seg mt-2">{[30, 45, 60, 75].map((t) => <button key={t} className="opt" aria-pressed={p.tempoPorSessaoMin === t} onClick={() => p.setTempo(t)}>{t === 75 ? '75+' : t}</button>)}</div></div>
-    </>
-  );
-}
-
-function PassoPreferencia(p: {
-  preferencia: '' | 'vegano' | 'vegetariano'; setPreferencia: (v: '' | 'vegano' | 'vegetariano') => void;
-  alergenos: Alergeno[]; toggleAlergeno: (a: Alergeno) => void; naoGosto: string; setNaoGosto: (v: string) => void;
-}) {
-  const pad: { id: '' | 'vegetariano' | 'vegano'; rotulo: string }[] = [
-    { id: '', rotulo: 'Onívoro' }, { id: 'vegetariano', rotulo: 'Vegetariano' }, { id: 'vegano', rotulo: 'Vegano' },
-  ];
-  return (
-    <>
-      <StepHead titulo="Preferência alimentar" sub="Alergia e padrão são regras absolutas; “não curto” é só uma preferência." />
-      <div><span className="label-cap">Padrão alimentar</span><div className="seg mt-2">{pad.map((x) => <button key={x.id || 'oni'} className="opt" aria-pressed={p.preferencia === x.id} onClick={() => p.setPreferencia(x.id)}>{x.rotulo}</button>)}</div></div>
-      <div>
-        <span className="label-cap">Alergias <span className="normal-case opacity-70">(filtro absoluto — nunca entram no cardápio)</span></span>
-        <div className="mt-2 flex flex-wrap gap-2">{ALERGENOS.map((a) => <button key={a.id} className="chip" aria-pressed={p.alergenos.includes(a.id)} onClick={() => p.toggleAlergeno(a.id)}>{a.rotulo}</button>)}</div>
+      <p style={{ margin: '0 0 24px', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Respeitamos isso à risca — nunca sugerimos algo fora do seu padrão.</p>
+      <div style={labelCap}>Alergias e intolerâncias</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Regra de segurança absoluta — nunca incluímos o que você marcar aqui.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 26 }}>
+        {ALERGENOS.map((o) => <div key={o.id} onClick={() => toggleAlergia(o.id)} style={{ ...chipBase, ...(alergias.includes(o.id) ? chipSel : {}) }}>{o.t}</div>)}
       </div>
-      <div><span className="label-cap">Não curto <span className="normal-case opacity-70">(opcional)</span></span><input className="campo mt-2" placeholder="ex.: jiló, fígado…" value={p.naoGosto} onChange={(e) => p.setNaoGosto(e.target.value)} /></div>
-    </>
+      <div style={{ ...labelCap, marginBottom: 6 }}>Alimentos que você não curte <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: 'rgba(234,229,219,.4)' }}>(opcional)</span></div>
+      <textarea value={naoGosto} onChange={(e) => setNaoGosto(e.target.value)} placeholder="Ex.: jiló, fígado…" rows={2} style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.96rem', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
+      <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>A gente tenta evitar; se faltar opção, avisamos. Diferente de alergia — esta é uma preferência relaxável.</p>
+    </div>
   );
 }
 
-/* ════════════════════ Gerando / Encaminhamento ════════════════════ */
+/* ════════════════════ Gerando / Gate B ════════════════════ */
 
-function TelaGerando() {
+function Gerando({ pct }: { pct: number }) {
   return (
-    <section className="anim-screen flex min-h-[50vh] flex-col items-center justify-center gap-6 text-center">
-      <div style={{ width: 56, height: 56, borderRadius: '50%', border: '3px solid rgba(234,229,219,.15)', borderTopColor: '#BDFF00', animation: 'evkSpin .9s linear infinite' }} />
-      <div><p className="text-lg font-bold">Montando seu ponto de partida…</p><p className="mt-1 text-sm text-secundario">Aplicando regras adaptativas ao seu perfil.</p></div>
-    </section>
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', textAlign: 'center', animation: `evkScreenIn .5s ${EASE}` }}>
+      <div style={{ position: 'relative', width: 200, height: 160, marginBottom: 18 }}>
+        <svg viewBox="0 0 200 160" fill="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          <path d="M20 140 Q80 124 120 80 T180 24" stroke="rgba(189,255,0,.4)" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeDasharray={2400} strokeDashoffset={2400} style={{ animation: `evkDraw 2.2s cubic-bezier(.16,.84,.3,1) infinite` }} />
+          <circle cx={20} cy={140} r={4} fill="#BDFF00" style={{ animation: 'evkRise 2s ease-in-out infinite' }} />
+          <circle cx={120} cy={80} r={5.5} fill="#BDFF00" style={{ animation: 'evkRise 2s ease-in-out infinite .4s' }} />
+          <circle cx={180} cy={24} r={7.5} fill="#BDFF00" style={{ animation: 'evkRise 2s ease-in-out infinite .8s', filter: 'drop-shadow(0 0 10px rgba(189,255,0,.7))' }} />
+        </svg>
+      </div>
+      <h2 style={{ margin: '0 0 12px', fontSize: '1.7rem', fontWeight: 700, letterSpacing: '-.02em' }}>Montando seu plano…</h2>
+      <p style={{ margin: '0 0 30px', color: 'rgba(234,229,219,.62)', lineHeight: 1.6, maxWidth: 420, fontSize: '.98rem' }}>Combinando suas respostas com <strong style={{ color: '#BDFF00', fontWeight: 600 }}>regras adaptativas</strong> e uma base de dados reconhecida de alimentos e exercícios.</p>
+      <div style={{ width: '100%', maxWidth: 300 }}>
+        <div style={{ height: 7, background: 'rgba(234,229,219,.1)', borderRadius: 99, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: '#BDFF00', borderRadius: 99, boxShadow: '0 0 12px rgba(189,255,0,.6)', transition: 'width .2s linear' }} /></div>
+        <div style={{ marginTop: 10, fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.5)' }}>{pct}%</div>
+      </div>
+    </div>
   );
 }
 
-function Encaminhamento({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => void }) {
+function GateB({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => void }) {
   return (
-    <section className="anim-screen surface flex flex-col gap-4 p-6">
-      <KAscendente size={44} />
-      <h1 className="text-2xl font-bold tracking-tight">Aqui, o cuidado certo é com um profissional</h1>
-      <p className="text-sm text-secundario">Com base no que você informou, o Evokorpus <strong className="text-bone">não gera um plano</strong> neste momento. Isso é proposital: algumas situações pedem o acompanhamento de um profissional de saúde.</p>
-      <ul className="flex flex-col gap-1 text-sm text-secundario">{motivos.map((m) => <li key={m} className="flex gap-2"><span className="text-folha">•</span>{m}</li>)}</ul>
-      <button className="btn btn-ghost w-fit" onClick={onRevisar}>Revisar respostas</button>
-    </section>
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', animation: `evkScreenIn .5s ${EASE}` }}>
+      <div style={{ width: '100%', maxWidth: 500, textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(22,163,74,.16)', border: '1px solid rgba(22,163,74,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 26px' }}>
+          <svg width={32} height={32} viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.4-7-9.6A4.4 4.4 0 0112 8a4.4 4.4 0 017 3.4c0 5.2-7 9.6-7 9.6z" stroke="#16A34A" strokeWidth={1.8} strokeLinejoin="round" /><path d="M9 11.5h1.6l.9-1.6 1 3 .9-1.4H16" stroke="#16A34A" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </div>
+        <h1 style={{ margin: '0 0 16px', fontSize: '1.9rem', fontWeight: 700, letterSpacing: '-.02em' }}>Vamos com cuidado aqui</h1>
+        <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.7)', lineHeight: 1.65, fontSize: '1.02rem' }}>Pelo que você respondeu, seu caso pede o <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>acompanhamento de um profissional de saúde</strong>. Por segurança, não vamos gerar um plano automático agora.</p>
+        {motivos.length > 0 && <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.55)', fontSize: '.9rem' }}>{motivos.join(' · ')}</p>}
+        <p style={{ margin: '0 0 32px', color: 'rgba(234,229,219,.6)', lineHeight: 1.65, fontSize: '.98rem' }}>Procure um médico, nutricionista ou educador físico — quando fizer sentido, a gente está aqui.</p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onRevisar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Revisar minhas respostas</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 /* ════════════════════ Primitivos ════════════════════ */
 
-function CardOptions<T extends string>({ opts, sel, onSel }: { opts: { id: T; rotulo: string; sub: string }[]; sel: T; onSel: (v: T) => void }) {
+function Backdrop() {
   return (
-    <div className="flex flex-col gap-2">
-      {opts.map((o) => (
-        <button key={o.id} className="opt text-left" aria-pressed={sel === o.id} onClick={() => onSel(o.id)} style={{ flex: 'none' }}>
-          <span className="block font-semibold text-bone">{o.rotulo}</span>
-          <span className="block text-xs text-secundario">{o.sub}</span>
-        </button>
-      ))}
+    <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', top: '-12%', right: '-8%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(22,163,74,.20), transparent 68%)', filter: 'blur(22px)', animation: 'evkDrift 24s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', bottom: '-16%', left: '-12%', width: 480, height: 480, borderRadius: '50%', background: 'radial-gradient(circle, rgba(189,255,0,.06), transparent 70%)', filter: 'blur(22px)', animation: 'evkDrift 30s ease-in-out infinite reverse' }} />
     </div>
   );
 }
 
-function NumField({ label, value, onChange, suf }: { label: string; value: string; onChange: (v: string) => void; suf: string }) {
+function Logo({ size }: { size: number }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="label-cap">{label}</span>
-      <div className="relative">
-        <input className="campo" type="number" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-secundario">{suf}</span>
-      </div>
-    </label>
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Evokorpus">
+      <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
+      <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
+    </svg>
   );
 }
-
-function SimNao({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="surface-soft flex items-center justify-between gap-3 p-3">
-      <span className="text-sm">{label}</span>
-      <div className="seg shrink-0" style={{ width: 140 }}>
-        <button className="opt" aria-pressed={!value} onClick={() => onChange(false)}>Não</button>
-        <button className="opt" aria-pressed={value} onClick={() => onChange(true)}>Sim</button>
-      </div>
-    </div>
-  );
-}
-
-function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl p-3 transition hover:bg-bone/5">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-4 w-4 accent-pulso" />
-      <span className="text-sm">{label}</span>
-    </label>
-  );
-}
+const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+const Box = ({ on }: { on: boolean }) => <div style={{ width: 24, height: 24, minWidth: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.3)'}`, background: on ? '#BDFF00' : 'transparent' }}>{on && <svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div>;
+const CheckCircle = () => <span style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', background: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></span>;
