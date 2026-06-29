@@ -42,6 +42,8 @@ const restricoesSchema = z
 export const subPratoSchema = z.object({
   perfil: perfilSchema,
   totaisDiaAtual: macrosSchema,
+  /** Escala do pratoAtual no cardápio (1 = porção-base). */
+  escalaAtual: z.coerce.number().finite().positive().optional(),
   pratoAtualId: z.string().min(1),
   slot: z.enum(['cafe', 'almoco', 'jantar', 'lanche']),
   restricoes: restricoesSchema,

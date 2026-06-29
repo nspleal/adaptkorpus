@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'entrada inválida', detalhes: parsed.error.issues }, { status: 400 });
   }
-  const { perfil: pf, totaisDiaAtual, pratoAtualId, slot, restricoes, gosto } = parsed.data;
+  const { perfil: pf, totaisDiaAtual, escalaAtual, pratoAtualId, slot, restricoes, gosto } = parsed.data;
 
   const perfil: PerfilUsuario = {
     sexo: pf.sexo,
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     foodsById: FOODS_BY_ID_SEED,
     plano,
     totaisDiaAtual,
+    escalaAtual,
     restricoes: {
       alergenos: (restricoes?.alergenos ?? []) as Alergeno[],
       preferencia: restricoes?.preferencia ?? null,

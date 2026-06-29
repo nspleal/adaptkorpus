@@ -51,6 +51,15 @@ export const GORDURA_CLAMP = { minFracao: 0.2, maxFracao: 0.3 } as const; // 20�
 /** kcal por grama (Atwater) — SÓ para alocar a meta, nunca para medir alimento. */
 export const KCAL_POR_G = { proteina: 4, carboidrato: 4, gordura: 9 } as const;
 
+/**
+ * Escala de porções do montador (Passo 3 — "combinar/ESCALAR pratos do banco").
+ * O cofre manda escalar as porções para mirar a janela; NÃO fixa os limites de escala.
+ * Estes são DEFAULTS de implementação (Bloco B), não números travados da spec: mantêm a
+ * porção em faixa realista (de metade a o triplo da porção-base). Conforme o banco de
+ * pratos cresce, a escala necessária diminui. Revisável sem alterar a spec.
+ */
+export const ESCALA_PORCAO = { min: 0.5, max: 3.0 } as const;
+
 /** Limiares de IMC (gate). */
 export const IMC = {
   magrezaSevera: 16, // < 16 → ROTEAR (qualquer objetivo)

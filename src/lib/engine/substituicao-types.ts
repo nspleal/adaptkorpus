@@ -42,8 +42,10 @@ export interface PedidoSubPrato {
   foodsById: ReadonlyMap<string, Food>;
   /** Plano de dieta (janela do dia + piso de proteína do dia em macros.proteinaPisoG). */
   plano: PlanoDieta;
-  /** Totais do dia ATUAL (somando o pratoAtual). */
+  /** Totais do dia ATUAL (somando o pratoAtual JÁ escalado). */
   totaisDiaAtual: RecipeMacros;
+  /** Escala do pratoAtual no cardápio (1 = porção-base). Default 1. */
+  escalaAtual?: number;
   restricoes: RestricoesSub;
   gosto?: GostoAlimento;
 }
@@ -51,6 +53,10 @@ export interface PedidoSubPrato {
 export interface ResultadoSubPrato {
   status: StatusSub;
   prato: Recipe | null;
+  /** Escala aplicada ao prato novo (equivalência calórica com o trocado). null se sinalizado. */
+  escala: number | null;
+  /** Macros do prato novo JÁ escaladas (null se sinalizado). */
+  macrosNovo: RecipeMacros | null;
   /** Totais do dia DEPOIS da troca (null se sinalizado). */
   totaisDiaNovo: RecipeMacros | null;
   /** true se foi preciso relaxar o gosto (fallback). */

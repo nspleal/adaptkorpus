@@ -188,12 +188,13 @@ export default function Onboarding() {
       foodsById: FOODS_BY_ID_SEED,
       plano: dieta.plano,
       totaisDiaAtual: cardTotais,
+      escalaAtual: item.escala,
       restricoes: ctx.restricoes,
       gosto: { excluirPratoIds: outrosIds }, // evita repetir prato já usado no dia
     });
-    if (res.status === 'ok' && res.prato && res.totaisDiaNovo) {
+    if (res.status === 'ok' && res.prato && res.totaisDiaNovo && res.escala != null && res.macrosNovo) {
       const novos = cardItens.slice();
-      novos[idx] = { refeicao: item.refeicao, prato: res.prato };
+      novos[idx] = { refeicao: item.refeicao, prato: res.prato, escala: res.escala, macros: res.macrosNovo };
       setCardItens(novos);
       setCardTotais(res.totaisDiaNovo);
       setMsgPrato({ idx, texto: res.gostoRelaxado ? 'Trocado (preferência de gosto relaxada).' : 'Trocado.' });
@@ -461,6 +462,9 @@ function DietaView({
                   <div>
                     <span className="block text-xs uppercase text-secundario">{REFEICAO_LABEL[it.refeicao]}</span>
                     <span>{it.prato.nome}</span>
+                    <span className="block text-xs text-secundario">
+                      {r0(it.macros.kcal)} kcal · {r0(it.macros.proteinaG)} g prot · porção {it.escala.toFixed(2)}×
+                    </span>
                   </div>
                   <button
                     type="button"

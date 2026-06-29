@@ -16,6 +16,7 @@
  *     Busca exaustiva determinística (banco finito; ~160k combinações no pior caso).
  */
 import { macrosDePrato } from '../data/nutrition';
+import { ESCALA_PORCAO } from './constants';
 import type {
   Alergeno,
   Food,
@@ -37,6 +38,10 @@ export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
 export interface CardapioItem {
   refeicao: Refeicao;
   prato: Recipe;
+  /** Fator de escala aplicado às porções do prato (1 = porção-base do banco). */
+  escala: number;
+  /** Macros do prato JÁ escaladas (base × escala) — kcal somada da TACO, Δ=0. */
+  macros: RecipeMacros;
 }
 
 export interface CardapioDia {
@@ -79,9 +84,35 @@ function somar(...partes: RecipeMacros[]): RecipeMacros {
   );
 }
 
+/** Escala linear das macros de um prato (kcal × porção; Δ=0). */
+function escalar(m: RecipeMacros, s: number): RecipeMacros {
+  return { kcal: m.kcal * s, proteinaG: m.proteinaG * s, carboidratoG: m.carboidratoG * s, gorduraG: m.gorduraG * s };
+}
+
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+interface PratoBase {
+  refeicao: Refeicao;
+  prato: Recipe;
+  base: RecipeMacros;
+}
+
 interface Candidato {
-  itens: CardapioItem[];
+  baseItens: PratoBase[];
+  /** Escala única do dia (Passo 3 — "escalar pratos"): porções sobem/descem juntas. */
+  escala: number;
+  /** Totais JÁ escalados (escala × soma das porções-base). */
   totais: RecipeMacros;
+}
+
+/** Materializa os itens do cardápio com a escala aplicada (para exibição/troca). */
+function materializar(c: Candidato): CardapioItem[] {
+  return c.baseItens.map((b) => ({
+    refeicao: b.refeicao,
+    prato: b.prato,
+    escala: c.escala,
+    macros: escalar(b.base, c.escala),
+  }));
 }
 
 /** Compara candidatos pela ordem de prioridade travada. < 0 ⇒ `a` é melhor. */
@@ -97,8 +128,8 @@ function compararCandidatos(a: Candidato, b: Candidato, plano: PlanoDieta): numb
   if (protA !== protB) return protA - protB;
 
   // 3) Chave final reprodutível: ordem lexicográfica sobre o conjunto de ids do dia.
-  const chaveA = a.itens.map((i) => i.prato.id).sort().join('|');
-  const chaveB = b.itens.map((i) => i.prato.id).sort().join('|');
+  const chaveA = a.baseItens.map((i) => i.prato.id).sort().join('|');
+  const chaveB = b.baseItens.map((i) => i.prato.id).sort().join('|');
   return chaveA < chaveB ? -1 : chaveA > chaveB ? 1 : 0;
 }
 
@@ -160,15 +191,21 @@ export function montarCardapioDia(
         for (const l of lanches) {
           if (l && (l.id === c.id || l.id === a.id || l.id === j.id)) continue;
 
-          const itens: CardapioItem[] = [
-            { refeicao: 'cafe', prato: c },
-            { refeicao: 'almoco', prato: a },
-            { refeicao: 'jantar', prato: j },
+          const baseItens: PratoBase[] = [
+            { refeicao: 'cafe', prato: c, base: macros(c) },
+            { refeicao: 'almoco', prato: a, base: macros(a) },
+            { refeicao: 'jantar', prato: j, base: macros(j) },
           ];
-          if (l) itens.push({ refeicao: 'lanche', prato: l });
+          if (l) baseItens.push({ refeicao: 'lanche', prato: l, base: macros(l) });
 
-          const totais = somar(...itens.map((i) => macros(i.prato)));
-          const cand: Candidato = { itens, totais };
+          const totaisBase = somar(...baseItens.map((b) => b.base));
+          // Passo 3 — ESCALAR: porção do dia escala para mirar a kcal-alvo (kcal é o alvo
+          // mais protegido). Escala única do dia, limitada a faixa realista (ESCALA_PORCAO).
+          const escala = totaisBase.kcal > 0
+            ? clamp(plano.kcalAlvo / totaisBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max)
+            : ESCALA_PORCAO.max;
+          const totais = escalar(totaisBase, escala);
+          const cand: Candidato = { baseItens, escala, totais };
 
           if (!melhorGeral || compararCandidatos(cand, melhorGeral, plano) < 0) {
             melhorGeral = cand;
@@ -198,8 +235,7 @@ export function montarCardapioDia(
   const desvioKcal = Math.abs(escolhido.totais.kcal - plano.kcalAlvo);
   // Ordem de exibição estável por refeição.
   const ordem: Refeicao[] = ['cafe', 'almoco', 'lanche', 'jantar'];
-  const itensOrdenados = escolhido.itens
-    .slice()
+  const itensOrdenados = materializar(escolhido)
     .sort((x, y) => ordem.indexOf(x.refeicao) - ordem.indexOf(y.refeicao));
 
   if (melhorNaJanela) {

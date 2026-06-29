@@ -74,7 +74,8 @@ Pipeline de dieta: gate → alvo calórico → macros → cardápio do dia.
     "macros": { "proteinaG": 144, "gorduraG": 64, "carboidratoG": 277, "proteinaPisoG": ... },
     "janela": { "minKcal": ..., "maxKcal": ... }
   },
-  "cardapio": { "status": "ok", "itens": [ { "refeicao": "...", "prato": {...} } ], ... }
+  "cardapio": { "status": "ok", "itens": [ { "refeicao": "almoco", "prato": {...}, "escala": 1.13, "macros": {...} } ], "totais": {...} }
+  // cada item traz "escala" (fator de porção; 1 = porção-base) e "macros" já escaladas; "totais" = soma escalada
 }
 ```
 
@@ -139,7 +140,8 @@ atual do dia.
 ```json
 {
   "perfil": { /* mesmo formato do POST /api/dieta */ },
-  "totaisDiaAtual": { "kcal": 2260, "proteinaG": 150, "carboidratoG": 277, "gorduraG": 64 },
+  "totaisDiaAtual": { "kcal": 1856, "proteinaG": 112, "carboidratoG": 200, "gorduraG": 55 },
+  "escalaAtual": 1.13,
   "pratoAtualId": "p1",
   "slot": "almoco",
   "restricoes": { "alergenos": [], "preferencia": null },
@@ -148,19 +150,25 @@ atual do dia.
 ```
 
 - `slot`: `cafe` \| `almoco` \| `jantar` \| `lanche`.
-- `totaisDiaAtual` = macros do **dia inteiro já incluindo** o `pratoAtual` (a troca recoloca o
-  novo prato e checa se o **dia inteiro** continua dentro da janela de kcal e acima do piso de
-  proteína). Por isso, totais muito longe do alvo → nada satisfaz → `sinalizado` (esperado).
+- `totaisDiaAtual` = macros do **dia inteiro já incluindo** o `pratoAtual` (com as porções já
+  **escaladas** — ver abaixo). `escalaAtual` = o fator de escala do `pratoAtual` no cardápio
+  (vem em cada item do cardápio como `escala`; default 1 se omitido).
+- **Escala de porções (Bloco B):** o prato novo é escalado à **equivalência calórica** do
+  trocado (spec da dieta: "mínimo = equivalência calórica"), dentro de uma faixa realista, para
+  o dia inteiro permanecer dentro da janela de kcal e acima do piso de proteína. Por isso a troca
+  fecha mesmo com pratos de porção-base diferente.
 - `restricoes`/`gosto` são opcionais. **Alérgeno e identidade (vegano/veg) nunca relaxam**;
   só o gosto cede, por último.
 
 **Resposta 200** (`ResultadoSubPrato`):
 
 ```jsonc
-// achou troca:
-{ "status": "ok", "prato": { "id": "p35", ... }, "totaisDiaNovo": {...}, "gostoRelaxado": false }
+// achou troca (escala = fator aplicado ao prato novo; macrosNovo = macros já escaladas):
+{ "status": "ok", "prato": { "id": "p35", ... }, "escala": 0.92, "macrosNovo": {...},
+  "totaisDiaNovo": {...}, "gostoRelaxado": false }
 // fail-safe (nenhuma troca mantém o dia equilibrado sem afrouxar segurança/identidade/dieta):
-{ "status": "sinalizado", "prato": null, "totaisDiaNovo": null, "gostoRelaxado": false, "nota": "..." }
+{ "status": "sinalizado", "prato": null, "escala": null, "macrosNovo": null,
+  "totaisDiaNovo": null, "gostoRelaxado": false, "nota": "..." }
 ```
 
 **404** se `pratoAtualId` não existe. **409** se o gate do perfil é `ROTEAR` (não há plano para

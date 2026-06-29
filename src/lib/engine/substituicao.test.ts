@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { substituirExercicio, substituirPrato } from './substituicao';
+import { ESCALA_PORCAO } from './constants';
 import { gerarDieta } from './index';
 import { macrosDePrato } from '../data/nutrition';
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '../data/seed';
@@ -24,6 +25,7 @@ function cenario(over: Partial<PerfilUsuario> = {}, restr: PedidoSubPrato['restr
     foodsById: FOODS_BY_ID_SEED,
     plano: r.plano!,
     totaisDiaAtual: r.cardapio!.totais,
+    escalaAtual: item.escala,
     restricoes: restr,
   };
   return pedido;
@@ -57,20 +59,29 @@ describe('substituição de prato (F.2)', () => {
     }
   });
 
-  it('ordena por menor desvio calórico do prato trocado', () => {
+  it('escala à equivalência calórica e ordena por menor desvio do prato trocado (escalado)', () => {
     const pedido = cenario();
     const r = substituirPrato(pedido);
     if (r.status === 'ok') {
-      const xk = macrosDePrato(pedido.pratoAtual, FOODS_BY_ID_SEED).kcal;
-      const escolhidoDelta = Math.abs(macrosDePrato(r.prato!, FOODS_BY_ID_SEED).kcal - xk);
-      // nenhum outro elegível (mesmo slot, sem alérgeno) tem desvio menor mantendo a janela+piso
+      const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+      const escalaAtual = pedido.escalaAtual ?? 1;
+      const xmBase = macrosDePrato(pedido.pratoAtual, FOODS_BY_ID_SEED);
+      const xk = xmBase.kcal * escalaAtual; // kcal do prato trocado JÁ escalado
+      // Equivalência calórica: o prato novo escalado fica ~na kcal do trocado (salvo clamp).
+      const escolhidoDelta = Math.abs(r.macrosNovo!.kcal - xk);
+      // nenhum outro elegível tem desvio (escalado) menor mantendo janela+piso
       for (const y of RECIPES_SEED) {
         if (y.id === pedido.pratoAtual.id || !y.refeicoes.includes(pedido.slot)) continue;
-        const ym = macrosDePrato(y, FOODS_BY_ID_SEED);
-        const diaNew = pedido.totaisDiaAtual.kcal - xk + ym.kcal;
-        const protNew = pedido.totaisDiaAtual.proteinaG - macrosDePrato(pedido.pratoAtual, FOODS_BY_ID_SEED).proteinaG + ym.proteinaG;
+        if (y.contemAlergenos.some((a) => pedido.restricoes.alergenos.includes(a))) continue;
+        const ymBase = macrosDePrato(y, FOODS_BY_ID_SEED);
+        if (ymBase.kcal <= 0) continue;
+        const s = clamp(xk / ymBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max);
+        const ymK = ymBase.kcal * s;
+        const ymP = ymBase.proteinaG * s;
+        const diaNew = pedido.totaisDiaAtual.kcal - xk + ymK;
+        const protNew = pedido.totaisDiaAtual.proteinaG - xmBase.proteinaG * escalaAtual + ymP;
         const dentro = diaNew >= pedido.plano.janela.minKcal - 1e-6 && diaNew <= pedido.plano.janela.maxKcal + 1e-6 && protNew >= pedido.plano.macros.proteinaPisoG - 1e-6;
-        if (dentro) expect(Math.abs(ym.kcal - xk)).toBeGreaterThanOrEqual(escolhidoDelta - 1e-6);
+        if (dentro) expect(Math.abs(ymK - xk)).toBeGreaterThanOrEqual(escolhidoDelta - 1e-6);
       }
     }
   });
@@ -89,6 +100,33 @@ describe('substituição de prato (F.2)', () => {
     const a = substituirPrato(pedido);
     const b = substituirPrato(pedido);
     expect(a.prato?.id).toBe(b.prato?.id);
+  });
+
+  // Bloco B — escala de porções: o cardápio com porções fixas não alcançava a janela
+  // (máx. 1680 < piso 1800 da janela; ver parametros-motor-dieta §"escalar pratos").
+  // Com a escala, o dia mira a kcal-alvo e a troca volta a fechar.
+  const femMod = { sexo: 'feminino' as const, pesoKg: 70, alturaCm: 170, idade: 30, nivelAtividade: 'moderado' as const, objetivo: 'emagrecimento' as const };
+
+  it('montador ESCALA porções e alcança a janela (caso antes impossível)', () => {
+    const r = gerarDieta(perfil(femMod), { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes: { alergenos: [], preferencia: null } });
+    expect(r.cardapio!.status).toBe('ok');
+    expect(r.cardapio!.totais.kcal).toBeGreaterThanOrEqual(r.plano!.janela.minKcal - 1e-6);
+    expect(r.cardapio!.totais.kcal).toBeLessThanOrEqual(r.plano!.janela.maxKcal + 1e-6);
+    for (const it of r.cardapio!.itens) {
+      expect(it.escala).toBeGreaterThan(0);
+      const base = macrosDePrato(it.prato, FOODS_BY_ID_SEED);
+      expect(it.macros.kcal).toBeCloseTo(base.kcal * it.escala, 6); // macros = base × escala
+    }
+  });
+
+  it('troca de prato AGORA fecha (status ok) e mantém o dia na janela', () => {
+    const pedido = cenario(femMod);
+    const r = substituirPrato(pedido);
+    expect(r.status).toBe('ok');
+    expect(r.prato!.id).not.toBe(pedido.pratoAtual.id);
+    expect(r.totaisDiaNovo!.kcal).toBeGreaterThanOrEqual(pedido.plano.janela.minKcal - 1e-6);
+    expect(r.totaisDiaNovo!.kcal).toBeLessThanOrEqual(pedido.plano.janela.maxKcal + 1e-6);
+    expect(r.totaisDiaNovo!.proteinaG).toBeGreaterThanOrEqual(pedido.plano.macros.proteinaPisoG - 1e-6);
   });
 });
 

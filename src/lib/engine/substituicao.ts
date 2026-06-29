@@ -7,6 +7,7 @@
  * relaxam; só o GOSTO cede, por último.
  */
 import { macrosDePrato } from '../data/nutrition';
+import { ESCALA_PORCAO } from './constants';
 import { dificuldadesLiberadas } from './treino';
 import { locaisPermitidos } from './treino-montador';
 import type { Recipe, RecipeMacros } from '../data/types';
@@ -18,6 +19,11 @@ import type {
 } from './substituicao-types';
 
 const EPS = 1e-6;
+
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+function escalarMacros(m: RecipeMacros, s: number): RecipeMacros {
+  return { kcal: m.kcal * s, proteinaG: m.proteinaG * s, carboidratoG: m.carboidratoG * s, gorduraG: m.gorduraG * s };
+}
 
 function preferenciaAceita(tipo: Recipe['tipo'], pref: PedidoSubPrato['restricoes']['preferencia']): boolean {
   if (!pref) return true;
@@ -50,7 +56,9 @@ function subtrair(a: RecipeMacros, b: RecipeMacros): RecipeMacros {
  * Gosto é relaxável (fallback). Nunca relaxa alérgeno/identidade/janela/piso.
  */
 export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
-  const xm = macrosDePrato(p.pratoAtual, p.foodsById);
+  // Contribuição do prato trocado JÁ escalada (a porção que ele ocupa no dia).
+  const escalaAtual = p.escalaAtual ?? 1;
+  const xm = escalarMacros(macrosDePrato(p.pratoAtual, p.foodsById), escalaAtual);
   const diaSemX = subtrair(p.totaisDiaAtual, xm);
   const pisoProteinaDia = p.plano.macros.proteinaPisoG;
   const { minKcal, maxKcal } = p.plano.janela;
@@ -60,22 +68,29 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
 
   interface Cand {
     y: Recipe;
-    ym: RecipeMacros;
+    escala: number;
+    ym: RecipeMacros; // já escalada
     diaNew: RecipeMacros;
   }
 
   // Filtros DUROS (segurança/identidade/slot/janela/piso) — nunca relaxados.
+  // ESCALA: o prato novo é escalado à EQUIVALÊNCIA CALÓRICA do trocado (spec dieta:
+  // "mínimo = equivalência calórica"), dentro da faixa realista (ESCALA_PORCAO), para
+  // manter o dia dentro da janela.
   const duros: Cand[] = [];
   for (const y of p.recipes) {
     if (y.id === p.pratoAtual.id) continue;
     if (!y.refeicoes.includes(p.slot)) continue;
     if (y.contemAlergenos.some((a) => p.restricoes.alergenos.includes(a))) continue;
     if (!preferenciaAceita(y.tipo, p.restricoes.preferencia)) continue;
-    const ym = macrosDePrato(y, p.foodsById);
+    const ymBase = macrosDePrato(y, p.foodsById);
+    if (ymBase.kcal <= 0) continue;
+    const escala = clamp(xm.kcal / ymBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max);
+    const ym = escalarMacros(ymBase, escala);
     const diaNew = somar(diaSemX, ym);
     if (diaNew.kcal < minKcal - EPS || diaNew.kcal > maxKcal + EPS) continue;
     if (diaNew.proteinaG < pisoProteinaDia - EPS) continue;
-    duros.push({ y, ym, diaNew });
+    duros.push({ y, escala, ym, diaNew });
   }
 
   // Gosto (relaxável).
@@ -100,15 +115,19 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
 
   const comGosto = ordenar(duros.filter((c) => gostoOk(c.y)));
   if (comGosto.length > 0) {
-    return { status: 'ok', prato: comGosto[0]!.y, totaisDiaNovo: comGosto[0]!.diaNew, gostoRelaxado: false };
+    const c = comGosto[0]!;
+    return { status: 'ok', prato: c.y, escala: c.escala, macrosNovo: c.ym, totaisDiaNovo: c.diaNew, gostoRelaxado: false };
   }
   // Fallback: relaxa o GOSTO (mantém todos os filtros duros).
   const semGosto = ordenar(duros);
   if (semGosto.length > 0) {
+    const c = semGosto[0]!;
     return {
       status: 'ok',
-      prato: semGosto[0]!.y,
-      totaisDiaNovo: semGosto[0]!.diaNew,
+      prato: c.y,
+      escala: c.escala,
+      macrosNovo: c.ym,
+      totaisDiaNovo: c.diaNew,
       gostoRelaxado: true,
       nota: 'Relaxamos sua preferência de gosto para manter o dia equilibrado (segurança, identidade e dieta preservadas).',
     };
@@ -116,6 +135,8 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
   return {
     status: 'sinalizado',
     prato: null,
+    escala: null,
+    macrosNovo: null,
     totaisDiaNovo: null,
     gostoRelaxado: false,
     nota: 'Não achei uma troca que mantenha seu dia equilibrado sem afrouxar segurança/identidade/dieta. Mantivemos o prato atual.',
