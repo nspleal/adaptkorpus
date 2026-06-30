@@ -7,6 +7,7 @@ import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
+import { DetalheExercicio, DetalhePrato } from './DetalheModais';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -67,6 +68,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [aba, setAba] = useState<Aba>('hoje');
   const [vista, setVista] = useState<null | 'compras'>(null);
   const [editando, setEditando] = useState(false);
+  const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);
   const [cardItens, setCardItens] = useState<CardapioItem[]>(dieta.cardapio?.itens ?? []);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(dieta.cardapio?.totais ?? null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
@@ -214,14 +216,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
         {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
         {!vista && aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} />}
-        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
+        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
+      {detalhe?.tipo === 'prato' && cardItens[detalhe.idx] && (
+        <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} />
+      )}
+      {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
+        <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
+      )}
     </div>
   );
 }
@@ -272,10 +280,10 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar, onDetalhe }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
-  onIniciar: (d: number) => void;
+  onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   return (
@@ -314,10 +322,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
                         <span style={pill}>RIR {prescricao.rir.min}–{prescricao.rir.max}</span>
                         <span style={pill}>Descanso {desc.min}–{desc.max}s</span>
                       </div>
-                      <details style={{ marginBottom: 14 }}>
-                        <summary style={{ listStyle: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '.86rem', fontWeight: 600, color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Como fazer</summary>
-                        <p style={{ margin: '10px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.65)', lineHeight: 1.55 }}>{sl.exercicio.comoFazer}</p>
-                      </details>
+                      <button onClick={() => onDetalhe(d, s)} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 14, background: 'none', border: '1px solid rgba(234,229,219,.18)', cursor: 'pointer', fontSize: '.86rem', fontWeight: 600, color: 'rgba(234,229,219,.8)', padding: '8px 13px', borderRadius: 10 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Como fazer</button>
                       <div style={{ borderTop: '1px solid rgba(234,229,219,.08)', paddingTop: 13 }}>
                         <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.55)', marginBottom: 8 }}>Como foi?</div>
                         <div style={{ display: 'flex', gap: 8 }}>
@@ -342,9 +347,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
 
 /* ════════════════════ Dieta ════════════════════ */
 
-function DietaTab({ dieta, itens, totais, trocados, onTrocar, onPorcao, onCompras }: {
+function DietaTab({ dieta, itens, totais, trocados, onTrocar, onPorcao, onCompras, onDetalhe }: {
   dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
-  onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void;
+  onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void; onDetalhe: (idx: number) => void;
 }) {
   const plano = dieta.plano!;
   return (
@@ -369,7 +374,7 @@ function DietaTab({ dieta, itens, totais, trocados, onTrocar, onPorcao, onCompra
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: '1.1rem', fontWeight: 700 }}>{REFEICAO_LABEL[it.refeicao]}</span><span style={{ fontSize: '.85rem', color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '4px 11px', borderRadius: 999 }}>~{r0(it.macros.kcal)} kcal</span></div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'rgba(234,229,219,.03)', borderRadius: 11, padding: '11px 14px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-                  <span style={{ fontSize: '.95rem' }}>{it.prato.nome}</span>
+                  <button onClick={() => onDetalhe(idx)} className="evk-perfil-link" style={{ background: 'none', border: 'none', padding: 0, color: '#EAE5DB', fontSize: '.95rem', textAlign: 'left', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(234,229,219,.25)', textUnderlineOffset: 3 }}>{it.prato.nome}</button>
                   {trocados.has(`p${idx}`) && <span style={{ fontSize: '.7rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 6, padding: '2px 7px' }}>{it.escala.toFixed(2)}× porção</span>}
                 </span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
