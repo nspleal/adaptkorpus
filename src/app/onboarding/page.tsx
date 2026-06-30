@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { gerarDieta, gerarTreino, type ResultadoMotor, type ResultadoTreino } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilTreino, PerfilUsuario, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
@@ -397,7 +398,8 @@ function GateB({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => voi
         {motivos.length > 0 && <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.55)', fontSize: '.9rem' }}>{motivos.join(' · ')}</p>}
         <p style={{ margin: '0 0 32px', color: 'rgba(234,229,219,.6)', lineHeight: 1.65, fontSize: '.98rem' }}>Procure um médico, nutricionista ou educador físico — quando fizer sentido, a gente está aqui.</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onRevisar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Revisar minhas respostas</button>
+          <button onClick={onRevisar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Revisar respostas</button>
+          <Link href="/aviso" className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.22)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.98rem', padding: '13px 24px', borderRadius: 12, textDecoration: 'none' }}>Ver conteúdos gerais</Link>
         </div>
       </div>
     </div>

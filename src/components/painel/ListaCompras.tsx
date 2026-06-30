@@ -3,6 +3,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { CardapioItem } from '@/lib/engine';
 import type { Food, GrupoAlimentar } from '@/lib/data/types';
+import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 
 /**
  * Lista de compras — porte fiel do protótipo V2 (.dc.html).
@@ -76,6 +77,17 @@ export default function ListaCompras({ itens, foodsById, onVoltar }: {
       </div>
       <p style={{ margin: '0 0 18px', fontSize: '.9rem', color: 'rgba(234,229,219,.55)' }}>Gerada a partir do seu cardápio, somando os ingredientes do período.</p>
 
+      {total === 0 ? (
+        <EmptyCard
+          variante="neon"
+          icone={<svg width={34} height={34} viewBox="0 0 24 24" fill="none"><circle cx={9.5} cy={19.5} r={1.4} stroke="#EAE5DB" strokeWidth={1.6} /><circle cx={17} cy={19.5} r={1.4} stroke="#EAE5DB" strokeWidth={1.6} /><path d="M3 4h2.3l2 11h10l2-7.6H6.3" stroke="#EAE5DB" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" fill="none" /><path d="M12.4 8.2v3.2M10.8 9.8h3.2" stroke="#BDFF00" strokeWidth={1.6} strokeLinecap="round" /></svg>}
+          titulo="Sua lista de compras está vazia."
+          apoio="Gere a lista a partir do seu cardápio."
+        >
+          <button onClick={onVoltar} className="hov-btn" style={estiloBotaoPrimario}>Ver dieta</button>
+        </EmptyCard>
+      ) : (
+      <>
       <div style={{ display: 'flex', gap: 7, marginBottom: 24 }}>
         {diasOpts.map((o) => {
           const on = dias === o.d;
@@ -104,6 +116,8 @@ export default function ListaCompras({ itens, foodsById, onVoltar }: {
         ))}
       </div>
       <p style={{ margin: '20px 2px 0', fontSize: '.85rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Quantidades estimadas a partir das porções do plano. Trocas e porções que você editar entram aqui também.</p>
+      </>
+      )}
     </div>
   );
 }

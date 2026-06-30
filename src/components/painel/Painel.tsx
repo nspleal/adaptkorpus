@@ -9,6 +9,7 @@ import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
+import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -221,7 +222,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} onAbrir={(s) => setDetalheSessao(s)} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
       </div>
 
@@ -422,7 +423,7 @@ function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: 
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos, onAbrir }: { sessoes: SessaoLog[]; pesos: number[]; onAbrir: (s: SessaoLog) => void }) {
+function Historico({ sessoes, pesos, onAbrir, onComecarTreino }: { sessoes: SessaoLog[]; pesos: number[]; onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void }) {
   const [sub, setSub] = useState<'treinos' | 'peso'>('treinos');
   const subTab = (id: 'treinos' | 'peso', label: string) => {
     const on = sub === id;
@@ -449,7 +450,16 @@ function Historico({ sessoes, pesos, onAbrir }: { sessoes: SessaoLog[]; pesos: n
             })}
             <p style={{ margin: '6px 2px 0', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Cada sessão concluída entra aqui com as séries, volume e seu feedback.</p>
           </div>
-        ) : <p style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.6)' }}>Nenhum treino concluído ainda. Inicie um treino na aba <strong style={{ color: '#BDFF00', fontWeight: 600 }}>Treino</strong>.</p>
+        ) : (
+          <EmptyCard
+            variante="neon"
+            icone={<svg width={34} height={34} viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 1 2.5 5.8" stroke="#EAE5DB" strokeWidth={1.7} strokeLinecap="round" fill="none" /><path d="M4 18v-4.2h4.2" stroke="#EAE5DB" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" fill="none" /><path d="M12 8.2v4l2.8 1.7" stroke="#BDFF00" strokeWidth={1.7} strokeLinecap="round" fill="none" /></svg>}
+            titulo="Nenhum treino registrado ainda."
+            apoio="Quando você concluir um treino, ele aparece aqui."
+          >
+            <button onClick={onComecarTreino} className="hov-btn" style={estiloBotaoPrimario}>Começar treino de hoje</button>
+          </EmptyCard>
+        )
       )}
 
       {sub === 'peso' && (

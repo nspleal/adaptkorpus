@@ -310,6 +310,15 @@ body {
   color: #bdff00;
   border-left-color: #bdff00;
 }
+/* Shimmer dos skeletons (V4 — espelham a forma do conteúdo, nunca spinner). */
+@keyframes evkShimmer {
+  0% { background-position: -460px 0; }
+  100% { background-position: 460px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*='evk-shimmer'] { animation: none !important; }
+}
+
 /* Foco visível em campos com estilo inline (a11y — WCAG 2.4.7). Borda neon + anel,
    equivalente ao style-focus do protótipo. */
 .input-foco:focus {

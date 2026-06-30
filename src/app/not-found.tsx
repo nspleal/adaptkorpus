@@ -1,24 +1,33 @@
 import Link from 'next/link';
+import { EstadoSistema, estiloBotaoPrimario, estiloBotaoSecundario } from '@/components/estados/ui';
 
 export const metadata = { title: 'Página não encontrada · Evokorpus' };
 
 export default function NotFound() {
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', overflow: 'hidden' }}>
-      <div aria-hidden style={{ position: 'absolute', top: '-12%', right: '-8%', width: 480, height: 480, borderRadius: '50%', background: 'radial-gradient(circle, rgba(22,163,74,.18), transparent 68%)', filter: 'blur(22px)' }} />
-      <div style={{ position: 'relative', textAlign: 'center', maxWidth: 460 }}>
-        <svg width={64} height={64} viewBox="0 0 100 100" fill="none" aria-label="Evokorpus" style={{ margin: '0 auto 24px', display: 'block' }}>
-          <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
-          <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
-        </svg>
-        <div style={{ fontSize: '3.4rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00', lineHeight: 1 }}>404</div>
-        <h1 style={{ margin: '14px 0 8px', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-.02em' }}>Essa página saiu da rota.</h1>
-        <p style={{ margin: '0 0 28px', color: 'rgba(234,229,219,.62)', fontSize: '.98rem', lineHeight: 1.55 }}>O endereço que você abriu não existe ou foi movido. Vamos te trazer de volta à trajetória.</p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link href="/" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', borderRadius: 13, textDecoration: 'none' }}>Voltar ao início</Link>
-          <Link href="/suporte" style={{ background: 'none', border: '1px solid rgba(234,229,219,.22)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: '14px 26px', borderRadius: 13, textDecoration: 'none' }}>Suporte</Link>
-        </div>
-      </div>
+    <div style={{ minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+      <EstadoSistema
+        eyebrow="Erro 404"
+        ilustracao={
+          <svg viewBox="0 0 300 156" width={300} style={{ maxWidth: '100%', marginBottom: 30 }}>
+            <line x1={24} y1={132} x2={276} y2={132} stroke="rgba(234,229,219,.1)" strokeWidth={1.5} strokeDasharray="2 8" strokeLinecap="round" />
+            <path d="M34 122 Q86 108 118 78" stroke="#EAE5DB" strokeWidth={3.4} fill="none" strokeLinecap="round" opacity={0.85} />
+            <path d="M150 56 Q186 38 206 28" stroke="rgba(234,229,219,.34)" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeDasharray="3 9" />
+            <path d="M214 24 Q236 16 256 30" stroke="rgba(234,229,219,.18)" strokeWidth={3} fill="none" strokeLinecap="round" strokeDasharray="2 9" />
+            <circle cx={34} cy={122} r={4.5} fill="rgba(189,255,0,.5)" />
+            <circle cx={118} cy={78} r={5.5} fill="rgba(189,255,0,.7)" />
+            <circle cx={138} cy={98} r={6} fill="none" stroke="rgba(229,72,77,.55)" strokeWidth={2} />
+            <path d="M135 95l6 6M141 95l-6 6" stroke="rgba(229,72,77,.7)" strokeWidth={1.8} strokeLinecap="round" />
+            <circle cx={206} cy={28} r={7.5} fill="#BDFF00" style={{ filter: 'drop-shadow(0 0 10px rgba(189,255,0,.6))', animation: 'evkBlink 2.4s ease-in-out infinite' }} />
+          </svg>
+        }
+        titulo="Essa página saiu da rota."
+        apoio="O link pode estar quebrado ou a página mudou de lugar."
+        acoes={<>
+          <Link href="/" className="hov-btn" style={{ ...estiloBotaoPrimario, textDecoration: 'none', fontSize: '.98rem', padding: '13px 24px', borderRadius: 12 }}>Voltar ao início</Link>
+          <Link href="/suporte" className="evk-voltar" style={{ ...estiloBotaoSecundario, textDecoration: 'none' }}>Falar com o suporte</Link>
+        </>}
+      />
     </div>
   );
 }
