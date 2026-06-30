@@ -1,0 +1,361 @@
+'use client';
+
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
+
+/**
+ * Sessão de treino guiada — porte fiel do protótipo V2 (.dc.html):
+ * intro → execução (tabela de séries, timer de descanso, %1RM opt-in, "como foi",
+ * "senti dor") → resumo. Estilos inline idênticos + movimento (evkStepIn/evkPop/
+ * evkDraw/evkRise).
+ *
+ * Os números (reps, RIR, descanso, séries) vêm do motor determinístico real
+ * (PrescricaoFITT) — nada de IA em runtime. O %1RM é só uma LEITURA estimada a
+ * partir da faixa de reps (nunca testamos 1RM real); respeita o piso de 6 reps
+ * (conceitos/parametros-motor-treino-evokorpus → piso de segurança).
+ */
+
+const EASE = 'cubic-bezier(.22,.61,.36,1)';
+
+type SetRow = { reps: string; kg: string; done: boolean };
+type ExState = { sets: SetRow[]; fb: Feedback | null; paused: boolean };
+
+interface ExView {
+  id: string;
+  nome: string;
+  grupos: string;
+  loaded: boolean;
+  reps: { min: number; max: number };
+  rir: { min: number; max: number };
+  restSeg: number;
+  comoFazer: string;
+}
+
+/** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
+function bandaRM(reps: { min: number; max: number }): string {
+  const r = (n: number) => Math.round((30 / (30 + Math.max(6, n))) * 100);
+  const alto = r(reps.min); // menos reps → % maior
+  const baixo = r(reps.max);
+  return `≈ ${baixo}–${alto}% do seu máximo`;
+}
+
+function fmt(seg: number): string {
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`;
+}
+
+export interface ResumoSessao {
+  dia: string;
+  series: number;
+  volumeKg: number;
+  feedback: Record<string, Feedback>;
+}
+
+export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
+  dia: DiaTreino;
+  prescricao: PrescricaoFITT;
+  onSair: () => void;
+  onConcluir: (resumo: ResumoSessao) => void;
+}) {
+  const exs: ExView[] = dia.slots.map((sl) => {
+    const comp = sl.padrao !== 'isolado';
+    const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
+    const desc = comp ? prescricao.descansoCompostoSeg : prescricao.descansoIsoladoSeg;
+    const loaded = (sl.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+    return {
+      id: sl.exercicio.id,
+      nome: sl.exercicio.nomePt,
+      grupos: sl.exercicio.grupoMuscular,
+      loaded,
+      reps,
+      rir: prescricao.rir,
+      restSeg: Math.round((desc.min + desc.max) / 2),
+      comoFazer: sl.exercicio.comoFazer,
+    };
+  });
+  const nSets = prescricao.seriesPorExercicio.min;
+
+  const [fase, setFase] = useState<'intro' | 'exec' | 'summary'>('intro');
+  const [cur, setCur] = useState(0);
+  const [showRM, setShowRM] = useState(false);
+  const [dorOpen, setDorOpen] = useState(false);
+  const [estados, setEstados] = useState<ExState[]>(
+    exs.map(() => ({ sets: Array.from({ length: nSets }, () => ({ reps: '', kg: '', done: false })), fb: null, paused: false })),
+  );
+
+  // Timer de descanso.
+  const [rest, setRest] = useState<{ left: number; total: number } | null>(null);
+  const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (restRef.current) clearInterval(restRef.current); }, []);
+  function iniciarDescanso(seg: number) {
+    if (restRef.current) clearInterval(restRef.current);
+    setRest({ left: seg, total: seg });
+    restRef.current = setInterval(() => {
+      setRest((r) => {
+        if (!r) return r;
+        if (r.left <= 1) { if (restRef.current) clearInterval(restRef.current); return null; }
+        return { ...r, left: r.left - 1 };
+      });
+    }, 1000);
+  }
+  function pararDescanso() { if (restRef.current) clearInterval(restRef.current); setRest(null); }
+
+  const ex = exs[cur]!;
+  const est = estados[cur]!;
+  const total = exs.length;
+
+  function setSet(i: number, patch: Partial<SetRow>) {
+    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, sets: e.sets.map((s, si) => (si === i ? { ...s, ...patch } : s)) } : e)));
+  }
+  function toggleSet(i: number) {
+    const ser = est.sets[i]!;
+    const ligando = !ser.done;
+    setSet(i, { done: ligando });
+    if (ligando) iniciarDescanso(ex.restSeg); else pararDescanso();
+  }
+  function setFb(f: Feedback) {
+    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, fb: f } : e)));
+  }
+  function pausarEx() {
+    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, paused: true } : e)));
+    setDorOpen(false);
+  }
+
+  const doneCount = est.sets.filter((s) => s.done).length;
+  const ehUltimo = cur === total - 1;
+
+  function avancar() {
+    pararDescanso();
+    setShowRM(false);
+    if (ehUltimo) { setFase('summary'); window.scrollTo(0, 0); }
+    else { setCur((c) => c + 1); window.scrollTo(0, 0); }
+  }
+  function voltar() { pararDescanso(); setShowRM(false); setCur((c) => Math.max(0, c - 1)); window.scrollTo(0, 0); }
+
+  // Resumo
+  const totalDoneSets = estados.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
+  const totalVol = estados.reduce((n, e, ei) => {
+    if (!exs[ei]!.loaded) return n;
+    return n + e.sets.filter((s) => s.done).reduce((v, s) => v + (Number(s.reps) || 0) * (Number(s.kg) || 0), 0);
+  }, 0);
+
+  function concluir() {
+    const fbMap: Record<string, Feedback> = {};
+    estados.forEach((e, ei) => { if (e.fb) fbMap[exs[ei]!.id] = e.fb; });
+    onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap });
+  }
+
+  return (
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', animation: `evkScreenIn .5s ${EASE}` }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.85)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Logo size={24} />
+            <span style={{ fontWeight: 700, fontSize: '.95rem', color: 'rgba(234,229,219,.85)' }}>{dia.nome}</span>
+          </div>
+          <button onClick={onSair} className="evk-voltar" style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.75)', fontWeight: 600, fontSize: '.85rem', padding: '8px 15px', borderRadius: 10, cursor: 'pointer' }}>Sair</button>
+        </div>
+      </header>
+
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 22px 80px' }}>
+
+        {fase === 'intro' && (
+          <div style={{ animation: `evkStepIn .45s ${EASE}` }}>
+            <div style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Treino de hoje</div>
+            <h1 style={{ margin: '0 0 6px', fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-.02em' }}>{dia.nome}</h1>
+            <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.6)', fontSize: '.98rem' }}>{total} exercícios · {nSets}–{prescricao.seriesPorExercicio.max} séries por exercício · RIR {prescricao.rir.min}–{prescricao.rir.max}</p>
+            <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '10px 20px', marginBottom: 24 }}>
+              {exs.map((e, i) => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '14px 0', borderBottom: i === exs.length - 1 ? 'none' : '1px solid rgba(234,229,219,.07)' }}>
+                  <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: '1rem' }}>{e.nome}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>RIR {e.rir.min}–{e.rir.max}</div></div>
+                  <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '6px 12px', borderRadius: 999 }}>{nSets} × {e.reps.min}–{e.reps.max}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => { setFase('exec'); window.scrollTo(0, 0); }} className="hov-btn" style={btnNeon}>Iniciar treino</button>
+            <p style={{ textAlign: 'center', margin: '16px 0 0', fontSize: '.88rem' }}><a onClick={onSair} style={{ color: 'rgba(234,229,219,.6)', textDecoration: 'underline', cursor: 'pointer' }}>Voltar ao painel</a></p>
+          </div>
+        )}
+
+        {fase === 'exec' && (
+          <div style={{ animation: `evkStepIn .4s ${EASE}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)' }}>Exercício {cur + 1} de {total}</span>
+            </div>
+            <div style={{ height: 6, background: 'rgba(234,229,219,.1)', borderRadius: 99, overflow: 'hidden', marginBottom: 22 }}>
+              <div style={{ height: '100%', width: `${((cur + 1) / total) * 100}%`, background: '#BDFF00', borderRadius: 99, boxShadow: '0 0 12px rgba(189,255,0,.5)', transition: `width .45s ${EASE}` }} />
+            </div>
+
+            {/* demo slot (faceless placeholder) */}
+            <div style={{ position: 'relative', height: 170, borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(160deg, rgba(22,163,74,.14), rgba(15,15,14,.6))', border: '1px solid rgba(234,229,219,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+              <svg viewBox="0 0 200 120" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5 }}>
+                <path d="M16 104 Q70 92 110 56 T188 18" stroke="rgba(189,255,0,.45)" strokeWidth={2} fill="none" strokeLinecap="round" strokeDasharray={600} strokeDashoffset={600} style={{ animation: `evkDraw 2.4s cubic-bezier(.16,.84,.3,1) infinite` }} />
+                <circle cx={110} cy={56} r={4} fill="#BDFF00" style={{ animation: 'evkRise 2s ease-in-out infinite .3s' }} />
+                <circle cx={188} cy={18} r={6} fill="#BDFF00" style={{ animation: 'evkRise 2s ease-in-out infinite .7s' }} />
+              </svg>
+              <div style={{ position: 'relative', textAlign: 'center' }}>
+                <div style={{ width: 46, height: 46, margin: '0 auto 8px', borderRadius: 13, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={5} r={2.4} stroke="#BDFF00" strokeWidth={1.8} /><path d="M12 8v6M12 11l-5 3M12 11l5 3M12 14l-3 6M12 14l3 6" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" /></svg></div>
+                <div style={{ fontSize: '.82rem', fontWeight: 600, color: 'rgba(234,229,219,.7)' }}>Demonstração</div>
+                <div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)' }}>animação faceless · em breve</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+              <div><h2 style={{ margin: '0 0 3px', fontSize: '1.45rem', fontWeight: 700, letterSpacing: '-.02em' }}>{ex.nome}{est.paused && <span style={{ marginLeft: 10, fontSize: '.68rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#E5484D', background: 'rgba(229,72,77,.12)', borderRadius: 6, padding: '2px 7px' }}>Pausado</span>}</h2><div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.5)' }}>{ex.grupos}</div></div>
+            </div>
+
+            <details style={{ marginBottom: 18 }}>
+              <summary style={{ listStyle: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.84rem', padding: '8px 13px', borderRadius: 10 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Como fazer</summary>
+              <p style={{ margin: '12px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.65)', lineHeight: 1.55 }}>{ex.comoFazer}</p>
+            </details>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+              <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{nSets} × {ex.reps.min}–{ex.reps.max} reps</span>
+              <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>RIR: {ex.rir.min}–{ex.rir.max}</span>
+              <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {ex.restSeg}s</span>
+            </div>
+
+            {/* %1RM opt-in (só com carga) */}
+            {ex.loaded && (
+              <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 13, padding: '13px 16px', marginBottom: 18 }}>
+                <div onClick={() => setShowRM((v) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
+                  <span style={{ fontSize: '.92rem', fontWeight: 500, color: 'rgba(234,229,219,.85)' }}>Prefiro ver por % do meu máximo</span>
+                  <span style={{ width: 44, minWidth: 44, height: 26, borderRadius: 999, padding: 3, transition: 'background .25s ease', background: showRM ? '#BDFF00' : 'rgba(234,229,219,.18)', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: showRM ? '#0D2818' : '#EAE5DB', transition: `transform .25s ${EASE}`, transform: showRM ? 'translateX(18px)' : 'translateX(0)' }} />
+                  </span>
+                </div>
+                {showRM && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(234,229,219,.08)' }}>
+                    <div style={{ fontSize: '.95rem', fontWeight: 700, color: '#BDFF00', marginBottom: 4 }}>{bandaRM(ex.reps)}</div>
+                    <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Estimado a partir da sua faixa de reps — nunca testamos seu 1RM real. O piso de segurança é de 6 reps.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* tabela de séries */}
+            <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 18px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0 6px', fontSize: '.72rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)' }}>
+                <span style={{ width: 36, minWidth: 36 }}>Série</span>
+                <span style={{ flex: 1 }}>Reps</span>
+                {ex.loaded && <span style={{ flex: 1 }}>Carga (kg)</span>}
+                <span style={{ width: 36, minWidth: 36, textAlign: 'center' }}>✓</span>
+              </div>
+              {est.sets.map((r, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                  <span style={{ width: 36, minWidth: 36, fontWeight: 800, color: 'rgba(234,229,219,.3)', fontSize: '1rem' }}>{i + 1}</span>
+                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder="—" style={inputCelula} />
+                  {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="—" style={inputCelula} />}
+                  <button onClick={() => toggleSet(i)} style={{ width: 36, minWidth: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${r.done ? '#BDFF00' : 'rgba(234,229,219,.2)'}`, background: r.done ? '#BDFF00' : 'transparent', color: r.done ? '#0D2818' : 'rgba(234,229,219,.3)' }}><svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                </div>
+              ))}
+              <div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.5)', paddingTop: 12 }}>{doneCount} de {est.sets.length} séries concluídas</div>
+            </div>
+
+            {/* timer de descanso */}
+            {rest && (
+              <div style={{ background: 'linear-gradient(165deg, rgba(189,255,0,.1), rgba(15,15,14,.5))', border: '1px solid rgba(189,255,0,.3)', borderRadius: 16, padding: '18px 20px', marginTop: 16, animation: `evkPop .3s ${EASE}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.6)' }}>Descanso</span>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#BDFF00', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{fmt(rest.left)}</span>
+                </div>
+                <div style={{ height: 6, background: 'rgba(234,229,219,.12)', borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}><div style={{ height: '100%', width: `${(rest.left / rest.total) * 100}%`, background: '#BDFF00', borderRadius: 99, transition: 'width 1s linear' }} /></div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setRest((r) => (r ? { left: r.left + 15, total: r.total + 15 } : r))} className="evk-voltar" style={{ flex: 1, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.9rem', padding: 10, borderRadius: 11, cursor: 'pointer' }}>+15 s</button>
+                  <button onClick={pararDescanso} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.9rem', padding: 10, border: 'none', borderRadius: 11, cursor: 'pointer' }}>Pular descanso</button>
+                </div>
+              </div>
+            )}
+
+            {/* como foi */}
+            <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '16px 18px', marginTop: 16 }}>
+              <div style={{ fontSize: '.9rem', fontWeight: 600, marginBottom: 4 }}>Como foi este exercício?</div>
+              <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)', marginBottom: 12 }}>Seu retorno ajusta o próximo treino.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['facil', 'na_medida', 'dificil'] as Feedback[]).map((f) => {
+                  const on = est.fb === f;
+                  return <button key={f} onClick={() => setFb(f)} style={{ cursor: 'pointer', flex: 1, padding: '10px 6px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{f === 'facil' ? 'Fácil' : f === 'na_medida' ? 'Na medida' : 'Difícil'}</button>;
+                })}
+              </div>
+            </div>
+
+            {/* senti dor */}
+            <div style={{ textAlign: 'center', margin: '16px 0 0' }}>
+              <button onClick={() => setDorOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', color: 'rgba(229,72,77,.85)', fontWeight: 600, fontSize: '.86rem', padding: 8, cursor: 'pointer', textDecoration: 'underline' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Senti dor neste exercício</button>
+            </div>
+
+            {/* nav */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 22 }}>
+              {cur > 0 && <button onClick={voltar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: '14px 22px', borderRadius: 13, cursor: 'pointer' }}>Anterior</button>}
+              <button onClick={avancar} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>{ehUltimo ? 'Concluir treino' : 'Próximo exercício'}</button>
+            </div>
+          </div>
+        )}
+
+        {fase === 'summary' && (
+          <div style={{ animation: `evkStepIn .45s ${EASE}` }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(189,255,0,.14)', border: '1px solid rgba(189,255,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}><svg width={30} height={30} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#BDFF00" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
+            <h1 style={{ margin: '0 0 8px', fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em' }}>Resumo do treino</h1>
+            <p style={{ margin: '0 0 22px', color: 'rgba(234,229,219,.62)', fontSize: '.98rem', lineHeight: 1.55 }}>Mais um dia no plano. Constância é o que move a curva.</p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18 }}>
+              <div style={cardStat}><div style={statLabel}>Séries</div><div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-.02em' }}>{totalDoneSets}</div></div>
+              <div style={cardStat}><div style={statLabel}>Volume</div><div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-.02em', color: '#BDFF00' }}>{totalVol.toLocaleString('pt-BR')}<span style={{ fontSize: '.85rem', fontWeight: 500, color: 'rgba(234,229,219,.5)' }}> kg</span></div></div>
+              <div style={cardStat}><div style={statLabel}>Exercícios</div><div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-.02em' }}>{total}</div></div>
+            </div>
+
+            <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 20px', marginBottom: 18 }}>
+              {exs.map((e, ei) => {
+                const s = estados[ei]!;
+                const ds = s.sets.filter((x) => x.done).length;
+                const vol = e.loaded ? s.sets.filter((x) => x.done).reduce((v, x) => v + (Number(x.reps) || 0) * (Number(x.kg) || 0), 0) : 0;
+                const fbLabel = s.fb === 'facil' ? 'Fácil' : s.fb === 'na_medida' ? 'Na medida' : s.fb === 'dificil' ? 'Difícil' : '—';
+                return (
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 0', borderBottom: ei === exs.length - 1 ? 'none' : '1px solid rgba(234,229,219,.07)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ fontWeight: 600, fontSize: '.96rem' }}>{e.nome}</span>{s.paused && <span style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: '#E5484D', background: 'rgba(229,72,77,.12)', borderRadius: 6, padding: '2px 7px' }}>Pausado</span>}</div>
+                      <div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>{ds}/{s.sets.length} séries · {fbLabel}</div>
+                    </div>
+                    <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.7)' }}>{e.loaded ? `${vol.toLocaleString('pt-BR')} kg` : `${ds} séries`}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button onClick={concluir} className="hov-btn" style={btnNeon}>Concluir treino</button>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL · SENTI DOR */}
+      {dorOpen && (
+        <div onClick={() => setDorOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 216, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.7)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, background: 'linear-gradient(168deg, rgba(42,16,16,.96), rgba(15,15,14,.98))', border: '1px solid rgba(229,72,77,.35)', borderRadius: 22, padding: 26, boxShadow: '0 40px 90px -30px rgba(0,0,0,.8)', animation: `evkPop .3s ${EASE}` }}>
+            <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(229,72,77,.14)', border: '1px solid rgba(229,72,77,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="#E5484D" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg></div>
+            <h2 style={{ margin: '0 0 10px', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-.01em' }}>Sentiu dor?</h2>
+            <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>Se for <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>dor</strong> (não o cansaço normal do esforço), pause este exercício e considere procurar um profissional. O resto do treino continua normalmente.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button onClick={pausarEx} style={{ width: '100%', background: 'rgba(229,72,77,.14)', border: '1px solid rgba(229,72,77,.5)', color: '#E5484D', fontWeight: 700, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Pausar este exercício</button>
+              <button onClick={() => setDorOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Foi só o esforço, continuar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const btnNeon: CSSProperties = { width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.08rem', padding: 16, border: 'none', borderRadius: 14, cursor: 'pointer' };
+const inputCelula: CSSProperties = { flex: 1, width: '100%', minWidth: 0, boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 10, padding: '10px 12px', color: '#EAE5DB', fontSize: '1rem', fontWeight: 600, outline: 'none' };
+const cardStat: CSSProperties = { background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 16 };
+const statLabel: CSSProperties = { fontSize: '.74rem', color: 'rgba(234,229,219,.5)', marginBottom: 5 };
+
+function Logo({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden>
+      <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
+      <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
+    </svg>
+  );
+}

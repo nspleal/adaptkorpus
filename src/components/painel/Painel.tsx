@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { substituirExercicio, substituirPrato } from '@/lib/engine';
+import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -62,6 +63,16 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
+  const [sessaoDia, setSessaoDia] = useState<number | null>(null);
+  const [sessoesConcluidas, setSessoesConcluidas] = useState(0);
+
+  function concluirSessao(r: ResumoSessao) {
+    setSessoesConcluidas((n) => n + 1);
+    setFeedback((p) => ({ ...p, ...r.feedback }));
+    setSessaoDia(null);
+    setAba('progresso');
+    window.scrollTo(0, 0);
+  }
 
   useEffect(() => { setDataHoje(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })); }, []);
   const marcar = (k: string) => setTrocados((prev) => new Set(prev).add(k));
@@ -109,6 +120,16 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   const prescricao = treino.prescricao;
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'perfil', label: 'Perfil' }];
 
+  // Sessão de treino guiada (tela cheia, fora do shell do painel).
+  if (sessaoDia !== null && prescricao && rotinaDias[sessaoDia]) {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+        <Backdrop />
+        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', animation: `evkScreenIn .5s ${EASE}` }}>
       <Backdrop />
@@ -142,10 +163,10 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
           <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem', textTransform: 'capitalize' }}>{dataHoje || 'Seu dia'}</p>
         </div>
 
-        {aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => setAba('treino')} onRegistrar={registrarPeso} />}
-        {aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} />}
+        {aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />}
+        {aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} />}
         {aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} />}
-        {aba === 'progresso' && <Progresso pesos={pesos} treinos={Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesConcluidas > 0 ? sessoesConcluidas : Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {aba === 'perfil' && <Perfil perfil={perfil} />}
       </div>
 
@@ -200,9 +221,10 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
+  onIniciar: (d: number) => void;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   return (
@@ -213,7 +235,10 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
       </div>
       {dias.map((dia, d) => (
         <div key={`${dia.nome}-${d}`} style={{ marginBottom: 22 }}>
-          <div style={{ ...kicker, marginBottom: 10 }}>{dia.nome} · RIR {prescricao.rir.min}–{prescricao.rir.max}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+            <div style={kicker}>{dia.nome} · RIR {prescricao.rir.min}–{prescricao.rir.max}</div>
+            <button onClick={() => onIniciar(d)} className="hov-btn" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.85rem', padding: '8px 16px', border: 'none', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill="currentColor" /></svg>Iniciar treino</button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {dia.slots.map((sl, s) => {
               const comp = sl.padrao !== 'isolado';
