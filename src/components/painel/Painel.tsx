@@ -7,7 +7,7 @@ import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
-import { DetalheExercicio, DetalhePrato } from './DetalheModais';
+import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -69,6 +69,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [vista, setVista] = useState<null | 'compras'>(null);
   const [editando, setEditando] = useState(false);
   const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);
+  const [detalheSessao, setDetalheSessao] = useState<SessaoLog | null>(null);
   const [cardItens, setCardItens] = useState<CardapioItem[]>(dieta.cardapio?.itens ?? []);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(dieta.cardapio?.totais ?? null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
@@ -219,7 +220,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} onAbrir={(s) => setDetalheSessao(s)} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
       </div>
 
@@ -230,6 +231,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
         <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
       )}
+      {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={`Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
     </div>
   );
 }
@@ -419,7 +421,7 @@ function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: 
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos }: { sessoes: SessaoLog[]; pesos: number[] }) {
+function Historico({ sessoes, pesos, onAbrir }: { sessoes: SessaoLog[]; pesos: number[]; onAbrir: (s: SessaoLog) => void }) {
   const [sub, setSub] = useState<'treinos' | 'peso'>('treinos');
   const subTab = (id: 'treinos' | 'peso', label: string) => {
     const on = sub === id;
@@ -436,9 +438,10 @@ function Historico({ sessoes, pesos }: { sessoes: SessaoLog[]; pesos: number[] }
               const fbVals = Object.values(w.feedback);
               const resumoFb = fbVals.length ? `${fbVals.filter((f) => f === 'na_medida').length} na medida` : 'sem feedback';
               return (
-                <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                <div key={w.n} onClick={() => onAbrir(w)} className="hov-lift" style={{ ...cardSoft, padding: '18px 20px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                     <div><div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{w.dia}</span><span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>Sessão {w.n}</span></div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 3 }}>{w.series} séries · {w.volumeKg.toLocaleString('pt-BR')} kg · {resumoFb}</div></div>
+                    <span style={{ color: 'rgba(234,229,219,.4)', fontSize: '1.2rem', flexShrink: 0 }}>→</span>
                   </div>
                 </div>
               );

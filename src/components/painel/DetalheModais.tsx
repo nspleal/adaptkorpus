@@ -3,6 +3,7 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import type { CardapioItem } from '@/lib/engine';
 import type { Alergeno, Exercise, Food } from '@/lib/data/types';
+import type { ResumoSessao } from './SessaoTreino';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
@@ -104,6 +105,40 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao }: 
         <button onClick={onPorcao} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>Editar porção</button>
       </div>
       <p style={{ margin: '14px 0 0', textAlign: 'center', fontSize: '.78rem', color: 'rgba(234,229,219,.4)' }}>Valores e alimentos da base TACO (NEPA/UNICAMP).</p>
+    </Shell>
+  );
+}
+
+const FB_LABEL: Record<string, string> = { facil: 'Fácil', na_medida: 'Na medida', dificil: 'Difícil' };
+
+export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSessao & { n: number }; rotulo: string; onFechar: () => void }) {
+  const fbs = sessao.exercicios.map((e) => e.fb).filter(Boolean) as string[];
+  const fbResumo = fbs.length ? (FB_LABEL[fbs.sort((a, c) => fbs.filter((x) => x === c).length - fbs.filter((x) => x === a).length)[0]!] ?? '—') : '—';
+  return (
+    <Shell onClose={onFechar} kicker={rotulo}>
+      <h2 style={{ margin: '0 0 14px', fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-.02em' }}>{sessao.dia}</h2>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+        <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 8, padding: '6px 11px' }}>Volume {sessao.volumeKg.toLocaleString('pt-BR')} kg</span>
+        <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>{sessao.series} séries</span>
+        <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>Como foi: {fbResumo}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {sessao.exercicios.map((e, i) => (
+          <div key={i} style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: 10 }}>{e.nome}</div>
+            {e.sets.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {e.sets.map((s, si) => (
+                  <span key={si} style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.82)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '5px 10px' }}>
+                    <span style={{ color: 'rgba(234,229,219,.45)', fontWeight: 700 }}>{si + 1}</span>&nbsp; {s.reps || '—'} reps{e.loaded && s.kg ? ` × ${s.kg} kg` : ''}
+                  </span>
+                ))}
+              </div>
+            ) : <div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Nenhuma série registrada.</div>}
+          </div>
+        ))}
+      </div>
+      <button onClick={onFechar} className="hov-btn" style={{ width: '100%', marginTop: 18, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Fechar</button>
     </Shell>
   );
 }

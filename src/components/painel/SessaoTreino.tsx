@@ -50,6 +50,8 @@ export interface ResumoSessao {
   series: number;
   volumeKg: number;
   feedback: Record<string, Feedback>;
+  /** Detalhe por exercício para o modal "Detalhe da sessão" no Histórico. */
+  exercicios: { nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[] }[];
 }
 
 export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
@@ -143,7 +145,13 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
   function concluir() {
     const fbMap: Record<string, Feedback> = {};
     estados.forEach((e, ei) => { if (e.fb) fbMap[exs[ei]!.id] = e.fb; });
-    onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap });
+    const exercicios = exs.map((ex, ei) => ({
+      nome: ex.nome,
+      loaded: ex.loaded,
+      fb: estados[ei]!.fb,
+      sets: estados[ei]!.sets.filter((s) => s.done).map((s) => ({ reps: s.reps, kg: s.kg })),
+    }));
+    onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios });
   }
 
   return (
