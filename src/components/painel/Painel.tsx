@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { gerarDieta, gerarTreino, substituirExercicio, substituirPrato } from '@/lib/engine';
+import { gerarDieta, gerarTreino, listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
@@ -128,16 +128,23 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function gerarOpcoesPrato(idx: number, excluir: string[]): OpcaoPrato[] {
     if (!dieta.plano || !cardTotais) return [];
     const item = cardItens[idx]!;
+    // Bloqueamos os pratos das outras refeições + os já mostrados. O motor deduplica e para
+    // quando o pool elegível se esgota (evita as "3 opções iguais" — o relaxe de gosto repetia).
     const outros = cardItens.filter((_, i) => i !== idx).map((c) => c.prato.id);
-    const usados = new Set(excluir); const out: OpcaoPrato[] = [];
-    for (let k = 0; k < 3; k++) {
-      const rr = substituirPrato({ pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala, restricoes, gosto: { excluirPratoIds: [...outros, ...usados] } });
-      if (rr.status === 'ok' && rr.prato && rr.escala != null && rr.macrosNovo && rr.totaisDiaNovo) { out.push({ prato: rr.prato, escala: rr.escala, macros: rr.macrosNovo, diaNew: rr.totaisDiaNovo }); usados.add(rr.prato.id); } else break;
-    }
-    return out;
+    return listarSubstituicoesPrato({
+      pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED,
+      plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala, restricoes,
+      gosto: { excluirPratoIds: [...outros, ...excluir] },
+    }).map((rr) => ({ prato: rr.prato!, escala: rr.escala!, macros: rr.macrosNovo!, diaNew: rr.totaisDiaNovo! }));
   }
   const abrirTrocaPrato = (idx: number) => { const o = gerarOpcoesPrato(idx, []); setModal({ tipo: 'prato', idx, base: cardItens[idx]!.prato.nome, opcoes: o, excl: o.map((x) => x.prato.id) }); };
-  const maisVariedadePrato = () => { if (modal?.tipo !== 'prato') return; const n = gerarOpcoesPrato(modal.idx, modal.excl); if (n.length) setModal({ ...modal, opcoes: n, excl: [...modal.excl, ...n.map((x) => x.prato.id)] }); };
+  const maisVariedadePrato = () => {
+    if (modal?.tipo !== 'prato') return;
+    let n = gerarOpcoesPrato(modal.idx, modal.excl);
+    let excl = [...modal.excl, ...n.map((x) => x.prato.id)];
+    if (!n.length) { n = gerarOpcoesPrato(modal.idx, []); excl = n.map((x) => x.prato.id); } // esgotou → recomeça o ciclo
+    if (n.length) setModal({ ...modal, opcoes: n, excl });
+  };
   function aplicarPrato(idx: number, o: OpcaoPrato) {
     const novos = cardItens.slice(); novos[idx] = { refeicao: cardItens[idx]!.refeicao, prato: o.prato, escala: o.escala, macros: o.macros };
     setCardItens(novos); setCardTotais(o.diaNew); marcar(`p${idx}`); setModal(null);
@@ -150,15 +157,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
   function gerarOpcoesEx(d: number, s: number, excluir: string[]): Exercise[] {
     const atual = rotinaDias[d]!.slots[s]!.exercicio;
-    const usados = new Set([...rotinaDias.flatMap((dia) => dia.slots.map((sl) => sl.exercicio.id)), ...excluir]); const out: Exercise[] = [];
-    for (let k = 0; k < 3; k++) {
-      const rr = substituirExercicio({ exercicioAtual: atual, equipamento: perfil.equipamento, nivelExperiencia: perfil.nivelExperiencia, exercises: EXERCISES_SEED, historicoRecenteIds: [...usados] });
-      if (rr.status === 'ok' && rr.exercicio && !out.some((e) => e.id === rr.exercicio!.id)) { out.push(rr.exercicio); usados.add(rr.exercicio.id); } else break;
-    }
-    return out;
+    // Bloqueia exercícios já usados na rotina + os já mostrados; o motor deduplica e para no fim.
+    const usados = [...rotinaDias.flatMap((dia) => dia.slots.map((sl) => sl.exercicio.id)), ...excluir];
+    return listarSubstituicoesExercicio({
+      exercicioAtual: atual, equipamento: perfil.equipamento, nivelExperiencia: perfil.nivelExperiencia,
+      exercises: EXERCISES_SEED, historicoRecenteIds: usados,
+    }).map((rr) => rr.exercicio!);
   }
   const abrirTrocaEx = (d: number, s: number) => { const o = gerarOpcoesEx(d, s, []); setModal({ tipo: 'exercicio', d, s, base: rotinaDias[d]!.slots[s]!.exercicio.nomePt, opcoes: o, excl: o.map((e) => e.id) }); };
-  const maisVariedadeEx = () => { if (modal?.tipo !== 'exercicio') return; const n = gerarOpcoesEx(modal.d, modal.s, modal.excl); if (n.length) setModal({ ...modal, opcoes: n, excl: [...modal.excl, ...n.map((e) => e.id)] }); };
+  const maisVariedadeEx = () => {
+    if (modal?.tipo !== 'exercicio') return;
+    let n = gerarOpcoesEx(modal.d, modal.s, modal.excl);
+    let excl = [...modal.excl, ...n.map((e) => e.id)];
+    if (!n.length) { n = gerarOpcoesEx(modal.d, modal.s, []); excl = n.map((e) => e.id); } // esgotou → recomeça o ciclo
+    if (n.length) setModal({ ...modal, opcoes: n, excl });
+  };
   function aplicarEx(d: number, s: number, ex: Exercise) {
     const novos = rotinaDias.map((dia) => ({ ...dia, slots: dia.slots.slice() })); novos[d]!.slots[s] = { ...novos[d]!.slots[s]!, exercicio: ex };
     setRotinaDias(novos); marcar(`e${d}-${s}`); setModal(null);
@@ -570,10 +583,20 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
   let titulo = 'Trocar'; let sub = ''; let showMore = false; let onMore = () => {};
   const opcoes: { chave: string; nome: string; detalhe?: string; onClick: () => void }[] = [];
   if (modal.tipo === 'prato') {
-    sub = 'Três opções que mantêm o equilíbrio do dia (equivalência calórica). Não curtiu? Gere mais.'; showMore = true; onMore = onMaisPrato;
+    // Só oferece "gerar mais" quando veio um lote cheio (3) — se veio menos, o pool elegível
+    // já se esgotou (poucos pratos cabem na janela do dia para este slot/dieta).
+    const n = modal.opcoes.length; showMore = n >= 3; onMore = onMaisPrato;
+    const equil = 'que mantêm o equilíbrio do dia (equivalência calórica)';
+    sub = n >= 3 ? `Três opções ${equil}. Não curtiu? Gere mais.`
+      : n === 2 ? `Duas opções ${equil}.`
+      : n === 1 ? `Uma opção que mantém o equilíbrio do dia (equivalência calórica).`
+      : '';
     modal.opcoes.forEach((o) => opcoes.push({ chave: o.prato.id, nome: o.prato.nome, detalhe: `${r0(o.macros.kcal)} kcal · ${r0(o.macros.proteinaG)} g prot`, onClick: () => onAplicarPrato(modal.idx, o) }));
   } else if (modal.tipo === 'exercicio') {
-    sub = 'Mantém o grupo e o padrão, respeitando seu equipamento. Não curtiu? Gere mais.'; showMore = true; onMore = onMaisEx;
+    const n = modal.opcoes.length; showMore = n >= 3; onMore = onMaisEx;
+    sub = n >= 3 ? 'Mantém o grupo e o padrão, respeitando seu equipamento. Não curtiu? Gere mais.'
+      : n >= 1 ? 'Mantém o grupo e o padrão, respeitando seu equipamento.'
+      : '';
     modal.opcoes.forEach((ex) => opcoes.push({ chave: ex.id, nome: ex.nomePt, detalhe: `${ex.grupoMuscular}${ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}`, onClick: () => onAplicarEx(modal.d, modal.s, ex) }));
   } else {
     titulo = 'Editar porção'; sub = 'Ajuste a quantidade do prato — a estimativa de referência acompanha.';

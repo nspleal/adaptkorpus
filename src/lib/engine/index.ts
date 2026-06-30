@@ -31,7 +31,10 @@ export { montarRotina, locaisPermitidos } from './treino-montador';
 
 // --- Substituição (F.2) ---
 export * from './substituicao-types';
-export { substituirPrato, substituirExercicio } from './substituicao';
+export {
+  substituirPrato, substituirExercicio,
+  listarSubstituicoesPrato, listarSubstituicoesExercicio,
+} from './substituicao';
 
 import { montarCardapioDia, type RestricoesUsuario, type CardapioDia } from './assembler';
 import { gerarPlanoDieta } from './diet';

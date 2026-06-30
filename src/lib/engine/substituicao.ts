@@ -144,6 +144,29 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
 }
 
 /**
+ * Lista até `max` substitutos de prato DISTINTOS para montar o seletor de troca.
+ *
+ * `substituirPrato` devolve UM melhor candidato e RELAXA o gosto (`excluirPratoIds`) no
+ * fallback — então, chamado em laço, pode repetir o mesmo prato quando a janela do dia
+ * deixa poucos elegíveis. Aqui deduplicamos: bloqueamos cada id já devolvido e paramos
+ * quando o motor repete (sinal de que o pool elegível se esgotou). Garante lista sem
+ * duplicatas — quem chama mostra 1, 2 ou 3 opções reais, nunca a mesma três vezes.
+ * Função PURA e determinística.
+ */
+export function listarSubstituicoesPrato(p: PedidoSubPrato, max = 3): ResultadoSubPrato[] {
+  const bloqueados = new Set<string>(p.gosto?.excluirPratoIds ?? []);
+  const out: ResultadoSubPrato[] = [];
+  for (let k = 0; k < max; k++) {
+    const rr = substituirPrato({ ...p, gosto: { ...p.gosto, excluirPratoIds: [...bloqueados] } });
+    if (rr.status === 'ok' && rr.prato && !bloqueados.has(rr.prato.id)) {
+      out.push(rr);
+      bloqueados.add(rr.prato.id);
+    } else break;
+  }
+  return out;
+}
+
+/**
  * Substitui um exercício. Função PURA e determinística.
  * Filtros DUROS: equipamento/local · tipo compatível · dificuldade ≤ liberada pelo nível.
  * Preservação: grupo muscular → padrão. Desempate: mesma dificuldade → MAIS FAMILIAR
@@ -217,4 +240,22 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
     gostoRelaxado: false,
     nota: 'Não há substituto elegível para o equipamento/nível atuais. Mantivemos o exercício.',
   };
+}
+
+/**
+ * Lista até `max` substitutos de exercício DISTINTOS para o seletor de troca. Mesma lógica
+ * de `listarSubstituicoesPrato`: `substituirExercicio` relaxa variedade no fallback, então
+ * deduplicamos por id e paramos quando repete. PURA e determinística.
+ */
+export function listarSubstituicoesExercicio(p: PedidoSubExercicio, max = 3): ResultadoSubExercicio[] {
+  const bloqueados = new Set<string>(p.historicoRecenteIds ?? []);
+  const out: ResultadoSubExercicio[] = [];
+  for (let k = 0; k < max; k++) {
+    const rr = substituirExercicio({ ...p, historicoRecenteIds: [...bloqueados] });
+    if (rr.status === 'ok' && rr.exercicio && !bloqueados.has(rr.exercicio.id)) {
+      out.push(rr);
+      bloqueados.add(rr.exercicio.id);
+    } else break;
+  }
+  return out;
 }

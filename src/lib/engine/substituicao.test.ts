@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { substituirExercicio, substituirPrato } from './substituicao';
+import { substituirExercicio, substituirPrato, listarSubstituicoesPrato, listarSubstituicoesExercicio } from './substituicao';
 import { ESCALA_PORCAO } from './constants';
 import { gerarDieta } from './index';
 import { macrosDePrato } from '../data/nutrition';
@@ -188,5 +188,64 @@ describe('substituição de exercício (F.2)', () => {
         const r = substituirExercicio({ exercicioAtual: ex, equipamento: equip, nivelExperiencia: 'avancado', exercises: EXERCISES });
         if (r.exercicio) expect(r.exercicio.id).not.toBe(ex.id);
       }
+  });
+});
+
+/**
+ * Regressão do seletor de troca (bug "3 opções iguais"): substituirPrato/Exercicio relaxam
+ * o gosto/variedade no fallback e, chamados em laço, repetem. listarSubstituicoes* deduplica.
+ */
+describe('listarSubstituicoesPrato — lista sem duplicatas', () => {
+  // Combinação restritiva (vegano) é a que mais força o fallback a repetir no motor antigo.
+  const PERFIS: { o: Partial<PerfilUsuario>; r: PedidoSubPrato['restricoes'] }[] = [
+    { o: {}, r: { alergenos: [], preferencia: null } },
+    { o: { objetivo: 'massa' }, r: { alergenos: [], preferencia: 'vegetariano' } },
+    { o: { sexo: 'feminino', pesoKg: 70, objetivo: 'saude' }, r: { alergenos: [], preferencia: 'vegano' } },
+  ];
+
+  it('nunca devolve o mesmo prato duas vezes (todas as opções distintas)', () => {
+    for (const { o, r } of PERFIS) {
+      const pedido = cenario(o, r);
+      const lista = listarSubstituicoesPrato(pedido, 3);
+      const ids = lista.map((x) => x.prato!.id);
+      expect(new Set(ids).size).toBe(ids.length); // sem duplicatas
+      expect(lista.length).toBeLessThanOrEqual(3);
+      // nenhuma opção é o próprio prato trocado nem um id já excluído
+      for (const x of lista) expect(x.prato!.id).not.toBe(pedido.pratoAtual.id);
+    }
+  });
+
+  it('respeita excluirPratoIds (não repete os já mostrados) — fluxo "gerar mais"', () => {
+    const pedido = cenario({}, { alergenos: [], preferencia: null });
+    const lote1 = listarSubstituicoesPrato(pedido, 3).map((x) => x.prato!.id);
+    const lote2 = listarSubstituicoesPrato({ ...pedido, gosto: { excluirPratoIds: lote1 } }, 3);
+    for (const x of lote2) expect(lote1).not.toContain(x.prato!.id); // nada reaparece
+  });
+
+  it('para quando o pool elegível se esgota (não inventa repetição)', () => {
+    // dieta vegana tem poucos cafés que cabem na janela → a lista vem curta, sem duplicar
+    const pedido = cenario({ sexo: 'feminino', pesoKg: 70, objetivo: 'saude' }, { alergenos: [], preferencia: 'vegano' });
+    const lista = listarSubstituicoesPrato(pedido, 3);
+    const ids = lista.map((x) => x.prato!.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('é determinístico', () => {
+    const pedido = cenario();
+    const a = listarSubstituicoesPrato(pedido, 3).map((x) => x.prato!.id);
+    const b = listarSubstituicoesPrato(pedido, 3).map((x) => x.prato!.id);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('listarSubstituicoesExercicio — lista sem duplicatas', () => {
+  const supino = EXERCISES.find((e) => e.id === 'e9')!; // Supino reto, academia, empurrar
+  it('nunca repete exercício e respeita historicoRecenteIds', () => {
+    const lista = listarSubstituicoesExercicio({ exercicioAtual: supino, equipamento: 'academia', nivelExperiencia: 'avancado', exercises: EXERCISES }, 3);
+    const ids = lista.map((x) => x.exercicio!.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const x of lista) expect(x.exercicio!.id).not.toBe(supino.id);
+    const lote2 = listarSubstituicoesExercicio({ exercicioAtual: supino, equipamento: 'academia', nivelExperiencia: 'avancado', exercises: EXERCISES, historicoRecenteIds: ids }, 3);
+    for (const x of lote2) expect(ids).not.toContain(x.exercicio!.id);
   });
 });
