@@ -132,7 +132,7 @@ export default function Onboarding() {
     const perfilTreino: PerfilTreino = { pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, flagsSaude: p.flagsSaude, objetivo: p.objetivo, nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: dias, tempoPorSessaoMin: tempo };
     setDieta(gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }));
     setTreino(gerarTreino(perfilTreino, { exercises: EXERCISES_SEED }));
-    setPerfilResumo({ sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo });
+    setPerfilResumo({ sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo, flagsSaude: p.flagsSaude });
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
     let pct = 0;

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
-import { substituirExercicio, substituirPrato } from '@/lib/engine';
+import { gerarDieta, gerarTreino, substituirExercicio, substituirPrato } from '@/lib/engine';
+import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
+import EditarPerfil from './EditarPerfil';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -20,6 +22,8 @@ export interface PerfilResumo {
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
   preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
+  /** Flags de saúde do gate — necessárias para recalcular o plano (Editar perfil). */
+  flagsSaude: FlagsSaude;
 }
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -51,13 +55,18 @@ type Modal =
   | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
-export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
+export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, desfechoC }: {
   perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void; desfechoC?: boolean;
 }) {
   const router = useRouter();
+  // Plano e perfil viram estado para suportar "Editar perfil → recalcular" em runtime.
+  const [perfil, setPerfil] = useState<PerfilResumo>(perfilProp);
+  const [dieta, setDieta] = useState<ResultadoMotor>(dietaProp);
+  const [treino, setTreino] = useState<ResultadoTreino>(treinoProp);
   const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
   const [aba, setAba] = useState<Aba>('hoje');
   const [vista, setVista] = useState<null | 'compras'>(null);
+  const [editando, setEditando] = useState(false);
   const [cardItens, setCardItens] = useState<CardapioItem[]>(dieta.cardapio?.itens ?? []);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(dieta.cardapio?.totais ?? null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
@@ -76,6 +85,27 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
     setAba('progresso');
+    window.scrollTo(0, 0);
+  }
+
+  // Editar perfil → recalcular: roda o motor determinístico real com o novo perfil
+  // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
+  function recalcular(novo: PerfilResumo) {
+    const perfilU: PerfilUsuario = { sexo: novo.sexo, pesoKg: novo.pesoKg, alturaCm: novo.alturaCm, idade: novo.idade, nivelAtividade: novo.nivelAtividade, objetivo: novo.objetivo, flagsSaude: novo.flagsSaude };
+    const perfilT: PerfilTreino = { pesoKg: novo.pesoKg, alturaCm: novo.alturaCm, idade: novo.idade, flagsSaude: novo.flagsSaude, objetivo: novo.objetivo, nivelExperiencia: novo.nivelExperiencia, equipamento: novo.equipamento, diasDisponiveis: novo.diasDisponiveis, tempoPorSessaoMin: novo.tempoPorSessaoMin };
+    const restr = { alergenos: novo.alergenos, preferencia: novo.preferencia };
+    const nd = gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes: restr });
+    const nt = gerarTreino(perfilT, { exercises: EXERCISES_SEED });
+    setPerfil(novo);
+    setDieta(nd);
+    setTreino(nt);
+    setCardItens(nd.cardapio?.itens ?? []);
+    setCardTotais(nd.cardapio?.totais ?? null);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    setTrocados(new Set());
+    setMostrarC(nd.gate.comportamento === 'RESTRINGIR' || nd.gate.comportamento === 'PISAR');
+    setEditando(false);
+    setAba('hoje');
     window.scrollTo(0, 0);
   }
 
@@ -126,6 +156,16 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
+  // Editar perfil (tela cheia) → recalcular o plano.
+  if (editando) {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+        <Backdrop />
+        <EditarPerfil inicial={perfil} onCancelar={() => setEditando(false)} onSalvar={recalcular} />
+      </div>
+    );
+  }
+
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
   if (sessaoDia !== null && prescricao && rotinaDias[sessaoDia]) {
     return (
@@ -156,6 +196,7 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
             {menu && (
               <div style={{ position: 'absolute', top: 48, right: 0, width: 180, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
                 <button onClick={() => { irAba('perfil'); setMenu(false); }} style={menuBtn(false)}>Meu perfil</button>
+                <button onClick={() => { setEditando(true); setMenu(false); }} style={menuBtn(false)}>Editar perfil</button>
                 <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e assinatura</button>
                 <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>
                 <button onClick={onSair} style={menuBtn(true)}>Sair</button>
@@ -177,7 +218,7 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} />}
-        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} />}
+        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
@@ -415,13 +456,16 @@ function Historico({ sessoes, pesos }: { sessoes: SessaoLog[]; pesos: number[] }
 
 /* ════════════════════ Perfil ════════════════════ */
 
-function Perfil({ perfil, onConta }: { perfil: PerfilResumo; onConta: () => void }) {
+function Perfil({ perfil, onConta, onEditar }: { perfil: PerfilResumo; onConta: () => void; onEditar: () => void }) {
   const linha = (k: string, v: string, last = false) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 0', ...(last ? {} : { borderBottom: '1px solid rgba(234,229,219,.07)' }) }}><span style={{ color: 'rgba(234,229,219,.55)', fontSize: '.94rem' }}>{k}</span><span style={{ fontWeight: 600, fontSize: '.94rem', textAlign: 'right' }}>{v}</span></div>;
   return (
     <div style={{ ...sec, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={{ ...cardSoft, padding: 24 }}>
-          <h3 style={{ margin: '0 0 18px', fontSize: '1.15rem', fontWeight: 700 }}>Seus dados</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Seus dados</h3>
+            <button onClick={onEditar} className="evk-troca" style={{ background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.82rem', padding: '7px 14px', borderRadius: 10, cursor: 'pointer' }}>Editar</button>
+          </div>
           {linha('Sexo biológico', perfil.sexo === 'feminino' ? 'Feminino' : 'Masculino')}
           {linha('Idade', `${perfil.idade} anos`)}
           {linha('Altura', `${perfil.alturaCm} cm`)}
