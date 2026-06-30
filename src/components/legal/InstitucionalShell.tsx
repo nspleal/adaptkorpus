@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 import { DISCLAIMER, AValidar } from './ui';
+import { temSessao, useTemSessao } from '@/lib/session';
 
 /**
  * Casca institucional (porte fiel do V3): header sticky com blur (logo + "Voltar ao site"
@@ -37,6 +39,14 @@ function Logo({ size }: { size: number }) {
 const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
 
 export default function InstitucionalShell({ page, showAmbient = true, children }: { page: PageKey; showAmbient?: boolean; children: ReactNode }) {
+  // Logado → "voltar" leva à área logada (/app), não à landing de marketing; deslogado → landing.
+  const router = useRouter();
+  const logado = useTemSessao();
+  const voltarHref = logado ? '/app' : '/';
+  const voltarLabel = logado ? 'Voltar ao app' : 'Voltar ao site';
+  // Robustez ao 1º quadro (useTemSessao resolve só após o efeito): se houver sessão no clique,
+  // vai pro /app mesmo que o rótulo/href ainda estejam no estado deslogado.
+  const irAppSeLogado = (e: React.MouseEvent) => { if (temSessao()) { e.preventDefault(); router.push('/app'); } };
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
       {/* ambient backdrop (controlável via showAmbient — handoff V3 §7) */}
@@ -50,9 +60,9 @@ export default function InstitucionalShell({ page, showAmbient = true, children 
       {/* header */}
       <header style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
         <div style={{ maxWidth: 1180, margin: '0 auto', padding: '13px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18 }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', color: 'inherit' }}><Logo size={28} /><Marca size="1.24rem" /></Link>
-          <Link href="/" className="evk-voltar" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'rgba(234,229,219,.8)', fontSize: '.92rem', fontWeight: 600, border: '1px solid rgba(234,229,219,.2)', borderRadius: 11, padding: '9px 16px' }}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>Voltar ao site
+          <Link href={voltarHref} onClick={irAppSeLogado} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', color: 'inherit' }}><Logo size={28} /><Marca size="1.24rem" /></Link>
+          <Link href={voltarHref} onClick={irAppSeLogado} className="evk-voltar" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'rgba(234,229,219,.8)', fontSize: '.92rem', fontWeight: 600, border: '1px solid rgba(234,229,219,.2)', borderRadius: 11, padding: '9px 16px' }}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{voltarLabel}
           </Link>
         </div>
         <div style={{ borderTop: '1px solid rgba(234,229,219,.06)' }}>

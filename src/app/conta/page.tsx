@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
 import { baixarArquivo } from '@/lib/export';
+import { limparSessao } from '@/lib/session';
 
 /**
  * Conta e assinatura — porte fiel do protótipo V2 (.dc.html): status da assinatura
@@ -65,7 +66,7 @@ export default function ContaPage() {
         {/* header */}
         <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <a onClick={() => router.push('/onboarding')} style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, cursor: 'pointer' }}><Logo size={26} /><Marca size="1.1rem" /></a>
+            <a onClick={() => router.push('/app')} style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0, cursor: 'pointer' }}><Logo size={26} /><Marca size="1.1rem" /></a>
             <div style={{ flex: 1 }} />
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button onClick={() => setMenu((m) => !m)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '5px 12px 5px 5px', cursor: 'pointer' }}>
@@ -74,9 +75,9 @@ export default function ContaPage() {
               </button>
               {menu && (
                 <div style={{ position: 'absolute', top: 48, right: 0, width: 190, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
-                  <button onClick={() => router.push('/onboarding')} style={menuItem(false)}>Meu perfil</button>
+                  <button onClick={() => router.push('/app')} style={menuItem(false)}>Meu perfil</button>
                   <button style={{ ...menuItem(false), background: 'rgba(189,255,0,.08)', color: '#BDFF00', fontWeight: 600 }}>Conta e assinatura</button>
-                  <button onClick={() => router.push('/login')} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
+                  <button onClick={() => { limparSessao(); router.replace('/'); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
                 </div>
               )}
             </div>
@@ -234,7 +235,7 @@ export default function ContaPage() {
           <p style={{ margin: '0 0 16px', fontSize: '.94rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Isso apaga <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>permanentemente</strong> sua conta, seu plano e todo o seu histórico. Esta ação não pode ser desfeita.</p>
           <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes. Cancelar a assinatura não exige excluir a conta.</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button onClick={() => { setDeleteOpen(false); router.push('/'); }} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Excluir definitivamente</button>
+            <button onClick={() => { setDeleteOpen(false); limparSessao(); router.replace('/'); }} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Excluir definitivamente</button>
             <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Manter minha conta</button>
           </div>
         </Modal>

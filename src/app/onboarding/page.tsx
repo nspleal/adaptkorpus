@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { gerarDieta, gerarTreino, type ResultadoMotor, type ResultadoTreino } from '@/lib/engine';
-import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilTreino, PerfilUsuario, Sexo } from '@/lib/engine';
+import { useRouter } from 'next/navigation';
+import { gerarDieta, type ResultadoMotor } from '@/lib/engine';
+import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilUsuario, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
-import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
+import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
-import Painel, { type PerfilResumo } from '@/components/painel/Painel';
+import { type PerfilResumo } from '@/components/painel/Painel';
+import { lerSessao, salvarSessao } from '@/lib/session';
 
 /**
  * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
@@ -73,6 +75,15 @@ type Fase = 'wizard' | 'gerando' | 'resultado';
 type SimNaoV = 'sim' | 'nao';
 
 export default function Onboarding() {
+  const router = useRouter();
+  // Já tem sessão? O cadastro de perfil é só da 1ª vez — manda direto pra área logada
+  // (edições posteriores são só pela aba "Editar perfil"). Evita reabrir o wizard no reload/voltar.
+  const [checando, setChecando] = useState(true);
+  useEffect(() => {
+    if (lerSessao()) router.replace('/app');
+    else setChecando(false);
+  }, [router]);
+
   const [terms, setTerms] = useState<[boolean, boolean, boolean]>([false, false, false]);
   const [sexo, setSexo] = useState<Sexo>('feminino');
   const [idade, setIdade] = useState('30');
@@ -94,9 +105,7 @@ export default function Onboarding() {
   const [erro, setErro] = useState('');
   const [genPct, setGenPct] = useState(0);
 
-  const [dieta, setDieta] = useState<ResultadoMotor | null>(null);
-  const [treino, setTreino] = useState<ResultadoTreino | null>(null);
-  const [perfilResumo, setPerfilResumo] = useState<PerfilResumo | null>(null);
+  const [dieta, setDieta] = useState<ResultadoMotor | null>(null); // mantido só para o Gate B (ROTEAR)
   const giRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => () => { if (giRef.current) clearInterval(giRef.current); }, []);
 
@@ -130,10 +139,9 @@ export default function Onboarding() {
     const p = parse.data;
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
-    const perfilTreino: PerfilTreino = { pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, flagsSaude: p.flagsSaude, objetivo: p.objetivo, nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: dias, tempoPorSessaoMin: tempo };
-    setDieta(gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }));
-    setTreino(gerarTreino(perfilTreino, { exercises: EXERCISES_SEED }));
-    setPerfilResumo({ sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo, flagsSaude: p.flagsSaude });
+    const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
+    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo, flagsSaude: p.flagsSaude };
+    setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
     let pct = 0;
@@ -141,16 +149,22 @@ export default function Onboarding() {
     giRef.current = setInterval(() => {
       pct = Math.min(100, pct + 9);
       setGenPct(pct);
-      if (pct >= 100) { if (giRef.current) clearInterval(giRef.current); setTimeout(() => setFase('resultado'), 450); }
+      if (pct >= 100) {
+        if (giRef.current) clearInterval(giRef.current);
+        setTimeout(() => {
+          // Gate B (ROTEAR) → encaminhamento (não gera plano, não cria sessão).
+          // Desfecho A/C → salva a sessão e abre a área logada estável (/app).
+          if (d.gate.comportamento === 'ROTEAR') { setFase('resultado'); }
+          else { salvarSessao(resumo); router.replace('/app'); }
+        }, 450);
+      }
     }, 150);
   }
 
-  const recomecar = () => { setFase('wizard'); setStep(0); setDieta(null); setTreino(null); setPerfilResumo(null); };
+  const recomecar = () => { setFase('wizard'); setStep(0); setDieta(null); };
 
-  // Plano gerado (Desfecho A/C) → painel completo, tela cheia.
-  if (fase === 'resultado' && dieta && treino && perfilResumo && dieta.gate.comportamento !== 'ROTEAR') {
-    return <Painel perfil={perfilResumo} dieta={dieta} treino={treino} onSair={recomecar} desfechoC={dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'} />;
-  }
+  // Enquanto checa a sessão (evita piscar o wizard antes do redirect para /app).
+  if (checando) return <div style={{ minHeight: '100vh', background: '#0D2818' }} />;
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>

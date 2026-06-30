@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { gerarDieta, gerarTreino, listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
-import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
+import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
+import type { FlagsSaude } from '@/lib/engine';
+import { recomputarPlano } from '@/lib/session';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
@@ -53,6 +54,7 @@ function escalar(m: RecipeMacros, s: number): RecipeMacros {
 }
 
 type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
+const ABAS_VALIDAS = new Set<Aba>(['hoje', 'treino', 'dieta', 'progresso', 'historico', 'perfil']);
 interface SessaoLog extends ResumoSessao { n: number }
 type Feedback = 'facil' | 'na_medida' | 'dificil';
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
@@ -62,8 +64,10 @@ type Modal =
   | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
-export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, desfechoC }: {
-  perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void; desfechoC?: boolean;
+export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, onPerfilChange, desfechoC }: {
+  perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void;
+  /** Persistência da sessão: chamado quando o perfil muda (Editar perfil) para manter o reload coerente. */
+  onPerfilChange?: (p: PerfilResumo) => void; desfechoC?: boolean;
 }) {
   const router = useRouter();
   // Plano e perfil viram estado para suportar "Editar perfil → recalcular" em runtime.
@@ -71,7 +75,13 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [dieta, setDieta] = useState<ResultadoMotor>(dietaProp);
   const [treino, setTreino] = useState<ResultadoTreino>(treinoProp);
   const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
-  const [aba, setAba] = useState<Aba>('hoje');
+  // Aba ativa persistida (evk_aba): reload/voltar restauram exatamente a aba anterior.
+  const [aba, setAba] = useState<Aba>(() => {
+    if (typeof window === 'undefined') return 'hoje';
+    const a = window.localStorage.getItem('evk_aba') as Aba | null;
+    return a && ABAS_VALIDAS.has(a) ? a : 'hoje';
+  });
+  useEffect(() => { try { window.localStorage.setItem('evk_aba', aba); } catch { /* noop */ } }, [aba]);
   const [vista, setVista] = useState<null | 'compras'>(null);
   const [editando, setEditando] = useState(false);
   const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);
@@ -88,6 +98,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
   const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
+  // Edição que cai em zona clínica (ROTEAR) → tela de encaminhamento, sem aplicar o plano.
+  const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
   const registro = useRegistro();
   // Refeições do dia = slots distintos do cardápio, na ordem em que aparecem.
@@ -103,12 +115,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   // Editar perfil → recalcular: roda o motor determinístico real com o novo perfil
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
+  // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
   function recalcular(novo: PerfilResumo) {
-    const perfilU: PerfilUsuario = { sexo: novo.sexo, pesoKg: novo.pesoKg, alturaCm: novo.alturaCm, idade: novo.idade, nivelAtividade: novo.nivelAtividade, objetivo: novo.objetivo, flagsSaude: novo.flagsSaude };
-    const perfilT: PerfilTreino = { pesoKg: novo.pesoKg, alturaCm: novo.alturaCm, idade: novo.idade, flagsSaude: novo.flagsSaude, objetivo: novo.objetivo, nivelExperiencia: novo.nivelExperiencia, equipamento: novo.equipamento, diasDisponiveis: novo.diasDisponiveis, tempoPorSessaoMin: novo.tempoPorSessaoMin };
-    const restr = { alergenos: novo.alergenos, preferencia: novo.preferencia };
-    const nd = gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes: restr });
-    const nt = gerarTreino(perfilT, { exercises: EXERCISES_SEED });
+    const { dieta: nd, treino: nt } = recomputarPlano(novo);
+    // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
+    // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
+    // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
+    if (nd.gate.comportamento === 'ROTEAR' || !nd.plano || !nt.rotina) {
+      setEditando(false);
+      setEncaminhamento(nd.gate.motivos ?? []);
+      window.scrollTo(0, 0);
+      return;
+    }
+    setEncaminhamento(null);
+    onPerfilChange?.(novo);
     setPerfil(novo);
     setDieta(nd);
     setTreino(nt);
@@ -181,6 +201,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const prescricao = treino.prescricao;
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
+
+  // Edição entrou em zona clínica (ROTEAR) → encaminhamento (tela cheia, fail-safe).
+  // Não aplicamos o plano nem mexemos na sessão: o plano válido anterior segue intacto.
+  if (encaminhamento) {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+        <Backdrop />
+        <EncaminhamentoEdicao motivos={encaminhamento} onRevisar={() => { setEncaminhamento(null); setEditando(true); }} onManter={() => setEncaminhamento(null)} />
+      </div>
+    );
+  }
 
   // Editar perfil (tela cheia) → recalcular o plano.
   if (editando) {
@@ -566,6 +597,31 @@ function Perfil({ perfil, onConta, onEditar }: { perfil: PerfilResumo; onConta: 
         <div style={{ padding: '4px 4px 0' }}>
           <span style={{ display: 'inline-block', marginBottom: 12, border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.6)', borderRadius: 8, padding: '3px 10px', fontSize: '.78rem', fontWeight: 700 }}>18+</span>
           <p style={{ margin: 0, fontSize: '.8rem', color: 'rgba(234,229,219,.42)', lineHeight: 1.6 }}>O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ Encaminhamento (edição → ROTEAR) ════════════════════ */
+
+// Postura fail-safe do gate de saúde (cofre, princípio 4 / gate-de-saude-evokorpus):
+// a edição entrou em zona clínica → não geramos plano; orientamos profissional. Mantém o
+// plano válido anterior (onManter) ou deixa revisar os dados (onRevisar). Sem promessa.
+function EncaminhamentoEdicao({ motivos, onRevisar, onManter }: { motivos: string[]; onRevisar: () => void; onManter: () => void }) {
+  return (
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', animation: `evkScreenIn .5s ${EASE}` }}>
+      <div style={{ width: '100%', maxWidth: 520, textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(22,163,74,.16)', border: '1px solid rgba(22,163,74,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 26px' }}>
+          <svg width={32} height={32} viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.4-7-9.6A4.4 4.4 0 0112 8a4.4 4.4 0 017 3.4c0 5.2-7 9.6-7 9.6z" stroke="#16A34A" strokeWidth={1.8} strokeLinejoin="round" /><path d="M9 11.5h1.6l.9-1.6 1 3 .9-1.4H16" stroke="#16A34A" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </div>
+        <h1 style={{ margin: '0 0 16px', fontSize: '1.7rem', fontWeight: 700, letterSpacing: '-.02em' }}>Vamos com cuidado aqui</h1>
+        <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.7)', lineHeight: 1.65, fontSize: '1rem' }}>Com esses novos dados, seu caso pede o <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>acompanhamento de um profissional de saúde</strong>. Por segurança, não vamos recalcular um plano automático agora.</p>
+        {motivos.length > 0 && <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.55)', fontSize: '.9rem' }}>{motivos.join(' · ')}</p>}
+        <p style={{ margin: '0 0 30px', color: 'rgba(234,229,219,.6)', lineHeight: 1.6, fontSize: '.95rem' }}>Seu plano atual continua disponível, sem alterações. Se quiser, revise os dados ou siga com o plano de antes.</p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onRevisar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Revisar meus dados</button>
+          <button onClick={onManter} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.22)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.98rem', padding: '13px 24px', borderRadius: 12, cursor: 'pointer' }}>Manter meu plano atual</button>
         </div>
       </div>
     </div>

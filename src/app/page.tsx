@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { temSessao, useTemSessao } from '@/lib/session';
 
 /**
  * Landing pública do Evokorpus — porte FIEL do protótipo de design (Evokorpus.dc.html):
@@ -14,6 +16,11 @@ const rev = (delay = 0): React.CSSProperties => ({ transitionDelay: `${delay}ms`
 
 export default function Home() {
   const rootRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const logado = useTemSessao(); // já onboardou → CTA do topo vira "Abrir o app"
+  // Robustez ao 1º quadro: useTemSessao só resolve após o efeito, então se a sessão existir
+  // no clique, vamos pro /app mesmo que o rótulo ainda esteja em "Testar 7 dias grátis".
+  const irAppSeLogado = (e: React.MouseEvent) => { if (temSessao()) { e.preventDefault(); router.push('/app'); } };
 
   useEffect(() => {
     const root = rootRef.current;
@@ -71,7 +78,7 @@ export default function Home() {
               <a key={id} href={`#${id}`} data-nav={id} className="evk-navlink">{txt}</a>
             ))}
           </div>
-          <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>Testar 7 dias grátis</Link>
+          <Link href={logado ? '/app' : '/cadastro'} {...(logado ? {} : { 'data-checkout': 'kiwify' })} onClick={irAppSeLogado} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>{logado ? 'Abrir o app' : 'Testar 7 dias grátis'}</Link>
         </div>
       </nav>
 

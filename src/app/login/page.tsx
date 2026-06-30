@@ -3,9 +3,12 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, EASE } from '@/components/auth/ui';
+import { temSessao } from '@/lib/session';
 
 export default function LoginPage() {
   const router = useRouter();
+  // Já onboardou nesta sessão → volta direto pra área logada; senão, faz o onboarding.
+  const entrar = () => router.push(temSessao() ? '/app' : '/onboarding');
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
       <Backdrop />
@@ -26,7 +29,7 @@ export default function LoginPage() {
               <Link href="/redefinir" style={{ fontSize: '.82rem', color: '#BDFF00', textDecoration: 'none' }}>Esqueci minha senha</Link>
             </div>
             <input type="password" placeholder="••••••••" style={{ ...inputAuth, marginBottom: 26 }} />
-            <button onClick={() => router.push('/onboarding')} className="hov-btn" style={btnNeon}>Entrar</button>
+            <button onClick={entrar} className="hov-btn" style={btnNeon}>Entrar</button>
           </div>
           <p style={{ textAlign: 'center', margin: '22px 0 0', fontSize: '.85rem', color: 'rgba(234,229,219,.45)' }}>
             Novo por aqui? <Link href="/cadastro" style={{ color: '#BDFF00', textDecoration: 'underline', fontWeight: 600 }}>Criar conta</Link> · <Link href="/" style={{ color: 'rgba(234,229,219,.75)', textDecoration: 'underline' }}>Conhecer</Link> · <span style={{ border: '1px solid rgba(234,229,219,.25)', borderRadius: 6, padding: '1px 7px', fontSize: '.72rem', fontWeight: 700, color: 'rgba(234,229,219,.6)' }}>18+</span>
