@@ -71,7 +71,7 @@ export default function Home() {
               <a key={id} href={`#${id}`} data-nav={id} className="evk-navlink">{txt}</a>
             ))}
           </div>
-          <Link href="/onboarding" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>Testar 7 dias grátis</Link>
+          <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>Testar 7 dias grátis</Link>
         </div>
       </nav>
 
@@ -91,7 +91,7 @@ export default function Home() {
             <h1 className="rv" style={{ ...rev(80), margin: '0 0 22px', fontWeight: 800, fontSize: 'clamp(2.6rem, 5.6vw, 5rem)', lineHeight: 1.02, letterSpacing: '-.03em' }}>O corpo que não para de <span style={{ color: '#BDFF00' }}>evoluir.</span></h1>
             <p className="rv" style={{ ...rev(160), margin: '0 0 36px', fontSize: 'clamp(1.05rem,1.5vw,1.28rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.7)', maxWidth: 520, fontWeight: 500 }}>Treino e dieta que se adaptam a cada avanço seu. Sem planilha, sem achismo — um plano construído com você, dia após dia.</p>
             <div className="rv" style={{ ...rev(240), display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 30 }}>
-              <Link href="/onboarding" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
+              <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
               <a href="#como" className="hov-btn" style={{ border: '1px solid rgba(234,229,219,.35)', color: '#EAE5DB', fontWeight: 600, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Ver como funciona</a>
             </div>
             <p className="rv" style={{ ...rev(320), margin: 0, fontSize: '.92rem', color: 'rgba(234,229,219,.5)', fontWeight: 500 }}>R$ 29/mês &nbsp;•&nbsp; Cancela quando quiser &nbsp;•&nbsp; 18+</p>
@@ -241,7 +241,7 @@ export default function Home() {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: '.98rem' }}><Check16 /> {i}</div>
               ))}
             </div>
-            <Link href="/onboarding" data-checkout="kiwify" className="hov-btn" style={{ display: 'block', textAlign: 'center', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.08rem', padding: 17, borderRadius: 14 }}>Testar 7 dias grátis</Link>
+            <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ display: 'block', textAlign: 'center', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.08rem', padding: 17, borderRadius: 14 }}>Testar 7 dias grátis</Link>
             <p style={{ margin: '16px 0 0', textAlign: 'center', fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>R$ 29/mês após o teste • Cancela quando quiser • 18+</p>
           </div>
         </div>
@@ -301,7 +301,7 @@ export default function Home() {
         <svg aria-hidden viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, margin: 'auto', width: '90%', maxWidth: 800, opacity: 0.4, zIndex: 0 }}><path data-draw d="M60 250 Q280 230 420 150 T740 50" stroke="rgba(189,255,0,.35)" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeDasharray={1000} strokeDashoffset={1000} style={{ transition: 'stroke-dashoffset 2.4s cubic-bezier(.16,.84,.3,1)' }} /><circle cx={420} cy={150} r={6} fill="rgba(189,255,0,.6)" style={{ animation: 'evkPulse 3.2s ease-in-out infinite' }} /><circle cx={740} cy={50} r={9} fill="#BDFF00" style={{ animation: 'evkPulse 3.2s ease-in-out infinite .6s', filter: 'drop-shadow(0 0 10px rgba(189,255,0,.7))' }} /></svg>
         <div className="rv" style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
           <h2 style={{ margin: '0 0 30px', fontWeight: 800, fontSize: 'clamp(2.2rem,5vw,4rem)', lineHeight: 1.05, letterSpacing: '-.03em' }}>Dê o próximo passo hoje.</h2>
-          <Link href="/onboarding" data-checkout="kiwify" className="hov-btn" style={{ display: 'inline-block', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.1rem', padding: '18px 36px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
+          <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ display: 'inline-block', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.1rem', padding: '18px 36px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
           <p style={{ margin: '18px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.5)' }}>R$ 29/mês • Cancela quando quiser • 18+</p>
         </div>
       </section>

@@ -196,6 +196,8 @@ body {
 @keyframes evkRingGlow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(189,255,0,.4)); } 50% { filter: drop-shadow(0 0 10px rgba(189,255,0,.75)); } }
 @keyframes evkDrift { 0% { transform: translate(0,0); } 50% { transform: translate(-22px,18px); } 100% { transform: translate(0,0); } }
 @keyframes evkBlink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes evkDraw { to { stroke-dashoffset: 0; } }
+@keyframes evkRise { 0% { transform: translateY(7px); opacity: .35; } 50% { opacity: 1; } 100% { transform: translateY(-7px); opacity: .35; } }
 
 /* Nav da landing (blur ao rolar — classe .scrolled via JS). */
 #evk-nav { border-bottom: 1px solid transparent; transition: background .4s ease, border-color .4s ease, backdrop-filter .4s ease; }
