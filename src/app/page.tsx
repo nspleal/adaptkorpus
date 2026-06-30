@@ -317,12 +317,11 @@ export default function Home() {
             </div>
             {[
               { t: 'Produto', l: [['#como', 'Como funciona'], ['#app', 'O app'], ['#preco', 'Preço'], ['#faq', 'FAQ']] },
-              { t: 'Recursos', l: [['#', 'Ebook']] },
-              { t: 'Legal', l: [['#', 'Política de privacidade'], ['#', 'Termos de uso'], ['#', 'Contato']] },
+              { t: 'Legal', l: [['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Contato']] },
             ].map((col) => (
               <div key={col.t}>
                 <div style={{ fontSize: '.76rem', textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(234,229,219,.4)', marginBottom: 16, fontWeight: 600 }}>{col.t}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, fontSize: '.92rem' }}>{col.l.map(([h, t]) => <a key={t} href={h} className="evk-foot-link">{t}</a>)}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, fontSize: '.92rem' }}>{col.l.map((par) => { const h = par[0]!; const t = par[1]!; return h.startsWith('/') ? <Link key={t} href={h} className="evk-foot-link">{t}</Link> : <a key={t} href={h} className="evk-foot-link">{t}</a>; })}</div>
               </div>
             ))}
           </div>

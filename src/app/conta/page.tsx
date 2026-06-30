@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
+import { baixarArquivo } from '@/lib/export';
 
 /**
  * Conta e assinatura — porte fiel do protótipo V2 (.dc.html): status da assinatura
@@ -29,6 +31,25 @@ export default function ContaPage() {
   const [cardOpen, setCardOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
+  const [nome, setNome] = useState('Lucas Almeida');
+  const [email, setEmail] = useState('lucas@email.com');
+  const [editar, setEditar] = useState<null | { campo: 'nome' | 'email'; valor: string }>(null);
+
+  function salvarEdicao() {
+    if (!editar) return;
+    const v = editar.valor.trim();
+    if (v) { if (editar.campo === 'nome') setNome(v); else setEmail(v); }
+    setEditar(null);
+  }
+
+  function baixarMeusDados() {
+    const dados = {
+      exportadoEm: new Date().toISOString(),
+      aviso: 'Exportação parcial (dados da conta nesta tela). A exportação completa de perfil, plano e histórico depende do backend (LGPD / Ownership-4).',
+      conta: { nome, email, assinatura: { plano: 'Evokorpus', valorMensal: 'R$ 29', status: sub } },
+    };
+    baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(dados, null, 2));
+  }
 
   const status = {
     trial: { t: 'Em teste grátis', c: '#BDFF00', bg: 'rgba(189,255,0,.12)', bd: 'rgba(189,255,0,.3)' },
@@ -134,8 +155,8 @@ export default function ContaPage() {
               <div style={card}>
                 <h3 style={cardH}>Dados da conta</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <LinhaDado rotulo="Nome" valor="Lucas Almeida" botao="Alterar" />
-                  <LinhaDado rotulo="E-mail" valor="lucas@email.com" botao="Alterar e-mail" />
+                  <LinhaDado rotulo="Nome" valor={nome} botao="Alterar" onClick={() => setEditar({ campo: 'nome', valor: nome })} />
+                  <LinhaDado rotulo="E-mail" valor={email} botao="Alterar e-mail" onClick={() => setEditar({ campo: 'email', valor: email })} />
                   <LinhaDado rotulo="Senha" valor="••••••••" botao="Alterar senha" onClick={() => router.push('/redefinir')} ultima />
                 </div>
               </div>
@@ -143,13 +164,13 @@ export default function ContaPage() {
                 <h3 style={{ ...cardH, marginBottom: 6 }}>Privacidade e seus dados</h3>
                 <p style={{ margin: '0 0 16px', fontSize: '.86rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Você controla seus dados. Atendemos às suas solicitações conforme a LGPD.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <button className="evk-troca" style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: '13px 15px', borderRadius: 12, cursor: 'pointer' }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Baixar meus dados</button>
+                  <button onClick={baixarMeusDados} className="evk-troca" style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: '13px 15px', borderRadius: 12, cursor: 'pointer' }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Baixar meus dados</button>
                   <button onClick={() => setDeleteOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'none', border: '1px solid rgba(229,72,77,.35)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: '13px 15px', borderRadius: 12, cursor: 'pointer' }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13" stroke="#E5484D" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Excluir minha conta e meus dados</button>
                 </div>
               </div>
               <div style={{ ...card, padding: 8 }}>
-                {['Termos de Uso', 'Política de Privacidade', 'Aviso (disclaimer)', 'Suporte'].map((l) => (
-                  <a key={l} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', borderRadius: 12, fontSize: '.93rem', color: 'rgba(234,229,219,.8)', cursor: 'pointer' }}>{l} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></a>
+                {([['Termos de Uso', '/termos'], ['Política de Privacidade', '/privacidade'], ['Aviso (disclaimer)', '/aviso'], ['Suporte', '/suporte']] as const).map(([l, href]) => (
+                  <Link key={l} href={href} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', borderRadius: 12, fontSize: '.93rem', color: 'rgba(234,229,219,.8)', cursor: 'pointer', textDecoration: 'none' }}>{l} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></Link>
                 ))}
               </div>
             </div>
@@ -215,6 +236,30 @@ export default function ContaPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button onClick={() => { setDeleteOpen(false); router.push('/'); }} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Excluir definitivamente</button>
             <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Manter minha conta</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL · ALTERAR NOME / E-MAIL */}
+      {editar && (
+        <Modal onClose={() => setEditar(null)} maxW={420}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+            <h2 style={modalH}>{editar.campo === 'nome' ? 'Alterar nome' : 'Alterar e-mail'}</h2>
+            <BotaoX onClick={() => setEditar(null)} />
+          </div>
+          <p style={{ margin: '0 0 20px', fontSize: '.88rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>{editar.campo === 'nome' ? 'Como devemos te chamar.' : 'Usamos seu e-mail para login e avisos importantes.'}</p>
+          <label style={labelCap}>{editar.campo === 'nome' ? 'Nome' : 'E-mail'}</label>
+          <input
+            type={editar.campo === 'email' ? 'email' : 'text'}
+            value={editar.valor}
+            onChange={(e) => setEditar({ campo: editar.campo, valor: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') salvarEdicao(); }}
+            autoFocus
+            style={{ ...inp, marginBottom: 22 }}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setEditar(null)} className="evk-voltar" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.96rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={salvarEdicao} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Salvar</button>
           </div>
         </Modal>
       )}

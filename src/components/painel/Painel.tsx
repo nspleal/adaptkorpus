@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { gerarDieta, gerarTreino, substituirExercicio, substituirPrato } from '@/lib/engine';
 import type { FlagsSaude, PerfilTreino, PerfilUsuario } from '@/lib/engine';
@@ -500,8 +501,8 @@ function Perfil({ perfil, onConta, onEditar }: { perfil: PerfilResumo; onConta: 
           <p style={{ margin: '14px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Cancelar é fácil, em poucos toques — sem letra miúda.</p>
         </div>
         <div style={{ ...cardSoft, padding: 8 }}>
-          {['Termos de Uso', 'Política de Privacidade', 'Aviso (disclaimer)', 'Suporte'].map((t) => (
-            <a key={t} href="#" className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, fontSize: '.95rem', color: 'rgba(234,229,219,.8)' }}>{t} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></a>
+          {([['Termos de Uso', '/termos'], ['Política de Privacidade', '/privacidade'], ['Aviso (disclaimer)', '/aviso'], ['Suporte', '/suporte']] as const).map(([t, href]) => (
+            <Link key={t} href={href} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, fontSize: '.95rem', color: 'rgba(234,229,219,.8)', textDecoration: 'none' }}>{t} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></Link>
           ))}
         </div>
         <div style={{ padding: '4px 4px 0' }}>
