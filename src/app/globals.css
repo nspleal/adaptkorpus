@@ -310,6 +310,14 @@ body {
   color: #bdff00;
   border-left-color: #bdff00;
 }
+/* Foco visível em campos com estilo inline (a11y — WCAG 2.4.7). Borda neon + anel,
+   equivalente ao style-focus do protótipo. */
+.input-foco:focus {
+  border-color: #bdff00;
+  background: rgba(189, 255, 0, 0.04);
+  box-shadow: 0 0 0 3px rgba(189, 255, 0, 0.15);
+}
+
 /* Acordeão do FAQ — animação por grid-template-rows (sem medir altura). */
 .faq-panel {
   display: grid;

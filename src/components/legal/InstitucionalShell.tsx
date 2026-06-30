@@ -36,14 +36,16 @@ function Logo({ size }: { size: number }) {
 }
 const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
 
-export default function InstitucionalShell({ page, children }: { page: PageKey; children: ReactNode }) {
+export default function InstitucionalShell({ page, showAmbient = true, children }: { page: PageKey; showAmbient?: boolean; children: ReactNode }) {
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
-      {/* ambient backdrop */}
-      <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '-12%', right: '-8%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(22,163,74,.16), transparent 68%)', filter: 'blur(22px)', animation: 'evkDrift 24s ease-in-out infinite' }} />
-        <div style={{ position: 'absolute', bottom: '-16%', left: '-12%', width: 460, height: 460, borderRadius: '50%', background: 'radial-gradient(circle, rgba(189,255,0,.05), transparent 70%)', filter: 'blur(22px)', animation: 'evkDrift 30s ease-in-out infinite reverse' }} />
-      </div>
+      {/* ambient backdrop (controlável via showAmbient — handoff V3 §7) */}
+      {showAmbient && (
+        <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', top: '-12%', right: '-8%', width: 520, height: 520, borderRadius: '50%', background: 'radial-gradient(circle, rgba(22,163,74,.16), transparent 68%)', filter: 'blur(22px)', animation: 'evkDrift 24s ease-in-out infinite' }} />
+          <div style={{ position: 'absolute', bottom: '-16%', left: '-12%', width: 460, height: 460, borderRadius: '50%', background: 'radial-gradient(circle, rgba(189,255,0,.05), transparent 70%)', filter: 'blur(22px)', animation: 'evkDrift 30s ease-in-out infinite reverse' }} />
+        </div>
+      )}
 
       {/* header */}
       <header style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>

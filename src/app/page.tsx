@@ -362,8 +362,8 @@ function FAQItem({ q, a, delay }: { q: string; a: string; delay: number }) {
   const ref = useRef<HTMLDivElement>(null);
   return (
     <div className="rv" style={{ ...rev(delay), background: 'rgba(234,229,219,.04)', border: `1px solid ${open ? 'rgba(189,255,0,.3)' : 'rgba(234,229,219,.1)'}`, borderRadius: 16, overflow: 'hidden', transition: 'border-color .3s ease, opacity .7s, transform .7s' }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ width: '100%', background: 'none', border: 'none', color: '#EAE5DB', fontFamily: 'inherit', textAlign: 'left', padding: '20px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, cursor: 'pointer', fontSize: '1.05rem', fontWeight: 600 }}>
-        {q}<span style={{ color: '#BDFF00', fontSize: '1.4rem', lineHeight: 1, transition: 'transform .3s ease', minWidth: 18, transform: open ? 'rotate(45deg)' : 'none' }}>+</span>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} style={{ width: '100%', background: 'none', border: 'none', color: '#EAE5DB', fontFamily: 'inherit', textAlign: 'left', padding: '20px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, cursor: 'pointer', fontSize: '1.05rem', fontWeight: 600 }}>
+        {q}<span aria-hidden style={{ color: '#BDFF00', fontSize: '1.4rem', lineHeight: 1, transition: 'transform .3s ease', minWidth: 18, transform: open ? 'rotate(45deg)' : 'none' }}>+</span>
       </button>
       <div style={{ maxHeight: open ? (ref.current?.scrollHeight ?? 200) : 0, opacity: open ? 1 : 0, overflow: 'hidden', transition: 'max-height .45s cubic-bezier(.22,.61,.36,1), opacity .4s ease' }}>
         <div ref={ref}><p style={{ margin: 0, padding: '0 22px 22px', color: 'rgba(234,229,219,.62)', lineHeight: 1.6 }}>{a}</p></div>

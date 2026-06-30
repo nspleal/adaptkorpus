@@ -11,7 +11,7 @@ import { AValidar } from './ui';
  * No mobile (<880px, via CSS) o grid empilha e o sumário recolhe.
  */
 export default function LegalLayout({
-  page, titulo, subtitulo, toc, draftMode = true, readingScale = 1, children,
+  page, titulo, subtitulo, toc, draftMode = true, readingScale = 1, showAmbient = true, children,
 }: {
   page: Exclude<PageKey, 'ebook'>;
   titulo: string;
@@ -19,6 +19,7 @@ export default function LegalLayout({
   toc: { id: string; label: string }[];
   draftMode?: boolean;
   readingScale?: number;
+  showAmbient?: boolean;
   children: ReactNode;
 }) {
   const [ativo, setAtivo] = useState<string>(toc[0]?.id ?? '');
@@ -29,20 +30,28 @@ export default function LegalLayout({
     if (detalheRef.current) detalheRef.current.open = window.innerWidth >= 880;
   }, []);
 
-  // Scroll-spy: destaca a seção visível no sumário.
+  // Scroll-spy: destaca a seção visível no sumário. Trata o fim da página (a margem
+  // inferior de -68% impediria a última seção curta de ativar) ativando o último item.
   useEffect(() => {
-    const alvos = toc.map((s) => document.getElementById(s.id)).filter((el): el is HTMLElement => !!el);
+    const ids = toc.map((s) => s.id);
+    const alvos = ids.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
     if (!alvos.length) return;
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => { if (e.isIntersecting) setAtivo(e.target.id); }),
       { rootMargin: '-122px 0px -68% 0px', threshold: 0 },
     );
     alvos.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    const noFim = () => {
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+        setAtivo(ids[ids.length - 1]!);
+      }
+    };
+    window.addEventListener('scroll', noFim, { passive: true });
+    return () => { io.disconnect(); window.removeEventListener('scroll', noFim); };
   }, [toc]);
 
   return (
-    <InstitucionalShell page={page}>
+    <InstitucionalShell page={page} showAmbient={showAmbient}>
       <div style={{ maxWidth: 1080, margin: '0 auto', animation: `evkScreenIn .5s cubic-bezier(.22,.61,.36,1)` }}>
         {/* bloco de título */}
         <div style={{ position: 'relative', maxWidth: '72ch' }}>
