@@ -1,53 +1,86 @@
-import Link from 'next/link';
-import { type ReactNode } from 'react';
+'use client';
+
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import InstitucionalShell, { type PageKey } from './InstitucionalShell';
+import { AValidar } from './ui';
 
 /**
- * Layout das páginas institucionais/legais (Termos, Privacidade, Aviso, Suporte).
- * Tema escuro de marca, sem dependência de runtime/IA. Conteúdo é RASCUNHO estruturado —
- * a redação final passa por validação jurídica e volta pelo humano para o cofre.
+ * Molde de leitura das páginas legais (Termos · Privacidade · Aviso · Suporte) — porte fiel
+ * do V3: selo de rascunho, título + subtítulo + "Última atualização", e grid sumário + coluna
+ * de leitura (72ch). Sumário com scroll-spy (IntersectionObserver) e item ativo em Pulso.
+ * No mobile (<880px, via CSS) o grid empilha e o sumário recolhe.
  */
-export default function LegalLayout({ titulo, atualizado, children }: { titulo: string; atualizado?: string; children: ReactNode }) {
-  return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
-      <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '14px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <svg width={26} height={26} viewBox="0 0 100 100" fill="none" aria-hidden><line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" /></svg>
-            <span style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>
-          </Link>
-          <Link href="/" style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.7)', textDecoration: 'none' }}>← Início</Link>
-        </div>
-      </header>
+export default function LegalLayout({
+  page, titulo, subtitulo, toc, draftMode = true, readingScale = 1, children,
+}: {
+  page: Exclude<PageKey, 'ebook'>;
+  titulo: string;
+  subtitulo: string;
+  toc: { id: string; label: string }[];
+  draftMode?: boolean;
+  readingScale?: number;
+  children: ReactNode;
+}) {
+  const [ativo, setAtivo] = useState<string>(toc[0]?.id ?? '');
+  const detalheRef = useRef<HTMLDetailsElement>(null);
 
-      <main style={{ maxWidth: 820, margin: '0 auto', padding: '48px 22px 80px' }}>
-        <h1 style={{ margin: '0 0 6px', fontSize: 'clamp(1.8rem,4vw,2.4rem)', fontWeight: 800, letterSpacing: '-.02em' }}>{titulo}</h1>
-        {atualizado && <p style={{ margin: '0 0 8px', fontSize: '.85rem', color: 'rgba(234,229,219,.45)' }}>Atualizado em {atualizado}</p>}
-        <div style={{ display: 'inline-block', margin: '6px 0 28px', background: 'rgba(229,192,77,.12)', border: '1px solid rgba(229,192,77,.35)', color: '#E5C04D', borderRadius: 8, padding: '5px 12px', fontSize: '.78rem', fontWeight: 600 }}>
-          Rascunho — conteúdo em validação jurídica
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 26, lineHeight: 1.65, fontSize: '.98rem', color: 'rgba(234,229,219,.82)' }}>
-          {children}
-        </div>
-        <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid rgba(234,229,219,.1)', display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: '.9rem' }}>
-          {([['/termos', 'Termos de Uso'], ['/privacidade', 'Política de Privacidade'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Suporte']] as const).map(([h, t]) => (
-            <Link key={h} href={h} className="evk-foot-link" style={{ color: 'rgba(234,229,219,.65)' }}>{t}</Link>
-          ))}
-        </div>
-        <p style={{ margin: '22px 0 0', fontSize: '.78rem', color: 'rgba(234,229,219,.4)', lineHeight: 1.6 }}>
-          O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou
-          acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.
-        </p>
-      </main>
-    </div>
-  );
-}
+  // Sumário recolhido no mobile (≥880px aberto). Imperativo só no mount — mantém toggle do usuário.
+  useEffect(() => {
+    if (detalheRef.current) detalheRef.current.open = window.innerWidth >= 880;
+  }, []);
 
-/** Seção de documento legal (título + corpo). */
-export function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
+  // Scroll-spy: destaca a seção visível no sumário.
+  useEffect(() => {
+    const alvos = toc.map((s) => document.getElementById(s.id)).filter((el): el is HTMLElement => !!el);
+    if (!alvos.length) return;
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) setAtivo(e.target.id); }),
+      { rootMargin: '-122px 0px -68% 0px', threshold: 0 },
+    );
+    alvos.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [toc]);
+
   return (
-    <section>
-      <h2 style={{ margin: '0 0 10px', fontSize: '1.2rem', fontWeight: 700, color: '#EAE5DB', letterSpacing: '-.01em' }}>{titulo}</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>
-    </section>
+    <InstitucionalShell page={page}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', animation: `evkScreenIn .5s cubic-bezier(.22,.61,.36,1)` }}>
+        {/* bloco de título */}
+        <div style={{ position: 'relative', maxWidth: '72ch' }}>
+          <svg aria-hidden viewBox="0 0 300 60" style={{ position: 'absolute', top: -14, right: 0, width: 170, maxWidth: '42%', opacity: 0.5, pointerEvents: 'none' }}>
+            <path d="M10 50 Q120 44 190 26 T290 8" stroke="rgba(189,255,0,.4)" strokeWidth={2} fill="none" strokeLinecap="round" strokeDasharray={420} strokeDashoffset={420} style={{ animation: `evkDraw 2.2s cubic-bezier(.16,.84,.3,1) .25s forwards` }} />
+            <circle cx={190} cy={26} r={3} fill="rgba(189,255,0,.6)" /><circle cx={290} cy={8} r={4.5} fill="#BDFF00" />
+          </svg>
+          {draftMode && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: 'rgba(229,72,77,.12)', border: '1px solid rgba(229,72,77,.42)', color: '#E5484D', borderRadius: 999, padding: '7px 15px', fontSize: '.82rem', fontWeight: 600, marginBottom: 22 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#E5484D', animation: 'evkBlink 2s ease-in-out infinite' }} />Rascunho — conteúdo em validação jurídica
+            </div>
+          )}
+          <h1 style={{ margin: '0 0 14px', fontWeight: 800, fontSize: 'clamp(2.1rem,4.4vw,3.2rem)', lineHeight: 1.06, letterSpacing: '-.03em' }}>{titulo}</h1>
+          <p style={{ margin: '0 0 18px', fontSize: 'clamp(1.02rem,1.4vw,1.16rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.66)', fontWeight: 500 }}>{subtitulo}</p>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, fontSize: '.9rem', color: 'rgba(234,229,219,.5)' }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={2} /><path d="M12 7v5l3 2" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Última atualização: <AValidar>data</AValidar>
+          </div>
+        </div>
+
+        {/* grid: sumário + leitura */}
+        <div className="legal-grid">
+          <div className="legal-toc-wrap">
+            <details ref={detalheRef} open style={{ background: 'rgba(234,229,219,.035)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 6px' }}>
+              <summary style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', fontSize: '.74rem', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.55)' }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h12M4 18h8" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /></svg>Nesta página
+              </summary>
+              <nav style={{ display: 'flex', flexDirection: 'column', padding: 4 }}>
+                {toc.map((s) => (
+                  <a key={s.id} href={`#${s.id}`} className={`legal-toc-link${ativo === s.id ? ' is-active' : ''}`}>{s.label}</a>
+                ))}
+              </nav>
+            </details>
+          </div>
+
+          <div style={{ minWidth: 0, fontSize: 16 * readingScale }}>{children}</div>
+        </div>
+      </div>
+    </InstitucionalShell>
   );
 }

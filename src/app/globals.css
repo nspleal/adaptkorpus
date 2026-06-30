@@ -267,3 +267,63 @@ body {
     animation: none;
   }
 }
+
+/* ─── Páginas institucionais (legal) — porte fiel do V3 ─────────────────── */
+/* Grid de leitura: sumário (250px) + coluna (72ch) no desktop; empilha < 880px. */
+.legal-grid {
+  margin-top: 38px;
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 72ch);
+  gap: 56px;
+  justify-content: center;
+  align-items: start;
+}
+.legal-toc-wrap {
+  position: sticky;
+  top: 118px;
+}
+@media (max-width: 879px) {
+  .legal-grid {
+    display: block;
+  }
+  .legal-toc-wrap {
+    position: static;
+    margin-bottom: 26px;
+  }
+}
+/* Item do sumário (scroll-spy adiciona .is-active). */
+.legal-toc-link {
+  display: block;
+  padding: 8px 12px;
+  border-left: 2px solid transparent;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: rgba(234, 229, 219, 0.6);
+  text-decoration: none;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.legal-toc-link:hover {
+  color: rgba(234, 229, 219, 0.85);
+}
+.legal-toc-link.is-active {
+  color: #bdff00;
+  border-left-color: #bdff00;
+}
+/* Acordeão do FAQ — animação por grid-template-rows (sem medir altura). */
+.faq-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.faq-panel.open {
+  grid-template-rows: 1fr;
+}
+.faq-panel > div {
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .faq-panel {
+    transition: none;
+  }
+}

@@ -292,7 +292,7 @@ export default function Home() {
       <section style={{ position: 'relative', zIndex: 1, padding: '0 24px 40px' }}>
         <div className="rv" style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, padding: '16px 22px', background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.08)', borderRadius: 14, fontSize: '.92rem', color: 'rgba(234,229,219,.55)' }}>
           <span>Prefere começar pelo básico? Temos um ebook de entrada por R$ 27.</span>
-          <a href="#" style={{ color: '#EAE5DB', textDecoration: 'underline', fontWeight: 500 }}>Ver o ebook</a>
+          <Link href="/ebook" style={{ color: '#EAE5DB', textDecoration: 'underline', fontWeight: 500 }}>Ver o ebook</Link>
         </div>
       </section>
 
@@ -317,6 +317,7 @@ export default function Home() {
             </div>
             {[
               { t: 'Produto', l: [['#como', 'Como funciona'], ['#app', 'O app'], ['#preco', 'Preço'], ['#faq', 'FAQ']] },
+              { t: 'Recursos', l: [['/ebook', 'Ebook']] },
               { t: 'Legal', l: [['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Contato']] },
             ].map((col) => (
               <div key={col.t}>

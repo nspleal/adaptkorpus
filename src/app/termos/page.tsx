@@ -1,45 +1,64 @@
-import LegalLayout, { Secao } from '@/components/legal/LegalLayout';
+import LegalLayout from '@/components/legal/LegalLayout';
+import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, AValidar } from '@/components/legal/ui';
 
 export const metadata = { title: 'Termos de Uso · Evokorpus' };
 
+const TOC = [
+  { id: 's-objeto', label: 'Objeto do serviço' },
+  { id: 's-elegibilidade', label: 'Elegibilidade' },
+  { id: 's-conta', label: 'Conta e acesso' },
+  { id: 's-assinatura', label: 'Assinatura e cobrança' },
+  { id: 's-conteudo', label: 'Conteúdo e propriedade' },
+  { id: 's-responsabilidade', label: 'Isenções e responsabilidade' },
+  { id: 's-alteracoes', label: 'Alterações e foro' },
+];
+
 export default function Termos() {
   return (
-    <LegalLayout titulo="Termos de Uso">
-      <p>Estes Termos regem o uso do aplicativo Evokorpus. Ao criar uma conta ou usar o serviço, você concorda com eles. Leia também a <strong style={{ color: '#EAE5DB' }}>Política de Privacidade</strong> e o <strong style={{ color: '#EAE5DB' }}>Aviso</strong>.</p>
+    <LegalLayout page="termos" titulo="Termos de Uso" subtitulo="Como você pode usar o Evokorpus, o que oferecemos e os limites do serviço — em linguagem direta." toc={TOC}>
+      <SecaoLegal id="s-objeto" titulo="Objeto do serviço">
+        <Paragrafo mb>O Evokorpus é uma <Forte>ferramenta de uso geral e caráter educacional, dirigida por você</Forte>. Ele organiza treino e alimentação a partir das informações que você fornece e de regras adaptativas sobre dados reconhecidos.</Paragrafo>
+        <Paragrafo>Ele <Forte>não constitui prescrição, consulta ou acompanhamento</Forte> nutricional ou de educação física, nem substitui profissionais habilitados. Você está sempre no comando: o app sugere, você decide e ajusta.</Paragrafo>
+      </SecaoLegal>
 
-      <Secao titulo="1. O que o Evokorpus é (e o que não é)">
-        <p>O Evokorpus é uma <strong style={{ color: '#EAE5DB' }}>ferramenta de uso geral e caráter educacional</strong>, dirigida pelo usuário, que sugere um plano de treino e dieta a partir de fórmulas e de uma base de dados curada. <strong style={{ color: '#EAE5DB' }}>Não é</strong> prescrição médica, nutricional ou de educação física, e não substitui o acompanhamento de profissionais habilitados.</p>
-        <p>As estimativas (como calorias) são pontos de partida, não metas garantidas. O serviço não promete resultados.</p>
-      </Secao>
+      <SecaoLegal id="s-elegibilidade" titulo="Elegibilidade">
+        <Paragrafo>O Evokorpus é destinado a <Forte>maiores de 18 anos</Forte>. Ao criar uma conta, você declara ter ao menos 18 anos e capacidade para aceitar estes Termos.</Paragrafo>
+      </SecaoLegal>
 
-      <Secao titulo="2. Idade mínima (18+)">
-        <p>O Evokorpus é destinado a pessoas com <strong style={{ color: '#EAE5DB' }}>18 anos ou mais</strong>. Ao usar o serviço, você declara ter idade igual ou superior a 18 anos.</p>
-      </Secao>
+      <SecaoLegal id="s-conta" titulo="Conta e acesso">
+        <Paragrafo mb>Sua conta é pessoal e intransferível. Você é responsável por manter a confidencialidade das suas credenciais e pelas atividades feitas na sua conta.</Paragrafo>
+        <Lista>
+          <ItemLista>Use dados verdadeiros ao se cadastrar.</ItemLista>
+          <ItemLista>Não compartilhe seu acesso com terceiros.</ItemLista>
+          <ItemLista ultimo>Avise-nos se suspeitar de uso não autorizado.</ItemLista>
+        </Lista>
+      </SecaoLegal>
 
-      <Secao titulo="3. Sua conta">
-        <p>Você é responsável por manter a confidencialidade das suas credenciais e por toda a atividade na sua conta. Os dados que você informa devem ser verdadeiros e atualizados — eles alimentam as estimativas do seu plano.</p>
-      </Secao>
+      <SecaoLegal id="s-assinatura" titulo="Assinatura e cobrança">
+        <Paragrafo mb>A assinatura dá acesso aos recursos do Evokorpus enquanto estiver ativa. Sem cobrança-surpresa, sem letra miúda.</Paragrafo>
+        <Lista mb>
+          <ItemLista><Forte>7 dias grátis</Forte> para testar.</ItemLista>
+          <ItemLista>Enviamos um <Forte>aviso por e-mail antes da primeira cobrança</Forte>.</ItemLista>
+          <ItemLista>Valor de R$ 29/mês <AValidar>valores e ciclo</AValidar></ItemLista>
+          <ItemLista ultimo><Forte>Cancelamento a qualquer momento.</Forte></ItemLista>
+        </Lista>
+        <Paragrafo>O cancelamento encerra as renovações seguintes; o acesso permanece até o fim do período já pago. <AValidar>política de reembolso</AValidar></Paragrafo>
+      </SecaoLegal>
 
-      <Secao titulo="4. Assinatura, teste grátis e cobrança">
-        <p>O acesso é por assinatura. Quando houver período de teste grátis, avisamos por e-mail <strong style={{ color: '#EAE5DB' }}>antes</strong> da primeira cobrança — sem cobrança-surpresa. Você pode cancelar a qualquer momento; o acesso permanece até o fim do período já pago e não há nova cobrança.</p>
-        <p><em>[A validar: valores, ciclo, regras de reembolso e o provedor de pagamento.]</em></p>
-      </Secao>
+      <SecaoLegal id="s-conteudo" titulo="Conteúdo e propriedade intelectual">
+        <Paragrafo mb>A marca, o software, os textos e o design do Evokorpus são protegidos e pertencem a seus titulares. O uso do serviço não transfere esses direitos a você.</Paragrafo>
+        <Paragrafo>Os valores nutricionais de alimentos exibidos têm como base a <Forte>TACO (NEPA/UNICAMP)</Forte> e o <Forte>USDA</Forte>. Mantemos o crédito a essas fontes onde os dados aparecem.</Paragrafo>
+      </SecaoLegal>
 
-      <Secao titulo="5. Uso responsável e saúde">
-        <p>Consulte um médico antes de iniciar qualquer programa de exercício ou mudança alimentar. Se você relatar uma condição de saúde na triagem, o app pode <strong style={{ color: '#EAE5DB' }}>não gerar um plano automático</strong> e orientar a procurar um profissional.</p>
-      </Secao>
+      <SecaoLegal id="s-responsabilidade" titulo="Isenções e limitação de responsabilidade">
+        <Paragrafo mb>O Evokorpus <Forte>não promete resultado, número ou prazo</Forte>. A evolução depende de fatores individuais e da sua constância.</Paragrafo>
+        <Paragrafo>Na máxima medida permitida pela lei, não nos responsabilizamos por decisões tomadas com base no uso da ferramenta. Em caso de dor, sintoma ou condição de saúde, procure um profissional habilitado. <AValidar>limitação de responsabilidade</AValidar></Paragrafo>
+      </SecaoLegal>
 
-      <Secao titulo="6. Propriedade intelectual">
-        <p>A marca, o conteúdo e o software do Evokorpus são protegidos. Você recebe uma licença pessoal e intransferível de uso, enquanto sua assinatura estiver ativa.</p>
-      </Secao>
-
-      <Secao titulo="7. Limitação de responsabilidade">
-        <p>Na máxima extensão permitida pela lei aplicável, o Evokorpus não se responsabiliza por decisões tomadas com base nas sugestões do app. <em>[A validar juridicamente.]</em></p>
-      </Secao>
-
-      <Secao titulo="8. Alterações e contato">
-        <p>Podemos atualizar estes Termos; avisaremos quando houver mudanças relevantes. Dúvidas: veja a página de <strong style={{ color: '#EAE5DB' }}>Suporte</strong>.</p>
-      </Secao>
+      <SecaoLegal id="s-alteracoes" titulo="Alterações dos termos e foro" ultima>
+        <Paragrafo mb>Podemos atualizar estes Termos para refletir melhorias do serviço ou exigências legais. Avisaremos sobre mudanças relevantes, e a data de atualização fica sempre visível no topo.</Paragrafo>
+        <Paragrafo>Estes Termos são regidos pelas leis brasileiras. Fica eleito o foro de <AValidar>foro</AValidar> para dirimir controvérsias. Razão social: <AValidar>razão social / CNPJ</AValidar></Paragrafo>
+      </SecaoLegal>
     </LegalLayout>
   );
 }

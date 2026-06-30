@@ -1,31 +1,40 @@
-import LegalLayout, { Secao } from '@/components/legal/LegalLayout';
+import LegalLayout from '@/components/legal/LegalLayout';
+import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, DISCLAIMER } from '@/components/legal/ui';
 
-export const metadata = { title: 'Aviso (disclaimer) · Evokorpus' };
+export const metadata = { title: 'Aviso · Evokorpus' };
+
+const TOC = [
+  { id: 's-aviso', label: 'O aviso' },
+  { id: 's-seguranca', label: 'Segurança e saúde' },
+  { id: 's-limites', label: 'Limites da ferramenta' },
+];
 
 export default function Aviso() {
   return (
-    <LegalLayout titulo="Aviso (disclaimer)">
-      <p>Leia este aviso com atenção antes de usar o Evokorpus.</p>
+    <LegalLayout page="aviso" titulo="Aviso" subtitulo="Leia antes de começar." toc={TOC}>
+      <section id="s-aviso" data-toc-target style={{ margin: '0 0 40px', scrollMarginTop: 128 }}>
+        <div style={{ position: 'relative', background: 'linear-gradient(165deg, rgba(229,72,77,.07), rgba(15,15,14,.5))', border: '1px solid rgba(229,72,77,.32)', borderRadius: 22, padding: 'clamp(26px,4vw,40px)', animation: `evkPop .4s cubic-bezier(.22,.61,.36,1)` }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, color: '#E5484D', fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 18 }}>
+            <svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M12 3l9 16H3l9-16z" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" /><path d="M12 10v4M12 17.5v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>
+            Leia antes de começar
+          </div>
+          <p style={{ margin: 0, fontSize: 'clamp(1.16rem,2vw,1.42rem)', lineHeight: 1.6, fontWeight: 600, color: '#EAE5DB', letterSpacing: '-.01em' }}>{DISCLAIMER}</p>
+        </div>
+      </section>
 
-      <Secao titulo="Natureza educacional">
-        <p>O Evokorpus é uma ferramenta de uso geral e <strong style={{ color: '#EAE5DB' }}>caráter educacional</strong>, dirigida pelo usuário. As sugestões de treino e dieta são geradas por fórmulas a partir dos dados que você informa e de uma base de alimentos e exercícios reconhecida.</p>
-      </Secao>
+      <SecaoLegal id="s-seguranca" titulo="Segurança e saúde">
+        <Paragrafo mb>Sua segurança vem antes de qualquer plano.</Paragrafo>
+        <Lista>
+          <ItemLista>Sentiu <Forte>dor</Forte> (diferente do cansaço normal)? Pare o exercício e procure um profissional.</ItemLista>
+          <ItemLista>Tem alguma condição de saúde, está gestante ou em recuperação? Converse com seu médico antes.</ItemLista>
+          <ItemLista ultimo>O app não incentiva treinar com dor nem “compensar” exageros.</ItemLista>
+        </Lista>
+      </SecaoLegal>
 
-      <Secao titulo="Não é aconselhamento profissional">
-        <p>O conteúdo <strong style={{ color: '#EAE5DB' }}>não constitui</strong> prescrição, consulta ou acompanhamento médico, nutricional ou de educação física, nem substitui a orientação de profissionais habilitados.</p>
-      </Secao>
-
-      <Secao titulo="Consulte um profissional">
-        <p>Consulte um médico antes de iniciar qualquer programa de exercício ou mudança alimentar — especialmente se tiver condição de saúde, estiver gestante/amamentando, ou sentir dor. Se a triagem indicar, o app orienta procurar acompanhamento em vez de gerar um plano.</p>
-      </Secao>
-
-      <Secao titulo="Sem promessa de resultado">
-        <p>Estimativas (como calorias e cargas) são <strong style={{ color: '#EAE5DB' }}>pontos de partida</strong>, não garantias. Resultados variam conforme constância, individualidade e fatores fora do controle do app. O Evokorpus não promete prazos nem desfechos.</p>
-      </Secao>
-
-      <Secao titulo="18+">
-        <p>Conteúdo destinado a maiores de 18 anos.</p>
-      </Secao>
+      <SecaoLegal id="s-limites" titulo="Limites da ferramenta" ultima>
+        <Paragrafo mb>O Evokorpus <Forte>não promete resultado, número ou prazo</Forte>. As estimativas de calorias e cargas são <Forte>pontos de partida</Forte>, não metas exatas — você ajusta conforme a sua realidade.</Paragrafo>
+        <Paragrafo>Para dúvidas clínicas, nutricionais ou de treino específicas do seu caso, procure profissionais habilitados.</Paragrafo>
+      </SecaoLegal>
     </LegalLayout>
   );
 }

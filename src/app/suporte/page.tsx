@@ -1,32 +1,55 @@
 import Link from 'next/link';
-import LegalLayout, { Secao } from '@/components/legal/LegalLayout';
+import LegalLayout from '@/components/legal/LegalLayout';
+import { SecaoLegal, Paragrafo, AValidar } from '@/components/legal/ui';
+import FaqAccordion from '@/components/legal/FaqAccordion';
+import ContactForm from '@/components/legal/ContactForm';
 
-export const metadata = { title: 'Suporte · Evokorpus' };
+export const metadata = { title: 'Suporte e Contato · Evokorpus' };
+
+const TOC = [
+  { id: 's-faq', label: 'Perguntas frequentes' },
+  { id: 's-contato', label: 'Fale com a gente' },
+  { id: 's-legais', label: 'Páginas legais' },
+];
+
+const FAQ = [
+  { q: 'O Evokorpus substitui um nutricionista ou personal?', a: 'Não. É uma ferramenta geral e educacional, dirigida por você. Para condições de saúde ou orientação individual, procure um profissional habilitado.' },
+  { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
+  { q: 'Como funciona a cobrança e o teste grátis?', a: <>São 7 dias grátis. Avisamos por e-mail antes da primeira cobrança de R$ 29/mês. Você cancela quando quiser. <AValidar>valores e ciclo</AValidar></> },
+  { q: 'Como eu cancelo?', a: 'Em Conta → Assinatura, em poucos toques. Sem letra miúda e sem pegadinha. O acesso continua até o fim do período já pago.' },
+  { q: 'Quero exercer meus direitos de dados. Como faço?', a: <>Em Conta → Privacidade você pode baixar ou excluir seus dados. Também pode falar com nosso Encarregado (DPO): <AValidar>e-mail do DPO</AValidar></> },
+];
+
+const CARDS = [
+  { titulo: 'Termos de Uso', desc: 'Regras, assinatura e limites do serviço.', href: '/termos' },
+  { titulo: 'Política de Privacidade', desc: 'Dados, LGPD e seus direitos.', href: '/privacidade' },
+  { titulo: 'Aviso', desc: 'Caráter educacional e segurança.', href: '/aviso' },
+];
 
 export default function Suporte() {
   return (
-    <LegalLayout titulo="Suporte">
-      <p>Precisa de ajuda? Reunimos os caminhos mais rápidos abaixo.</p>
+    <LegalLayout page="suporte" titulo="Suporte e Contato" subtitulo="Tire dúvidas, fale com a gente e acesse as páginas legais." toc={TOC}>
+      <section id="s-faq" data-toc-target style={{ margin: '0 0 46px', scrollMarginTop: 128 }}>
+        <h2 style={{ margin: '0 0 18px', fontSize: 'clamp(1.32rem,2.6vw,1.7rem)', fontWeight: 700, letterSpacing: '-.02em' }}>Perguntas frequentes</h2>
+        <FaqAccordion itens={FAQ} />
+      </section>
 
-      <Secao titulo="Perguntas frequentes">
-        <p>Muitas dúvidas (como funciona, preço, cancelamento, idade) estão respondidas na <Link href="/#faq" style={{ color: '#BDFF00', textDecoration: 'underline' }}>seção de FAQ</Link> da página inicial.</p>
-      </Secao>
+      <SecaoLegal id="s-contato" titulo="Fale com a gente">
+        <Paragrafo mb>Não achou a resposta? Escreva pra gente. E-mail de suporte: <AValidar>suporte@evokorpus… real</AValidar></Paragrafo>
+        <ContactForm />
+      </SecaoLegal>
 
-      <Secao titulo="Assinatura e pagamento">
-        <p>Para gerenciar seu plano, atualizar o cartão ou cancelar, vá em <Link href="/conta" style={{ color: '#BDFF00', textDecoration: 'underline' }}>Conta e assinatura</Link>. Cancelar é simples e sem letra miúda; avisamos por e-mail antes de qualquer cobrança.</p>
-      </Secao>
-
-      <Secao titulo="Privacidade e seus dados">
-        <p>Você pode baixar ou excluir seus dados em <Link href="/conta" style={{ color: '#BDFF00', textDecoration: 'underline' }}>Conta e assinatura</Link>. Saiba mais na <Link href="/privacidade" style={{ color: '#BDFF00', textDecoration: 'underline' }}>Política de Privacidade</Link>.</p>
-      </Secao>
-
-      <Secao titulo="Falar com a gente">
-        <p>Envie sua mensagem para o nosso e-mail de suporte: <a href="mailto:suporte@evokorpus.app" style={{ color: '#BDFF00', textDecoration: 'underline' }}>suporte@evokorpus.app</a>. <em>[A confirmar: canal oficial de atendimento.]</em></p>
-      </Secao>
-
-      <Secao titulo="Saúde em primeiro lugar">
-        <p>O Evokorpus é educacional e não substitui profissionais. Em caso de dor, condição de saúde ou dúvida clínica, procure um médico. Veja o <Link href="/aviso" style={{ color: '#BDFF00', textDecoration: 'underline' }}>Aviso</Link>.</p>
-      </Secao>
+      <section id="s-legais" data-toc-target style={{ margin: '0 0 8px', scrollMarginTop: 128 }}>
+        <h2 style={{ margin: '0 0 16px', fontSize: 'clamp(1.32rem,2.6vw,1.7rem)', fontWeight: 700, letterSpacing: '-.02em' }}>Páginas legais</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
+          {CARDS.map((c) => (
+            <Link key={c.href} href={c.href} className="hov-lift" style={{ textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 18, color: '#EAE5DB', textDecoration: 'none' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: 700, marginBottom: 4 }}>{c.titulo}</div>
+              <div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)' }}>{c.desc}</div>
+            </Link>
+          ))}
+        </div>
+      </section>
     </LegalLayout>
   );
 }
