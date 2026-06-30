@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
 import { substituirExercicio, substituirPrato } from '@/lib/engine';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
+import ListaCompras from './ListaCompras';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
@@ -39,7 +41,8 @@ function escalar(m: RecipeMacros, s: number): RecipeMacros {
   return { kcal: m.kcal * s, proteinaG: m.proteinaG * s, carboidratoG: m.carboidratoG * s, gorduraG: m.gorduraG * s };
 }
 
-type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'perfil';
+type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
+interface SessaoLog extends ResumoSessao { n: number }
 type Feedback = 'facil' | 'na_medida' | 'dificil';
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
 type Modal =
@@ -51,8 +54,10 @@ type Modal =
 export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void; desfechoC?: boolean;
 }) {
+  const router = useRouter();
   const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
   const [aba, setAba] = useState<Aba>('hoje');
+  const [vista, setVista] = useState<null | 'compras'>(null);
   const [cardItens, setCardItens] = useState<CardapioItem[]>(dieta.cardapio?.itens ?? []);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(dieta.cardapio?.totais ?? null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
@@ -64,10 +69,10 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
-  const [sessoesConcluidas, setSessoesConcluidas] = useState(0);
+  const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
 
   function concluirSessao(r: ResumoSessao) {
-    setSessoesConcluidas((n) => n + 1);
+    setSessoes((prev) => [{ ...r, n: prev.length + 1 }, ...prev]);
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
     setAba('progresso');
@@ -118,7 +123,8 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
   const registrarPeso = (v: number) => { if (Number.isFinite(v) && v >= 30 && v <= 300) setPesos((p) => [...p, v]); };
 
   const prescricao = treino.prescricao;
-  const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'perfil', label: 'Perfil' }];
+  const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
+  const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
   if (sessaoDia !== null && prescricao && rotinaDias[sessaoDia]) {
@@ -139,7 +145,7 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
           <nav style={{ flex: 1, display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 4px' }}>
             {tabs.map((t) => (
-              <div key={t.id} onClick={() => setAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', border: '1px solid transparent', ...(aba === t.id ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)' }) }}>{t.label}</div>
+              <div key={t.id} onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', border: '1px solid transparent', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)' }) }}>{t.label}</div>
             ))}
           </nav>
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -149,7 +155,9 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
             </button>
             {menu && (
               <div style={{ position: 'absolute', top: 48, right: 0, width: 180, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
-                <button onClick={() => { setAba('perfil'); setMenu(false); }} style={menuBtn(false)}>Meu perfil</button>
+                <button onClick={() => { irAba('perfil'); setMenu(false); }} style={menuBtn(false)}>Meu perfil</button>
+                <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e assinatura</button>
+                <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>
                 <button onClick={onSair} style={menuBtn(true)}>Sair</button>
               </div>
             )}
@@ -163,11 +171,13 @@ export default function Painel({ perfil, dieta, treino, onSair, desfechoC }: {
           <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem', textTransform: 'capitalize' }}>{dataHoje || 'Seu dia'}</p>
         </div>
 
-        {aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />}
-        {aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} />}
-        {aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} />}
-        {aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesConcluidas > 0 ? sessoesConcluidas : Object.keys(feedback).length} onRegistrar={registrarPeso} />}
-        {aba === 'perfil' && <Perfil perfil={perfil} />}
+        {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
+        {!vista && aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} />}
+        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} />}
+        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} />}
+        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
@@ -291,13 +301,18 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
 
 /* ════════════════════ Dieta ════════════════════ */
 
-function DietaTab({ dieta, itens, totais, trocados, onTrocar, onPorcao }: {
+function DietaTab({ dieta, itens, totais, trocados, onTrocar, onPorcao, onCompras }: {
   dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
-  onTrocar: (idx: number) => void; onPorcao: (idx: number) => void;
+  onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void;
 }) {
   const plano = dieta.plano!;
   return (
     <div style={sec}>
+      {itens.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button onClick={onCompras} className="modal-more" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 600, fontSize: '.88rem', padding: '9px 16px', borderRadius: 11, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M5 7h14l-1 12H6L5 7z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" /><path d="M8.5 7V5.5a3.5 3.5 0 017 0V7" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" /></svg>Lista de compras</button>
+        </div>
+      )}
       <div style={{ ...gradCard, padding: '22px 24px', borderRadius: 18, marginBottom: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>Seu ponto de partida</div><div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}><span style={{ fontSize: '2rem', fontWeight: 800, color: '#BDFF00', letterSpacing: '-.02em' }}>{r0(totais?.kcal ?? plano.kcalAlvo)}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>kcal · estimativa de referência</span></div></div>
@@ -356,9 +371,51 @@ function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: 
   );
 }
 
+/* ════════════════════ Histórico ════════════════════ */
+
+function Historico({ sessoes, pesos }: { sessoes: SessaoLog[]; pesos: number[] }) {
+  const [sub, setSub] = useState<'treinos' | 'peso'>('treinos');
+  const subTab = (id: 'treinos' | 'peso', label: string) => {
+    const on = sub === id;
+    return <div key={id} onClick={() => setSub(id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '9px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.03)', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{label}</div>;
+  };
+  return (
+    <div style={sec}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 22, overflowX: 'auto', paddingBottom: 2 }}>{subTab('treinos', 'Treinos')}{subTab('peso', 'Peso')}</div>
+
+      {sub === 'treinos' && (
+        sessoes.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {sessoes.map((w) => {
+              const fbVals = Object.values(w.feedback);
+              const resumoFb = fbVals.length ? `${fbVals.filter((f) => f === 'na_medida').length} na medida` : 'sem feedback';
+              return (
+                <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+                    <div><div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{w.dia}</span><span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>Sessão {w.n}</span></div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 3 }}>{w.series} séries · {w.volumeKg.toLocaleString('pt-BR')} kg · {resumoFb}</div></div>
+                  </div>
+                </div>
+              );
+            })}
+            <p style={{ margin: '6px 2px 0', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Cada sessão concluída entra aqui com as séries, volume e seu feedback.</p>
+          </div>
+        ) : <p style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.6)' }}>Nenhum treino concluído ainda. Inicie um treino na aba <strong style={{ color: '#BDFF00', fontWeight: 600 }}>Treino</strong>.</p>
+      )}
+
+      {sub === 'peso' && (
+        <div style={{ ...cardSoft, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
+          <Grafico pesos={pesos} />
+          {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre seu peso na aba Progresso para ver a curva.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════════════════ Perfil ════════════════════ */
 
-function Perfil({ perfil }: { perfil: PerfilResumo }) {
+function Perfil({ perfil, onConta }: { perfil: PerfilResumo; onConta: () => void }) {
   const linha = (k: string, v: string, last = false) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 0', ...(last ? {} : { borderBottom: '1px solid rgba(234,229,219,.07)' }) }}><span style={{ color: 'rgba(234,229,219,.55)', fontSize: '.94rem' }}>{k}</span><span style={{ fontWeight: 600, fontSize: '.94rem', textAlign: 'right' }}>{v}</span></div>;
   return (
     <div style={{ ...sec, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18 }}>
@@ -385,8 +442,8 @@ function Perfil({ perfil }: { perfil: PerfilResumo }) {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 6 }}><span style={{ fontSize: '1.7rem', fontWeight: 800, color: '#BDFF00' }}>R$ 29</span><span style={{ color: 'rgba(234,229,219,.55)' }}>/mês</span></div>
           <p style={{ margin: '0 0 20px', fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>Demo — sem cobrança ativa. Avisamos antes de qualquer renovação, sem cobrança-surpresa.</p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button style={{ flex: 1, minWidth: 140, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Gerenciar assinatura</button>
-            <button style={{ flex: 1, minWidth: 140, background: 'none', border: '1px solid rgba(229,72,77,.4)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={onConta} style={{ flex: 1, minWidth: 140, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Gerenciar assinatura</button>
+            <button onClick={onConta} style={{ flex: 1, minWidth: 140, background: 'none', border: '1px solid rgba(229,72,77,.4)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Cancelar</button>
           </div>
           <p style={{ margin: '14px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Cancelar é fácil, em poucos toques — sem letra miúda.</p>
         </div>
