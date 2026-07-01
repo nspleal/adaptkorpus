@@ -12,7 +12,8 @@
  *
  * Limitações conscientes do v0 (Bloco B em progresso, documentadas honestamente):
  *   - Seleciona 1 prato por refeição (café/almoço/jantar obrigatórios; lanche opcional),
- *     pratos distintos entre os slots, sem escalar porções nem relaxar proteína até o piso.
+ *     pratos distintos entre os slots. Aplica UMA escala de porção por dia (mira a kcal-alvo,
+ *     dentro de `ESCALA_PORCAO`), mas não relaxa proteína até o piso na montagem.
  *     Busca exaustiva determinística (banco finito; ~160k combinações no pior caso).
  */
 import { macrosDePrato } from '../data/nutrition';

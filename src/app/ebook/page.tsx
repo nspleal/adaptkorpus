@@ -47,7 +47,9 @@ export default function Ebook() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}><span style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.02em' }}>R$ 27</span><span style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.55)' }}>compra única</span></div>
-              <button data-checkout="ebook" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Comprar o ebook</button>
+              {/* Checkout (Kiwify) ainda não integrado — sem backend de pagamento. Afordância
+                  honesta "em breve" em vez de um botão morto (convenção de placeholder do app). */}
+              <button data-checkout="ebook" disabled aria-disabled="true" title="Checkout em breve" style={{ background: 'rgba(234,229,219,.1)', color: 'rgba(234,229,219,.6)', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: '1px solid rgba(234,229,219,.16)', borderRadius: 13, cursor: 'not-allowed' }}>Comprar o ebook · em breve</button>
             </div>
             <p style={{ margin: '0 0 20px', fontSize: '.84rem', color: 'rgba(234,229,219,.45)' }}>Pagamento seguro • É um material introdutório: não promete resultado nem substitui profissionais.</p>
             <div style={{ borderTop: '1px solid rgba(234,229,219,.1)', paddingTop: 18, fontSize: '.94rem', color: 'rgba(234,229,219,.6)' }}>
