@@ -1,7 +1,7 @@
 # Handoff — Dias de treino + Preferências estruturadas + "Sua semana" (V5)
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `3e49474`.
+> Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `3e49474` (feature) + `60d2f99` (correções de revisão).
 > Origem estética: `V5_frond_end_evoK.zip` → `design_handoff_dias_e_preferencias/Evokorpus Dias e Preferências.dc.html`
 > (Componente A — dias · Componente B — não curto · faixa "Sua semana" · modal recalcular). A "casca
 > de revisão" do protótipo (segmented Onboarding/Perfil/Painel + Reiniciar) foi descartada, como manda o handoff.
@@ -16,6 +16,12 @@
   (`rotina.dias[].nome`, ex.: "Full-body A/B/C") sobre os dias escolhidos, e resolve **"hoje"**.
   Clicar num dia abre o detalhe: treino (→ "Ir para a sessão") · **descanso de hoje = estado B2**
   ("Hoje é dia de descanso", nunca falha) · descanso de outro dia (estado calmo).
+- **Dias excedentes = Recuperação.** Se a pessoa escolhe **mais dias do que o teto de sessões de
+  força do nível** (iniciante 3 · intermediário 4 · avançado 6), o motor já prescreve os dias a mais
+  como **cardio/recuperação** (`diasCardioRecuperacao`). As N sessões de força vão nos primeiros N
+  dias; os excedentes viram **"Recuperação"** (marcador Folha + detalhe "Recuperação ativa") — fiel
+  ao motor, **sem repetir sessão de força**. (O protótipo assumia 1 sessão por dia; nosso motor capa,
+  então este é o comportamento correto — a **copy/conteúdo do dia de cardio** volta como decisão do cofre.)
 - **"hoje" vem do relógio na UI, não no motor** (o motor segue determinístico e sem relógio) —
   `src/lib/semana.ts` (`montarSemana`, `weekdayHojeIdx`, `proximoTreinoIdx`) é puro.
 
@@ -33,8 +39,8 @@
   alimentos indesejados; se isso **esvaziar** os candidatos daquela refeição, **relaxa** (usa a lista
   cheia). É **gosto** — nunca segurança; **alérgeno continua absoluto** e o cardápio **precisa fechar**.
 - A **substituição** de prato também passa `excluirAlimentoIds` (as trocas respeitam o "não curto").
-- **+4 testes** (`naocurto.test.ts`): evita quando há alternativa · não quebra o plano · determinístico ·
-  sem exclusão → idêntico ao base.
+- **+5 testes** (`naocurto.test.ts`): evita quando há alternativa · exclusão realista ainda fecha ·
+  colisão entre slots relaxa por completo (2º passo) · determinístico · sem exclusão → idêntico ao base.
 
 ## Fluxo de edição (Editar perfil) — honesto
 - **Mudou os dias de treino** → modal **"Recalcular seu plano?"** ("reorganiza sua semana — as sessões
@@ -54,7 +60,7 @@ sem "IA" ("regras adaptativas") · sem promessa · 18+ · neon só no escuro · 
 **saída sempre estruturada** (weekdays / IDs), nunca texto livre.
 
 ## Qualidade
-`typecheck` · `lint` · **139 testes** (+4) · `build` — verdes. E2E (Playwright), **zero erros de console**:
+`typecheck` · `lint` · **140 testes** (+5) · `build` — verdes. E2E (Playwright), **zero erros de console**:
 seletor de dias (Seg–Dom + contagem), autocomplete de alimentos (busca sem acento, chips), "Sua semana"
 com as sessões reais do motor + "hoje", detalhe de treino/descanso, Editar perfil com tudo persistido,
 persistência de sessão (14 checagens) e o fail-safe clínico (edição em zona ROTEAR → encaminhamento).
