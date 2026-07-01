@@ -124,7 +124,9 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
         </div>
         <p style={{ margin: '0 0 14px', fontSize: '.9rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.5 }}>{contexto === 'onboarding' ? <>A gente evita quando dá — é <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>preferência</strong>, não alergia. Tudo opcional.</> : 'A gente evita quando dá. Busque e adicione — remova quando quiser.'}</p>
         <BuscaNaoCurto naoCurto={naoCurto} onAdd={onAddFood} onRemove={onRemoveFood} />
-        {contexto === 'editar' && <p style={{ margin: '13px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Pratos que você marca como <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>&quot;Cansei deste prato&quot;</strong> também entram aqui automaticamente.</p>}
+        {/* Cofre §Variedade (DF 2026-07-01): prato ≠ ingrediente. "Cansei deste prato" é do
+            nível do PRATO e NÃO alimenta o "não curto" (nível do alimento) — sinais separados. */}
+        {contexto === 'editar' && <p style={{ margin: '13px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Isto é sobre <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>ingredientes</strong>. Cansou de uma receita específica? Use <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>&quot;Cansei deste prato&quot;</strong> no card do prato (aba Dieta) — ele descansa da rotação e volta sozinho.</p>}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { type CSSProperties, type ReactNode } from 'react';
 import type { CardapioItem } from '@/lib/engine';
 import type { Alergeno, Exercise, Food } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
+import { DESCANSO_PRATO_DIAS } from '@/lib/rotacao-pratos';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
@@ -62,7 +63,7 @@ export function DetalheExercicio({ ex, onFechar, onTrocar }: { ex: Exercise; onF
   );
 }
 
-export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao }: { item: CardapioItem; foodsById: Map<string, Food>; onFechar: () => void; onTrocar: () => void; onPorcao: () => void }) {
+export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, onCansei }: { item: CardapioItem; foodsById: Map<string, Food>; onFechar: () => void; onTrocar: () => void; onPorcao: () => void; onCansei: () => void }) {
   const m = item.macros;
   const alergenos = item.prato.contemAlergenos ?? [];
   const ingredientes = item.prato.itens.map((it) => {
@@ -100,10 +101,17 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao }: 
         <div><div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 2 }}>Modo de preparo em breve</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Este prato ainda está sendo detalhado na nossa base de alimentos.</div></div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>Trocar prato</button>
         <button onClick={onPorcao} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>Editar porção</button>
       </div>
+      {/* "Cansei deste prato" — descanso na rotação (cofre §Variedade): tira da rotação por 21
+          dias, com retorno automático. NÃO é "não curto" (nível do alimento) — é gosto de receita. */}
+      <button onClick={onCansei} className="evk-troca" style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'none', border: '1px solid rgba(234,229,219,.14)', color: 'rgba(234,229,219,.72)', fontWeight: 600, fontSize: '.9rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 8h11a4 4 0 010 8h-1M4 8v9a1 1 0 001 1h8M7 4v1.5M10 4v1.5M13 4v1.5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        Cansei deste prato
+      </button>
+      <p style={{ margin: '9px 0 0', textAlign: 'center', fontSize: '.76rem', color: 'rgba(234,229,219,.45)' }}>Descansa da rotação por {DESCANSO_PRATO_DIAS} dias e volta sozinho.</p>
       <p style={{ margin: '14px 0 0', textAlign: 'center', fontSize: '.78rem', color: 'rgba(234,229,219,.4)' }}>Valores e alimentos da base TACO (NEPA/UNICAMP).</p>
     </Shell>
   );

@@ -20,6 +20,7 @@ import { gerarDieta, gerarTreino } from '@/lib/engine';
 import type { PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { diasPadrao } from '@/lib/semana';
+import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
 
 const KEY = 'evk_sessao';
@@ -41,11 +42,15 @@ export function lerSessao(): PerfilResumo | null {
   } catch { return null; }
 }
 
-/** Retrocompat: sessões antigas não tinham treinoDias/naoCurto — deriva defaults sensatos. */
+/** Retrocompat: sessões antigas não tinham treinoDias/naoCurto/pratosCansados — deriva
+ *  defaults sensatos. Também poda os pratos cujo descanso de 21 dias já expirou (retorno
+ *  automático): o storage se autolimpa a cada leitura. */
 function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   const treinoDias = Array.isArray(p.treinoDias) && p.treinoDias.length > 0 ? p.treinoDias : diasPadrao(p.diasDisponiveis ?? 3);
   const naoCurto = Array.isArray(p.naoCurto) ? p.naoCurto : [];
-  return { ...p, treinoDias, naoCurto, diasDisponiveis: treinoDias.length };
+  const ativos = new Set(pratosCansadosAtivos(p.pratosCansados));
+  const pratosCansados = Array.isArray(p.pratosCansados) ? p.pratosCansados.filter((c) => c && ativos.has(c.id)) : [];
+  return { ...p, treinoDias, naoCurto, pratosCansados, diasDisponiveis: treinoDias.length };
 }
 
 /** Encerra a sessão local (logout). */
@@ -74,8 +79,14 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
     diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
   };
-  // "Não curto" entra como preferência relaxável na geração do cardápio (IDs da paleta).
-  const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia, excluirAlimentoIds: perfil.naoCurto ?? [] };
+  // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
+  // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é
+  // resolvido aqui, fora do motor). Ambas cedem antes de deixar o cardápio sem fechar.
+  const restricoes = {
+    alergenos: perfil.alergenos, preferencia: perfil.preferencia,
+    excluirAlimentoIds: perfil.naoCurto ?? [],
+    excluirPratoIds: pratosCansadosAtivos(perfil.pratosCansados),
+  };
   return {
     dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),
     treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED }),

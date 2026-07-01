@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
+import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
@@ -36,6 +37,9 @@ export interface PerfilResumo {
   treinoDias: Weekday[];
   /** "Alimentos que não curto" — IDs da paleta curada (preferência relaxável no motor). */
   naoCurto: string[];
+  /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
+   *  (nível do alimento). Retornam sozinhos após 21 dias. */
+  pratosCansados: PratoCansado[];
   /** Flags de saúde do gate — necessárias para recalcular o plano (Editar perfil). */
   flagsSaude: FlagsSaude;
 }
@@ -151,6 +155,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   useEffect(() => { setDataHoje(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })); }, []);
   const marcar = (k: string) => setTrocados((prev) => new Set(prev).add(k));
 
+  // "Cansei deste prato" (cofre, parametros-motor-substituicao-evokorpus §Variedade): pratos em
+  // descanso na rotação. O prazo/retorno de 21 dias é resolvido na sessão (relógio fora do motor).
+  const cansadosAtivos = pratosCansadosAtivos(perfil.pratosCansados);
+  const nomePrato = (id: string) => RECIPES_SEED.find((r) => r.id === id)?.nome ?? id;
+  const pratosDescanso = perfil.pratosCansados
+    .filter((c) => cansadosAtivos.includes(c.id))
+    .map((c) => ({ id: c.id, nome: nomePrato(c.id), ate: c.ate }));
+
+  // Aplica um novo perfil (só mudou a rotação de pratos — saúde/dias intactos) e recomputa o
+  // cardápio. Determinístico: mesmo perfil → mesmo cardápio. Não mexe no treino (não muda).
+  function aplicarRotacao(novo: PerfilResumo) {
+    const { dieta: nd } = recomputarPlano(novo);
+    if (!nd.plano || !nd.cardapio) return; // robustez (saúde não muda aqui → não vira ROTEAR)
+    onPerfilChange?.(novo);
+    setPerfil(novo);
+    setDieta(nd);
+    setCardItens(nd.cardapio.itens);
+    setCardTotais(nd.cardapio.totais);
+    setTrocados(new Set());
+  }
+  function cansarDoPrato(pratoId: string) {
+    aplicarRotacao({ ...perfil, pratosCansados: marcarPratoCansado(perfil.pratosCansados, pratoId) });
+    setDetalhe(null);
+    setModal(null);
+  }
+  function trazerDeVoltaPrato(pratoId: string) {
+    aplicarRotacao({ ...perfil, pratosCansados: perfil.pratosCansados.filter((c) => c.id !== pratoId) });
+  }
+
   function gerarOpcoesPrato(idx: number, excluir: string[]): OpcaoPrato[] {
     if (!dieta.plano || !cardTotais) return [];
     const item = cardItens[idx]!;
@@ -160,7 +193,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return listarSubstituicoesPrato({
       pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED,
       plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala, restricoes,
-      gosto: { excluirPratoIds: [...outros, ...excluir], excluirAlimentoIds: perfil.naoCurto },
+      gosto: { excluirPratoIds: [...outros, ...excluir, ...cansadosAtivos], excluirAlimentoIds: perfil.naoCurto },
     }).map((rr) => ({ prato: rr.prato!, escala: rr.escala!, macros: rr.macrosNovo!, diaNew: rr.totaisDiaNovo! }));
   }
   const abrirTrocaPrato = (idx: number) => { const o = gerarOpcoesPrato(idx, []); setModal({ tipo: 'prato', idx, base: cardItens[idx]!.prato.nome, opcoes: o, excl: o.map((x) => x.prato.id) }); };
@@ -289,7 +322,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
-        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} />}
+        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
@@ -297,7 +330,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
       {detalhe?.tipo === 'prato' && cardItens[detalhe.idx] && (
-        <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} />
+        <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
       )}
       {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
         <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
@@ -420,11 +453,12 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
 
 /* ════════════════════ Dieta ════════════════════ */
 
-function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe }: {
+function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta }: {
   dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
   refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
   onStatus: (id: string, s: StatusRefeicao) => void; onNote: (id: string, txt: string) => void;
   onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void; onDetalhe: (idx: number) => void;
+  descanso: { id: string; nome: string; ate: string }[]; onTrazerDeVolta: (id: string) => void;
 }) {
   const plano = dieta.plano!;
   return (
@@ -480,6 +514,26 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
           </div>
         </>
       ) : <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>{dieta.cardapio?.nota ?? 'Sem cardápio para as restrições atuais.'}</p>}
+      {descanso.length > 0 && (
+        <div style={{ ...cardSoft, marginTop: 22, borderStyle: 'dashed', borderColor: 'rgba(234,229,219,.16)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
+            <svg width={17} height={17} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M4 8h11a4 4 0 010 8h-1M4 8v9a1 1 0 001 1h8M7 4v1.5M10 4v1.5M13 4v1.5" stroke="rgba(234,229,219,.6)" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span style={{ fontWeight: 700, fontSize: '.98rem' }}>Pratos em descanso</span>
+          </div>
+          <p style={{ margin: '0 0 12px', fontSize: '.84rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Você marcou &quot;Cansei deste prato&quot; nestes. Eles saem da rotação e <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>voltam sozinhos</strong> — ou traga de volta agora.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {descanso.map((d) => {
+              const restam = Math.max(0, Math.ceil((Date.parse(d.ate) - Date.now()) / 86_400_000));
+              return (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'rgba(234,229,219,.03)', borderRadius: 11, padding: '10px 13px' }}>
+                  <span style={{ minWidth: 0 }}><span style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.85)' }}>{d.nome}</span><span style={{ display: 'block', fontSize: '.76rem', color: 'rgba(234,229,219,.45)' }}>volta em {restam} {restam === 1 ? 'dia' : 'dias'}</span></span>
+                  <button onClick={() => onTrazerDeVolta(d.id)} className="evk-troca" style={{ flexShrink: 0, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.84rem', padding: '8px 14px', borderRadius: 10, cursor: 'pointer' }}>Trazer de volta</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <p style={{ margin: '18px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>O registro acompanha sua constância, não calorias. Os valores do cardápio são estimativas de uma base reconhecida de alimentos.</p>
       <p style={{ margin: '8px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Trocas respeitam suas alergias e seu padrão alimentar — sempre.</p>
     </div>

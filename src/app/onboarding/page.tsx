@@ -140,7 +140,7 @@ export default function Onboarding() {
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, flagsSaude: p.flagsSaude };
+    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude };
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);

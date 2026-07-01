@@ -37,6 +37,15 @@ export interface RestricoesUsuario {
    * esvaziar os candidatos daquela refeição, relaxamos (o cardápio precisa fechar).
    */
   excluirAlimentoIds?: string[];
+  /**
+   * "Cansei deste prato" — IDs de PRATOS em descanso na rotação (cofre,
+   * parametros-motor-substituicao-evokorpus §Variedade, DF 2026-07-01). Nível do PRATO, não do
+   * alimento: cansaço de receita ≠ desgosto do ingrediente. PREFERÊNCIA RELAXÁVEL, idêntico ao
+   * "não curto": evita o prato quando há alternativa; relaxa se esvaziar (o cardápio precisa
+   * fechar). O prazo de descanso (21 dias) e o retorno automático vivem FORA do motor (usam
+   * relógio) — o motor recebe só a lista já resolvida.
+   */
+  excluirPratoIds?: string[];
 }
 
 export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
@@ -216,23 +225,26 @@ export function montarCardapioDia(
     return { melhorNaJanela, melhorGeral };
   }
 
-  // "Não curto" (relaxável): por refeição, prefere pratos SEM os alimentos indesejados.
-  // É preferência de GOSTO — nunca segurança — e o cardápio PRECISA fechar. Estratégia
-  // determinística em dois passos: (1) tenta com as listas filtradas; (2) se elas não
-  // formam um trio DISTINTO café/almoço/jantar (colisão entre slots), relaxa por completo
-  // e tenta com as listas cheias. Best-effort que nunca impede o cardápio de fechar.
-  const evitar = new Set(restricoes.excluirAlimentoIds ?? []);
-  const semIndesejado = (lista: Recipe[]): Recipe[] =>
-    lista.filter((r) => !r.itens.some((it) => evitar.has(it.alimentoId)));
+  // Preferências relaxáveis de GOSTO — nunca segurança — e o cardápio PRECISA fechar. Duas
+  // fontes, mesmo tratamento: "não curto" (nível do ALIMENTO) e "Cansei deste prato" (nível
+  // do PRATO, cofre §Variedade). Estratégia determinística em dois passos: (1) tenta com as
+  // listas filtradas; (2) se elas não formam um trio DISTINTO café/almoço/jantar (colisão
+  // entre slots), relaxa por completo e tenta com as listas cheias. Best-effort que nunca
+  // impede o cardápio de fechar.
+  const evitarAlim = new Set(restricoes.excluirAlimentoIds ?? []);
+  const evitarPrato = new Set(restricoes.excluirPratoIds ?? []);
+  const temPreferencia = evitarAlim.size > 0 || evitarPrato.size > 0;
+  const indesejado = (r: Recipe): boolean =>
+    evitarPrato.has(r.id) || r.itens.some((it) => evitarAlim.has(it.alimentoId));
   const preferir = (lista: Recipe[]): Recipe[] => {
-    if (evitar.size === 0) return lista;
-    const f = semIndesejado(lista);
+    if (!temPreferencia) return lista;
+    const f = lista.filter((r) => !indesejado(r));
     return f.length > 0 ? f : lista; // relaxa por slot quando esvazia
   };
   const lanchesBase = porRefeicao('lanche');
   let busca = procurar(preferir(porRefeicao('cafe')), preferir(porRefeicao('almoco')), preferir(porRefeicao('jantar')), [null, ...preferir(lanchesBase)]);
-  if (!busca.melhorGeral && evitar.size > 0) {
-    // as listas filtradas não fecharam um trio distinto → relaxa o "não curto" por completo.
+  if (!busca.melhorGeral && temPreferencia) {
+    // as listas filtradas não fecharam um trio distinto → relaxa as preferências por completo.
     busca = procurar(porRefeicao('cafe'), porRefeicao('almoco'), porRefeicao('jantar'), [null, ...lanchesBase]);
   }
   const { melhorNaJanela, melhorGeral } = busca;
