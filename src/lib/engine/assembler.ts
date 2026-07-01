@@ -31,6 +31,12 @@ export interface RestricoesUsuario {
   alergenos: Alergeno[];
   /** Preferência alimentar (opcional). 'vegano' aceita só vegano; 'vegetariano' aceita veg + vegano. */
   preferencia?: 'vegano' | 'vegetariano' | null;
+  /**
+   * "Alimentos que não curto" — IDs de alimentos que o usuário prefere evitar. PREFERÊNCIA
+   * RELAXÁVEL (nunca segurança): evitamos por refeição quando há alternativa; se filtrar
+   * esvaziar os candidatos daquela refeição, relaxamos (o cardápio precisa fechar).
+   */
+  excluirAlimentoIds?: string[];
 }
 
 export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
@@ -164,10 +170,20 @@ export function montarCardapioDia(
   const porRefeicao = (ref: Refeicao): Recipe[] =>
     elegiveis.filter((r) => r.refeicoes.includes(ref));
 
-  const cafes = porRefeicao('cafe');
-  const almocos = porRefeicao('almoco');
-  const jantares = porRefeicao('jantar');
-  const lanches: (Recipe | null)[] = [null, ...porRefeicao('lanche')];
+  // "Não curto" (relaxável): por refeição, prefere pratos SEM os alimentos indesejados;
+  // se isso esvaziar os candidatos daquela refeição, RELAXA (usa a lista cheia). É
+  // preferência de gosto — nunca segurança, e o cardápio precisa fechar. Ordem preservada.
+  const evitar = new Set(restricoes.excluirAlimentoIds ?? []);
+  const preferir = (lista: Recipe[]): Recipe[] => {
+    if (evitar.size === 0) return lista;
+    const semIndesejado = lista.filter((r) => !r.itens.some((it) => evitar.has(it.alimentoId)));
+    return semIndesejado.length > 0 ? semIndesejado : lista;
+  };
+
+  const cafes = preferir(porRefeicao('cafe'));
+  const almocos = preferir(porRefeicao('almoco'));
+  const jantares = preferir(porRefeicao('jantar'));
+  const lanches: (Recipe | null)[] = [null, ...preferir(porRefeicao('lanche'))];
 
   const faltando = REFEICOES_OBRIGATORIAS.filter((ref) => porRefeicao(ref).length === 0);
   if (faltando.length > 0) {

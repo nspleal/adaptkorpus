@@ -228,6 +228,10 @@ body {
 .evk-troca:hover { border-color: #BDFF00 !important; color: #BDFF00 !important; }
 .evk-perfil-link:hover { background: rgba(234,229,219,.05); }
 .evk-voltar:hover { border-color: rgba(234,229,219,.5) !important; background: rgba(234,229,219,.04); }
+/* Dias e Preferências (V5) */
+.evk-dia:hover, .evk-semana-cell:hover { border-color: rgba(189,255,0,.45) !important; }
+.evk-sugestao:hover { background: rgba(189,255,0,.08); }
+.evk-chip-x:hover { background: rgba(229,72,77,.2) !important; color: #E5484D !important; }
 
 /* Animações (do protótipo). */
 @keyframes evkStepIn {

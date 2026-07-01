@@ -10,6 +10,8 @@ import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
+import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
+import { SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 
 /**
  * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
@@ -25,17 +27,11 @@ const cardBase: CSSProperties = { cursor: 'pointer', position: 'relative', backg
 const cardSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.07)', boxShadow: '0 0 0 1px rgba(189,255,0,.35)' };
 const segBase: CSSProperties = { cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'center', padding: '13px 8px', borderRadius: 12, fontWeight: 600, fontSize: '.95rem', transition: 'all .25s ease', border: '1px solid rgba(234,229,219,.12)', background: 'rgba(234,229,219,.04)', color: 'rgba(234,229,219,.7)' };
 const segSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.1)', color: '#BDFF00' };
-const chipBase: CSSProperties = { cursor: 'pointer', padding: '10px 16px', borderRadius: 999, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: '1px solid rgba(234,229,219,.15)', background: 'rgba(234,229,219,.04)', color: 'rgba(234,229,219,.75)' };
-const chipSel: CSSProperties = { borderColor: '#BDFF00', background: 'rgba(189,255,0,.1)', color: '#BDFF00' };
 const labelCap: CSSProperties = { fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 10 };
 const inputBox: CSSProperties = { display: 'flex', alignItems: 'center', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '0 14px' };
 const inputInner: CSSProperties = { width: '100%', background: 'none', border: 'none', color: '#EAE5DB', fontSize: '1.1rem', fontWeight: 600, padding: '13px 0', outline: 'none' };
 const h2: CSSProperties = { margin: '0 0 22px', fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-.02em' };
 
-const ALERGENOS: { id: Alergeno; t: string }[] = [
-  { id: 'lactose', t: 'Lactose' }, { id: 'gluten', t: 'Glúten' }, { id: 'ovo', t: 'Ovo' }, { id: 'soja', t: 'Soja' },
-  { id: 'amendoim', t: 'Amendoim' }, { id: 'castanhas', t: 'Castanhas' }, { id: 'gergelim', t: 'Gergelim' }, { id: 'coco', t: 'Coco' }, { id: 'peixe_frutos_do_mar', t: 'Peixe / frutos do mar' },
-];
 const ATIVIDADES: { id: NivelAtividade; t: string; d: string }[] = [
   { id: 'sedentario', t: 'Sedentário', d: 'Pouco ou nenhum exercício' },
   { id: 'leve', t: 'Leve', d: '1–2 dias por semana' },
@@ -94,11 +90,14 @@ export default function Onboarding() {
   const [atividade, setAtividade] = useState<NivelAtividade>('moderado');
   const [experiencia, setExperiencia] = useState<NivelExperiencia>('iniciante');
   const [local, setLocal] = useState<EquipamentoDisp>('casa');
-  const [dias, setDias] = useState(3);
+  const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasPadrao(3));
   const [tempo, setTempo] = useState(45);
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>('');
   const [alergias, setAlergias] = useState<Alergeno[]>([]);
-  const [naoGosto, setNaoGosto] = useState('');
+  const [naoCurto, setNaoCurto] = useState<string[]>([]);
+  const toggleDia = (w: Weekday) => setTreinoDias((p) => (p.includes(w) ? p.filter((x) => x !== w) : [...p, w].sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))));
+  const addFood = (id: string) => setNaoCurto((p) => (p.includes(id) ? p : [...p, id]));
+  const removeFood = (id: string) => setNaoCurto((p) => p.filter((x) => x !== id));
 
   const [step, setStep] = useState(0);
   const [fase, setFase] = useState<Fase>('wizard');
@@ -117,6 +116,7 @@ export default function Onboarding() {
     if (step === 0) return terms.every(Boolean);
     if (step === 1) { const i = +idade, a = +altura, p = +peso; return i >= 18 && i <= 100 && a >= 100 && a <= 250 && p >= 30 && p <= 300; }
     if (step === 2) return reqHealth.every((q) => healthAns[q.id]);
+    if (step === 6) return treinoDias.length >= 1; // ao menos um dia de treino
     return true;
   }
 
@@ -137,10 +137,10 @@ export default function Onboarding() {
     const parse = perfilSchema.safeParse({ sexo, pesoKg: peso, alturaCm: altura, idade, nivelAtividade: atividade, objetivo, flagsSaude: flags, preferenciaAlimentar: padrao || null, alergenos: alergias });
     if (!consent.success || !parse.success) { setErro('Confira seus dados antes de gerar.'); return; }
     const p = parse.data;
-    const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null };
+    const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: dias, tempoPorSessaoMin: tempo, flagsSaude: p.flagsSaude };
+    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, flagsSaude: p.flagsSaude };
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
@@ -195,8 +195,8 @@ export default function Onboarding() {
                 {step === 3 && <StepCards titulo="Qual é o seu objetivo?" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />}
                 {step === 4 && <StepCards titulo="Seu nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} />}
                 {step === 5 && <StepCards titulo="Sua experiência de treino" sub="É diferente do seu dia a dia — aqui é há quanto tempo você treina de forma consistente." opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} />}
-                {step === 6 && <Step6 {...{ local, setLocal, dias, setDias, tempo, setTempo }} />}
-                {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGosto }} />}
+                {step === 6 && <Step6 {...{ local, setLocal, treinoDias, toggleDia, tempo, setTempo }} />}
+                {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood }} />}
               </div>
             </div>
 
@@ -318,8 +318,8 @@ function StepCards<T extends string>({ titulo, sub, opts, sel, onSel }: { titulo
   );
 }
 
-function Step6({ local, setLocal, dias, setDias, tempo, setTempo }: {
-  local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void; dias: number; setDias: (v: number) => void; tempo: number; setTempo: (v: number) => void;
+function Step6({ local, setLocal, treinoDias, toggleDia, tempo, setTempo }: {
+  local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void; treinoDias: Weekday[]; toggleDia: (w: Weekday) => void; tempo: number; setTempo: (v: number) => void;
 }) {
   return (
     <div>
@@ -335,27 +335,24 @@ function Step6({ local, setLocal, dias, setDias, tempo, setTempo }: {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={labelCap}>Dias por semana</div>
-          <div style={{ display: 'flex', gap: 7 }}>{[1, 2, 3, 4, 5, 6].map((d) => <div key={d} onClick={() => setDias(d)} style={{ ...segBase, ...(dias === d ? segSel : {}) }}>{d}</div>)}</div>
-        </div>
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={labelCap}>Tempo por sessão</div>
-          <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...segBase, ...(tempo === t ? segSel : {}) }}>{t === 75 ? '75+' : t}</div>)}</div>
-        </div>
+      <div style={labelCap}>Quais dias você treina?</div>
+      <p style={{ margin: '0 0 2px', fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Escolha os dias em que você treina. Os outros são descanso — faz parte do plano.</p>
+      <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} stripMarginTop={14} />
+      <div style={{ marginTop: 22 }}>
+        <div style={labelCap}>Tempo por sessão</div>
+        <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...segBase, ...(tempo === t ? segSel : {}) }}>{t === 75 ? '75+' : t}</div>)}</div>
       </div>
     </div>
   );
 }
 
-function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGosto }: {
+function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood }: {
   padrao: '' | 'vegetariano' | 'vegano'; setPadrao: (v: '' | 'vegetariano' | 'vegano') => void;
-  alergias: Alergeno[]; toggleAlergia: (a: Alergeno) => void; naoGosto: string; setNaoGosto: (v: string) => void;
+  alergias: Alergeno[]; toggleAlergia: (a: Alergeno) => void; naoCurto: string[]; addFood: (id: string) => void; removeFood: (id: string) => void;
 }) {
   return (
     <div>
-      <h2 style={h2}>Preferência alimentar</h2>
+      <h2 style={h2}>Suas preferências alimentares</h2>
       <div style={labelCap}>Padrão alimentar</div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
         {PADROES.map((o) => (
@@ -364,15 +361,8 @@ function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoGosto, setNaoGos
           </div>
         ))}
       </div>
-      <p style={{ margin: '0 0 24px', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Respeitamos isso à risca — nunca sugerimos algo fora do seu padrão.</p>
-      <div style={labelCap}>Alergias e intolerâncias</div>
-      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Regra de segurança absoluta — nunca incluímos o que você marcar aqui.</p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 26 }}>
-        {ALERGENOS.map((o) => <div key={o.id} onClick={() => toggleAlergia(o.id)} style={{ ...chipBase, ...(alergias.includes(o.id) ? chipSel : {}) }}>{o.t}</div>)}
-      </div>
-      <div style={{ ...labelCap, marginBottom: 6 }}>Alimentos que você não curte <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: 'rgba(234,229,219,.4)' }}>(opcional)</span></div>
-      <textarea value={naoGosto} onChange={(e) => setNaoGosto(e.target.value)} placeholder="Ex.: jiló, fígado…" rows={2} style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.96rem', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
-      <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>A gente tenta evitar; se faltar opção, avisamos. Diferente de alergia — esta é uma preferência relaxável.</p>
+      <p style={{ margin: '0 0 22px', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Respeitamos isso à risca — nunca sugerimos algo fora do seu padrão.</p>
+      <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="onboarding" />
     </div>
   );
 }

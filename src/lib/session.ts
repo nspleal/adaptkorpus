@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { gerarDieta, gerarTreino } from '@/lib/engine';
 import type { PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
+import { diasPadrao } from '@/lib/semana';
 import type { PerfilResumo } from '@/components/painel/Painel';
 
 const KEY = 'evk_sessao';
@@ -36,8 +37,15 @@ export function lerSessao(): PerfilResumo | null {
     if (!raw) return null;
     const obj = JSON.parse(raw) as { v?: number; perfil?: PerfilResumo };
     if (!obj || obj.v !== VERSAO || !obj.perfil) return null;
-    return obj.perfil;
+    return normalizarPerfil(obj.perfil);
   } catch { return null; }
+}
+
+/** Retrocompat: sessões antigas não tinham treinoDias/naoCurto — deriva defaults sensatos. */
+function normalizarPerfil(p: PerfilResumo): PerfilResumo {
+  const treinoDias = Array.isArray(p.treinoDias) && p.treinoDias.length > 0 ? p.treinoDias : diasPadrao(p.diasDisponiveis ?? 3);
+  const naoCurto = Array.isArray(p.naoCurto) ? p.naoCurto : [];
+  return { ...p, treinoDias, naoCurto, diasDisponiveis: treinoDias.length };
 }
 
 /** Encerra a sessão local (logout). */
@@ -59,12 +67,15 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
     sexo: perfil.sexo, pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,
     nivelAtividade: perfil.nivelAtividade, objetivo: perfil.objetivo, flagsSaude: perfil.flagsSaude,
   };
+  // A agenda (treinoDias) é a fonte de verdade; o motor de treino usa a CONTAGEM de dias.
+  const diasDisponiveis = perfil.treinoDias?.length ?? perfil.diasDisponiveis;
   const perfilT: PerfilTreino = {
     pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade, flagsSaude: perfil.flagsSaude,
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
-    diasDisponiveis: perfil.diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+    diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
   };
-  const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
+  // "Não curto" entra como preferência relaxável na geração do cardápio (IDs da paleta).
+  const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia, excluirAlimentoIds: perfil.naoCurto ?? [] };
   return {
     dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),
     treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED }),

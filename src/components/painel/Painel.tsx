@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
+import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
+import SuaSemana from './SuaSemana';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
@@ -30,6 +32,10 @@ export interface PerfilResumo {
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
   preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
+  /** Dias da semana em que treina (Seg→Dom). É a fonte de verdade da agenda; `diasDisponiveis` = length. */
+  treinoDias: Weekday[];
+  /** "Alimentos que não curto" — IDs da paleta curada (preferência relaxável no motor). */
+  naoCurto: string[];
   /** Flags de saúde do gate — necessárias para recalcular o plano (Editar perfil). */
   flagsSaude: FlagsSaude;
 }
@@ -154,7 +160,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return listarSubstituicoesPrato({
       pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED,
       plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala, restricoes,
-      gosto: { excluirPratoIds: [...outros, ...excluir] },
+      gosto: { excluirPratoIds: [...outros, ...excluir], excluirAlimentoIds: perfil.naoCurto },
     }).map((rr) => ({ prato: rr.prato!, escala: rr.escala!, macros: rr.macrosNovo!, diaNew: rr.totaisDiaNovo! }));
   }
   const abrirTrocaPrato = (idx: number) => { const o = gerarOpcoesPrato(idx, []); setModal({ tipo: 'prato', idx, base: cardItens[idx]!.prato.nome, opcoes: o, excl: o.map((x) => x.prato.id) }); };
@@ -270,7 +276,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         </div>
 
         {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
-        {!vista && aba === 'hoje' && <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'hoje' && (
+          <div style={sec}>
+            <SuaSemana
+              treinoDias={perfil.treinoDias}
+              sessoesNomes={rotinaDias.map((d) => d.nome)}
+              onIrSessao={(idx) => (rotinaDias[idx] ? setSessaoDia(idx) : setAba('treino'))}
+              onVerDieta={() => irAba('dieta')}
+              onEditarPerfil={() => setEditando(true)}
+            />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />
+          </div>
+        )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}

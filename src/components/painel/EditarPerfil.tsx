@@ -4,6 +4,8 @@ import { useState, type CSSProperties } from 'react';
 import type { PerfilResumo } from './Painel';
 import type { NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
+import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
+import { SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 
 /**
  * Editar perfil — porte fiel do protótipo V2 (.dc.html). Coleta os mesmos campos do
@@ -43,11 +45,6 @@ const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
   { id: 'vegetariano', t: 'Vegetariano', d: 'Sem carnes.' },
   { id: 'vegano', t: 'Vegano', d: 'Sem origem animal.' },
 ];
-const ALERGENOS: { id: Alergeno; t: string }[] = [
-  { id: 'lactose', t: 'Lactose' }, { id: 'gluten', t: 'Glúten' }, { id: 'ovo', t: 'Ovo' }, { id: 'soja', t: 'Soja' },
-  { id: 'amendoim', t: 'Amendoim' }, { id: 'castanhas', t: 'Castanhas' }, { id: 'gergelim', t: 'Gergelim' }, { id: 'coco', t: 'Coco' }, { id: 'peixe_frutos_do_mar', t: 'Peixe / frutos do mar' },
-];
-
 export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   inicial: PerfilResumo;
   onCancelar: () => void;
@@ -61,27 +58,37 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   const [atividade, setAtividade] = useState<NivelAtividade>(inicial.nivelAtividade);
   const [experiencia, setExperiencia] = useState<NivelExperiencia>(inicial.nivelExperiencia);
   const [local, setLocal] = useState<EquipamentoDisp>(inicial.equipamento);
-  const [dias, setDias] = useState(inicial.diasDisponiveis);
+  const diasIniciais = inicial.treinoDias?.length ? inicial.treinoDias : diasPadrao(inicial.diasDisponiveis);
+  const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasIniciais);
   const [tempo, setTempo] = useState(inicial.tempoPorSessaoMin);
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>(inicial.preferencia ?? '');
   const [alergias, setAlergias] = useState<Alergeno[]>(inicial.alergenos);
-  const [naoGostoInput, setNaoGostoInput] = useState('');
-  const [naoGosto, setNaoGosto] = useState<string[]>([]);
+  const [naoCurto, setNaoCurto] = useState<string[]>(inicial.naoCurto ?? []);
   const [confirmar, setConfirmar] = useState(false);
 
   const toggleAlergia = (a: Alergeno) => setAlergias((p) => (p.includes(a) ? p.filter((x) => x !== a) : [...p, a]));
-  const addNaoGosto = () => { const v = naoGostoInput.trim(); if (v && !naoGosto.includes(v)) { setNaoGosto((p) => [...p, v]); setNaoGostoInput(''); } };
+  const toggleDia = (w: Weekday) => setTreinoDias((p) => (p.includes(w) ? p.filter((x) => x !== w) : [...p, w].sort((x, y) => ORDEM_SEMANA.indexOf(x) - ORDEM_SEMANA.indexOf(y))));
+  const addFood = (id: string) => setNaoCurto((p) => (p.includes(id) ? p : [...p, id]));
+  const removeFood = (id: string) => setNaoCurto((p) => p.filter((x) => x !== id));
 
   const i = +idade, a = +altura, pz = +peso;
-  const valido = i >= 18 && i <= 100 && a >= 100 && a <= 250 && pz >= 30 && pz <= 300;
+  const valido = i >= 18 && i <= 100 && a >= 100 && a <= 250 && pz >= 30 && pz <= 300 && treinoDias.length >= 1;
+  // A semana só é "reorganizada" quando os dias de treino mudam (handoff §5.3/§6).
+  const diasMudaram = JSON.stringify(treinoDias) !== JSON.stringify(diasIniciais);
+
+  function tentarSalvar() {
+    if (!valido) return;
+    if (diasMudaram) setConfirmar(true); // dias mudaram → confirma o recálculo/reorganização
+    else salvar();                       // só alimentos/outros → salva direto
+  }
 
   function salvar() {
     if (!valido) return;
     onSalvar({
       ...inicial,
       sexo, idade: i, alturaCm: a, pesoKg: pz, objetivo, nivelAtividade: atividade,
-      nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: dias, tempoPorSessaoMin: tempo,
-      preferencia: padrao || null, alergenos: alergias,
+      nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
+      preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto,
     });
   }
 
@@ -116,9 +123,19 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
           <CardsBloco titulo="Experiência de treino" opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} desc />
           <CardsBloco titulo="Local e equipamento" opts={LOCAIS} sel={local} onSel={setLocal} desc />
 
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 170 }}><div style={cap}>Dias por semana</div><div style={{ display: 'flex', gap: 7 }}>{[1, 2, 3, 4, 5, 6].map((d) => <div key={d} onClick={() => setDias(d)} style={{ ...seg, ...(dias === d ? segOn : {}) }}>{d}</div>)}</div></div>
-            <div style={{ flex: 1, minWidth: 170 }}><div style={cap}>Tempo por sessão</div><div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...seg, ...(tempo === t ? segOn : {}) }}>{t === 75 ? '75+' : t}</div>)}</div></div>
+          <div>
+            <div style={cap}>Dias de treino</div>
+            <p style={{ margin: '0 0 2px', fontSize: '.85rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Selecione os dias de treino. Os outros entram como descanso na sua semana.</p>
+            <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} contagemFont="1.5rem" stripMarginTop={14} />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, padding: '13px 15px', borderRadius: 12, background: 'rgba(189,255,0,.05)', border: '1px solid rgba(189,255,0,.2)' }}>
+              <svg width={17} height={17} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M4 12a8 8 0 1 1 2.5 5.8" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" fill="none" /><path d="M4 18v-4.4h4.4" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+              <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões são redistribuídas nos novos dias.</p>
+            </div>
+          </div>
+
+          <div>
+            <div style={cap}>Tempo por sessão</div>
+            <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...seg, ...(tempo === t ? segOn : {}) }}>{t === 75 ? '75+' : t}</div>)}</div>
           </div>
 
           <div>
@@ -126,25 +143,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{PADROES.map((o) => <div key={o.id || 'oni'} onClick={() => setPadrao(o.id)} style={{ ...card, minWidth: 120, flex: 1, ...(padrao === o.id ? cardOn : {}) }}><div style={{ fontSize: '.98rem', fontWeight: 700 }}>{o.t}</div><div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div></div>)}</div>
           </div>
 
-          <div>
-            <div style={{ ...cap, marginBottom: 6 }}>Alergias e intolerâncias</div>
-            <p style={{ margin: '0 0 10px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Regra de segurança absoluta — nunca incluímos o que estiver marcado.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9 }}>{ALERGENOS.map((o) => { const on = alergias.includes(o.id); return <div key={o.id} onClick={() => toggleAlergia(o.id)} style={{ cursor: 'pointer', padding: '8px 14px', borderRadius: 999, fontWeight: 600, fontSize: '.88rem', transition: 'all .25s ease', border: `1px solid ${on ? '#16A34A' : 'rgba(234,229,219,.18)'}`, background: on ? '#16A34A' : 'transparent', color: on ? '#EAE5DB' : 'rgba(234,229,219,.7)' }}>{o.t}</div>; })}</div>
-          </div>
-
-          <div>
-            <div style={{ ...cap, marginBottom: 6 }}>Alimentos que você não curte</div>
-            <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Preferência relaxável: a gente evita quando dá; se faltar opção, avisa. Diferente de alergia.</p>
-            {naoGosto.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                {naoGosto.map((c) => <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '.88rem', fontWeight: 500, color: 'rgba(234,229,219,.85)', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 999, padding: '7px 9px 7px 14px' }}>{c}<button onClick={() => setNaoGosto((p) => p.filter((x) => x !== c))} style={{ background: 'none', border: 'none', color: 'rgba(234,229,219,.5)', fontSize: '1.05rem', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</button></span>)}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 9 }}>
-              <input value={naoGostoInput} onChange={(e) => setNaoGostoInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addNaoGosto(); }} placeholder="Ex.: jiló, fígado…" style={{ flex: 1, boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.96rem', outline: 'none' }} />
-              <button onClick={addNaoGosto} className="modal-more" style={{ background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 700, fontSize: '.92rem', padding: '0 20px', borderRadius: 12, cursor: 'pointer' }}>Adicionar</button>
-            </div>
-          </div>
+          <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="editar" />
 
         </div>
 
@@ -152,7 +151,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
 
         <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
           <button onClick={onCancelar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: '14px 24px', borderRadius: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={() => valido && setConfirmar(true)} disabled={!valido} className={valido ? 'hov-btn' : ''} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: valido ? 'pointer' : 'not-allowed', opacity: valido ? 1 : 0.4 }}>Salvar alterações</button>
+          <button onClick={tentarSalvar} disabled={!valido} className={valido ? 'hov-btn' : ''} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: valido ? 'pointer' : 'not-allowed', opacity: valido ? 1 : 0.4 }}>Salvar alterações</button>
         </div>
       </div>
 
@@ -162,7 +161,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(189,255,0,.3)', borderRadius: 22, padding: 26, boxShadow: '0 40px 90px -30px rgba(0,0,0,.8)', animation: `evkPop .3s ${EASE}` }}>
             <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M4 5v5h5M20 19v-5h-5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /><path d="M19 9a7.5 7.5 0 00-13-2.5L4 10M5 15a7.5 7.5 0 0013 2.5L20 14" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></div>
             <h2 style={{ margin: '0 0 10px', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-.01em' }}>Recalcular seu plano?</h2>
-            <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>Você mudou <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>peso, objetivo ou disponibilidade</strong>. Vamos atualizar suas estimativas de referência e o treino — e a triagem de saúde roda de novo, se fizer sentido.</p>
+            <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões serão redistribuídas nos novos dias. Suas preferências de alimentos não mudam.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={salvar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Confirmar e recalcular</button>
               <button onClick={() => setConfirmar(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Voltar e revisar</button>
