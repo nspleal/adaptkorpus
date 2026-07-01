@@ -170,21 +170,6 @@ export function montarCardapioDia(
   const porRefeicao = (ref: Refeicao): Recipe[] =>
     elegiveis.filter((r) => r.refeicoes.includes(ref));
 
-  // "Não curto" (relaxável): por refeição, prefere pratos SEM os alimentos indesejados;
-  // se isso esvaziar os candidatos daquela refeição, RELAXA (usa a lista cheia). É
-  // preferência de gosto — nunca segurança, e o cardápio precisa fechar. Ordem preservada.
-  const evitar = new Set(restricoes.excluirAlimentoIds ?? []);
-  const preferir = (lista: Recipe[]): Recipe[] => {
-    if (evitar.size === 0) return lista;
-    const semIndesejado = lista.filter((r) => !r.itens.some((it) => evitar.has(it.alimentoId)));
-    return semIndesejado.length > 0 ? semIndesejado : lista;
-  };
-
-  const cafes = preferir(porRefeicao('cafe'));
-  const almocos = preferir(porRefeicao('almoco'));
-  const jantares = preferir(porRefeicao('jantar'));
-  const lanches: (Recipe | null)[] = [null, ...preferir(porRefeicao('lanche'))];
-
   const faltando = REFEICOES_OBRIGATORIAS.filter((ref) => porRefeicao(ref).length === 0);
   if (faltando.length > 0) {
     return {
@@ -196,45 +181,61 @@ export function montarCardapioDia(
     };
   }
 
-  let melhorNaJanela: Candidato | null = null;
-  let melhorGeral: Candidato | null = null;
-
-  for (const c of cafes) {
-    for (const a of almocos) {
-      if (a.id === c.id) continue;
-      for (const j of jantares) {
-        if (j.id === c.id || j.id === a.id) continue;
-        for (const l of lanches) {
-          if (l && (l.id === c.id || l.id === a.id || l.id === j.id)) continue;
-
-          const baseItens: PratoBase[] = [
-            { refeicao: 'cafe', prato: c, base: macros(c) },
-            { refeicao: 'almoco', prato: a, base: macros(a) },
-            { refeicao: 'jantar', prato: j, base: macros(j) },
-          ];
-          if (l) baseItens.push({ refeicao: 'lanche', prato: l, base: macros(l) });
-
-          const totaisBase = somar(...baseItens.map((b) => b.base));
-          // Passo 3 — ESCALAR: porção do dia escala para mirar a kcal-alvo (kcal é o alvo
-          // mais protegido). Escala única do dia, limitada a faixa realista (ESCALA_PORCAO).
-          const escala = totaisBase.kcal > 0
-            ? clamp(plano.kcalAlvo / totaisBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max)
-            : ESCALA_PORCAO.max;
-          const totais = escalar(totaisBase, escala);
-          const cand: Candidato = { baseItens, escala, totais };
-
-          if (!melhorGeral || compararCandidatos(cand, melhorGeral, plano) < 0) {
-            melhorGeral = cand;
-          }
-          const dentro =
-            totais.kcal >= plano.janela.minKcal && totais.kcal <= plano.janela.maxKcal;
-          if (dentro && (!melhorNaJanela || compararCandidatos(cand, melhorNaJanela, plano) < 0)) {
-            melhorNaJanela = cand;
+  // Busca combinatória (café × almoço × jantar × lanche opcional), pratos DISTINTOS.
+  function procurar(cafes: Recipe[], almocos: Recipe[], jantares: Recipe[], lanches: (Recipe | null)[]) {
+    let melhorNaJanela: Candidato | null = null;
+    let melhorGeral: Candidato | null = null;
+    for (const c of cafes) {
+      for (const a of almocos) {
+        if (a.id === c.id) continue;
+        for (const j of jantares) {
+          if (j.id === c.id || j.id === a.id) continue;
+          for (const l of lanches) {
+            if (l && (l.id === c.id || l.id === a.id || l.id === j.id)) continue;
+            const baseItens: PratoBase[] = [
+              { refeicao: 'cafe', prato: c, base: macros(c) },
+              { refeicao: 'almoco', prato: a, base: macros(a) },
+              { refeicao: 'jantar', prato: j, base: macros(j) },
+            ];
+            if (l) baseItens.push({ refeicao: 'lanche', prato: l, base: macros(l) });
+            const totaisBase = somar(...baseItens.map((b) => b.base));
+            // Passo 3 — ESCALAR: porção do dia escala para mirar a kcal-alvo (kcal é o alvo
+            // mais protegido). Escala única do dia, limitada à faixa realista (ESCALA_PORCAO).
+            const escala = totaisBase.kcal > 0
+              ? clamp(plano.kcalAlvo / totaisBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max)
+              : ESCALA_PORCAO.max;
+            const totais = escalar(totaisBase, escala);
+            const cand: Candidato = { baseItens, escala, totais };
+            if (!melhorGeral || compararCandidatos(cand, melhorGeral, plano) < 0) melhorGeral = cand;
+            const dentro = totais.kcal >= plano.janela.minKcal && totais.kcal <= plano.janela.maxKcal;
+            if (dentro && (!melhorNaJanela || compararCandidatos(cand, melhorNaJanela, plano) < 0)) melhorNaJanela = cand;
           }
         }
       }
     }
+    return { melhorNaJanela, melhorGeral };
   }
+
+  // "Não curto" (relaxável): por refeição, prefere pratos SEM os alimentos indesejados.
+  // É preferência de GOSTO — nunca segurança — e o cardápio PRECISA fechar. Estratégia
+  // determinística em dois passos: (1) tenta com as listas filtradas; (2) se elas não
+  // formam um trio DISTINTO café/almoço/jantar (colisão entre slots), relaxa por completo
+  // e tenta com as listas cheias. Best-effort que nunca impede o cardápio de fechar.
+  const evitar = new Set(restricoes.excluirAlimentoIds ?? []);
+  const semIndesejado = (lista: Recipe[]): Recipe[] =>
+    lista.filter((r) => !r.itens.some((it) => evitar.has(it.alimentoId)));
+  const preferir = (lista: Recipe[]): Recipe[] => {
+    if (evitar.size === 0) return lista;
+    const f = semIndesejado(lista);
+    return f.length > 0 ? f : lista; // relaxa por slot quando esvazia
+  };
+  const lanchesBase = porRefeicao('lanche');
+  let busca = procurar(preferir(porRefeicao('cafe')), preferir(porRefeicao('almoco')), preferir(porRefeicao('jantar')), [null, ...preferir(lanchesBase)]);
+  if (!busca.melhorGeral && evitar.size > 0) {
+    // as listas filtradas não fecharam um trio distinto → relaxa o "não curto" por completo.
+    busca = procurar(porRefeicao('cafe'), porRefeicao('almoco'), porRefeicao('jantar'), [null, ...lanchesBase]);
+  }
+  const { melhorNaJanela, melhorGeral } = busca;
 
   // Fail-safe: pode não existir combinação de pratos DISTINTOS para as 3 refeições
   // obrigatórias mesmo havendo candidatos por slot (ex.: o único café = o único almoço).

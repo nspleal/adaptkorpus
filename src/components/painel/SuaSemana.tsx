@@ -51,8 +51,8 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
             <div key={d.weekday} onClick={() => setSelDay(d.idx)} className="evk-semana-cell" style={cellStyle(d.isTraining, d.isToday, selDay === d.idx)}>
               {d.isToday && <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: '.58rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0D2818', background: '#BDFF00', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>Hoje</span>}
               <span style={{ fontWeight: 700, fontSize: '.95rem', color: d.isTraining ? '#EAE5DB' : 'rgba(234,229,219,.7)' }}>{d.abbr}</span>
-              <span style={d.isTraining ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
-              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.isTraining ? 700 : 600, color: d.isTraining ? '#BDFF00' : 'rgba(234,229,219,.45)' }}>{d.isTraining ? (d.sessionLabel ?? 'Treino') : 'Descanso'}</span>
+              <span style={d.tipo === 'treino' ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : d.tipo === 'recuperacao' ? { width: 7, height: 7, borderRadius: '50%', background: '#16A34A' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
+              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'recuperacao' ? 'Recuperação' : 'Descanso'}</span>
             </div>
           ))}
         </div>
@@ -60,7 +60,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
 
       {/* Detalhe do dia selecionado */}
       <div style={{ marginTop: 16 }}>
-        {sd.isTraining ? (
+        {sd.tipo === 'treino' ? (
           <div style={{ background: 'linear-gradient(160deg, rgba(189,255,0,.08), rgba(15,15,14,.4))', border: '1px solid rgba(189,255,0,.28)', borderRadius: 18, padding: 24, animation: `evkStepIn .35s ease` }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
               <span style={{ width: 52, height: 52, minWidth: 52, borderRadius: 15, background: 'rgba(189,255,0,.12)', border: '1px solid rgba(189,255,0,.34)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={26} height={26} viewBox="0 0 24 24" fill="none"><path d="M6.5 9v6M17.5 9v6M4 10.5v3M20 10.5v3M6.5 12h11" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /></svg></span>
@@ -70,6 +70,18 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
                 <p style={{ margin: 0, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{sd.isToday ? 'Seu treino de hoje está pronto quando você estiver.' : `Programado para ${sd.full}.`}</p>
               </div>
               <button onClick={() => sd.sessionIdx != null && onIrSessao(sd.sessionIdx)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>{sd.isToday ? 'Ir para a sessão' : 'Ver este treino'}<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+            </div>
+          </div>
+        ) : sd.tipo === 'recuperacao' ? (
+          <div style={{ background: 'linear-gradient(160deg, rgba(22,163,74,.09), rgba(15,15,14,.4))', border: '1px solid rgba(22,163,74,.28)', borderRadius: 18, padding: 24, animation: `evkStepIn .35s ease` }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
+              <span style={{ width: 52, height: 52, minWidth: 52, borderRadius: 15, background: 'rgba(22,163,74,.14)', border: '1px solid rgba(22,163,74,.34)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2 5 4-12 2 7h6" stroke="#16A34A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{sd.isToday ? 'Hoje · Recuperação' : `${cap(sd.full)} · Recuperação`}</div>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>Recuperação ativa</h3>
+                <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.</p>
+              </div>
+              <button onClick={onVerDieta} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.85)', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer', alignSelf: 'center' }}>Ver dieta de hoje</button>
             </div>
           </div>
         ) : sd.isToday ? (

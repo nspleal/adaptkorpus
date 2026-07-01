@@ -40,6 +40,16 @@ describe('"não curto" na geração do cardápio (preferência relaxável)', () 
     expect(['ok', 'fora_da_janela']).toContain(d.cardapio!.status);
   });
 
+  it('colisão entre slots (filtro esvazia distinção) → relaxa por completo e fecha', () => {
+    // Caso real: com este "não curto", almoço e jantar filtrados colapsam no MESMO prato.
+    // O per-slot não relaxa (nenhum slot fica vazio); a distinção café≠almoço≠jantar falha.
+    // O 2º passo relaxa por completo e o cardápio fecha (era 'sem_candidatos' antes do fix).
+    const d = gerar(['a103', 'a14', 'a18', 'a36', 'a42', 'a47', 'a49', 'a60', 'a68', 'a90', 'a97']);
+    expect(d.plano).not.toBeNull();
+    expect(d.cardapio!.status).not.toBe('sem_candidatos');
+    expect(d.cardapio!.itens.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('é determinístico', () => {
     const a = gerar(['a67', 'a49']).cardapio!.itens.map((i) => i.prato.id);
     const b = gerar(['a67', 'a49']).cardapio!.itens.map((i) => i.prato.id);

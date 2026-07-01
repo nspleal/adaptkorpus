@@ -42,42 +42,47 @@ export function diasPadrao(n: number): Weekday[] {
   return (mapas[Math.max(0, Math.min(7, Math.round(n)))] ?? mapas[3]!).slice();
 }
 
+/** treino = sessão de força do motor · recuperacao = dia ativo excedente (cardio/recuperação
+ * que o motor prescreve — `diasCardioRecuperacao`) · descanso = folga. */
+export type DiaTipo = 'treino' | 'recuperacao' | 'descanso';
+
 export interface DiaDaSemana {
   idx: number;            // 0=Seg … 6=Dom
   weekday: Weekday;
   abbr: string;
   full: string;
-  isTraining: boolean;
+  isTraining: boolean;    // dia ativo (treino OU recuperação)
   isToday: boolean;
-  sessionIdx?: number;    // índice em rotina.dias (só em dia de treino) — abre a sessão
-  sessionLabel?: string;  // nome da sessão vindo do motor (só em dia de treino)
+  tipo: DiaTipo;
+  sessionIdx?: number;    // índice em rotina.dias (só tipo 'treino') — abre a sessão
+  sessionLabel?: string;  // 'treino' → nome da sessão do motor; 'recuperacao' → 'Recuperação'
 }
 
 /**
- * Monta os 7 dias (Seg→Dom). As sessões do motor são distribuídas nos dias de treino, na
- * ordem da semana (round-robin defensivo se contagens divergirem). `hojeIdx` vem da UI.
+ * Monta os 7 dias (Seg→Dom). As `n` sessões de FORÇA do motor vão nos primeiros `n` dias de
+ * treino (ordem da semana); os dias ativos EXCEDENTES viram **recuperação** (cardio/recuperação
+ * que o motor prescreve como `diasCardioRecuperacao`) — nunca repetimos uma sessão de força nem
+ * rotulamos errado. `hojeIdx` vem da UI (relógio), fora do motor.
  */
 export function montarSemana(treinoDias: readonly Weekday[], sessoesNomes: readonly string[], hojeIdx: number): DiaDaSemana[] {
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
   let li = 0;
   return ORDEM_SEMANA.map((weekday, idx) => {
-    const isTraining = treino.has(weekday);
-    const base: DiaDaSemana = { idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full, isTraining, isToday: idx === hojeIdx };
-    if (isTraining && n > 0) {
-      const sessionIdx = li % n;
-      li++;
-      return { ...base, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] };
-    }
-    return base;
+    const ativo = treino.has(weekday);
+    const base = { idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full, isTraining: ativo, isToday: idx === hojeIdx };
+    if (!ativo) return { ...base, tipo: 'descanso' as const };
+    if (li < n) { const sessionIdx = li; li++; return { ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] }; }
+    li++;
+    return { ...base, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' };
   });
 }
 
-/** Índice (0–6) do próximo dia de treino a partir de hoje (exclui hoje); -1 se nenhum. */
+/** Índice (0–6) do próximo dia de FORÇA a partir de hoje (exclui hoje); -1 se nenhum. */
 export function proximoTreinoIdx(semana: readonly DiaDaSemana[], hojeIdx: number): number {
   for (let k = 1; k <= 7; k++) {
     const idx = (hojeIdx + k) % 7;
-    if (semana[idx]?.isTraining) return idx;
+    if (semana[idx]?.tipo === 'treino') return idx;
   }
   return -1;
 }
