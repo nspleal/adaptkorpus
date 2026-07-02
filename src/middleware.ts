@@ -27,11 +27,15 @@ function construirCSP(nonce: string): string {
   const ws = origin ? origin.replace(/^http/, 'ws') : '';
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    // va.vercel-scripts.com: cinto-e-suspensório p/ browsers que ignoram 'strict-dynamic'
+    // (em produção na Vercel o script do Analytics é same-origin /_vercel/insights).
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://va.vercel-scripts.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     `connect-src 'self' ${origin} ${ws}`.trim(),
+    // service worker (offline-first do plano do dia) — registro por URL exige worker-src explícito
+    "worker-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -82,6 +86,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Roda em tudo, menos estáticos e a imagem do Next.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/).*)'],
+  // Roda em tudo, menos estáticos, a imagem do Next e o service worker (sw.js não precisa
+  // de CSP nem de renovação de sessão — e o update-check do SW roda com frequência).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|sw.js).*)'],
 };
