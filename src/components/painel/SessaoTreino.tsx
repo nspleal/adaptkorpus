@@ -321,6 +321,8 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               <div style={cardStat}><div style={statLabel}>Volume</div><div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-.02em', color: '#BDFF00' }}>{totalVol.toLocaleString('pt-BR')}<span style={{ fontSize: '.85rem', fontWeight: 500, color: 'rgba(234,229,219,.5)' }}> kg</span></div></div>
               <div style={cardStat}><div style={statLabel}>Exercícios</div><div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-.02em' }}>{total}</div></div>
             </div>
+            {/* Glosa amigável do "Volume" (jargão → linguagem simples; = Σ reps × carga). */}
+            <p style={{ margin: '0 0 18px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}><strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>Volume</strong> é o peso total que você moveu hoje — repetições × carga, somando todas as séries. Exercícios só com o peso do corpo não entram na conta.</p>
 
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 20px', marginBottom: 18 }}>
               {exs.map((e, ei) => {
