@@ -55,6 +55,16 @@ export const subPratoSchema = z.object({
     .optional(),
 });
 
+/** Entrada do formulário de suporte (POST /api/suporte). `site` é honeypot anti-bot:
+ *  humano nunca vê/preenche; conteúdo ali = bot (a rota finge sucesso e descarta). */
+export const suporteSchema = z.object({
+  nome: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254),
+  assunto: z.enum(['duvida', 'cobranca', 'privacidade', 'outro']),
+  mensagem: z.string().trim().min(10).max(4000),
+  site: z.string().max(0).optional(),
+});
+
 /** Entrada da substituição de exercício. */
 export const subExercicioSchema = z.object({
   exercicioAtualId: z.string().min(1),

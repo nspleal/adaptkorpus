@@ -131,23 +131,10 @@ function materializar(c: Candidato): CardapioItem[] {
   }));
 }
 
-/** Compara candidatos pela ordem de prioridade travada. < 0 ⇒ `a` é melhor. */
-function compararCandidatos(a: Candidato, b: Candidato, plano: PlanoDieta): number {
-  // 1) Menor desvio calórico (fidelidade calórica primeiro).
-  const devA = Math.abs(a.totais.kcal - plano.kcalAlvo);
-  const devB = Math.abs(b.totais.kcal - plano.kcalAlvo);
-  if (devA !== devB) return devA - devB;
-
-  // 2) Macros secundário: proteína protegida (menor desvio do ponto de proteína).
-  const protA = Math.abs(a.totais.proteinaG - plano.macros.proteinaG);
-  const protB = Math.abs(b.totais.proteinaG - plano.macros.proteinaG);
-  if (protA !== protB) return protA - protB;
-
-  // 3) Chave final reprodutível: ordem lexicográfica sobre o conjunto de ids do dia.
-  const chaveA = a.baseItens.map((i) => i.prato.id).sort().join('|');
-  const chaveB = b.baseItens.map((i) => i.prato.id).sort().join('|');
-  return chaveA < chaveB ? -1 : chaveA > chaveB ? 1 : 0;
-}
+// Ordem de prioridade TRAVADA do comparador de candidatos (implementada inline em
+// `procurar`/`melhorDe`, sem alocação): 1) menor desvio calórico (fidelidade calórica
+// primeiro) → 2) menor desvio de proteína (macro protegida) → 3) chave reprodutível:
+// ordem lexicográfica sobre o CONJUNTO de ids do dia (só computada no empate).
 
 const REFEICOES_OBRIGATORIAS: Refeicao[] = ['cafe', 'almoco', 'jantar'];
 
