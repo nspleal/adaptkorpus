@@ -12,7 +12,7 @@ import { temSessao, useTemSessao } from '@/lib/session';
  * disclaimer + 18+ + copyright). Usada pelas páginas legais e pela /ebook.
  */
 
-type PageKey = 'termos' | 'privacidade' | 'aviso' | 'suporte' | 'ebook';
+type PageKey = 'termos' | 'privacidade' | 'aviso' | 'suporte' | 'ebook' | 'reembolso' | 'faq' | 'changelog';
 
 const NAV: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos', href: '/termos' },
@@ -24,7 +24,10 @@ const FOOTER: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos de Uso', href: '/termos' },
   { key: 'privacidade', label: 'Política de Privacidade', href: '/privacidade' },
   { key: 'aviso', label: 'Aviso', href: '/aviso' },
+  { key: 'reembolso', label: 'Reembolso', href: '/reembolso' },
+  { key: 'faq', label: 'Perguntas frequentes', href: '/faq' },
   { key: 'suporte', label: 'Suporte', href: '/suporte' },
+  { key: 'changelog', label: 'Changelog', href: '/changelog' },
   { key: 'ebook', label: 'Ebook', href: '/ebook' },
 ];
 

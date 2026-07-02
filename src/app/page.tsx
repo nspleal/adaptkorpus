@@ -222,6 +222,10 @@ export default function Home() {
               {['Sem cobrança-surpresa', 'Sem pegadinha no cancelamento', 'Sem letra miúda'].map((n) => (
                 <span key={n} style={{ background: 'rgba(229,72,77,.14)', color: '#E5484D', border: '1px solid rgba(229,72,77,.4)', borderRadius: 999, padding: '9px 16px', fontWeight: 600, fontSize: '.88rem' }}>{n}</span>
               ))}
+              {/* Selo de garantia — ACENTO DE MARCA (Pulso), não vermelho: é boa notícia, não erro. */}
+              <Link href="/reembolso" className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(189,255,0,.1)', color: '#BDFF00', border: '1px solid rgba(189,255,0,.4)', borderRadius: 999, padding: '9px 16px', fontWeight: 600, fontSize: '.88rem', textDecoration: 'none' }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3z" stroke="#BDFF00" strokeWidth={1.8} strokeLinejoin="round" /><path d="M9.5 12l1.8 1.8 3.4-3.6" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>7 dias de garantia
+              </Link>
             </div>
           </div>
           <div className="rv" style={{ ...rev(120), display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -325,7 +329,7 @@ export default function Home() {
             {[
               { t: 'Produto', l: [['#como', 'Como funciona'], ['#app', 'O app'], ['#preco', 'Preço'], ['#faq', 'FAQ']] },
               { t: 'Recursos', l: [['/ebook', 'Ebook']] },
-              { t: 'Legal', l: [['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Contato']] },
+              { t: 'Legal', l: [['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'], ['/reembolso', 'Reembolso'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Contato']] },
             ].map((col) => (
               <div key={col.t}>
                 <div style={{ fontSize: '.76rem', textTransform: 'uppercase', letterSpacing: '.12em', color: 'rgba(234,229,219,.4)', marginBottom: 16, fontWeight: 600 }}>{col.t}</div>
