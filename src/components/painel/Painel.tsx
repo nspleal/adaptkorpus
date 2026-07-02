@@ -50,7 +50,8 @@ const REFEICAO_LABEL: Record<string, string> = { cafe: 'Café', almoco: 'Almoço
 const PADRAO_LABEL: Record<string, string> = { empurrar: 'Empurrar', puxar: 'Puxar', agachar: 'Agachar', dobradica_quadril: 'Dobradiça', core: 'Core', cardio: 'Cardio', isolado: 'Isolado' };
 const OBJETIVO_LABEL: Record<Objetivo, string> = { emagrecimento: 'Emagrecer', massa: 'Ganhar massa', saude: 'Manter / Saúde' };
 const ATIV_LABEL: Record<NivelAtividade, string> = { sedentario: 'Sedentário', leve: 'Leve', moderado: 'Moderado', intenso: 'Intenso', muito_intenso: 'Muito intenso' };
-const PORCOES: { f: number; r: string }[] = [{ f: 0.5, r: '½' }, { f: 0.75, r: '¾' }, { f: 1, r: '1' }, { f: 1.25, r: '1¼' }, { f: 1.5, r: '1½' }, { f: 2, r: '2' }];
+// `f` = fator de escala (move a matemática); `r` = rótulo exibido, em porcentagem da porção.
+const PORCOES: { f: number; r: string }[] = [{ f: 0.5, r: '50%' }, { f: 0.75, r: '75%' }, { f: 1, r: '100%' }, { f: 1.25, r: '125%' }, { f: 1.5, r: '150%' }, { f: 2, r: '200%' }];
 
 // estilos exatos do protótipo
 const cardSoft: CSSProperties = { background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '20px 22px' };
@@ -493,7 +494,7 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'rgba(234,229,219,.03)', borderRadius: 11, padding: '11px 14px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
                       <button onClick={() => onDetalhe(idx)} className="evk-perfil-link" style={{ background: 'none', border: 'none', padding: 0, color: '#EAE5DB', fontSize: '.95rem', textAlign: 'left', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(234,229,219,.25)', textUnderlineOffset: 3 }}>{it.prato.nome}</button>
-                      {trocados.has(`p${idx}`) && <span style={{ fontSize: '.7rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 6, padding: '2px 7px' }}>{it.escala.toFixed(2)}× porção</span>}
+                      {trocados.has(`p${idx}`) && <span style={{ fontSize: '.7rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 6, padding: '2px 7px' }}>{Math.round(it.escala * 100)}% da porção</span>}
                     </span>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => onTrocar(idx)} className="evk-troca" style={dishBtn}>Trocar</button>
@@ -727,7 +728,7 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
     modal.opcoes.forEach((ex) => opcoes.push({ chave: ex.id, nome: ex.nomePt, detalhe: `${ex.grupoMuscular}${ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}`, onClick: () => onAplicarEx(modal.d, modal.s, ex) }));
   } else {
     titulo = 'Editar porção'; sub = 'Ajuste a quantidade do prato — a estimativa de referência acompanha.';
-    PORCOES.forEach((p) => opcoes.push({ chave: String(p.f), nome: `${p.r} porção${p.f === 1 ? ' (padrão)' : ''}`, onClick: () => onAplicarPorcao(modal.idx, p.f) }));
+    PORCOES.forEach((p) => opcoes.push({ chave: String(p.f), nome: `${p.r}${p.f === 1 ? ' (padrão)' : ''}`, onClick: () => onAplicarPorcao(modal.idx, p.f) }));
   }
   return (
     <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>

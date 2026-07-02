@@ -218,17 +218,23 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               <p style={{ margin: '12px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.65)', lineHeight: 1.55 }}>{ex.comoFazer}</p>
             </details>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{nSets} × {ex.reps.min}–{ex.reps.max} reps</span>
               <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>RIR: {ex.rir.min}–{ex.rir.max}</span>
               <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {ex.restSeg}s</span>
             </div>
+            {/* Glosa amigável do RIR (jargão → linguagem simples, para quem não conhece o termo). */}
+            <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}><strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>RIR</strong> é a reserva: quantas repetições você ainda conseguiria fazer no fim da série. Pare com {ex.rir.min}–{ex.rir.max} na reserva — sem ir até a falha.</p>
 
             {/* %1RM opt-in (só com carga) */}
             {ex.loaded && (
               <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 13, padding: '13px 16px', marginBottom: 18 }}>
                 <div onClick={() => setShowRM((v) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
-                  <span style={{ fontSize: '.92rem', fontWeight: 500, color: 'rgba(234,229,219,.85)' }}>Prefiro ver por % do meu máximo</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '.92rem', fontWeight: 500, color: 'rgba(234,229,219,.85)' }}>Prefiro ver por % do meu máximo</span>
+                    {/* Glosa amigável do "% do máximo" (jargão → linguagem simples). */}
+                    <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.45, marginTop: 2 }}>Quanto do peso máximo que você levantaria numa única repetição.</span>
+                  </span>
                   <span style={{ width: 44, minWidth: 44, height: 26, borderRadius: 999, padding: 3, transition: 'background .25s ease', background: showRM ? '#BDFF00' : 'rgba(234,229,219,.18)', display: 'flex', alignItems: 'center' }}>
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: showRM ? '#0D2818' : '#EAE5DB', transition: `transform .25s ${EASE}`, transform: showRM ? 'translateX(18px)' : 'translateX(0)' }} />
                   </span>
@@ -242,6 +248,9 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               </div>
             )}
 
+            {/* Linha-guia: diz explicitamente o que registrar e a meta de reps do dia. */}
+            <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre cada série abaixo: quantas repetições e o peso. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {ex.reps.min}–{ex.reps.max} reps</strong>.</p>
+
             {/* tabela de séries */}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 18px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0 6px', fontSize: '.72rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)' }}>
@@ -253,8 +262,8 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               {est.sets.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
                   <span style={{ width: 36, minWidth: 36, fontWeight: 800, color: 'rgba(234,229,219,.3)', fontSize: '1rem' }}>{i + 1}</span>
-                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder="—" style={inputCelula} />
-                  {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="—" style={inputCelula} />}
+                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder={`${ex.reps.min}–${ex.reps.max}`} style={inputCelula} />
+                  {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="kg" style={inputCelula} />}
                   <button onClick={() => toggleSet(i)} style={{ width: 36, minWidth: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${r.done ? '#BDFF00' : 'rgba(234,229,219,.2)'}`, background: r.done ? '#BDFF00' : 'transparent', color: r.done ? '#0D2818' : 'rgba(234,229,219,.3)' }}><svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                 </div>
               ))}

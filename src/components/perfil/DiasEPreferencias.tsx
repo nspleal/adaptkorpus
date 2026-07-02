@@ -92,8 +92,8 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
       : { fontWeight: 600, background: 'rgba(234,229,219,.04)', border: '1.5px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.7)' }),
   });
   const notaSep = contexto === 'onboarding'
-    ? <><strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>Alergias são absolutas</strong> — a gente nunca passa por cima. Já o <strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>&quot;não curto&quot;</strong> abaixo a gente relaxa se faltar opção no cardápio.</>
-    : <><strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>Alergias são absolutas</strong>; já o <strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>&quot;não curto&quot;</strong> a gente relaxa se faltar opção no cardápio.</>;
+    ? <><strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>Alergias são absolutas</strong> — a gente nunca passa por cima. Já o <strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>&quot;não gosto&quot;</strong> abaixo a gente relaxa se faltar opção no cardápio.</>
+    : <><strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>Alergias são absolutas</strong>; já o <strong style={{ color: 'rgba(234,229,219,.82)', fontWeight: 600 }}>&quot;não gosto&quot;</strong> a gente relaxa se faltar opção no cardápio.</>;
 
   return (
     <div>
@@ -119,7 +119,7 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
       {/* NÃO CURTO (preferência) */}
       <div style={{ background: contexto === 'editar' ? 'rgba(234,229,219,.025)' : 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: '18px 19px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontSize: '1.02rem', fontWeight: 700 }}>Alimentos que você não curte</span>
+          <span style={{ fontSize: '1.02rem', fontWeight: 700 }}>Alimentos que você não gosta</span>
           <span style={{ fontSize: '.66rem', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.72)', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.18)', borderRadius: 999, padding: '3px 9px' }}>Preferência</span>
         </div>
         <p style={{ margin: '0 0 14px', fontSize: '.9rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.5 }}>{contexto === 'onboarding' ? <>A gente evita quando dá — é <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>preferência</strong>, não alergia. Tudo opcional.</> : 'A gente evita quando dá. Busque e adicione — remova quando quiser.'}</p>
