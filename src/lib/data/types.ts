@@ -1,6 +1,6 @@
 /**
  * Tipos do banco de dados curado (espelham o schema do Supabase e o banco do cofre).
- * Fonte: fontes/banco-alimentos-evokorpus (125 alimentos TACO + 56 pratos, Δ=0)
+ * Fonte: fontes/banco-alimentos-evokorpus (V2 limpa: 167 alimentos TACO + 96 pratos, Δ=0)
  *        fontes/ranking-exercicios-evokorpus (163 exercícios).
  *
  * Estrutura RELACIONAL: foods → recipes → recipe_items (join).
@@ -36,7 +36,16 @@ export type TipoPrato = 'vegano' | 'vegetariano' | 'onivoro';
 /** Alimento (ingrediente único) — valores REAIS da TACO por 100 g. */
 export interface Food {
   id: string;
+  /** Nome clínico da TACO (proveniência/atribuição — não exibir ao usuário). */
   nome: string;
+  /**
+   * Rótulo amigável — vocabulário OFICIAL do cofre (voz de marca; DF 2026-07-01,
+   * conceitos/rotulos-amigaveis-alimentos-evokorpus). É o nome que o usuário lê
+   * (autocomplete, detalhe de prato, lista de compras). Opcional no TIPO (fixtures de
+   * teste do motor não precisam dele); no SEED real é 100% preenchido e único —
+   * imposto por data.test.ts. Exibição: `rotuloAmigavel ?? nome`.
+   */
+  rotuloAmigavel?: string;
   /** Nº de referência na TACO 4ª ed. (proveniência). */
   fonteTaco?: number;
   grupo: GrupoAlimentar;

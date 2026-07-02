@@ -1,6 +1,6 @@
 /**
  * Dados curados do app (base completa, validada Δ≈0):
- * 125 alimentos (TACO 4ª ed.) · 56 pratos · 216 ingredientes · 163 exercícios.
+ * V2 limpa: 167 alimentos (TACO 4ª ed., rotulo_amigavel do cofre) · 96 pratos · 363 ingredientes · 163 exercícios.
  *
  * Os arrays vivem em foods.ts / recipes.ts / exercises.ts (gerados do xlsx do autor).
  * Estes aliases mantêm a API usada pela UI/motor.

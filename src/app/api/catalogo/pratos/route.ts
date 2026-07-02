@@ -1,5 +1,5 @@
 /**
- * GET /api/catalogo/pratos — lista os 56 pratos com macros computadas (soma TACO × gramas).
+ * GET /api/catalogo/pratos — lista os 96 pratos com macros computadas (soma TACO × gramas).
  */
 import { NextResponse } from 'next/server';
 import { RECIPES } from '@/lib/data/recipes';

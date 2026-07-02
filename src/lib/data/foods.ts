@@ -1,6 +1,8 @@
 /**
- * GERADO a partir dos dados do autor (xlsx) — NÃO editar à mão.
- * Fonte: cofre (banco-alimentos / ranking-exercicios). Validado Δ≈0.
+ * GERADO a partir dos dados do autor (xlsx) — NÃO editar à mão. Regenerar:
+ *   node scripts/gerar-seed.mjs <paleta-V2-limpa.xlsx> <pratos-V2.xlsx>
+ * Fonte: cofre (banco-alimentos V2 limpa + pratos V2, 2026-07-01). Validado Δ=0
+ * (167 alimentos · 96 pratos · 363 ingredientes · tipos 35/29/32 · Atwater ≤12%).
  */
 import type { Food } from './types';
 
@@ -8,6 +10,7 @@ export const FOODS: Food[] = [
   {
     "id": "a1",
     "nome": "Atum, conserva em óleo",
+    "rotuloAmigavel": "Atum em conserva",
     "fonteTaco": 277,
     "grupo": "proteina_animal",
     "kcalPor100g": 166.0,
@@ -24,6 +27,7 @@ export const FOODS: Food[] = [
   {
     "id": "a2",
     "nome": "Atum, fresco, cru",
+    "rotuloAmigavel": "Atum fresco",
     "fonteTaco": 278,
     "grupo": "proteina_animal",
     "kcalPor100g": 118.0,
@@ -40,6 +44,7 @@ export const FOODS: Food[] = [
   {
     "id": "a3",
     "nome": "Camarão, Rio Grande, grande, cozido",
+    "rotuloAmigavel": "Camarão",
     "fonteTaco": 284,
     "grupo": "proteina_animal",
     "kcalPor100g": 90.0,
@@ -56,6 +61,7 @@ export const FOODS: Food[] = [
   {
     "id": "a4",
     "nome": "Carne, bovina, acém, moído, cozido",
+    "rotuloAmigavel": "Carne moída (acém)",
     "fonteTaco": 326,
     "grupo": "proteina_animal",
     "kcalPor100g": 212.0,
@@ -72,6 +78,7 @@ export const FOODS: Food[] = [
   {
     "id": "a5",
     "nome": "Carne, bovina, contra-filé, sem gordura, grelhado",
+    "rotuloAmigavel": "Contrafilé",
     "fonteTaco": 346,
     "grupo": "proteina_animal",
     "kcalPor100g": 194.0,
@@ -88,6 +95,7 @@ export const FOODS: Food[] = [
   {
     "id": "a6",
     "nome": "Carne, bovina, coxão mole, sem gordura, cozido",
+    "rotuloAmigavel": "Coxão mole (cozido)",
     "fonteTaco": 351,
     "grupo": "proteina_animal",
     "kcalPor100g": 219.0,
@@ -104,6 +112,7 @@ export const FOODS: Food[] = [
   {
     "id": "a7",
     "nome": "Carne, bovina, filé mingnon, sem gordura, grelhado",
+    "rotuloAmigavel": "Filé mignon",
     "fonteTaco": 358,
     "grupo": "proteina_animal",
     "kcalPor100g": 220.0,
@@ -120,6 +129,7 @@ export const FOODS: Food[] = [
   {
     "id": "a8",
     "nome": "Carne, bovina, lagarto, cozido",
+    "rotuloAmigavel": "Lagarto",
     "fonteTaco": 363,
     "grupo": "proteina_animal",
     "kcalPor100g": 222.0,
@@ -136,6 +146,7 @@ export const FOODS: Food[] = [
   {
     "id": "a9",
     "nome": "Carne, bovina, patinho, sem gordura, grelhado",
+    "rotuloAmigavel": "Patinho",
     "fonteTaco": 377,
     "grupo": "proteina_animal",
     "kcalPor100g": 219.0,
@@ -152,6 +163,7 @@ export const FOODS: Food[] = [
   {
     "id": "a10",
     "nome": "Carne, bovina, picanha, sem gordura, grelhada",
+    "rotuloAmigavel": "Picanha",
     "fonteTaco": 383,
     "grupo": "proteina_animal",
     "kcalPor100g": 238.0,
@@ -168,6 +180,7 @@ export const FOODS: Food[] = [
   {
     "id": "a11",
     "nome": "Frango, coxa, sem pele, cozida",
+    "rotuloAmigavel": "Coxa de frango (cozida)",
     "fonteTaco": 398,
     "grupo": "proteina_animal",
     "kcalPor100g": 167.0,
@@ -184,6 +197,7 @@ export const FOODS: Food[] = [
   {
     "id": "a12",
     "nome": "Frango, inteiro, sem pele, assado",
+    "rotuloAmigavel": "Frango assado (sem pele)",
     "fonteTaco": 403,
     "grupo": "proteina_animal",
     "kcalPor100g": 187.0,
@@ -200,6 +214,7 @@ export const FOODS: Food[] = [
   {
     "id": "a13",
     "nome": "Frango, peito, sem pele, cozido",
+    "rotuloAmigavel": "Peito de frango (cozido)",
     "fonteTaco": 408,
     "grupo": "proteina_animal",
     "kcalPor100g": 163.0,
@@ -216,6 +231,7 @@ export const FOODS: Food[] = [
   {
     "id": "a14",
     "nome": "Frango, peito, sem pele, grelhado",
+    "rotuloAmigavel": "Peito de frango",
     "fonteTaco": 410,
     "grupo": "proteina_animal",
     "kcalPor100g": 159.0,
@@ -232,6 +248,7 @@ export const FOODS: Food[] = [
   {
     "id": "a15",
     "nome": "Frango, sobrecoxa, sem pele, assada",
+    "rotuloAmigavel": "Sobrecoxa de frango",
     "fonteTaco": 413,
     "grupo": "proteina_animal",
     "kcalPor100g": 233.0,
@@ -248,6 +265,7 @@ export const FOODS: Food[] = [
   {
     "id": "a16",
     "nome": "Merluza, filé, assado",
+    "rotuloAmigavel": "Merluza",
     "fonteTaco": 301,
     "grupo": "proteina_animal",
     "kcalPor100g": 122.0,
@@ -264,6 +282,7 @@ export const FOODS: Food[] = [
   {
     "id": "a17",
     "nome": "Ovo, de galinha, clara, cozida/10minutos",
+    "rotuloAmigavel": "Clara de ovo (cozida)",
     "fonteTaco": 486,
     "grupo": "proteina_animal",
     "kcalPor100g": 59.0,
@@ -280,6 +299,7 @@ export const FOODS: Food[] = [
   {
     "id": "a18",
     "nome": "Ovo, de galinha, inteiro, cozido/10minutos",
+    "rotuloAmigavel": "Ovo cozido",
     "fonteTaco": 488,
     "grupo": "proteina_animal",
     "kcalPor100g": 146.0,
@@ -296,6 +316,7 @@ export const FOODS: Food[] = [
   {
     "id": "a19",
     "nome": "Ovo, de galinha, inteiro, frito",
+    "rotuloAmigavel": "Ovo frito",
     "fonteTaco": 490,
     "grupo": "proteina_animal",
     "kcalPor100g": 240.0,
@@ -312,6 +333,7 @@ export const FOODS: Food[] = [
   {
     "id": "a20",
     "nome": "Peru, congelado, assado",
+    "rotuloAmigavel": "Peito de peru (assado)",
     "fonteTaco": 425,
     "grupo": "proteina_animal",
     "kcalPor100g": 163.0,
@@ -328,6 +350,7 @@ export const FOODS: Food[] = [
   {
     "id": "a21",
     "nome": "Pintado, grelhado",
+    "rotuloAmigavel": "Pintado (peixe)",
     "fonteTaco": 313,
     "grupo": "proteina_animal",
     "kcalPor100g": 152.0,
@@ -344,6 +367,7 @@ export const FOODS: Food[] = [
   {
     "id": "a22",
     "nome": "Porco, bisteca, grelhada",
+    "rotuloAmigavel": "Bisteca de porco",
     "fonteTaco": 429,
     "grupo": "proteina_animal",
     "kcalPor100g": 280.0,
@@ -360,6 +384,7 @@ export const FOODS: Food[] = [
   {
     "id": "a23",
     "nome": "Porco, lombo, assado",
+    "rotuloAmigavel": "Lombo de porco",
     "fonteTaco": 432,
     "grupo": "proteina_animal",
     "kcalPor100g": 210.0,
@@ -376,6 +401,7 @@ export const FOODS: Food[] = [
   {
     "id": "a24",
     "nome": "Porco, pernil, assado",
+    "rotuloAmigavel": "Pernil",
     "fonteTaco": 435,
     "grupo": "proteina_animal",
     "kcalPor100g": 262.0,
@@ -392,6 +418,7 @@ export const FOODS: Food[] = [
   {
     "id": "a25",
     "nome": "Salmão, sem pele, fresco, grelhado",
+    "rotuloAmigavel": "Salmão",
     "fonteTaco": 317,
     "grupo": "proteina_animal",
     "kcalPor100g": 243.0,
@@ -408,6 +435,7 @@ export const FOODS: Food[] = [
   {
     "id": "a26",
     "nome": "Sardinha, assada",
+    "rotuloAmigavel": "Sardinha",
     "fonteTaco": 318,
     "grupo": "proteina_animal",
     "kcalPor100g": 164.0,
@@ -424,6 +452,7 @@ export const FOODS: Food[] = [
   {
     "id": "a27",
     "nome": "Sardinha, conserva em óleo",
+    "rotuloAmigavel": "Sardinha (em conserva)",
     "fonteTaco": 319,
     "grupo": "proteina_animal",
     "kcalPor100g": 285.0,
@@ -440,6 +469,7 @@ export const FOODS: Food[] = [
   {
     "id": "a28",
     "nome": "Creme de Leite",
+    "rotuloAmigavel": "Creme de leite",
     "fonteTaco": 447,
     "grupo": "laticinio",
     "kcalPor100g": 221.0,
@@ -456,6 +486,7 @@ export const FOODS: Food[] = [
   {
     "id": "a29",
     "nome": "Iogurte, natural",
+    "rotuloAmigavel": "Iogurte natural",
     "fonteTaco": 448,
     "grupo": "laticinio",
     "kcalPor100g": 51.0,
@@ -472,6 +503,7 @@ export const FOODS: Food[] = [
   {
     "id": "a30",
     "nome": "Iogurte, natural, desnatado",
+    "rotuloAmigavel": "Iogurte desnatado",
     "fonteTaco": 449,
     "grupo": "laticinio",
     "kcalPor100g": 41.0,
@@ -488,6 +520,7 @@ export const FOODS: Food[] = [
   {
     "id": "a31",
     "nome": "Leite, de vaca, desnatado, UHT",
+    "rotuloAmigavel": "Leite desnatado",
     "fonteTaco": 457,
     "grupo": "laticinio",
     "kcalPor100g": 35.0,
@@ -504,6 +537,7 @@ export const FOODS: Food[] = [
   {
     "id": "a32",
     "nome": "Leite, de vaca, integral",
+    "rotuloAmigavel": "Leite integral",
     "fonteTaco": 458,
     "grupo": "laticinio",
     "kcalPor100g": 60.0,
@@ -520,6 +554,7 @@ export const FOODS: Food[] = [
   {
     "id": "a33",
     "nome": "Leite, fermentado",
+    "rotuloAmigavel": "Leite fermentado",
     "fonteTaco": 460,
     "grupo": "laticinio",
     "kcalPor100g": 70.0,
@@ -536,6 +571,7 @@ export const FOODS: Food[] = [
   {
     "id": "a34",
     "nome": "Queijo, minas, frescal",
+    "rotuloAmigavel": "Queijo minas",
     "fonteTaco": 461,
     "grupo": "laticinio",
     "kcalPor100g": 264.0,
@@ -552,6 +588,7 @@ export const FOODS: Food[] = [
   {
     "id": "a35",
     "nome": "Queijo, mozarela",
+    "rotuloAmigavel": "Muçarela",
     "fonteTaco": 463,
     "grupo": "laticinio",
     "kcalPor100g": 330.0,
@@ -568,6 +605,7 @@ export const FOODS: Food[] = [
   {
     "id": "a36",
     "nome": "Queijo, parmesão",
+    "rotuloAmigavel": "Parmesão",
     "fonteTaco": 464,
     "grupo": "laticinio",
     "kcalPor100g": 453.0,
@@ -584,6 +622,7 @@ export const FOODS: Food[] = [
   {
     "id": "a37",
     "nome": "Queijo, prato",
+    "rotuloAmigavel": "Queijo prato",
     "fonteTaco": 467,
     "grupo": "laticinio",
     "kcalPor100g": 360.0,
@@ -600,6 +639,7 @@ export const FOODS: Food[] = [
   {
     "id": "a38",
     "nome": "Queijo, requeijão, cremoso",
+    "rotuloAmigavel": "Requeijão",
     "fonteTaco": 468,
     "grupo": "laticinio",
     "kcalPor100g": 257.0,
@@ -616,6 +656,7 @@ export const FOODS: Food[] = [
   {
     "id": "a39",
     "nome": "Queijo, ricota",
+    "rotuloAmigavel": "Ricota",
     "fonteTaco": 469,
     "grupo": "laticinio",
     "kcalPor100g": 140.0,
@@ -632,6 +673,7 @@ export const FOODS: Food[] = [
   {
     "id": "a40",
     "nome": "Ervilha, em vagem",
+    "rotuloAmigavel": "Ervilha fresca",
     "fonteTaco": 559,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 88.0,
@@ -646,6 +688,7 @@ export const FOODS: Food[] = [
   {
     "id": "a41",
     "nome": "Feijão, carioca, cozido",
+    "rotuloAmigavel": "Feijão carioca",
     "fonteTaco": 561,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 76.0,
@@ -660,6 +703,7 @@ export const FOODS: Food[] = [
   {
     "id": "a42",
     "nome": "Feijão, fradinho, cozido",
+    "rotuloAmigavel": "Feijão-fradinho",
     "fonteTaco": 563,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 78.0,
@@ -674,6 +718,7 @@ export const FOODS: Food[] = [
   {
     "id": "a43",
     "nome": "Feijão, preto, cozido",
+    "rotuloAmigavel": "Feijão preto",
     "fonteTaco": 567,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 77.0,
@@ -688,6 +733,7 @@ export const FOODS: Food[] = [
   {
     "id": "a44",
     "nome": "Feijão, roxo, cozido",
+    "rotuloAmigavel": "Feijão roxo",
     "fonteTaco": 573,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 77.0,
@@ -702,6 +748,7 @@ export const FOODS: Food[] = [
   {
     "id": "a45",
     "nome": "Grão-de-bico, cru",
+    "rotuloAmigavel": "Grão-de-bico (cru/seco)",
     "fonteTaco": 575,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 355.0,
@@ -716,6 +763,7 @@ export const FOODS: Food[] = [
   {
     "id": "a46",
     "nome": "Lentilha, cozida",
+    "rotuloAmigavel": "Lentilha",
     "fonteTaco": 577,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 93.0,
@@ -730,6 +778,7 @@ export const FOODS: Food[] = [
   {
     "id": "a47",
     "nome": "Soja, queijo (tofu)",
+    "rotuloAmigavel": "Tofu",
     "fonteTaco": 584,
     "grupo": "leguminosa_proteina_vegetal",
     "kcalPor100g": 64.0,
@@ -746,6 +795,7 @@ export const FOODS: Food[] = [
   {
     "id": "a48",
     "nome": "Arroz, integral, cozido",
+    "rotuloAmigavel": "Arroz integral",
     "fonteTaco": 1,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 124.0,
@@ -760,6 +810,7 @@ export const FOODS: Food[] = [
   {
     "id": "a49",
     "nome": "Arroz, tipo 1, cozido",
+    "rotuloAmigavel": "Arroz branco",
     "fonteTaco": 3,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 128.0,
@@ -774,6 +825,7 @@ export const FOODS: Food[] = [
   {
     "id": "a50",
     "nome": "Aveia, flocos, crua",
+    "rotuloAmigavel": "Aveia",
     "fonteTaco": 7,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 394.0,
@@ -788,6 +840,7 @@ export const FOODS: Food[] = [
   {
     "id": "a51",
     "nome": "Batata, baroa, cozida",
+    "rotuloAmigavel": "Batata-baroa (mandioquinha)",
     "fonteTaco": 86,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 80.0,
@@ -802,6 +855,7 @@ export const FOODS: Food[] = [
   {
     "id": "a52",
     "nome": "Batata, doce, cozida",
+    "rotuloAmigavel": "Batata-doce",
     "fonteTaco": 88,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 77.0,
@@ -816,6 +870,7 @@ export const FOODS: Food[] = [
   {
     "id": "a53",
     "nome": "Batata, inglesa, cozida",
+    "rotuloAmigavel": "Batata",
     "fonteTaco": 91,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 52.0,
@@ -830,6 +885,7 @@ export const FOODS: Food[] = [
   {
     "id": "a54",
     "nome": "Cará, cozido",
+    "rotuloAmigavel": "Cará",
     "fonteTaco": 102,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 78.0,
@@ -844,6 +900,7 @@ export const FOODS: Food[] = [
   {
     "id": "a55",
     "nome": "Farinha, de mandioca, crua",
+    "rotuloAmigavel": "Farinha de mandioca",
     "fonteTaco": 121,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 361.0,
@@ -858,6 +915,7 @@ export const FOODS: Food[] = [
   {
     "id": "a56",
     "nome": "Farinha, de milho, amarela",
+    "rotuloAmigavel": "Farinha de milho",
     "fonteTaco": 33,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 351.0,
@@ -872,6 +930,7 @@ export const FOODS: Food[] = [
   {
     "id": "a57",
     "nome": "Farinha, de trigo",
+    "rotuloAmigavel": "Farinha de trigo",
     "fonteTaco": 35,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 360.0,
@@ -888,6 +947,7 @@ export const FOODS: Food[] = [
   {
     "id": "a58",
     "nome": "Inhame, cru",
+    "rotuloAmigavel": "Inhame",
     "fonteTaco": 126,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 97.0,
@@ -902,6 +962,7 @@ export const FOODS: Food[] = [
   {
     "id": "a59",
     "nome": "Macarrão, trigo, cru",
+    "rotuloAmigavel": "Macarrão",
     "fonteTaco": 40,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 371.0,
@@ -918,6 +979,7 @@ export const FOODS: Food[] = [
   {
     "id": "a60",
     "nome": "Mandioca, cozida",
+    "rotuloAmigavel": "Mandioca",
     "fonteTaco": 129,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 125.0,
@@ -932,6 +994,7 @@ export const FOODS: Food[] = [
   {
     "id": "a61",
     "nome": "Milho, fubá, cru",
+    "rotuloAmigavel": "Fubá",
     "fonteTaco": 43,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 353.0,
@@ -946,6 +1009,7 @@ export const FOODS: Food[] = [
   {
     "id": "a62",
     "nome": "Milho, verde, enlatado, drenado",
+    "rotuloAmigavel": "Milho verde",
     "fonteTaco": 45,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 98.0,
@@ -960,6 +1024,7 @@ export const FOODS: Food[] = [
   {
     "id": "a63",
     "nome": "Pipoca, com óleo de soja, sem sal",
+    "rotuloAmigavel": "Pipoca",
     "fonteTaco": 61,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 448.0,
@@ -974,6 +1039,7 @@ export const FOODS: Food[] = [
   {
     "id": "a64",
     "nome": "Polenta, pré-cozida",
+    "rotuloAmigavel": "Polenta",
     "fonteTaco": 62,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 103.0,
@@ -988,6 +1054,7 @@ export const FOODS: Food[] = [
   {
     "id": "a65",
     "nome": "Pão, aveia, forma",
+    "rotuloAmigavel": "Pão de aveia",
     "fonteTaco": 48,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 343.0,
@@ -1004,6 +1071,7 @@ export const FOODS: Food[] = [
   {
     "id": "a66",
     "nome": "Pão, trigo, forma, integral",
+    "rotuloAmigavel": "Pão integral",
     "fonteTaco": 52,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 253.0,
@@ -1020,6 +1088,7 @@ export const FOODS: Food[] = [
   {
     "id": "a67",
     "nome": "Pão, trigo, francês",
+    "rotuloAmigavel": "Pão francês",
     "fonteTaco": 53,
     "grupo": "grao_cereal_tuberculo",
     "kcalPor100g": 300.0,
@@ -1036,6 +1105,7 @@ export const FOODS: Food[] = [
   {
     "id": "a68",
     "nome": "Abacate, cru",
+    "rotuloAmigavel": "Abacate",
     "fonteTaco": 163,
     "grupo": "fruta",
     "kcalPor100g": 96.0,
@@ -1050,6 +1120,7 @@ export const FOODS: Food[] = [
   {
     "id": "a69",
     "nome": "Abacaxi, cru",
+    "rotuloAmigavel": "Abacaxi",
     "fonteTaco": 164,
     "grupo": "fruta",
     "kcalPor100g": 48.0,
@@ -1064,6 +1135,7 @@ export const FOODS: Food[] = [
   {
     "id": "a70",
     "nome": "Ameixa, crua",
+    "rotuloAmigavel": "Ameixa",
     "fonteTaco": 172,
     "grupo": "fruta",
     "kcalPor100g": 53.0,
@@ -1078,6 +1150,7 @@ export const FOODS: Food[] = [
   {
     "id": "a71",
     "nome": "Banana, nanica, crua",
+    "rotuloAmigavel": "Banana (nanica)",
     "fonteTaco": 179,
     "grupo": "fruta",
     "kcalPor100g": 92.0,
@@ -1092,6 +1165,7 @@ export const FOODS: Food[] = [
   {
     "id": "a72",
     "nome": "Banana, prata, crua",
+    "rotuloAmigavel": "Banana",
     "fonteTaco": 182,
     "grupo": "fruta",
     "kcalPor100g": 98.0,
@@ -1106,6 +1180,7 @@ export const FOODS: Food[] = [
   {
     "id": "a73",
     "nome": "Caqui, chocolate, cru",
+    "rotuloAmigavel": "Caqui",
     "fonteTaco": 189,
     "grupo": "fruta",
     "kcalPor100g": 71.0,
@@ -1120,6 +1195,7 @@ export const FOODS: Food[] = [
   {
     "id": "a74",
     "nome": "Figo, cru",
+    "rotuloAmigavel": "Figo",
     "fonteTaco": 194,
     "grupo": "fruta",
     "kcalPor100g": 41.0,
@@ -1134,6 +1210,7 @@ export const FOODS: Food[] = [
   {
     "id": "a75",
     "nome": "Goiaba, vermelha, com casca, crua",
+    "rotuloAmigavel": "Goiaba",
     "fonteTaco": 200,
     "grupo": "fruta",
     "kcalPor100g": 54.0,
@@ -1148,6 +1225,7 @@ export const FOODS: Food[] = [
   {
     "id": "a76",
     "nome": "Kiwi, cru",
+    "rotuloAmigavel": "Kiwi",
     "fonteTaco": 207,
     "grupo": "fruta",
     "kcalPor100g": 51.0,
@@ -1162,6 +1240,7 @@ export const FOODS: Food[] = [
   {
     "id": "a77",
     "nome": "Laranja, baía, crua",
+    "rotuloAmigavel": "Laranja",
     "fonteTaco": 208,
     "grupo": "fruta",
     "kcalPor100g": 45.0,
@@ -1176,6 +1255,7 @@ export const FOODS: Food[] = [
   {
     "id": "a78",
     "nome": "Limão, tahiti, cru",
+    "rotuloAmigavel": "Limão",
     "fonteTaco": 220,
     "grupo": "fruta",
     "kcalPor100g": 32.0,
@@ -1190,6 +1270,7 @@ export const FOODS: Food[] = [
   {
     "id": "a79",
     "nome": "Mamão, Papaia, cru",
+    "rotuloAmigavel": "Mamão",
     "fonteTaco": 226,
     "grupo": "fruta",
     "kcalPor100g": 40.0,
@@ -1204,6 +1285,7 @@ export const FOODS: Food[] = [
   {
     "id": "a80",
     "nome": "Manga, Tommy Atkins, crua",
+    "rotuloAmigavel": "Manga",
     "fonteTaco": 231,
     "grupo": "fruta",
     "kcalPor100g": 51.0,
@@ -1218,6 +1300,7 @@ export const FOODS: Food[] = [
   {
     "id": "a81",
     "nome": "Maracujá, cru",
+    "rotuloAmigavel": "Maracujá",
     "fonteTaco": 232,
     "grupo": "fruta",
     "kcalPor100g": 68.0,
@@ -1232,6 +1315,7 @@ export const FOODS: Food[] = [
   {
     "id": "a82",
     "nome": "Maçã, Fuji, com casca, crua",
+    "rotuloAmigavel": "Maçã",
     "fonteTaco": 222,
     "grupo": "fruta",
     "kcalPor100g": 56.0,
@@ -1246,6 +1330,7 @@ export const FOODS: Food[] = [
   {
     "id": "a83",
     "nome": "Melancia, crua",
+    "rotuloAmigavel": "Melancia",
     "fonteTaco": 235,
     "grupo": "fruta",
     "kcalPor100g": 33.0,
@@ -1260,6 +1345,7 @@ export const FOODS: Food[] = [
   {
     "id": "a84",
     "nome": "Melão, cru",
+    "rotuloAmigavel": "Melão",
     "fonteTaco": 236,
     "grupo": "fruta",
     "kcalPor100g": 29.0,
@@ -1274,6 +1360,7 @@ export const FOODS: Food[] = [
   {
     "id": "a85",
     "nome": "Morango, cru",
+    "rotuloAmigavel": "Morango",
     "fonteTaco": 239,
     "grupo": "fruta",
     "kcalPor100g": 30.0,
@@ -1288,6 +1375,7 @@ export const FOODS: Food[] = [
   {
     "id": "a86",
     "nome": "Pêra, Williams, crua",
+    "rotuloAmigavel": "Pêra",
     "fonteTaco": 243,
     "grupo": "fruta",
     "kcalPor100g": 53.0,
@@ -1302,6 +1390,7 @@ export const FOODS: Food[] = [
   {
     "id": "a87",
     "nome": "Pêssego, Aurora, cru",
+    "rotuloAmigavel": "Pêssego",
     "fonteTaco": 244,
     "grupo": "fruta",
     "kcalPor100g": 36.0,
@@ -1316,6 +1405,7 @@ export const FOODS: Food[] = [
   {
     "id": "a88",
     "nome": "Tangerina, Poncã, crua",
+    "rotuloAmigavel": "Tangerina",
     "fonteTaco": 251,
     "grupo": "fruta",
     "kcalPor100g": 38.0,
@@ -1330,6 +1420,7 @@ export const FOODS: Food[] = [
   {
     "id": "a89",
     "nome": "Uva, Rubi, crua",
+    "rotuloAmigavel": "Uva",
     "fonteTaco": 257,
     "grupo": "fruta",
     "kcalPor100g": 49.0,
@@ -1344,6 +1435,7 @@ export const FOODS: Food[] = [
   {
     "id": "a90",
     "nome": "Abobrinha, italiana, cozida",
+    "rotuloAmigavel": "Abobrinha",
     "fonteTaco": 70,
     "grupo": "verdura_legume",
     "kcalPor100g": 15.0,
@@ -1358,6 +1450,7 @@ export const FOODS: Food[] = [
   {
     "id": "a91",
     "nome": "Abóbora, cabotian, cozida",
+    "rotuloAmigavel": "Abóbora",
     "fonteTaco": 64,
     "grupo": "verdura_legume",
     "kcalPor100g": 48.0,
@@ -1372,6 +1465,7 @@ export const FOODS: Food[] = [
   {
     "id": "a92",
     "nome": "Agrião, cru",
+    "rotuloAmigavel": "Agrião",
     "fonteTaco": 75,
     "grupo": "verdura_legume",
     "kcalPor100g": 17.0,
@@ -1386,6 +1480,7 @@ export const FOODS: Food[] = [
   {
     "id": "a93",
     "nome": "Alface, americana, crua",
+    "rotuloAmigavel": "Alface",
     "fonteTaco": 77,
     "grupo": "verdura_legume",
     "kcalPor100g": 9.0,
@@ -1400,6 +1495,7 @@ export const FOODS: Food[] = [
   {
     "id": "a94",
     "nome": "Alho, cru",
+    "rotuloAmigavel": "Alho",
     "fonteTaco": 82,
     "grupo": "verdura_legume",
     "kcalPor100g": 113.0,
@@ -1414,6 +1510,7 @@ export const FOODS: Food[] = [
   {
     "id": "a95",
     "nome": "Berinjela, cozida",
+    "rotuloAmigavel": "Berinjela",
     "fonteTaco": 95,
     "grupo": "verdura_legume",
     "kcalPor100g": 19.0,
@@ -1428,6 +1525,7 @@ export const FOODS: Food[] = [
   {
     "id": "a96",
     "nome": "Beterraba, cozida",
+    "rotuloAmigavel": "Beterraba",
     "fonteTaco": 97,
     "grupo": "verdura_legume",
     "kcalPor100g": 32.0,
@@ -1442,6 +1540,7 @@ export const FOODS: Food[] = [
   {
     "id": "a97",
     "nome": "Brócolis, cozido",
+    "rotuloAmigavel": "Brócolis",
     "fonteTaco": 100,
     "grupo": "verdura_legume",
     "kcalPor100g": 25.0,
@@ -1456,6 +1555,7 @@ export const FOODS: Food[] = [
   {
     "id": "a98",
     "nome": "Cebola, crua",
+    "rotuloAmigavel": "Cebola",
     "fonteTaco": 107,
     "grupo": "verdura_legume",
     "kcalPor100g": 39.0,
@@ -1470,6 +1570,7 @@ export const FOODS: Food[] = [
   {
     "id": "a99",
     "nome": "Cebolinha, crua",
+    "rotuloAmigavel": "Cebolinha",
     "fonteTaco": 108,
     "grupo": "verdura_legume",
     "kcalPor100g": 20.0,
@@ -1484,6 +1585,7 @@ export const FOODS: Food[] = [
   {
     "id": "a100",
     "nome": "Cenoura, cozida",
+    "rotuloAmigavel": "Cenoura",
     "fonteTaco": 109,
     "grupo": "verdura_legume",
     "kcalPor100g": 30.0,
@@ -1498,6 +1600,7 @@ export const FOODS: Food[] = [
   {
     "id": "a101",
     "nome": "Cenoura, crua",
+    "rotuloAmigavel": "Cenoura (crua)",
     "fonteTaco": 110,
     "grupo": "verdura_legume",
     "kcalPor100g": 34.0,
@@ -1512,6 +1615,7 @@ export const FOODS: Food[] = [
   {
     "id": "a102",
     "nome": "Chuchu, cozido",
+    "rotuloAmigavel": "Chuchu",
     "fonteTaco": 112,
     "grupo": "verdura_legume",
     "kcalPor100g": 19.0,
@@ -1526,6 +1630,7 @@ export const FOODS: Food[] = [
   {
     "id": "a103",
     "nome": "Couve, manteiga, crua",
+    "rotuloAmigavel": "Couve",
     "fonteTaco": 115,
     "grupo": "verdura_legume",
     "kcalPor100g": 27.0,
@@ -1540,6 +1645,7 @@ export const FOODS: Food[] = [
   {
     "id": "a104",
     "nome": "Couve-flor, cozida",
+    "rotuloAmigavel": "Couve-flor",
     "fonteTaco": 118,
     "grupo": "verdura_legume",
     "kcalPor100g": 19.0,
@@ -1554,6 +1660,7 @@ export const FOODS: Food[] = [
   {
     "id": "a105",
     "nome": "Espinafre, Nova Zelândia, cru",
+    "rotuloAmigavel": "Espinafre",
     "fonteTaco": 119,
     "grupo": "verdura_legume",
     "kcalPor100g": 16.0,
@@ -1568,6 +1675,7 @@ export const FOODS: Food[] = [
   {
     "id": "a106",
     "nome": "Pepino, cru",
+    "rotuloAmigavel": "Pepino",
     "fonteTaco": 142,
     "grupo": "verdura_legume",
     "kcalPor100g": 10.0,
@@ -1582,6 +1690,7 @@ export const FOODS: Food[] = [
   {
     "id": "a107",
     "nome": "Pimentão, verde, cru",
+    "rotuloAmigavel": "Pimentão",
     "fonteTaco": 144,
     "grupo": "verdura_legume",
     "kcalPor100g": 21.0,
@@ -1596,6 +1705,7 @@ export const FOODS: Food[] = [
   {
     "id": "a108",
     "nome": "Quiabo, cru",
+    "rotuloAmigavel": "Quiabo",
     "fonteTaco": 147,
     "grupo": "verdura_legume",
     "kcalPor100g": 30.0,
@@ -1610,6 +1720,7 @@ export const FOODS: Food[] = [
   {
     "id": "a109",
     "nome": "Repolho, branco, cru",
+    "rotuloAmigavel": "Repolho",
     "fonteTaco": 149,
     "grupo": "verdura_legume",
     "kcalPor100g": 17.0,
@@ -1624,6 +1735,7 @@ export const FOODS: Food[] = [
   {
     "id": "a110",
     "nome": "Rúcula, crua",
+    "rotuloAmigavel": "Rúcula",
     "fonteTaco": 152,
     "grupo": "verdura_legume",
     "kcalPor100g": 13.0,
@@ -1638,6 +1750,7 @@ export const FOODS: Food[] = [
   {
     "id": "a111",
     "nome": "Tomate, salada",
+    "rotuloAmigavel": "Tomate",
     "fonteTaco": 161,
     "grupo": "verdura_legume",
     "kcalPor100g": 21.0,
@@ -1652,6 +1765,7 @@ export const FOODS: Food[] = [
   {
     "id": "a112",
     "nome": "Vagem, crua",
+    "rotuloAmigavel": "Vagem",
     "fonteTaco": 162,
     "grupo": "verdura_legume",
     "kcalPor100g": 25.0,
@@ -1666,6 +1780,7 @@ export const FOODS: Food[] = [
   {
     "id": "a113",
     "nome": "Amendoim, grão, cru",
+    "rotuloAmigavel": "Amendoim",
     "fonteTaco": 557,
     "grupo": "gordura",
     "kcalPor100g": 544.0,
@@ -1682,6 +1797,7 @@ export const FOODS: Food[] = [
   {
     "id": "a114",
     "nome": "Amêndoa, torrada, salgada",
+    "rotuloAmigavel": "Amêndoa",
     "fonteTaco": 587,
     "grupo": "gordura",
     "kcalPor100g": 581.0,
@@ -1698,6 +1814,7 @@ export const FOODS: Food[] = [
   {
     "id": "a115",
     "nome": "Azeite, de oliva, extra virgem",
+    "rotuloAmigavel": "Azeite de oliva",
     "fonteTaco": 260,
     "grupo": "gordura",
     "kcalPor100g": 884.0,
@@ -1711,6 +1828,7 @@ export const FOODS: Food[] = [
   {
     "id": "a116",
     "nome": "Castanha-de-caju, torrada, salgada",
+    "rotuloAmigavel": "Castanha-de-caju",
     "fonteTaco": 588,
     "grupo": "gordura",
     "kcalPor100g": 570.0,
@@ -1727,6 +1845,7 @@ export const FOODS: Food[] = [
   {
     "id": "a117",
     "nome": "Castanha-do-Brasil, crua",
+    "rotuloAmigavel": "Castanha-do-pará",
     "fonteTaco": 589,
     "grupo": "gordura",
     "kcalPor100g": 643.0,
@@ -1743,6 +1862,7 @@ export const FOODS: Food[] = [
   {
     "id": "a118",
     "nome": "Coco, cru",
+    "rotuloAmigavel": "Coco",
     "fonteTaco": 590,
     "grupo": "gordura",
     "kcalPor100g": 406.0,
@@ -1759,6 +1879,7 @@ export const FOODS: Food[] = [
   {
     "id": "a119",
     "nome": "Gergelim, semente",
+    "rotuloAmigavel": "Gergelim",
     "fonteTaco": 593,
     "grupo": "gordura",
     "kcalPor100g": 584.0,
@@ -1775,6 +1896,7 @@ export const FOODS: Food[] = [
   {
     "id": "a120",
     "nome": "Linhaça, semente",
+    "rotuloAmigavel": "Linhaça",
     "fonteTaco": 594,
     "grupo": "gordura",
     "kcalPor100g": 495.0,
@@ -1789,6 +1911,7 @@ export const FOODS: Food[] = [
   {
     "id": "a121",
     "nome": "Manteiga, com sal",
+    "rotuloAmigavel": "Manteiga",
     "fonteTaco": 261,
     "grupo": "gordura",
     "kcalPor100g": 726.0,
@@ -1805,6 +1928,7 @@ export const FOODS: Food[] = [
   {
     "id": "a122",
     "nome": "Noz, crua",
+    "rotuloAmigavel": "Noz",
     "fonteTaco": 597,
     "grupo": "gordura",
     "kcalPor100g": 620.0,
@@ -1821,6 +1945,7 @@ export const FOODS: Food[] = [
   {
     "id": "a123",
     "nome": "Óleo, de canola",
+    "rotuloAmigavel": "Óleo de canola",
     "fonteTaco": 268,
     "grupo": "gordura",
     "kcalPor100g": 884.0,
@@ -1834,6 +1959,7 @@ export const FOODS: Food[] = [
   {
     "id": "a124",
     "nome": "Óleo, de girassol",
+    "rotuloAmigavel": "Óleo de girassol",
     "fonteTaco": 269,
     "grupo": "gordura",
     "kcalPor100g": 884.0,
@@ -1847,6 +1973,7 @@ export const FOODS: Food[] = [
   {
     "id": "a125",
     "nome": "Óleo, de soja",
+    "rotuloAmigavel": "Óleo de soja",
     "fonteTaco": 272,
     "grupo": "gordura",
     "kcalPor100g": 884.0,
@@ -1855,6 +1982,681 @@ export const FOODS: Food[] = [
     "gorduraPor100g": 100.0,
     "medidaCaseira": "1 colher de sopa",
     "gramasDaMedida": 8.0,
+    "alergenos": []
+  },
+  {
+    "id": "a126",
+    "nome": "Ervilha, enlatada, drenada",
+    "rotuloAmigavel": "Ervilha (enlatada)",
+    "fonteTaco": 560,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 74.0,
+    "proteinaPor100g": 4.6,
+    "carboidratoPor100g": 13.4,
+    "gorduraPor100g": 0.4,
+    "fibraPor100g": 5.1,
+    "medidaCaseira": "colher de sopa cheia",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a128",
+    "nome": "Feijão, jalo, cozido",
+    "rotuloAmigavel": "Feijão jalo",
+    "fonteTaco": 565,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 93.0,
+    "proteinaPor100g": 6.1,
+    "carboidratoPor100g": 16.5,
+    "gorduraPor100g": 0.5,
+    "fibraPor100g": 13.9,
+    "medidaCaseira": "concha média",
+    "gramasDaMedida": 80.0,
+    "alergenos": []
+  },
+  {
+    "id": "a129",
+    "nome": "Feijão, rajado, cozido",
+    "rotuloAmigavel": "Feijão rajado",
+    "fonteTaco": 569,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 85.0,
+    "proteinaPor100g": 5.5,
+    "carboidratoPor100g": 15.3,
+    "gorduraPor100g": 0.4,
+    "fibraPor100g": 9.3,
+    "medidaCaseira": "concha média",
+    "gramasDaMedida": 80.0,
+    "alergenos": []
+  },
+  {
+    "id": "a130",
+    "nome": "Feijão, rosinha, cozido",
+    "rotuloAmigavel": "Feijão rosinha",
+    "fonteTaco": 571,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 68.0,
+    "proteinaPor100g": 4.5,
+    "carboidratoPor100g": 11.8,
+    "gorduraPor100g": 0.5,
+    "fibraPor100g": 4.8,
+    "medidaCaseira": "concha média",
+    "gramasDaMedida": 80.0,
+    "alergenos": []
+  },
+  {
+    "id": "a132",
+    "nome": "Soja, farinha",
+    "rotuloAmigavel": "Farinha de soja",
+    "fonteTaco": 581,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 404.0,
+    "proteinaPor100g": 36.0,
+    "carboidratoPor100g": 38.4,
+    "gorduraPor100g": 14.6,
+    "fibraPor100g": 20.2,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 15.0,
+    "alergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "a133",
+    "nome": "Soja, extrato solúvel, natural, fluido",
+    "rotuloAmigavel": "Bebida de soja",
+    "fonteTaco": 582,
+    "grupo": "leguminosa_proteina_vegetal",
+    "kcalPor100g": 39.0,
+    "proteinaPor100g": 2.4,
+    "carboidratoPor100g": 4.3,
+    "gorduraPor100g": 1.6,
+    "fibraPor100g": 0.4,
+    "medidaCaseira": "copo",
+    "gramasDaMedida": 200.0,
+    "alergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "a138",
+    "nome": "Pinhão, cozido",
+    "rotuloAmigavel": "Pinhão",
+    "fonteTaco": 595,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 174.0,
+    "proteinaPor100g": 3.0,
+    "carboidratoPor100g": 43.9,
+    "gorduraPor100g": 0.7,
+    "fibraPor100g": 15.6,
+    "medidaCaseira": "3 unidades",
+    "gramasDaMedida": 20.0,
+    "alergenos": []
+  },
+  {
+    "id": "a139",
+    "nome": "Biscoito, salgado, cream cracker",
+    "rotuloAmigavel": "Biscoito cream cracker",
+    "fonteTaco": 13,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 432.0,
+    "proteinaPor100g": 10.1,
+    "carboidratoPor100g": 68.7,
+    "gorduraPor100g": 14.4,
+    "fibraPor100g": 2.5,
+    "medidaCaseira": "4 unidades",
+    "gramasDaMedida": 25.0,
+    "alergenos": [
+      "gluten"
+    ]
+  },
+  {
+    "id": "a140",
+    "nome": "Cereais, milho, flocos, com sal",
+    "rotuloAmigavel": "Cereal de milho (flocos)",
+    "fonteTaco": 21,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 370.0,
+    "proteinaPor100g": 7.3,
+    "carboidratoPor100g": 80.8,
+    "gorduraPor100g": 1.6,
+    "fibraPor100g": 5.3,
+    "medidaCaseira": "xícara",
+    "gramasDaMedida": 30.0,
+    "alergenos": [
+      "gluten"
+    ]
+  },
+  {
+    "id": "a141",
+    "nome": "Farinha, de arroz, enriquecida",
+    "rotuloAmigavel": "Farinha de arroz",
+    "fonteTaco": 31,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 363.0,
+    "proteinaPor100g": 1.3,
+    "carboidratoPor100g": 85.5,
+    "gorduraPor100g": 0.3,
+    "fibraPor100g": 0.6,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 15.0,
+    "alergenos": []
+  },
+  {
+    "id": "a142",
+    "nome": "Farinha, de rosca",
+    "rotuloAmigavel": "Farinha de rosca",
+    "fonteTaco": 34,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 371.0,
+    "proteinaPor100g": 11.4,
+    "carboidratoPor100g": 75.8,
+    "gorduraPor100g": 1.5,
+    "fibraPor100g": 4.8,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 15.0,
+    "alergenos": [
+      "gluten"
+    ]
+  },
+  {
+    "id": "a143",
+    "nome": "Milho, amido, cru",
+    "rotuloAmigavel": "Amido de milho",
+    "fonteTaco": 42,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 361.0,
+    "proteinaPor100g": 0.6,
+    "carboidratoPor100g": 87.1,
+    "gorduraPor100g": 0.0,
+    "fibraPor100g": 0.7,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 10.0,
+    "alergenos": []
+  },
+  {
+    "id": "a144",
+    "nome": "Pão, de soja",
+    "rotuloAmigavel": "Pão de soja",
+    "fonteTaco": 49,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 309.0,
+    "proteinaPor100g": 11.3,
+    "carboidratoPor100g": 56.5,
+    "gorduraPor100g": 3.6,
+    "fibraPor100g": 5.7,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 30.0,
+    "alergenos": [
+      "gluten",
+      "soja"
+    ]
+  },
+  {
+    "id": "a145",
+    "nome": "Pão, milho, forma",
+    "rotuloAmigavel": "Pão de milho",
+    "fonteTaco": 51,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 292.0,
+    "proteinaPor100g": 8.3,
+    "carboidratoPor100g": 56.4,
+    "gorduraPor100g": 3.1,
+    "fibraPor100g": 4.3,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 40.0,
+    "alergenos": [
+      "gluten"
+    ]
+  },
+  {
+    "id": "a146",
+    "nome": "Torrada, pão francês",
+    "rotuloAmigavel": "Torrada",
+    "fonteTaco": 63,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 377.0,
+    "proteinaPor100g": 10.5,
+    "carboidratoPor100g": 74.6,
+    "gorduraPor100g": 3.3,
+    "fibraPor100g": 3.4,
+    "medidaCaseira": "2 unidades",
+    "gramasDaMedida": 16.0,
+    "alergenos": [
+      "gluten"
+    ]
+  },
+  {
+    "id": "a147",
+    "nome": "Leite, condensado",
+    "rotuloAmigavel": "Leite condensado",
+    "fonteTaco": 453,
+    "grupo": "laticinio",
+    "kcalPor100g": 313.0,
+    "proteinaPor100g": 7.7,
+    "carboidratoPor100g": 57.0,
+    "gorduraPor100g": 6.7,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 20.0,
+    "alergenos": [
+      "lactose",
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a148",
+    "nome": "Queijo, minas, meia cura",
+    "rotuloAmigavel": "Queijo minas (meia cura)",
+    "fonteTaco": 462,
+    "grupo": "laticinio",
+    "kcalPor100g": 321.0,
+    "proteinaPor100g": 21.2,
+    "carboidratoPor100g": 3.6,
+    "gorduraPor100g": 24.6,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 30.0,
+    "alergenos": [
+      "lactose",
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a149",
+    "nome": "Queijo, pasteurizado",
+    "rotuloAmigavel": "Queijo pasteurizado",
+    "fonteTaco": 465,
+    "grupo": "laticinio",
+    "kcalPor100g": 303.0,
+    "proteinaPor100g": 9.4,
+    "carboidratoPor100g": 5.7,
+    "gorduraPor100g": 27.4,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 20.0,
+    "alergenos": [
+      "lactose",
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a150",
+    "nome": "Ovo, de galinha, gema, cozida/10minutos",
+    "rotuloAmigavel": "Gema de ovo",
+    "fonteTaco": 487,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 353.0,
+    "proteinaPor100g": 15.9,
+    "carboidratoPor100g": 1.6,
+    "gorduraPor100g": 30.8,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "2 gemas",
+    "gramasDaMedida": 34.0,
+    "alergenos": [
+      "origem_animal",
+      "ovo"
+    ]
+  },
+  {
+    "id": "a151",
+    "nome": "Presunto, sem capa de gordura",
+    "rotuloAmigavel": "Presunto",
+    "fonteTaco": 439,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 94.0,
+    "proteinaPor100g": 14.3,
+    "carboidratoPor100g": 2.1,
+    "gorduraPor100g": 2.7,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 15.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a152",
+    "nome": "Salame",
+    "rotuloAmigavel": "Salame",
+    "fonteTaco": 443,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 398.0,
+    "proteinaPor100g": 25.8,
+    "carboidratoPor100g": 2.9,
+    "gorduraPor100g": 30.6,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 10.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a153",
+    "nome": "Coco, água de",
+    "rotuloAmigavel": "Água de coco",
+    "fonteTaco": 478,
+    "grupo": "fruta",
+    "kcalPor100g": 22.0,
+    "proteinaPor100g": 0.0,
+    "carboidratoPor100g": 5.3,
+    "gorduraPor100g": 0.0,
+    "fibraPor100g": 0.1,
+    "medidaCaseira": "copo",
+    "gramasDaMedida": 200.0,
+    "alergenos": [
+      "coco"
+    ]
+  },
+  {
+    "id": "a154",
+    "nome": "Hambúrguer, bovino, grelhado",
+    "rotuloAmigavel": "Hambúrguer bovino",
+    "fonteTaco": 417,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 210.0,
+    "proteinaPor100g": 13.2,
+    "carboidratoPor100g": 11.3,
+    "gorduraPor100g": 12.4,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "unidade",
+    "gramasDaMedida": 80.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a155",
+    "nome": "Linguiça, frango, grelhada",
+    "rotuloAmigavel": "Linguiça de frango",
+    "fonteTaco": 420,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 244.0,
+    "proteinaPor100g": 18.2,
+    "carboidratoPor100g": 0.0,
+    "gorduraPor100g": 18.4,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "gomo",
+    "gramasDaMedida": 60.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a156",
+    "nome": "Linguiça, porco, grelhada",
+    "rotuloAmigavel": "Linguiça de porco",
+    "fonteTaco": 423,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 296.0,
+    "proteinaPor100g": 23.2,
+    "carboidratoPor100g": 0.0,
+    "gorduraPor100g": 21.9,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "gomo",
+    "gramasDaMedida": 60.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a157",
+    "nome": "Mortadela",
+    "rotuloAmigavel": "Mortadela",
+    "fonteTaco": 424,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 269.0,
+    "proteinaPor100g": 12.0,
+    "carboidratoPor100g": 5.8,
+    "gorduraPor100g": 21.6,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 15.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a158",
+    "nome": "Porco, costela, assada",
+    "rotuloAmigavel": "Costela de porco",
+    "fonteTaco": 430,
+    "grupo": "proteina_animal",
+    "kcalPor100g": 402.0,
+    "proteinaPor100g": 30.2,
+    "carboidratoPor100g": 0.0,
+    "gorduraPor100g": 30.3,
+    "fibraPor100g": 0.0,
+    "medidaCaseira": "pedaço",
+    "gramasDaMedida": 100.0,
+    "alergenos": [
+      "origem_animal"
+    ]
+  },
+  {
+    "id": "a159",
+    "nome": "Acelga, crua",
+    "rotuloAmigavel": "Acelga",
+    "fonteTaco": 74,
+    "grupo": "verdura_legume",
+    "kcalPor100g": 21.0,
+    "proteinaPor100g": 1.4,
+    "carboidratoPor100g": 4.6,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 1.1,
+    "medidaCaseira": "xícara (folhas)",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a160",
+    "nome": "Aipo, cru",
+    "rotuloAmigavel": "Aipo (salsão)",
+    "fonteTaco": 76,
+    "grupo": "verdura_legume",
+    "kcalPor100g": 19.0,
+    "proteinaPor100g": 0.8,
+    "carboidratoPor100g": 4.3,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 1.0,
+    "medidaCaseira": "2 colheres de sopa",
+    "gramasDaMedida": 40.0,
+    "alergenos": []
+  },
+  {
+    "id": "a161",
+    "nome": "Chicória, crua",
+    "rotuloAmigavel": "Chicória",
+    "fonteTaco": 111,
+    "grupo": "verdura_legume",
+    "kcalPor100g": 14.0,
+    "proteinaPor100g": 1.1,
+    "carboidratoPor100g": 2.9,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 2.2,
+    "medidaCaseira": "xícara",
+    "gramasDaMedida": 25.0,
+    "alergenos": []
+  },
+  {
+    "id": "a163",
+    "nome": "Feijão, broto, cru",
+    "rotuloAmigavel": "Broto de feijão (moyashi)",
+    "fonteTaco": 125,
+    "grupo": "verdura_legume",
+    "kcalPor100g": 39.0,
+    "proteinaPor100g": 4.2,
+    "carboidratoPor100g": 7.8,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 2.0,
+    "medidaCaseira": "xícara",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a164",
+    "nome": "Fécula, de mandioca (polvilho)",
+    "rotuloAmigavel": "Polvilho (fécula de mandioca)",
+    "fonteTaco": 124,
+    "grupo": "grao_cereal_tuberculo",
+    "kcalPor100g": 331.0,
+    "proteinaPor100g": 0.5,
+    "carboidratoPor100g": 81.1,
+    "gorduraPor100g": 0.3,
+    "fibraPor100g": 0.6,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 15.0,
+    "alergenos": []
+  },
+  {
+    "id": "a165",
+    "nome": "Carambola, crua",
+    "rotuloAmigavel": "Carambola",
+    "fonteTaco": 190,
+    "grupo": "fruta",
+    "kcalPor100g": 46.0,
+    "proteinaPor100g": 0.9,
+    "carboidratoPor100g": 11.5,
+    "gorduraPor100g": 0.2,
+    "fibraPor100g": 2.0,
+    "medidaCaseira": "1 unidade",
+    "gramasDaMedida": 100.0,
+    "alergenos": []
+  },
+  {
+    "id": "a166",
+    "nome": "Cupuaçu, cru",
+    "rotuloAmigavel": "Cupuaçu (polpa)",
+    "fonteTaco": 192,
+    "grupo": "fruta",
+    "kcalPor100g": 49.0,
+    "proteinaPor100g": 1.2,
+    "carboidratoPor100g": 10.4,
+    "gorduraPor100g": 1.0,
+    "fibraPor100g": 3.1,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a168",
+    "nome": "Graviola, crua",
+    "rotuloAmigavel": "Graviola",
+    "fonteTaco": 201,
+    "grupo": "fruta",
+    "kcalPor100g": 62.0,
+    "proteinaPor100g": 0.8,
+    "carboidratoPor100g": 15.8,
+    "gorduraPor100g": 0.2,
+    "fibraPor100g": 1.9,
+    "medidaCaseira": "fatia",
+    "gramasDaMedida": 100.0,
+    "alergenos": []
+  },
+  {
+    "id": "a169",
+    "nome": "Jabuticaba, crua",
+    "rotuloAmigavel": "Jabuticaba",
+    "fonteTaco": 203,
+    "grupo": "fruta",
+    "kcalPor100g": 58.0,
+    "proteinaPor100g": 0.6,
+    "carboidratoPor100g": 15.3,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 2.3,
+    "medidaCaseira": "punhado",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a170",
+    "nome": "Jaca, crua",
+    "rotuloAmigavel": "Jaca",
+    "fonteTaco": 204,
+    "grupo": "fruta",
+    "kcalPor100g": 88.0,
+    "proteinaPor100g": 1.4,
+    "carboidratoPor100g": 22.5,
+    "gorduraPor100g": 0.3,
+    "fibraPor100g": 2.4,
+    "medidaCaseira": "gomos",
+    "gramasDaMedida": 40.0,
+    "alergenos": []
+  },
+  {
+    "id": "a173",
+    "nome": "Mexerica, Murcote, crua",
+    "rotuloAmigavel": "Mexerica (tangerina)",
+    "fonteTaco": 237,
+    "grupo": "fruta",
+    "kcalPor100g": 58.0,
+    "proteinaPor100g": 0.9,
+    "carboidratoPor100g": 14.9,
+    "gorduraPor100g": 0.1,
+    "fibraPor100g": 3.1,
+    "medidaCaseira": "1 unidade",
+    "gramasDaMedida": 100.0,
+    "alergenos": []
+  },
+  {
+    "id": "a175",
+    "nome": "Pinha, crua",
+    "rotuloAmigavel": "Pinha (fruta-do-conde)",
+    "fonteTaco": 246,
+    "grupo": "fruta",
+    "kcalPor100g": 88.0,
+    "proteinaPor100g": 1.5,
+    "carboidratoPor100g": 22.4,
+    "gorduraPor100g": 0.3,
+    "fibraPor100g": 3.4,
+    "medidaCaseira": "1 unidade",
+    "gramasDaMedida": 100.0,
+    "alergenos": []
+  },
+  {
+    "id": "a176",
+    "nome": "Pitanga, crua",
+    "rotuloAmigavel": "Pitanga",
+    "fonteTaco": 247,
+    "grupo": "fruta",
+    "kcalPor100g": 41.0,
+    "proteinaPor100g": 0.9,
+    "carboidratoPor100g": 10.2,
+    "gorduraPor100g": 0.2,
+    "fibraPor100g": 3.2,
+    "medidaCaseira": "punhado",
+    "gramasDaMedida": 30.0,
+    "alergenos": []
+  },
+  {
+    "id": "a177",
+    "nome": "Romã, crua",
+    "rotuloAmigavel": "Romã",
+    "fonteTaco": 249,
+    "grupo": "fruta",
+    "kcalPor100g": 56.0,
+    "proteinaPor100g": 0.4,
+    "carboidratoPor100g": 15.1,
+    "gorduraPor100g": 0.0,
+    "fibraPor100g": 0.4,
+    "medidaCaseira": "1/2 unidade",
+    "gramasDaMedida": 80.0,
+    "alergenos": []
+  },
+  {
+    "id": "a178",
+    "nome": "Tamarindo, cru",
+    "rotuloAmigavel": "Tamarindo (polpa)",
+    "fonteTaco": 250,
+    "grupo": "fruta",
+    "kcalPor100g": 276.0,
+    "proteinaPor100g": 3.2,
+    "carboidratoPor100g": 72.5,
+    "gorduraPor100g": 0.5,
+    "fibraPor100g": 6.4,
+    "medidaCaseira": "colher de sopa",
+    "gramasDaMedida": 20.0,
     "alergenos": []
   }
 ];

@@ -17,10 +17,37 @@ const semFlags: FlagsSaude = {
 };
 
 describe('integridade da base curada', () => {
-  it('contagens da base (125 alimentos · 56 pratos · 163 exercícios)', () => {
-    expect(FOODS).toHaveLength(125);
-    expect(RECIPES).toHaveLength(56);
+  // Âncoras da V2 limpa (cofre: banco-alimentos §Expansão V2 + handoff-pratos-v2, 2026-07-01)
+  it('contagens da base (V2: 167 alimentos · 96 pratos · 363 ingredientes · 163 exercícios)', () => {
+    expect(FOODS).toHaveLength(167);
+    expect(RECIPES).toHaveLength(96);
+    expect(RECIPES.reduce((n, r) => n + r.itens.length, 0)).toBe(363);
     expect(EXERCISES).toHaveLength(163);
+  });
+
+  it('distribuição por tipo (vegano 35 · vegetariano 29 · onívoro 32)', () => {
+    const conta = { vegano: 0, vegetariano: 0, onivoro: 0 };
+    for (const r of RECIPES) conta[r.tipo]++;
+    expect(conta).toEqual({ vegano: 35, vegetariano: 29, onivoro: 32 });
+  });
+
+  it('rótulo amigável (vocabulário do cofre): 100% preenchido e único', () => {
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const vistos = new Set<string>();
+    for (const f of FOODS) {
+      expect(f.rotuloAmigavel, `${f.id} sem rotuloAmigavel`).toBeTruthy();
+      const n = norm(f.rotuloAmigavel!);
+      expect(vistos.has(n), `rótulo repetido: ${f.rotuloAmigavel}`).toBe(false);
+      vistos.add(n);
+    }
+  });
+
+  it('Atwater: kcal ≈ 4P+4C+9G (desvio > ±12% E > 25 kcal = troca de coluna)', () => {
+    for (const f of FOODS) {
+      const atwater = 4 * f.proteinaPor100g + 4 * f.carboidratoPor100g + 9 * f.gorduraPor100g;
+      const desvio = Math.abs(f.kcalPor100g - atwater);
+      expect(desvio <= Math.max(0.12 * f.kcalPor100g, 25), `${f.id} "${f.nome}": kcal ${f.kcalPor100g} vs 4/4/9 ${atwater.toFixed(0)}`).toBe(true);
+    }
   });
 
   it('ids únicos em todas as tabelas', () => {

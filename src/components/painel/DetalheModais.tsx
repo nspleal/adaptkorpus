@@ -66,9 +66,11 @@ export function DetalheExercicio({ ex, onFechar, onTrocar }: { ex: Exercise; onF
 export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, onCansei }: { item: CardapioItem; foodsById: Map<string, Food>; onFechar: () => void; onTrocar: () => void; onPorcao: () => void; onCansei: () => void }) {
   const m = item.macros;
   const alergenos = item.prato.contemAlergenos ?? [];
+  // Nome de exibição = rótulo amigável do cofre (rotulos-amigaveis-alimentos-evokorpus);
+  // o nome clínico TACO fica na base (proveniência/atribuição), não na tela.
   const ingredientes = item.prato.itens.map((it) => {
     const f = foodsById.get(it.alimentoId);
-    return { nome: f?.nome ?? it.alimentoId, qtd: `${r0(it.gramas * item.escala)} g` };
+    return { nome: f?.rotuloAmigavel ?? f?.nome ?? it.alimentoId, qtd: `${r0(it.gramas * item.escala)} g` };
   });
   return (
     <Shell onClose={onFechar} kicker={REFEICAO_LABEL[item.refeicao] ?? 'Prato'}>

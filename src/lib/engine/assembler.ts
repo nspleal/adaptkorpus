@@ -192,38 +192,84 @@ export function montarCardapioDia(
   }
 
   // Busca combinatória (café × almoço × jantar × lanche opcional), pratos DISTINTOS.
+  //
+  // PERFORMANCE (base V2, 2026-07-01): com 96 pratos multi-slot a busca chega a ~2,3M
+  // combinações — a versão ingênua (alocar itens + somar + comparar objetos por combinação)
+  // levava ~1 s por cardápio. Este loop é o mesmo algoritmo com aritmética escalar
+  // incremental e ZERO alocação no caminho quente; só os DOIS vencedores são materializados
+  // no fim. A saída é BIT-IDÊNTICA à busca ingênua: mesma ordem de iteração, mesma
+  // associatividade de soma (c→a→j→l), mesmo comparador estrito (desvio de kcal → desvio de
+  // proteína → chave lexicográfica do conjunto de ids, computada só no empate).
   function procurar(cafes: Recipe[], almocos: Recipe[], jantares: Recipe[], lanches: (Recipe | null)[]) {
-    let melhorNaJanela: Candidato | null = null;
-    let melhorGeral: Candidato | null = null;
-    for (const c of cafes) {
-      for (const a of almocos) {
-        if (a.id === c.id) continue;
-        for (const j of jantares) {
-          if (j.id === c.id || j.id === a.id) continue;
-          for (const l of lanches) {
-            if (l && (l.id === c.id || l.id === a.id || l.id === j.id)) continue;
-            const baseItens: PratoBase[] = [
-              { refeicao: 'cafe', prato: c, base: macros(c) },
-              { refeicao: 'almoco', prato: a, base: macros(a) },
-              { refeicao: 'jantar', prato: j, base: macros(j) },
-            ];
-            if (l) baseItens.push({ refeicao: 'lanche', prato: l, base: macros(l) });
-            const totaisBase = somar(...baseItens.map((b) => b.base));
+    const mC = cafes.map(macros), mA = almocos.map(macros), mJ = jantares.map(macros);
+    const mL = lanches.map((l) => (l ? macros(l) : null));
+    const alvoKcal = plano.kcalAlvo, alvoProt = plano.macros.proteinaG;
+    const { minKcal, maxKcal } = plano.janela;
+
+    interface Melhor { ci: number; ai: number; ji: number; li: number; escala: number; dev: number; protDev: number; chave: string | null }
+    let geral: Melhor | null = null;
+    let naJanela: Melhor | null = null;
+
+    const chaveDe = (ci: number, ai: number, ji: number, li: number): string => {
+      const ids = [cafes[ci]!.id, almocos[ai]!.id, jantares[ji]!.id];
+      const l = lanches[li];
+      if (l) ids.push(l.id);
+      return ids.sort().join('|');
+    };
+    // Substitui `b` só se o candidato for ESTRITAMENTE melhor (mesma semântica de
+    // compararCandidatos(cand, melhor) < 0 da versão ingênua).
+    const melhorDe = (b: Melhor | null, ci: number, ai: number, ji: number, li: number, escala: number, dev: number, protDev: number): Melhor => {
+      if (!b) return { ci, ai, ji, li, escala, dev, protDev, chave: null };
+      if (dev !== b.dev) return dev < b.dev ? { ci, ai, ji, li, escala, dev, protDev, chave: null } : b;
+      if (protDev !== b.protDev) return protDev < b.protDev ? { ci, ai, ji, li, escala, dev, protDev, chave: null } : b;
+      const chave = chaveDe(ci, ai, ji, li);
+      if (b.chave === null) b.chave = chaveDe(b.ci, b.ai, b.ji, b.li);
+      return chave < b.chave ? { ci, ai, ji, li, escala, dev, protDev, chave } : b;
+    };
+
+    for (let ci = 0; ci < cafes.length; ci++) {
+      const cId = cafes[ci]!.id, kcalC = mC[ci]!.kcal, protC = mC[ci]!.proteinaG;
+      for (let ai = 0; ai < almocos.length; ai++) {
+        const aId = almocos[ai]!.id;
+        if (aId === cId) continue;
+        const kcalCA = kcalC + mA[ai]!.kcal, protCA = protC + mA[ai]!.proteinaG;
+        for (let ji = 0; ji < jantares.length; ji++) {
+          const jId = jantares[ji]!.id;
+          if (jId === cId || jId === aId) continue;
+          const kcalCAJ = kcalCA + mJ[ji]!.kcal, protCAJ = protCA + mJ[ji]!.proteinaG;
+          for (let li = 0; li < lanches.length; li++) {
+            const l = lanches[li];
+            if (l && (l.id === cId || l.id === aId || l.id === jId)) continue;
+            const kcalBase = l ? kcalCAJ + mL[li]!.kcal : kcalCAJ;
+            const protBase = l ? protCAJ + mL[li]!.proteinaG : protCAJ;
             // Passo 3 — ESCALAR: porção do dia escala para mirar a kcal-alvo (kcal é o alvo
             // mais protegido). Escala única do dia, limitada à faixa realista (ESCALA_PORCAO).
-            const escala = totaisBase.kcal > 0
-              ? clamp(plano.kcalAlvo / totaisBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max)
+            const escala = kcalBase > 0
+              ? clamp(alvoKcal / kcalBase, ESCALA_PORCAO.min, ESCALA_PORCAO.max)
               : ESCALA_PORCAO.max;
-            const totais = escalar(totaisBase, escala);
-            const cand: Candidato = { baseItens, escala, totais };
-            if (!melhorGeral || compararCandidatos(cand, melhorGeral, plano) < 0) melhorGeral = cand;
-            const dentro = totais.kcal >= plano.janela.minKcal && totais.kcal <= plano.janela.maxKcal;
-            if (dentro && (!melhorNaJanela || compararCandidatos(cand, melhorNaJanela, plano) < 0)) melhorNaJanela = cand;
+            const kcal = kcalBase * escala;
+            const dev = Math.abs(kcal - alvoKcal);
+            const protDev = Math.abs(protBase * escala - alvoProt);
+            geral = melhorDe(geral, ci, ai, ji, li, escala, dev, protDev);
+            if (kcal >= minKcal && kcal <= maxKcal) naJanela = melhorDe(naJanela, ci, ai, ji, li, escala, dev, protDev);
           }
         }
       }
     }
-    return { melhorNaJanela, melhorGeral };
+
+    // Materializa só os vencedores (mesma construção da versão ingênua: soma c→a→j→l).
+    const montar = (b: Melhor | null): Candidato | null => {
+      if (!b) return null;
+      const baseItens: PratoBase[] = [
+        { refeicao: 'cafe', prato: cafes[b.ci]!, base: mC[b.ci]! },
+        { refeicao: 'almoco', prato: almocos[b.ai]!, base: mA[b.ai]! },
+        { refeicao: 'jantar', prato: jantares[b.ji]!, base: mJ[b.ji]! },
+      ];
+      const l = lanches[b.li];
+      if (l) baseItens.push({ refeicao: 'lanche', prato: l, base: mL[b.li]! });
+      return { baseItens, escala: b.escala, totais: escalar(somar(...baseItens.map((x) => x.base)), b.escala) };
+    };
+    return { melhorNaJanela: montar(naJanela), melhorGeral: montar(geral) };
   }
 
   // Preferências relaxáveis de GOSTO — nunca segurança — e o cardápio PRECISA fechar. Duas

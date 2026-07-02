@@ -31,6 +31,10 @@ function fmtQty(g: number): string {
   return `${total} g`;
 }
 
+/** Nome que o usuário lê = rótulo amigável do cofre (rotulos-amigaveis-alimentos-evokorpus);
+ *  o nome clínico TACO fica como proveniência na base. */
+const rotulo = (f: Food): string => f.rotuloAmigavel ?? f.nome;
+
 export default function ListaCompras({ itens, foodsById, onVoltar }: {
   itens: CardapioItem[];
   foodsById: Map<string, Food>;
@@ -59,7 +63,7 @@ export default function ListaCompras({ itens, foodsById, onVoltar }: {
     }
     return GRUPO_ORDEM
       .filter((g) => porGrupo.has(g))
-      .map((g) => ({ grupo: g, itens: porGrupo.get(g)!.sort((a, b) => a.food.nome.localeCompare(b.food.nome, 'pt-BR')) }));
+      .map((g) => ({ grupo: g, itens: porGrupo.get(g)!.sort((a, b) => rotulo(a.food).localeCompare(rotulo(b.food), 'pt-BR')) }));
   }, [itens, foodsById, dias]);
 
   const total = grupos.reduce((n, g) => n + g.itens.length, 0);
@@ -106,7 +110,7 @@ export default function ListaCompras({ itens, foodsById, onVoltar }: {
                 return (
                   <div key={it.food.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i === g.itens.length - 1 ? 'none' : '1px solid rgba(234,229,219,.06)' }}>
                     <div onClick={() => toggle(it.food.id)} style={{ width: 24, height: 24, minWidth: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .2s ease', border: `1px solid ${checked ? '#BDFF00' : 'rgba(234,229,219,.25)'}`, background: checked ? '#BDFF00' : 'transparent' }}>{checked && <svg width={13} height={13} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div>
-                    <span onClick={() => toggle(it.food.id)} style={{ flex: 1, fontSize: '.95rem', cursor: 'pointer', ...risco }}>{it.food.nome}</span>
+                    <span onClick={() => toggle(it.food.id)} style={{ flex: 1, fontSize: '.95rem', cursor: 'pointer', ...risco }}>{rotulo(it.food)}</span>
                     <span style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)', ...risco }}>{fmtQty(it.gramas)}</span>
                   </div>
                 );
