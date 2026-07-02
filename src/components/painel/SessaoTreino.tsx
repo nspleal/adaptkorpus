@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
+import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 
 /**
  * Sessão de treino guiada — porte fiel do protótipo V2 (.dc.html):
@@ -219,6 +220,13 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               <summary style={{ listStyle: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.84rem', padding: '8px 13px', borderRadius: 10 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Como fazer</summary>
               <p style={{ margin: '12px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.65)', lineHeight: 1.55 }}>{ex.comoFazer}</p>
             </details>
+
+            {temErrosComuns(ex.id) && (
+              <details style={{ marginBottom: 18 }}>
+                <summary style={{ listStyle: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.84rem', padding: '8px 13px', borderRadius: 10 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3Z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" /><path d="M12 10v4M12 17v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Erros comuns</summary>
+                <div style={{ margin: '12px 0 0' }}><ListaErrosComuns exId={ex.id} /></div>
+              </details>
+            )}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{nSets} × {ex.reps.min}–{ex.reps.max} reps</span>

@@ -2,29 +2,32 @@ import InstitucionalShell from '@/components/legal/InstitucionalShell';
 
 export const metadata = { title: 'Changelog · Evokorpus' };
 
-// Conteúdo ILUSTRATIVO de formato — o time alimenta a lista a cada release.
+// Releases REAIS do Evokorpus, compilados do histórico de lançamentos — atualizar a cada release.
 // Tags SEM vermelho (vermelho = erro/segurança em todo o sistema): "Novo" = Pulso sólido;
 // "Melhoria"/"Correção" = pílula Bone neutra.
 type Tag = 'Novo' | 'Melhoria' | 'Correção';
 const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; desc: string }[] }[] = [
   {
+    mes: 'Julho 2026',
+    itens: [
+      { data: '02 jul', titulo: 'Erros comuns em cada exercício', tag: 'Novo', desc: 'Além do "como fazer", a tela do exercício agora mostra os deslizes mais comuns de execução e como corrigir.' },
+      { data: '02 jul', titulo: 'Registre qualquer treino', tag: 'Novo', desc: 'Treinou por fora do plano? Marque o dia como treinado — ele conta para a sua constância.' },
+      { data: '02 jul', titulo: 'Marcos de constância', tag: 'Novo', desc: 'Um marco que soma os seus dias de treino e nunca cobra a ausência: nenhum dia conta contra você.' },
+      { data: '02 jul', titulo: 'Progressão de carga por exercício', tag: 'Novo', desc: 'Acompanhe a evolução da sua carga ao longo do tempo, direto no Histórico.' },
+      { data: '02 jul', titulo: 'Base ampliada: 167 alimentos e 96 pratos', tag: 'Melhoria', desc: 'Cardápios com mais opções, incluindo 35 pratos veganos e 29 vegetarianos, com dados TACO e USDA.' },
+      { data: '02 jul', titulo: 'Perguntas frequentes com busca', tag: 'Melhoria', desc: 'A central de ajuda agora cobre assinatura, treino, dieta, seus dados e os limites da ferramenta.' },
+      { data: '02 jul', titulo: 'Garantia de 7 dias e reembolso', tag: 'Novo', desc: 'Nova página explicando a garantia de 7 dias e como pedir reembolso, sem letra miúda.' },
+      { data: '01 jul', titulo: 'Escolha os seus dias de treino', tag: 'Novo', desc: 'Marque quais dias da semana você treina (de segunda a domingo); o resto vira descanso ou recuperação leve.' },
+      { data: '01 jul', titulo: '"Cansei deste prato"', tag: 'Novo', desc: 'Tirou um prato da rotação? Ele descansa por 21 dias e volta sozinho depois.' },
+    ],
+  },
+  {
     mes: 'Junho 2026',
     itens: [
-      { data: '28 jun', titulo: 'Trocas de alimentos mais rápidas', tag: 'Melhoria', desc: 'Buscar e substituir um alimento do cardápio ficou mais direto.' },
-      { data: '14 jun', titulo: 'Novo painel da semana', tag: 'Novo', desc: 'Veja seus dias de treino e de descanso em um único lugar.' },
-    ],
-  },
-  {
-    mes: 'Maio 2026',
-    itens: [
-      { data: '22 mai', titulo: 'Correção no cálculo de macros', tag: 'Correção', desc: 'Ajustamos um arredondamento que afetava os totais de proteína.' },
-      { data: '05 mai', titulo: 'Preferências alimentares', tag: 'Novo', desc: 'Agora você marca alergias e alimentos que não gosta direto no perfil.' },
-    ],
-  },
-  {
-    mes: 'Abril 2026',
-    itens: [
-      { data: '10 abr', titulo: 'Melhorias de performance', tag: 'Melhoria', desc: 'O app abre mais rápido em conexões lentas.' },
+      { data: '30 jun', titulo: 'Registro de refeições e histórico de constância', tag: 'Novo', desc: 'Marque se seguiu o plano em cada refeição e acompanhe a sua constância — sem contar calorias, sem culpa.' },
+      { data: '30 jun', titulo: 'Detalhe de cada prato e exercício', tag: 'Novo', desc: 'Toque em um item para ver ingredientes, estimativa de referência e como fazer.' },
+      { data: '30 jun', titulo: 'Termos, Privacidade e Suporte', tag: 'Novo', desc: 'Documentos claros sobre como a ferramenta funciona e como os seus dados são tratados.' },
+      { data: '30 jun', titulo: 'Sua sessão mais estável', tag: 'Melhoria', desc: 'A área logada sobrevive a recarregar a página e ao botão voltar do navegador.' },
     ],
   },
 ];
@@ -44,7 +47,6 @@ export default function Changelog() {
       <div style={{ maxWidth: 760, margin: '0 auto', animation: 'evkScreenIn .5s cubic-bezier(.22,.61,.36,1)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
           <h1 style={{ margin: 0, fontWeight: 800, fontSize: 'clamp(2.1rem,4.4vw,3.2rem)', lineHeight: 1.06, letterSpacing: '-.03em' }}>Changelog</h1>
-          <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.45)', border: '1px solid rgba(234,229,219,.18)', borderRadius: 999, padding: '6px 14px', whiteSpace: 'nowrap' }}>Exemplos ilustrativos de formato</span>
         </div>
         <p style={{ margin: '0 0 44px', fontSize: 'clamp(1.02rem,1.4vw,1.16rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.66)', fontWeight: 500, maxWidth: 520 }}>O que muda no Evokorpus, direto ao ponto — atualizado a cada novo lançamento.</p>
 

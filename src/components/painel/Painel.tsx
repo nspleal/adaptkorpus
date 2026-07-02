@@ -7,7 +7,7 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarTreinoManual, treinouEm, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
 import { marco, diasDeTreino, diasEntreISO, type Marco as MarcoTipo } from '@/lib/marcos';
 import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
@@ -135,6 +135,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setSessaoDia(null);
     setAba('progresso');
     window.scrollTo(0, 0);
+  }
+
+  // "Treinei por fora" — registro rápido do dia (cofre: qualquer treino conta p/ os marcos).
+  // Guarda anti-duplicidade: se já treinou hoje (guiado ou manual), o dia já conta — não infla.
+  const treinouHoje = treinouEm(sessoes, hojeISO());
+  function registrarTreinoHoje() {
+    if (treinouHoje) return;
+    setSessoes(registrarTreinoManual());
   }
 
   // Marco de constância a partir do histórico persistido (dias distintos; nunca zera).
@@ -349,7 +357,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} marco={marcoAtual} onVerMarco={() => setAba('progresso')} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} marco={marcoAtual} onVerMarco={() => setAba('progresso')} onJaTreinei={registrarTreinoHoje} treinouHoje={treinouHoje} />
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
@@ -374,10 +382,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, marco, onVerMarco }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, marco, onVerMarco, onJaTreinei, treinouHoje }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
-  marco: MarcoTipo; onVerMarco: () => void;
+  marco: MarcoTipo; onVerMarco: () => void; onJaTreinei: () => void; treinouHoje: boolean;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
@@ -400,6 +408,15 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
             <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios</div>
             <button onClick={onComecar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>
+            {/* "Treinei por fora" — registro rápido; conta p/ os marcos como qualquer treino (cofre). */}
+            {treinouHoje ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 12, fontSize: '.86rem', fontWeight: 600, color: '#BDFF00' }}>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#BDFF00" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Treino de hoje registrado
+              </div>
+            ) : (
+              <button onClick={onJaTreinei} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none', color: 'rgba(234,229,219,.6)', fontSize: '.86rem', fontWeight: 500, padding: '4px 0', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, textDecorationColor: 'rgba(234,229,219,.3)' }}>Treinei por fora? Registrar treino de hoje</button>
+            )}
           </div>
         )}
         <div style={gradCard}>
@@ -627,6 +644,18 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
         sessoes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {sessoes.map((w) => {
+              // Registro manual ("treinei por fora") — sem séries/volume/feedback p/ mostrar;
+              // linha informativa, não clicável (nada a detalhar). Conta igual para os marcos.
+              if (w.manual) {
+                return (
+                  <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: '50%', background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#BDFF00" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+                      <div><div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Treino registrado</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 2 }}>Você marcou este dia como treinado.</div></div>
+                    </div>
+                  </div>
+                );
+              }
               const fbVals = Object.values(w.feedback);
               const resumoFb = fbVals.length ? `${fbVals.filter((f) => f === 'na_medida').length} na medida` : 'sem feedback';
               return (
@@ -758,14 +787,14 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
     // já se esgotou (poucos pratos cabem na janela do dia para este slot/dieta).
     const n = modal.opcoes.length; showMore = n >= 3; onMore = onMaisPrato;
     const equil = 'que mantêm o equilíbrio do dia (equivalência calórica)';
-    sub = n >= 3 ? `Três opções ${equil}. Não curtiu? Gere mais.`
+    sub = n >= 3 ? `Três opções ${equil}. Não gostou? Gere mais.`
       : n === 2 ? `Duas opções ${equil}.`
       : n === 1 ? `Uma opção que mantém o equilíbrio do dia (equivalência calórica).`
       : '';
     modal.opcoes.forEach((o) => opcoes.push({ chave: o.prato.id, nome: o.prato.nome, detalhe: `${r0(o.macros.kcal)} kcal · ${r0(o.macros.proteinaG)} g prot`, onClick: () => onAplicarPrato(modal.idx, o) }));
   } else if (modal.tipo === 'exercicio') {
     const n = modal.opcoes.length; showMore = n >= 3; onMore = onMaisEx;
-    sub = n >= 3 ? 'Mantém o grupo e o padrão, respeitando seu equipamento. Não curtiu? Gere mais.'
+    sub = n >= 3 ? 'Mantém o grupo e o padrão, respeitando seu equipamento. Não gostou? Gere mais.'
       : n >= 1 ? 'Mantém o grupo e o padrão, respeitando seu equipamento.'
       : '';
     modal.opcoes.forEach((ex) => opcoes.push({ chave: ex.id, nome: ex.nomePt, detalhe: `${ex.grupoMuscular}${ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}`, onClick: () => onAplicarEx(modal.d, modal.s, ex) }));
@@ -794,7 +823,7 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
         {showMore && (
           <button onClick={onMore} className="modal-more" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 700, fontSize: '.94rem', padding: 13, borderRadius: 13, cursor: 'pointer' }}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M4 5v5h5M20 19v-5h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /><path d="M19 9a7.5 7.5 0 00-13-2.5L4 10M5 15a7.5 7.5 0 0013 2.5L20 14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Não curti nenhuma — gerar mais variedade
+            Não gostei de nenhuma — gerar mais variedade
           </button>
         )}
       </div>

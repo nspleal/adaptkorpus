@@ -1,55 +1,74 @@
 import LegalLayout from '@/components/legal/LegalLayout';
 import FaqBusca, { type FaqCat } from '@/components/legal/FaqBusca';
-import { AValidar } from '@/components/legal/ui';
 
 export const metadata = { title: 'Perguntas frequentes · Evokorpus' };
 
 // FAQ é conteúdo informacional (NÃO jurídico) → draftMode={false} (sem selo de rascunho).
-// Ainda assim, fatos pendentes específicos levam o marcador [A validar:] inline.
+// Conteúdo canônico VERBATIM do cofre (conceitos/faq-evokorpus, 2026-07-02) — o app porta
+// daqui, não inventa Q&A. Fatos já fixados no cofre (R$29/mês · 7 dias · 167 alimentos/96
+// pratos · reembolso 7 dias/2 dias úteis · suporte 24–48h) → sem [A validar].
 const TOC = [
-  { id: 's-cat-assinatura', label: 'Assinatura e cancelamento' },
+  { id: 's-cat-assinatura', label: 'Assinatura, preço e cancelamento' },
   { id: 's-cat-treino', label: 'Treino' },
   { id: 's-cat-dieta', label: 'Dieta' },
   { id: 's-cat-conta', label: 'Conta e dados' },
-  { id: 's-cat-legal', label: 'Legal e 18+' },
+  { id: 's-cat-legal', label: 'Saúde, legal e 18+' },
 ];
 
 const CATEGORIAS: FaqCat[] = [
   {
-    id: 's-cat-assinatura', label: 'Assinatura e cancelamento', desc: 'Como funciona o teste grátis, a cobrança e o cancelamento.',
+    id: 's-cat-assinatura', label: 'Assinatura, preço e cancelamento', desc: 'Preço, teste grátis, cancelamento, reembolso e formas de pagamento.',
     items: [
-      { q: 'Como funciona o teste grátis?', a: 'São 7 dias grátis. Avisamos por e-mail antes da primeira cobrança de R$ 29/mês. Você cancela quando quiser.', note: <AValidar>valores e ciclo</AValidar> },
-      { q: 'Como eu cancelo?', a: 'Em Conta → Assinatura, em poucos toques. Sem letra miúda: o acesso continua até o fim do período já pago.' },
+      { q: 'Quanto custa?', a: 'O app custa R$ 29/mês, com 7 dias grátis pra testar antes de pagar. O ebook "A Curva" é R$ 27, compra única e separada.' },
+      { q: 'Como funciona o teste grátis de 7 dias?', a: 'Você usa o app completo por 7 dias sem pagar nada. Se não quiser continuar, não é cobrado — a cobrança só começa depois, se você seguir.' },
+      { q: 'Como eu cancelo?', a: 'Em 1 clique, na sua conta, quando quiser. Sem multa e sem precisar ligar pra ninguém. O acesso continua até o fim do período que você já pagou.' },
+      { q: 'Vou ser cobrado de surpresa?', a: 'Não. A cobrança é mensal e clara, e você cancela a hora que quiser em 1 clique. Cobrança honesta é um princípio nosso, não um favor.' },
+      { q: 'Posso pedir reembolso?', a: 'Pode. Nos primeiros 7 dias, devolvemos tudo, sem perguntas (é a garantia do Código de Defesa do Consumidor). É só pedir pelo suporte ou na sua conta; processamos em até 2 dias úteis.' },
+      { q: 'Quais as formas de pagamento?', a: 'Aceitamos Pix, boleto e cartão.' },
     ],
   },
   {
-    id: 's-cat-treino', label: 'Treino', desc: 'Como o treino se adapta a você.',
+    id: 's-cat-treino', label: 'Treino', desc: 'Como o treino é montado e se adapta a você.',
     items: [
-      { q: 'Preciso ir à academia?', a: 'Não. O treino se adapta ao que você tem — em casa ou na academia, com ou sem equipamento.' },
-      { q: 'E se eu perder um dia de treino?', a: 'Sem culpa. Seus dias de treino ficam salvos no seu perfil e o plano se reorganiza a partir daí — constância importa mais que perfeição.' },
+      { q: 'Preciso de academia?', a: 'Não. Você escolhe o equipamento que tem — nenhum, em casa ou academia — e o plano se monta em cima disso.' },
+      { q: 'Como o treino é montado?', a: 'Por um método de treino consagrado (o FITT): séries, repetições, descanso e progressão conforme o seu objetivo e o seu nível. Regras claras, sem achismo.' },
+      { q: 'Sou iniciante, serve pra mim?', a: 'Serve. Você informa a sua experiência e o plano começa no ponto certo, com progressão gradual.' },
+      { q: 'Como sei quanta carga usar?', a: 'O app trabalha com esforço percebido (deixar 1 a 3 repetições "na reserva"), e não com teste de carga máxima — mais seguro pra quem treina sozinho.' },
+      { q: 'Posso escolher os dias de treino?', a: 'Pode. Você marca quais dias da semana treina (de segunda a domingo); o restante vira descanso ou recuperação leve.' },
+      { q: 'Posso trocar um exercício que não gosto ou não consigo fazer?', a: 'Pode. O app sugere alternativas equivalentes pro mesmo padrão de movimento.' },
     ],
   },
   {
-    id: 's-cat-dieta', label: 'Dieta', desc: 'Cardápio, trocas e como calculamos.',
+    id: 's-cat-dieta', label: 'Dieta', desc: 'Cardápio, dados dos alimentos, trocas e restrições.',
     items: [
-      // "não curto" → "não gosto" (consistência com o rename já publicado no app).
-      { q: 'Não gosto de um alimento do cardápio. E agora?', a: 'Você troca sem quebrar o plano — é só marcar o que não gosta nas suas preferências.' },
-      { q: 'As calorias e macros são exatas?', a: 'São pontos de partida calculados a partir de dados reconhecidos (TACO/USDA) — não metas exatas. Você ajusta conforme a sua realidade.' },
+      { q: 'É contagem de calorias?', a: 'Não é um diário de calorias. O app monta um cardápio pra sua meta e você só marca se seguiu ou comeu outra coisa — sem culpa, sem número na sua cara.' },
+      { q: 'De onde vêm os dados dos alimentos?', a: 'De tabelas oficiais de composição de alimentos (a TACO, brasileira, e a USDA). São 167 alimentos e 96 pratos montados a partir deles.' },
+      { q: 'Sou vegetariano ou vegano — funciona?', a: 'Funciona bem. Há 35 pratos veganos e 29 vegetarianos, com boas fontes de proteína vegetal (soja, leguminosas). Você marca a sua identidade alimentar e o app respeita.' },
+      { q: 'Tem alimento que eu não gosto — e se eu for alérgico?', a: 'Você lista o que "não gosto" e o app evita. Alergia é tratada à parte, como filtro absoluto (nunca entra no seu cardápio) — são coisas diferentes de propósito, por segurança.' },
+      { q: 'Cansei de um prato, e agora?', a: 'Toca em "Cansei deste prato" e ele sai da rotação por 21 dias, voltando sozinho depois. Cansaço de receita é temporário.' },
+      { q: 'Preciso comer exatamente as gramas do cardápio?', a: 'É uma referência, não uma regra rígida. O app ajusta as porções pra bater a sua meta; use como ponto de partida.' },
     ],
   },
   {
-    id: 's-cat-conta', label: 'Conta e dados', desc: 'Seus dados, seus direitos.',
+    id: 's-cat-conta', label: 'Conta e dados', desc: 'Seus dados, seus direitos e como o app funciona.',
     items: [
-      { q: 'Como exerço meus direitos sobre meus dados (LGPD)?', a: 'Em Conta → Privacidade você acessa, corrige, baixa ou exclui seus dados. Também pode falar com nosso Encarregado (DPO).', note: <AValidar>e-mail do DPO</AValidar> },
-      { q: 'Posso excluir minha conta quando quiser?', a: 'Pode, direto no app, a qualquer momento.' },
+      { q: 'Vocês vendem os meus dados?', a: 'Não. Nunca vendemos os seus dados nem usamos os seus dados de saúde para publicidade.' },
+      { q: 'Posso exportar ou apagar os meus dados?', a: 'Pode, quando quiser — é um direito garantido pela LGPD. Você baixa ou exclui pela sua conta.' },
+      { q: 'Vocês pedem foto do meu corpo?', a: 'Não pedimos foto.' },
+      { q: 'Funciona sem internet?', a: 'O seu plano do dia (cardápio e treino) fica disponível offline depois que você abre o app uma vez.' },
+      { q: 'Tem app pra baixar na loja?', a: 'É um app web (PWA): você acessa pelo navegador e pode "adicionar à tela inicial" pra usar como um app, sem loja.' },
+      { q: 'Como falo com o suporte?', a: 'Por e-mail e WhatsApp; respondemos em até 24 a 48 horas.' },
     ],
   },
   {
-    id: 's-cat-legal', label: 'Legal e 18+', desc: 'Limites da ferramenta e quem pode usar.',
+    id: 's-cat-legal', label: 'Saúde, legal e 18+', desc: 'Os limites da ferramenta e quem pode usar.',
     items: [
-      { q: 'O Evokorpus substitui um nutricionista ou personal?', a: 'Não. É uma ferramenta geral e educacional, dirigida por você. Para condições de saúde, procure um profissional habilitado.' },
-      { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
-      { q: 'Preciso ter 18 anos?', a: 'Sim. O Evokorpus é destinado a maiores de 18 anos.' },
+      { q: 'O Evokorpus usa IA?', a: 'Não. É uma ferramenta baseada em regras claras e numa base de dados curada — uma fórmula transparente, não um chute de "caixa-preta". Você fica no comando das escolhas.' },
+      { q: 'Isso substitui nutricionista ou personal trainer?', a: 'Não. É uma ferramenta geral e educacional pra você organizar treino e alimentação; não é acompanhamento clínico. Para necessidades específicas, procure um profissional.' },
+      { q: 'Tenho uma condição de saúde (diabetes, gravidez, lesão, coração) — posso usar?', a: 'Nesses casos o app não gera plano e te orienta a procurar um profissional de saúde. É uma escolha de segurança, não um limite comercial.' },
+      { q: 'Vocês prometem que eu vou emagrecer ou ganhar massa?', a: 'Não prometemos resultado. Entregamos uma ferramenta honesta e organizada; o resultado depende de constância e de fatores individuais.' },
+      { q: 'Vocês recomendam suplementos?', a: 'Não. O Evokorpus não vende nem recomenda suplementos.' },
+      { q: 'Tem idade mínima?', a: 'Sim: o Evokorpus é para maiores de 18 anos.' },
     ],
   },
 ];

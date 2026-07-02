@@ -13,6 +13,7 @@ import type { ResumoSessao } from '@/components/painel/SessaoTreino';
 export interface SessaoHistorico extends ResumoSessao {
   n: number;        // nº sequencial (1 = primeira sessão registrada)
   dataISO: string;  // 'YYYY-MM-DD' — dia em que a sessão foi concluída
+  manual?: boolean; // true = registro rápido "treinei por fora" (sem séries/volume/feedback)
 }
 
 const KEY = 'evk_treinos';
@@ -40,4 +41,23 @@ export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date()):
   const todo = [nova, ...hist];
   try { localStorage.setItem(KEY, JSON.stringify(todo)); } catch { /* storage indisponível */ }
   return todo;
+}
+
+/**
+ * Registro rápido "treinei por fora" — decisão do cofre (registro-de-aderencia-evokorpus §Marcos,
+ * 2026-07-02): "dia de treino registrado" conta QUALQUER treino registrado, não só a sessão guiada.
+ * Marca o dia como treinado (sem séries/volume/feedback) → entra na contagem de dias distintos dos
+ * marcos, igual a uma sessão concluída. Chamador deve evitar duplicar o mesmo dia (ver `treinouEm`).
+ */
+export function registrarTreinoManual(agora: Date = new Date()): SessaoHistorico[] {
+  const hist = lerHistorico();
+  const nova: SessaoHistorico = { dia: 'Treino registrado', series: 0, volumeKg: 0, feedback: {}, exercicios: [], n: hist.length + 1, dataISO: hojeISO(agora), manual: true };
+  const todo = [nova, ...hist];
+  try { localStorage.setItem(KEY, JSON.stringify(todo)); } catch { /* storage indisponível */ }
+  return todo;
+}
+
+/** Já existe algum treino (guiado ou manual) registrado nesta data ISO? */
+export function treinouEm(hist: SessaoHistorico[], dataISO: string): boolean {
+  return hist.some((s) => s.dataISO === dataISO);
 }

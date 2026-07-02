@@ -5,6 +5,7 @@ import type { CardapioItem } from '@/lib/engine';
 import type { Alergeno, Exercise, Food } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
 import { DESCANSO_PRATO_DIAS } from '@/lib/rotacao-pratos';
+import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
@@ -55,6 +56,10 @@ export function DetalheExercicio({ ex, onFechar, onTrocar }: { ex: Exercise; onF
       </div>
       <div style={secCap}>Como fazer</div>
       <p style={{ margin: '0 0 22px', fontSize: '.92rem', color: 'rgba(234,229,219,.82)', lineHeight: 1.55 }}>{ex.comoFazer}</p>
+      {temErrosComuns(ex.id) && (<>
+        <div style={secCap}>Erros comuns</div>
+        <div style={{ marginBottom: 22 }}><ListaErrosComuns exId={ex.id} /></div>
+      </>)}
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar exercício</button>
         <button onClick={onFechar} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.94rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Voltar</button>
