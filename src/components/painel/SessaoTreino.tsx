@@ -50,8 +50,9 @@ export interface ResumoSessao {
   series: number;
   volumeKg: number;
   feedback: Record<string, Feedback>;
-  /** Detalhe por exercício para o modal "Detalhe da sessão" no Histórico. */
-  exercicios: { nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[] }[];
+  /** Detalhe por exercício para o modal "Detalhe da sessão" no Histórico + a curva de cargas.
+   *  `id` = id do exercício (chave estável entre sessões p/ a progressão de carga). */
+  exercicios: { id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[] }[];
 }
 
 export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
@@ -146,6 +147,7 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
     const fbMap: Record<string, Feedback> = {};
     estados.forEach((e, ei) => { if (e.fb) fbMap[exs[ei]!.id] = e.fb; });
     const exercicios = exs.map((ex, ei) => ({
+      id: ex.id,
       nome: ex.nome,
       loaded: ex.loaded,
       fb: estados[ei]!.fb,

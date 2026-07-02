@@ -1,15 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
+import { registrarSessao, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
+import { marco, diasDeTreino, diasEntreISO, type Marco as MarcoTipo } from '@/lib/marcos';
+import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
+import GraficoLinha from './GraficoLinha';
+import { MarcoCard, MarcoCompacto } from './MarcoConstancia';
+import CargasHistorico from './CargasHistorico';
+import { NotificacoesCard, ModalNotificacoes } from './Notificacoes';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
@@ -66,7 +73,7 @@ function escalar(m: RecipeMacros, s: number): RecipeMacros {
 
 type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
 const ABAS_VALIDAS = new Set<Aba>(['hoje', 'treino', 'dieta', 'progresso', 'historico', 'perfil']);
-interface SessaoLog extends ResumoSessao { n: number }
+type SessaoLog = SessaoHistorico; // ResumoSessao + { n, dataISO } (persistido em evk_treinos)
 type Feedback = 'facil' | 'na_medida' | 'dificil';
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
 type Modal =
@@ -109,6 +116,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
   const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
+  // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
+  useEffect(() => { setSessoes(lerHistorico()); }, []);
+  // Notificações (opt-in explícito, persistido em evk_notif).
+  const [notif, setNotif] = useState<NotifPrefs>({ optIn: null, treino: true, refeicao: true });
+  const [notifModal, setNotifModal] = useState(false);
+  useEffect(() => { setNotif(lerNotif()); }, []);
   // Edição que cai em zona clínica (ROTEAR) → tela de encaminhamento, sem aplicar o plano.
   const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
@@ -117,11 +130,28 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const refeicoesDia = cardItens.map((it) => it.refeicao).filter((r, i, a) => a.indexOf(r) === i);
 
   function concluirSessao(r: ResumoSessao) {
-    setSessoes((prev) => [{ ...r, n: prev.length + 1 }, ...prev]);
+    setSessoes(registrarSessao(r)); // carimba data + persiste (evk_treinos)
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
     setAba('progresso');
     window.scrollTo(0, 0);
+  }
+
+  // Marco de constância a partir do histórico persistido (dias distintos; nunca zera).
+  const marcoAtual = (() => {
+    const d = diasDeTreino(sessoes.map((s) => s.dataISO));
+    const ultimo = sessoes[0]?.dataISO;
+    return marco(d, ultimo ? diasEntreISO(ultimo, hojeISO()) : undefined);
+  })();
+
+  function atualizarNotif(patch: Partial<NotifPrefs>) {
+    setNotif((prev) => { const n = { ...prev, ...patch }; salvarNotif(n); return n; });
+  }
+  function ativarNotif() {
+    // Opt-in real do navegador (best-effort); a entrega/agendamento via push é fase de backend.
+    if (typeof window !== 'undefined' && 'Notification' in window) { try { void Notification.requestPermission(); } catch { /* noop */ } }
+    atualizarNotif({ optIn: true, treino: true, refeicao: true });
+    setNotifModal(false);
   }
 
   // Editar perfil → recalcular: roda o motor determinístico real com o novo perfil
@@ -319,14 +349,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} marco={marcoAtual} onVerMarco={() => setAba('progresso')} />
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
-        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} marco={marcoAtual} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} />}
-        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} />}
+        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
@@ -337,21 +367,25 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={`Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
+      {notifModal && <ModalNotificacoes onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
     </div>
   );
 }
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, marco, onVerMarco }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
+  marco: MarcoTipo; onVerMarco: () => void;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
   const totK = plano.macros.kcalProteina + plano.macros.kcalCarboidrato + plano.macros.kcalGordura || 1;
   return (
     <div style={sec}>
+      {/* Marco de constância (compacto) — acima dos cartões de hoje. */}
+      <MarcoCompacto m={marco} onVerDetalhe={onVerMarco} />
       {mostrarC && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, background: 'rgba(189,255,0,.07)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 16, padding: '16px 18px', marginBottom: 20 }}>
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx={12} cy={12} r={9} stroke="#BDFF00" strokeWidth={1.8} /><path d="M12 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /><circle cx={12} cy={16.2} r={1.1} fill="#BDFF00" /></svg>
@@ -543,7 +577,7 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void }) {
+function Progresso({ pesos, treinos, onRegistrar, marco }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; marco: MarcoTipo }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -553,6 +587,8 @@ function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: 
         <Stat rotulo="Variação" valor={`${variacao >= 0 ? '+' : ''}${variacao.toFixed(1)}`} un="kg" cor="#BDFF00" />
         <Stat rotulo="Treinos avaliados" valor={String(treinos)} />
       </div>
+      {/* Marco de constância (cartão completo) — entre os stats e o gráfico de peso. */}
+      <MarcoCard m={marco} />
       <div style={{ ...cardSoft, padding: 24, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
         <Grafico pesos={pesos} />
@@ -573,16 +609,19 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
   sessoes: SessaoLog[]; pesos: number[]; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
   onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void;
 }) {
-  const [sub, setSub] = useState<'treinos' | 'dieta' | 'peso'>('treinos');
-  const subTab = (id: 'treinos' | 'dieta' | 'peso', label: string) => {
+  type Sub = 'treinos' | 'dieta' | 'cargas' | 'peso';
+  const [sub, setSub] = useState<Sub>('treinos');
+  const subTab = (id: Sub, label: string) => {
     const on = sub === id;
     return <div key={id} onClick={() => setSub(id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '9px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.03)', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{label}</div>;
   };
   return (
     <div style={sec}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 22, overflowX: 'auto', paddingBottom: 2 }}>{subTab('treinos', 'Treinos')}{subTab('dieta', 'Dieta')}{subTab('peso', 'Peso')}</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 22, overflowX: 'auto', paddingBottom: 2 }}>{subTab('treinos', 'Treinos')}{subTab('dieta', 'Dieta')}{subTab('cargas', 'Cargas')}{subTab('peso', 'Peso')}</div>
 
       {sub === 'dieta' && <HistoricoDieta refeicoes={refeicoes} hojeLogs={logs} hojeNotes={notes} onVerDieta={onVerDieta} />}
+
+      {sub === 'cargas' && <CargasHistorico historico={sessoes} />}
 
       {sub === 'treinos' && (
         sessoes.length > 0 ? (
@@ -626,7 +665,10 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
 /* ════════════════════ Perfil ════════════════════ */
 
-function Perfil({ perfil, onConta, onEditar }: { perfil: PerfilResumo; onConta: () => void; onEditar: () => void }) {
+function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTreino, onToggleRefeicao, onDesativarTudo }: {
+  perfil: PerfilResumo; onConta: () => void; onEditar: () => void;
+  notif: NotifPrefs; onAtivarNotif: () => void; onToggleTreino: () => void; onToggleRefeicao: () => void; onDesativarTudo: () => void;
+}) {
   const linha = (k: string, v: string, last = false) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 0', ...(last ? {} : { borderBottom: '1px solid rgba(234,229,219,.07)' }) }}><span style={{ color: 'rgba(234,229,219,.55)', fontSize: '.94rem' }}>{k}</span><span style={{ fontWeight: 600, fontSize: '.94rem', textAlign: 'right' }}>{v}</span></div>;
   return (
     <div style={{ ...sec, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18 }}>
@@ -661,6 +703,7 @@ function Perfil({ perfil, onConta, onEditar }: { perfil: PerfilResumo; onConta: 
           </div>
           <p style={{ margin: '14px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Cancelar é fácil, em poucos toques — sem letra miúda.</p>
         </div>
+        <NotificacoesCard prefs={notif} onAtivar={onAtivarNotif} onToggleTreino={onToggleTreino} onToggleRefeicao={onToggleRefeicao} onDesativarTudo={onDesativarTudo} />
         <div style={{ ...cardSoft, padding: 8 }}>
           {([['Termos de Uso', '/termos'], ['Política de Privacidade', '/privacidade'], ['Aviso (disclaimer)', '/aviso'], ['Suporte', '/suporte']] as const).map(([t, href]) => (
             <Link key={t} href={href} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, fontSize: '.95rem', color: 'rgba(234,229,219,.8)', textDecoration: 'none' }}>{t} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></Link>
@@ -811,22 +854,5 @@ function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void })
 }
 
 function Grafico({ pesos }: { pesos: number[] }) {
-  const W = 640, H = 200, pad = 14;
-  const min = Math.min(...pesos), max = Math.max(...pesos), span = max - min || 1;
-  const pts = pesos.map((p, i) => {
-    const x = pesos.length === 1 ? W / 2 : pad + (i / (pesos.length - 1)) * (W - 2 * pad);
-    const y = H - pad - ((p - min) / span) * (H - 2 * pad);
-    return [x, y] as const;
-  });
-  const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
-  const area = pts.length > 1 ? `${line} L${pts[pts.length - 1]![0].toFixed(1)} ${H} L${pts[0]![0].toFixed(1)} ${H} Z` : '';
-  const ref = useRef<SVGPathElement>(null);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
-      <defs><linearGradient id="evkChartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="rgba(189,255,0,.28)" /><stop offset="100%" stopColor="rgba(189,255,0,0)" /></linearGradient></defs>
-      {pts.length > 1 && <path d={area} fill="url(#evkChartFill)" />}
-      {pts.length > 1 && <path ref={ref} d={line} fill="none" stroke="#BDFF00" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />}
-      {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={4} fill="#BDFF00" />)}
-    </svg>
-  );
+  return <GraficoLinha serie={pesos} gradId="evkChartPeso" />;
 }
