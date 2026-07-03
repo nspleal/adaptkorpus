@@ -27,6 +27,7 @@ import type {
   ResultadoGateTreino,
 } from './treino-types';
 import type { Exercise, NivelExercicio } from '../data/types';
+import { DECREMENTO_SEG, INCREMENTO_SEG, faixaSegundos, repUnitDe } from './isometricos';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -109,9 +110,14 @@ export function progredirExercicio(
     };
   }
 
-  const faixa = faixaReps(exercicio, prescricao);
+  // Isométricos: mesma dupla progressão, unidade = segundos (cofre §Isométricos). A faixa vem das
+  // bandas por nível e o passo é ±5 s (análogo a ±1/±2 reps); o alvo mora em `repsAlvo` (genérico).
+  const esSeg = repUnitDe(exercicio.id) === 'segundos';
+  const faixa = esSeg ? (faixaSegundos(exercicio.id, prescricao.nivel) ?? faixaReps(exercicio, prescricao)) : faixaReps(exercicio, prescricao);
   const piso = faixa.min; // reset sempre ao piso da faixa
   const teto = faixa.max;
+  const passoUp = esSeg ? INCREMENTO_SEG : 1;   // "na medida" sobe dentro da faixa
+  const passoDown = esSeg ? DECREMENTO_SEG : 2; // "difícil 2×" desce dentro da faixa
 
   if (feedback === 'facil') {
     if (estado.modo === 'carga') {
@@ -145,10 +151,10 @@ export function progredirExercicio(
 
   if (feedback === 'na_medida') {
     if (estado.modo === 'peso_corporal') {
-      // reps sobem dentro da faixa (é aqui que o peso corporal progride em reps)
+      // reps/segundos sobem dentro da faixa (é aqui que o peso corporal / hold progride)
       return {
-        acao: '+1 rep dentro da faixa',
-        proximo: { ...estado, repsAlvo: Math.min(estado.repsAlvo + 1, teto), dificeisSeguidos: 0 },
+        acao: esSeg ? `+${passoUp} s dentro da faixa` : '+1 rep dentro da faixa',
+        proximo: { ...estado, repsAlvo: Math.min(estado.repsAlvo + passoUp, teto), dificeisSeguidos: 0 },
       };
     }
     return { acao: 'repete (consolida)', proximo: { ...estado, dificeisSeguidos: 0 } };
@@ -164,11 +170,11 @@ export function progredirExercicio(
         proximo: { ...estado, cargaKg: novaCarga, repsAlvo: piso, dificeisSeguidos: 0 },
       };
     }
-    // peso corporal: −1–2 reps, ou desce 1 variação se furaria o piso
-    if (estado.repsAlvo - 2 >= piso) {
+    // peso corporal: −1–2 reps (ou −5 s no hold), ou desce 1 variação/modificação se furaria o piso
+    if (estado.repsAlvo - passoDown >= piso) {
       return {
-        acao: '−2 reps',
-        proximo: { ...estado, repsAlvo: estado.repsAlvo - 2, dificeisSeguidos: 0 },
+        acao: esSeg ? `−${passoDown} s` : '−2 reps',
+        proximo: { ...estado, repsAlvo: estado.repsAlvo - passoDown, dificeisSeguidos: 0 },
       };
     }
     return {
@@ -189,6 +195,55 @@ export function progredirExercicio(
 // A progressão acima reseta sempre a `faixa.min` (≥ 6), então isto é só documentação/asserção.
 export function repsRespeitaPisoAbsoluto(reps: number): boolean {
   return reps >= PISO_ABSOLUTO_REPS;
+}
+
+/** Um evento de progressão: o feedback do exercício naquela sessão + a maior carga logada (se houve). */
+export interface EventoProgressao {
+  fb: Feedback;
+  /** Só no modo carga: a maior carga (kg) efetivamente logada na sessão (base do próximo alvo). */
+  cargaMaxKg?: number;
+}
+
+/** Estado inicial de um exercício (antes de qualquer sessão), pela prescrição e pelo tipo. */
+export function estadoInicial(exercicio: Exercise, prescricao: PrescricaoFITT): EstadoExercicio {
+  const esSeg = repUnitDe(exercicio.id) === 'segundos';
+  const faixa = esSeg ? (faixaSegundos(exercicio.id, prescricao.nivel) ?? faixaReps(exercicio, prescricao)) : faixaReps(exercicio, prescricao);
+  // Holds são time-only (peso corporal); com carga = academia/casa-com; senão peso corporal.
+  const modo: EstadoExercicio['modo'] = !esSeg && (exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal' ? 'carga' : 'peso_corporal';
+  return {
+    exercicioId: exercicio.id,
+    modo,
+    series: prescricao.seriesPorExercicio.min,
+    repsAlvo: faixa.min, // alvo dentro da faixa (reps OU segundos)
+    ...(modo === 'peso_corporal' ? { variacaoNivel: 0 } : {}),
+    rirAlvo: prescricao.rir.min,
+    dificeisSeguidos: 0,
+  };
+}
+
+/**
+ * Estado ATUAL de um exercício = dobra pura de `progredirExercicio` sobre o histórico de eventos
+ * (ordem cronológica). No modo carga, semeia `cargaKg` da carga logada da sessão ANTES de progredir
+ * (base = o que a pessoa levantou). Determinística: mesmo histórico → mesmo alvo. Retorna também a
+ * última ação (para o hint de evolução na UI). Nunca sugere carga 0 (base ausente → cargaKg indefinida).
+ */
+export function estadoAposHistorico(
+  exercicio: Exercise,
+  prescricao: PrescricaoFITT,
+  eventos: readonly EventoProgressao[],
+): { estado: EstadoExercicio; ultimaAcao: string | null } {
+  let estado = estadoInicial(exercicio, prescricao);
+  let ultimaAcao: string | null = null;
+  for (const ev of eventos) {
+    if (estado.modo === 'carga' && ev.cargaMaxKg != null && ev.cargaMaxKg > 0) {
+      estado = { ...estado, cargaKg: ev.cargaMaxKg }; // base do próximo alvo = carga logada
+    }
+    const r = progredirExercicio(estado, ev.fb, prescricao, exercicio);
+    estado = r.proximo;
+    if (estado.cargaKg === 0) estado = { ...estado, cargaKg: undefined }; // sem base → sem sugestão
+    ultimaAcao = r.acao;
+  }
+  return { estado, ultimaAcao };
 }
 
 /** Deload — precisa nesta semana? */

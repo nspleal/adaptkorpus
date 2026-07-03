@@ -10,6 +10,7 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
   {
     mes: 'Julho 2026',
     itens: [
+      { data: '03 jul', titulo: 'Seu treino evolui com você', tag: 'Novo', desc: 'A meta de cada exercício sobe ou ajusta conforme o seu feedback (fácil / na medida / difícil) — reps, tempo e carga. E, quando a fadiga aparece, entra uma semana de alívio pra você recuperar.' },
       { data: '03 jul', titulo: 'Aviso de privacidade transparente', tag: 'Novo', desc: 'Uma faixa explica, sem juridiquês, que usamos só medição anônima de uso — sem cookies de rastreio e sem dado de saúde para publicidade.' },
       { data: '03 jul', titulo: 'Tempo nos exercícios isométricos', tag: 'Melhoria', desc: 'Prancha, pendura e afins agora registram segundos (não repetições), com a faixa de tempo certa para o seu nível.' },
       { data: '03 jul', titulo: 'Registre um treino já feito', tag: 'Novo', desc: 'Treinou por fora ou em outro dia? Lance a sessão completa — exercícios, séries, cargas e esforço — direto no seu histórico.' },

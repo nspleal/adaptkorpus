@@ -22,10 +22,14 @@ export * from './treino-types';
 export {
   prescreverTreino,
   progredirExercicio,
+  estadoInicial,
+  estadoAposHistorico,
   precisaDeload,
   aplicarDeload,
   dificuldadesLiberadas,
 } from './treino';
+export type { EventoProgressao } from './treino';
+export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
 export { montarRotina, locaisPermitidos } from './treino-montador';
 

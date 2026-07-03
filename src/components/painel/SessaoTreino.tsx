@@ -4,6 +4,19 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
+import type { ProgressoExercicio } from '@/lib/treino-progressao';
+
+/** Hint amigável a partir da última ação da progressão (evita jargão). */
+function hintEvolucao(acao: string | null | undefined): string | null {
+  if (!acao) return null;
+  if (acao.includes('carga') && acao.startsWith('+')) return 'Subiu a carga desde a última — mantenha a forma.';
+  if (acao.includes('série')) return 'Você ganhou uma série — mais volume.';
+  if (acao.includes('variação') || acao.includes('modificação')) return 'Você subiu um degrau de dificuldade.';
+  if (acao.startsWith('+')) return 'Sua meta evoluiu desde a última sessão.';
+  if (acao.startsWith('−') || acao.includes('reconstrói') || acao.includes('desce')) return 'Ajustamos a meta pra baixo — reconstrua com segurança.';
+  return null;
+}
+const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
  * Sessão de treino guiada — porte fiel do protótipo V2 (.dc.html):
@@ -35,6 +48,13 @@ interface ExView {
   repUnit: RepUnit;
   /** Faixa de tempo do hold no nível do usuário (só quando repUnit==='segundos'). */
   faixaSeg: FaixaHold | null;
+  /** Progressão (Bloco B): séries efetivas (com deload), meta que evolui, sugestão de carga, hint. */
+  nSetsEx: number;
+  metaCurta: string;        // conteúdo do chip: "10 reps" · "25 s" · "6–12 reps"
+  metaFaixa: string | null; // contexto quando há alvo único: "faixa 8–15"
+  placeholderAlvo: string;  // placeholder do input
+  cargaHint: string | null; // "tente ~42,5 kg"
+  evoluiuHint: string | null;
 }
 
 /** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
@@ -63,9 +83,13 @@ export interface ResumoSessao {
   exercicios: { id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[]; custom?: boolean; rir?: string; variacao?: string }[];
 }
 
-export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
+export default function SessaoTreino({ dia, prescricao, progresso, deload, onSair, onConcluir }: {
   dia: DiaTreino;
   prescricao: PrescricaoFITT;
+  /** Alvo progredido por exercício (Bloco B), derivado do histórico; ausente na 1ª sessão. */
+  progresso?: Record<string, ProgressoExercicio>;
+  /** Semana de alívio ativa → corta ~metade das séries, mantém movimentos (cofre §Deload). */
+  deload?: boolean;
   onSair: () => void;
   onConcluir: (resumo: ResumoSessao) => void;
 }) {
@@ -73,11 +97,29 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
     const comp = sl.padrao !== 'isolado';
     const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
     const desc = comp ? prescricao.descansoCompostoSeg : prescricao.descansoIsoladoSeg;
-    // Isométricos (cofre): registram SEGUNDOS pela faixa do nível; tratados como time-only
-    // (sem carga/%1RM/volume) — o motor só conhece reps, então a faixa vem de isometricos.ts.
+    // Isométricos (cofre): registram SEGUNDOS pela faixa do nível; tratados como time-only.
     const repUnit = repUnitDe(sl.exercicio.id);
     const faixaSeg = repUnit === 'segundos' ? faixaSegundos(sl.exercicio.id, prescricao.nivel) : null;
     const loaded = repUnit === 'segundos' ? false : (sl.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+
+    // --- Progressão viva (Bloco B) ---------------------------------------------------------
+    const estado = progresso?.[sl.exercicio.id]?.estado;
+    const esSeg = repUnit === 'segundos';
+    const modo = estado?.modo ?? (loaded ? 'carga' : 'peso_corporal');
+    const faixaCtx = esSeg && faixaSeg ? faixaSeg : reps; // contexto (min–max)
+    const unidade = esSeg ? 's' : 'reps';
+    // séries efetivas (deload corta ~metade, mantém o movimento — cofre §Deload)
+    const seriesBase = estado?.series ?? prescricao.seriesPorExercicio.min;
+    const nSetsEx = deload ? Math.max(1, Math.ceil(seriesBase / 2)) : seriesBase;
+    // alvo único (peso corporal / hold) só quando já há progressão; senão mostra a faixa
+    const temAlvoUnico = modo === 'peso_corporal' && !!estado;
+    const bandaStr = esSeg && faixaSeg ? `${rotuloFaixaSeg(faixaSeg)} ${unidade}` : `${reps.min}–${reps.max} ${unidade}`;
+    const metaCurta = temAlvoUnico ? `${estado!.repsAlvo} ${unidade}` : bandaStr;
+    const metaFaixa = temAlvoUnico ? `faixa ${faixaCtx.min}–${faixaCtx.max}${esSeg && faixaSeg?.aberto ? '+' : ''}` : null;
+    const placeholderAlvo = temAlvoUnico ? String(estado!.repsAlvo) : (esSeg && faixaSeg ? `${faixaSeg.min}–${faixaSeg.max}` : `${reps.min}–${reps.max}`);
+    const cargaHint = modo === 'carga' && estado?.cargaKg ? `tente ~${r1(estado.cargaKg)} kg` : null;
+    const evoluiuHint = hintEvolucao(progresso?.[sl.exercicio.id]?.ultimaAcao);
+
     return {
       id: sl.exercicio.id,
       nome: sl.exercicio.nomePt,
@@ -89,6 +131,12 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
       comoFazer: sl.exercicio.comoFazer,
       repUnit,
       faixaSeg,
+      nSetsEx,
+      metaCurta,
+      metaFaixa,
+      placeholderAlvo,
+      cargaHint,
+      evoluiuHint,
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -98,7 +146,7 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
   const [showRM, setShowRM] = useState(false);
   const [dorOpen, setDorOpen] = useState(false);
   const [estados, setEstados] = useState<ExState[]>(
-    exs.map(() => ({ sets: Array.from({ length: nSets }, () => ({ reps: '', kg: '', done: false })), fb: null, paused: false })),
+    exs.map((e) => ({ sets: Array.from({ length: e.nSetsEx }, () => ({ reps: '', kg: '', done: false })), fb: null, paused: false })),
   );
 
   // Timer de descanso.
@@ -189,11 +237,12 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
             <div style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Treino de hoje</div>
             <h1 style={{ margin: '0 0 6px', fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-.02em' }}>{dia.nome}</h1>
             <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.6)', fontSize: '.98rem' }}>{total} exercícios · {nSets}–{prescricao.seriesPorExercicio.max} séries por exercício · RIR {prescricao.rir.min}–{prescricao.rir.max}</p>
+            {deload && <AvisoAlivio />}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '10px 20px', marginBottom: 24 }}>
               {exs.map((e, i) => (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '14px 0', borderBottom: i === exs.length - 1 ? 'none' : '1px solid rgba(234,229,219,.07)' }}>
                   <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: '1rem' }}>{e.nome}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>{e.repUnit === 'segundos' ? 'Isométrico · tempo' : `RIR ${e.rir.min}–${e.rir.max}`}</div></div>
-                  <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '6px 12px', borderRadius: 999 }}>{e.repUnit === 'segundos' && e.faixaSeg ? `${nSets} × ${rotuloFaixaSeg(e.faixaSeg)} s` : `${nSets} × ${e.reps.min}–${e.reps.max}`}</span>
+                  <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '6px 12px', borderRadius: 999 }}>{e.nSetsEx} × {e.metaCurta}</span>
                 </div>
               ))}
             </div>
@@ -242,11 +291,15 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
             )}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.repUnit === 'segundos' && ex.faixaSeg ? `${nSets} × ${rotuloFaixaSeg(ex.faixaSeg)} s` : `${nSets} × ${ex.reps.min}–${ex.reps.max} reps`}</span>
+              <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.nSetsEx} × {ex.metaCurta}</span>
+              {/* Progressão (Bloco B): sugestão de carga a partir do que você levantou. */}
+              {ex.cargaHint && <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.cargaHint}</span>}
               {/* RIR não se aplica a holds (cofre §Isométricos) — só o feedback fácil/na medida/difícil. */}
               {ex.repUnit !== 'segundos' && <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>RIR: {ex.rir.min}–{ex.rir.max}</span>}
               <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {ex.restSeg}s</span>
             </div>
+            {/* Hint de evolução (subiu de meta / carga / degrau) — só quando houve progressão real. */}
+            {ex.evoluiuHint && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{ex.evoluiuHint}</p>}
             {/* Glosa amigável do RIR (jargão → linguagem simples). Não se aplica a isométricos. */}
             {ex.repUnit === 'segundos'
               ? <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Exercício <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>isométrico</strong>: segure a posição pelo tempo-alvo, com boa forma. Aqui não tem RIR — o que guia é como foi (fácil / na medida / difícil).</p>
@@ -274,10 +327,10 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               </div>
             )}
 
-            {/* Linha-guia: diz explicitamente o que registrar e a meta do dia (reps ou segundos). */}
-            {ex.repUnit === 'segundos' && ex.faixaSeg
-              ? <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre o tempo (em segundos) de cada série. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {rotuloFaixaSeg(ex.faixaSeg)} s</strong> · mínimo {PISO_HOLD_SEG} s.</p>
-              : <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre cada série abaixo: quantas repetições e o peso. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {ex.reps.min}–{ex.reps.max} reps</strong>.</p>}
+            {/* Linha-guia: o que registrar + a meta do dia (progredida), com a faixa como contexto. */}
+            {ex.repUnit === 'segundos'
+              ? <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre o tempo (em segundos) de cada série. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{ex.nSetsEx} séries de {ex.metaCurta}</strong>{ex.metaFaixa ? ` (${ex.metaFaixa})` : ''} · mínimo {PISO_HOLD_SEG} s.</p>
+              : <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre cada série abaixo: {ex.loaded ? 'quantas repetições e o peso' : 'quantas repetições'}. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{ex.nSetsEx} séries de {ex.metaCurta}</strong>{ex.metaFaixa ? ` (${ex.metaFaixa})` : ''}{ex.cargaHint ? ` · ${ex.cargaHint}` : ''}.</p>}
 
             {/* tabela de séries */}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 18px 14px' }}>
@@ -290,7 +343,7 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               {est.sets.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
                   <span style={{ width: 36, minWidth: 36, fontWeight: 800, color: 'rgba(234,229,219,.3)', fontSize: '1rem' }}>{i + 1}</span>
-                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder={ex.repUnit === 'segundos' && ex.faixaSeg ? `${ex.faixaSeg.min}–${ex.faixaSeg.max}` : `${ex.reps.min}–${ex.reps.max}`} style={inputCelula} />
+                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder={ex.placeholderAlvo} style={inputCelula} />
                   {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="kg" style={inputCelula} />}
                   <button onClick={() => toggleSet(i)} style={{ width: 36, minWidth: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${r.done ? '#BDFF00' : 'rgba(234,229,219,.2)'}`, background: r.done ? '#BDFF00' : 'transparent', color: r.done ? '#0D2818' : 'rgba(234,229,219,.3)' }}><svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                 </div>
@@ -404,5 +457,18 @@ function Logo({ size }: { size: number }) {
       <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
     </svg>
+  );
+}
+
+/**
+ * Aviso "Semana de alívio" (deload — cofre §Deload): corta ~metade das séries, mantém os
+ * movimentos, sugere −10% de carga. Tom acolhedor (recuperação faz parte), sem vermelho.
+ */
+function AvisoAlivio() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'linear-gradient(165deg, rgba(22,163,74,.12), rgba(15,15,14,.5))', border: '1px solid rgba(189,255,0,.28)', borderRadius: 16, padding: '14px 16px', marginBottom: 18 }}>
+      <span style={{ width: 34, height: 34, minWidth: 34, borderRadius: 10, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={18} height={18} viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9-9a5 5 0 0 1 9-2 5 5 0 0 1 9 2c-2 4.5-9 9-9 9z" stroke="#BDFF00" strokeWidth={1.7} strokeLinejoin="round" /></svg></span>
+      <div><div style={{ fontWeight: 700, fontSize: '.95rem', color: '#BDFF00', marginBottom: 2 }}>Semana de alívio</div><p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.5 }}>Reduzimos as séries e sugerimos aliviar ~10% da carga esta semana. Recuperar faz parte de progredir — na próxima você volta com tudo.</p></div>
+    </div>
   );
 }

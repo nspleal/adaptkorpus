@@ -26,6 +26,14 @@ export function repUnitDe(id: string): RepUnit {
 /** Piso de registro (segundos). Abaixo disso o motor sugere a modificação mais fácil (cofre). */
 export const PISO_HOLD_SEG = 10;
 
+/**
+ * Passo da progressão de tempo (Passo 2, unidade = segundos — cofre §Isométricos):
+ * "na medida" → +5–10 s / sessão · "difícil 2×" → −5–10 s. Passo único determinístico dentro
+ * da faixa do cofre (análogo a +1 rep / −2 reps na progressão de reps).
+ */
+export const INCREMENTO_SEG = 5;
+export const DECREMENTO_SEG = 5;
+
 /** Faixa de tempo com marcação opcional de topo aberto (ex.: farmer hold avançado "60–90+"). */
 export interface FaixaHold extends Faixa {
   aberto?: boolean;

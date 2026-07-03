@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
-import { aplicarDeload, precisaDeload, prescreverTreino, progredirExercicio } from './treino';
+import { aplicarDeload, estadoAposHistorico, estadoInicial, precisaDeload, prescreverTreino, progredirExercicio } from './treino';
 import type { EstadoExercicio, PerfilTreino } from './treino-types';
 import type { FlagsSaude } from './types';
 import type { Exercise } from '../data/types';
@@ -15,6 +15,8 @@ function prescrever(over: Partial<PerfilTreino> = {}) {
 }
 const supino: Exercise = { id: 'e_sup', nomePt: 'Supino', grupoMuscular: 'peito', padraoMovimento: 'empurrar', nivel: 'intermediario', tipo: 'forca_hipertrofia', equipamento: 'academia', local: 'academia', comoFazer: '' };
 const agacho: Exercise = { id: 'e_agacho', nomePt: 'Agachamento', grupoMuscular: 'quadriceps', padraoMovimento: 'agachar', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', local: 'casa_sem', comoFazer: '' };
+// Isométrico: id 'e7' (Prancha) está em REP_UNIT_SEGUNDOS → progride em segundos.
+const prancha: Exercise = { id: 'e7', nomePt: 'Prancha', grupoMuscular: 'core', padraoMovimento: 'core', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', equipamentoDetalhe: 'Peso corporal', local: 'casa_sem', comoFazer: '' };
 
 describe('prescrição FITT', () => {
   it('massa/intermediário bate a spec', () => {
@@ -99,6 +101,72 @@ describe('progressão (dupla progressão)', () => {
     const r = progredirExercicio(estado(), 'na_medida', p, supino, { temDor: true });
     expect(r.pausadoPorDor).toBe(true);
     expect(r.aviso).toBeTruthy();
+  });
+});
+
+describe('progressão de segundos (isométricos)', () => {
+  // Prancha iniciante → faixa de segundos 20–40 (cofre §Faixas por nível).
+  const p = prescrever({ objetivo: 'saude', nivelExperiencia: 'iniciante' });
+  function hold(over: Partial<EstadoExercicio> = {}): EstadoExercicio {
+    return { exercicioId: 'e7', modo: 'peso_corporal', series: p.seriesPorExercicio.min, repsAlvo: 20, variacaoNivel: 0, rirAlvo: p.rir.min, dificeisSeguidos: 0, ...over };
+  }
+
+  it('na medida → +5 s dentro da faixa (não +1)', () => {
+    expect(progredirExercicio(hold({ repsAlvo: 20 }), 'na_medida', p, prancha).proximo.repsAlvo).toBe(25);
+    expect(progredirExercicio(hold({ repsAlvo: 30 }), 'na_medida', p, prancha).proximo.repsAlvo).toBe(35);
+  });
+
+  it('na medida → nunca ultrapassa o teto da faixa (40 s)', () => {
+    expect(progredirExercicio(hold({ repsAlvo: 38 }), 'na_medida', p, prancha).proximo.repsAlvo).toBe(40);
+    expect(progredirExercicio(hold({ repsAlvo: 40 }), 'na_medida', p, prancha).proximo.repsAlvo).toBe(40);
+  });
+
+  it('fácil → +1 série até o teto, depois sobe modificação e reseta ao piso (20 s)', () => {
+    const r1 = progredirExercicio(hold({ series: p.seriesPorExercicio.min }), 'facil', p, prancha);
+    expect(r1.proximo.series).toBe(p.seriesPorExercicio.min + 1);
+    const r2 = progredirExercicio(hold({ series: p.seriesPorExercicio.max, repsAlvo: 40, variacaoNivel: 0 }), 'facil', p, prancha);
+    expect(r2.proximo.variacaoNivel).toBe(1);
+    expect(r2.proximo.series).toBe(p.seriesPorExercicio.min);
+    expect(r2.proximo.repsAlvo).toBe(20); // reset ao piso da faixa de segundos
+  });
+
+  it('difícil 2× → −5 s (piso da faixa); se furaria, desce 1 modificação', () => {
+    const r1 = progredirExercicio(hold({ repsAlvo: 30 }), 'dificil', p, prancha);
+    expect(r1.proximo.dificeisSeguidos).toBe(1);
+    const r2 = progredirExercicio(r1.proximo, 'dificil', p, prancha);
+    expect(r2.proximo.repsAlvo).toBe(25); // 30 − 5
+    // perto do piso: 22 − 5 = 17 < 20 → desce modificação, volta ao teto
+    const d1 = progredirExercicio(hold({ repsAlvo: 22 }), 'dificil', p, prancha);
+    const d2 = progredirExercicio(d1.proximo, 'dificil', p, prancha);
+    expect(d2.proximo.variacaoNivel).toBe(0); // max(0, 0−1)
+    expect(d2.proximo.repsAlvo).toBe(40); // reconstrói do teto
+  });
+});
+
+describe('estadoAposHistorico (dobra pura sobre o histórico)', () => {
+  const p = prescrever({ objetivo: 'saude', nivelExperiencia: 'iniciante' });
+
+  it('sem eventos → estado inicial (alvo no piso da faixa)', () => {
+    const { estado, ultimaAcao } = estadoAposHistorico(prancha, p, []);
+    expect(estado).toEqual(estadoInicial(prancha, p));
+    expect(estado.repsAlvo).toBe(20); // piso da faixa de segundos
+    expect(ultimaAcao).toBeNull();
+  });
+
+  it('hold: dois "na medida" sobem o alvo 20 → 25 → 30 s', () => {
+    const { estado } = estadoAposHistorico(prancha, p, [{ fb: 'na_medida' }, { fb: 'na_medida' }]);
+    expect(estado.repsAlvo).toBe(30);
+  });
+
+  it('carga: "fácil" sugere +2,5% a partir da carga LOGADA (base = o que levantou)', () => {
+    const { estado } = estadoAposHistorico(supino, p, [{ fb: 'facil', cargaMaxKg: 40 }]);
+    expect(estado.cargaKg).toBeCloseTo(41, 3); // 40 × 1,025
+    expect(estado.repsAlvo).toBe(p.repsComposto.min); // reset ao piso de reps
+  });
+
+  it('carga sem base logada → não sugere carga (cargaKg indefinida, nunca 0)', () => {
+    const { estado } = estadoAposHistorico(supino, p, [{ fb: 'facil' }]);
+    expect(estado.cargaKg).toBeUndefined();
   });
 });
 

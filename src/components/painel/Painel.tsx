@@ -7,7 +7,8 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
+import { progressoDosExercicios, precisaDeloadDoHistorico } from '@/lib/treino-progressao';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
 import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
@@ -302,6 +303,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const registrarPeso = (v: number) => { if (Number.isFinite(v) && v >= 30 && v <= 300) setPesos((p) => [...p, v]); };
 
   const prescricao = treino.prescricao;
+  // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
+  const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id)) : undefined;
+  const deloadAtivo = prescricao ? precisaDeloadDoHistorico(sessoes, prescricao.nivel, hojeISO()) : false;
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
@@ -347,7 +351,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
+        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} progresso={progresso} deload={deloadAtivo} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
       </div>
     );
   }
@@ -401,7 +405,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} />
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -426,10 +430,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
-  onRegistrarTreino: () => void;
+  onRegistrarTreino: () => void; deload: boolean;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
@@ -446,9 +450,9 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18, marginBottom: 18 }}>
         {dia && (
           <div style={gradCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}><span style={kicker}>Treino de hoje</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}><span style={kicker}>Treino de hoje</span>{deload && <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Semana de alívio</span>}</div>
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
-            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios</div>
+            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload ? ' · séries reduzidas esta semana' : ''}</div>
             {/* Entrada A1 do registro manual (handoff): botão ao lado de "Começar treino". */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onComecar} className="hov-btn" style={{ flex: 2, minWidth: 150, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>
