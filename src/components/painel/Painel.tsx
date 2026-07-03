@@ -7,14 +7,15 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarTreinoManual, treinouEm, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
-import { marco, diasDeTreino, diasEntreISO, type Marco as MarcoTipo } from '@/lib/marcos';
+import { registrarSessao, registrarSessaoEm, lerHistorico, type SessaoHistorico } from '@/lib/treino-historico';
+import { bandaChama, diasDeTreino } from '@/lib/chama';
 import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
 import GraficoLinha from './GraficoLinha';
-import { MarcoCard, MarcoCompacto } from './MarcoConstancia';
+import { ContadorTreinos } from './ChamaContador';
+import RegistrarTreino from './RegistrarTreino';
 import CargasHistorico from './CargasHistorico';
 import { NotificacoesCard, ModalNotificacoes } from './Notificacoes';
 import ListaCompras from './ListaCompras';
@@ -69,6 +70,13 @@ const sec: CSSProperties = { animation: `evkPop .45s ${EASE}` };
 
 function escalar(m: RecipeMacros, s: number): RecipeMacros {
   return { kcal: m.kcal * s, proteinaG: m.proteinaG * s, carboidratoG: m.carboidratoG * s, gorduraG: m.gorduraG * s };
+}
+
+// Data curta pt-BR ('28 jun') p/ sessões manuais — determinística, sem locale do ambiente.
+const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function fmtDataCurta(dataISO: string): string {
+  const [, m, d] = dataISO.split('-').map(Number);
+  return m && d ? `${d} ${MES_CURTO[m - 1]}` : dataISO;
 }
 
 type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
@@ -129,28 +137,45 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Refeições do dia = slots distintos do cardápio, na ordem em que aparecem.
   const refeicoesDia = cardItens.map((it) => it.refeicao).filter((r, i, a) => a.indexOf(r) === i);
 
+  // Contador de treinos (cofre registro-de-aderencia §Contador): dias DISTINTOS, guiado ou
+  // manual — só sobe, nunca zera. A comemoração da chama dispara SÓ na transição real de
+  // marco causada por um registro (nunca ao montar/hidratar/trocar de tela). Como o registro
+  // acontece em telas cheias (sessão guiada / formulário) com a Chama DESMONTADA, o cruzamento
+  // fica pendente e o token só incrementa quando a Hoje está visível — a Chama montada vê a
+  // mudança e toca a comemoração única (~1,25s) do handoff.
+  const diasTreinados = diasDeTreino(sessoes.map((s) => s.dataISO));
+  const [celebrarToken, setCelebrarToken] = useState(0);
+  const [celebrarPendente, setCelebrarPendente] = useState(false);
+  function aplicarNovoHistorico(novo: SessaoHistorico[]) {
+    const antes = bandaChama(diasTreinados);
+    if (bandaChama(diasDeTreino(novo.map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
+    setSessoes(novo);
+  }
+
   function concluirSessao(r: ResumoSessao) {
-    setSessoes(registrarSessao(r)); // carimba data + persiste (evk_treinos)
+    aplicarNovoHistorico(registrarSessao(r)); // carimba data + persiste (evk_treinos)
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
     setAba('progresso');
     window.scrollTo(0, 0);
   }
 
-  // "Treinei por fora" — registro rápido do dia (cofre: qualquer treino conta p/ os marcos).
-  // Guarda anti-duplicidade: se já treinou hoje (guiado ou manual), o dia já conta — não infla.
-  const treinouHoje = treinouEm(sessoes, hojeISO());
-  function registrarTreinoHoje() {
-    if (treinouHoje) return;
-    setSessoes(registrarTreinoManual());
+  // "Registrar treino feito" (formulário pós-fato) — grava na DATA REAL escolhida, no mesmo
+  // formato da sessão guiada + origem manual (design_handoff_registro_e_contador_treino).
+  const [registrando, setRegistrando] = useState(false);
+  function salvarTreinoManual(r: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) {
+    aplicarNovoHistorico(registrarSessaoEm(r, dataISO, { manual: true, ...extra }));
+    setFeedback((p) => ({ ...p, ...r.feedback }));
   }
-
-  // Marco de constância a partir do histórico persistido (dias distintos; nunca zera).
-  const marcoAtual = (() => {
-    const d = diasDeTreino(sessoes.map((s) => s.dataISO));
-    const ultimo = sessoes[0]?.dataISO;
-    return marco(d, ultimo ? diasEntreISO(ultimo, hojeISO()) : undefined);
-  })();
+  // Consome o cruzamento pendente com a Hoje visível: o 1º commit monta a Chama com o token
+  // atual; este efeito roda DEPOIS e incrementa → a Chama vê a transição e comemora.
+  const chamaVisivel = !vista && aba === 'hoje' && !registrando && sessaoDia === null && !editando && !encaminhamento;
+  useEffect(() => {
+    if (celebrarPendente && chamaVisivel) {
+      setCelebrarPendente(false);
+      setCelebrarToken((t) => t + 1);
+    }
+  }, [celebrarPendente, chamaVisivel]);
 
   function atualizarNotif(patch: Partial<NotifPrefs>) {
     setNotif((prev) => { const n = { ...prev, ...patch }; salvarNotif(n); return n; });
@@ -301,6 +326,22 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     );
   }
 
+  // Registrar treino feito (tela cheia, fora do shell — mesmo padrão da sessão guiada).
+  if (registrando) {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+        <Backdrop />
+        <RegistrarTreino
+          diaHoje={rotinaDias[0]}
+          prescricao={prescricao ?? null}
+          onCancelar={() => setRegistrando(false)}
+          onSalvar={salvarTreinoManual}
+          onVerHistorico={() => { setRegistrando(false); setAba('historico'); window.scrollTo(0, 0); }}
+        />
+      </div>
+    );
+  }
+
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
   if (sessaoDia !== null && prescricao && rotinaDias[sessaoDia]) {
     return (
@@ -342,6 +383,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       </header>
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1080, margin: '0 auto', padding: '36px 22px 90px' }}>
+        {/* Contador de treinos (chama dos 4 marcos) — PRIMEIRO elemento da Hoje, acima da
+            saudação (handoff §Posição). Substitui o indicador de marco 7/30 que ficava abaixo. */}
+        {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} />}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Bom treino 👊</h1>
           <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem', textTransform: 'capitalize' }}>{dataHoje || 'Seu dia'}</p>
@@ -357,13 +401,13 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} marco={marcoAtual} onVerMarco={() => setAba('progresso')} onJaTreinei={registrarTreinoHoje} treinouHoje={treinouHoje} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} />
           </div>
         )}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
-        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} marco={marcoAtual} />}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} />}
+        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
       </div>
 
@@ -374,7 +418,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
         <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
       )}
-      {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={`Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
+      {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
       {notifModal && <ModalNotificacoes onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
     </div>
   );
@@ -382,18 +426,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, marco, onVerMarco, onJaTreinei, treinouHoje }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
-  marco: MarcoTipo; onVerMarco: () => void; onJaTreinei: () => void; treinouHoje: boolean;
+  onRegistrarTreino: () => void;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
   const totK = plano.macros.kcalProteina + plano.macros.kcalCarboidrato + plano.macros.kcalGordura || 1;
   return (
     <div style={sec}>
-      {/* Marco de constância (compacto) — acima dos cartões de hoje. */}
-      <MarcoCompacto m={marco} onVerDetalhe={onVerMarco} />
       {mostrarC && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, background: 'rgba(189,255,0,.07)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 16, padding: '16px 18px', marginBottom: 20 }}>
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx={12} cy={12} r={9} stroke="#BDFF00" strokeWidth={1.8} /><path d="M12 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /><circle cx={12} cy={16.2} r={1.1} fill="#BDFF00" /></svg>
@@ -407,16 +449,11 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}><span style={kicker}>Treino de hoje</span></div>
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
             <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios</div>
-            <button onClick={onComecar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>
-            {/* "Treinei por fora" — registro rápido; conta p/ os marcos como qualquer treino (cofre). */}
-            {treinouHoje ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 12, fontSize: '.86rem', fontWeight: 600, color: '#BDFF00' }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#BDFF00" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Treino de hoje registrado
-              </div>
-            ) : (
-              <button onClick={onJaTreinei} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none', color: 'rgba(234,229,219,.6)', fontSize: '.86rem', fontWeight: 500, padding: '4px 0', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, textDecorationColor: 'rgba(234,229,219,.3)' }}>Treinei por fora? Registrar treino de hoje</button>
-            )}
+            {/* Entrada A1 do registro manual (handoff): botão ao lado de "Começar treino". */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={onComecar} className="hov-btn" style={{ flex: 2, minWidth: 150, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>
+              <button onClick={onRegistrarTreino} className="evk-registrar" style={{ flex: 1, minWidth: 170, background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.9rem', padding: 14, borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
+            </div>
           </div>
         )}
         <div style={gradCard}>
@@ -438,17 +475,21 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar, onDetalhe }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
-  onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void;
+  onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   return (
     <div style={sec}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
         <div><div style={{ ...kicker, color: '#BDFF00', marginBottom: 6 }}>Plano de treino</div><h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-.02em' }}>{treinoNome}</h2></div>
-        <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios</span>
+          {/* Entrada A2 do registro manual (handoff): no header da aba Treino. */}
+          <button onClick={onRegistrarTreino} className="evk-registrar" style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
+        </div>
       </div>
       {dias.map((dia, d) => (
         <div key={`${dia.nome}-${d}`} style={{ marginBottom: 22 }}>
@@ -594,7 +635,7 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, marco }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; marco: MarcoTipo }) {
+function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -604,8 +645,8 @@ function Progresso({ pesos, treinos, onRegistrar, marco }: { pesos: number[]; tr
         <Stat rotulo="Variação" valor={`${variacao >= 0 ? '+' : ''}${variacao.toFixed(1)}`} un="kg" cor="#BDFF00" />
         <Stat rotulo="Treinos avaliados" valor={String(treinos)} />
       </div>
-      {/* Marco de constância (cartão completo) — entre os stats e o gráfico de peso. */}
-      <MarcoCard m={marco} />
+      {/* O cartão de marco 7/30 saiu (substituído pelo contador da Hoje — handoff §Substituição);
+          o total acumulado já aparece no stat acima, sem reintroduzir níveis. */}
       <div style={{ ...cardSoft, padding: 24, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
         <Grafico pesos={pesos} />
@@ -622,9 +663,9 @@ function Progresso({ pesos, treinos, onRegistrar, marco }: { pesos: number[]; tr
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta }: {
+function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino }: {
   sessoes: SessaoLog[]; pesos: number[]; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
-  onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void;
+  onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void; onRegistrarTreino: () => void;
 }) {
   type Sub = 'treinos' | 'dieta' | 'cargas' | 'peso';
   const [sub, setSub] = useState<Sub>('treinos');
@@ -640,18 +681,21 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
       {sub === 'cargas' && <CargasHistorico historico={sessoes} />}
 
-      {sub === 'treinos' && (
-        sessoes.length > 0 ? (
+      {sub === 'treinos' && (<>
+        {/* Entrada A3 do registro manual (handoff): topo da lista de sessões. */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <button onClick={onRegistrarTreino} className="evk-registrar" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.9rem', padding: '10px 18px', borderRadius: 11, cursor: 'pointer' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" /></svg>Adicionar treino</button>
+        </div>
+        {sessoes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {sessoes.map((w) => {
-              // Registro manual ("treinei por fora") — sem séries/volume/feedback p/ mostrar;
-              // linha informativa, não clicável (nada a detalhar). Conta igual para os marcos.
-              if (w.manual) {
+              // Registro rápido legado (V6.3, sem exercícios) — linha informativa, não clicável.
+              if (w.manual && w.exercicios.length === 0) {
                 return (
                   <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: '50%', background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#BDFF00" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-                      <div><div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Treino registrado</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 2 }}>Você marcou este dia como treinado.</div></div>
+                      <div><div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Treino registrado</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 2 }}>{fmtDataCurta(w.dataISO)} · Você marcou este dia como treinado.</div></div>
                     </div>
                   </div>
                 );
@@ -661,7 +705,8 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
               return (
                 <div key={w.n} onClick={() => onAbrir(w)} className="hov-lift" style={{ ...cardSoft, padding: '18px 20px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-                    <div><div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{w.dia}</span><span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>Sessão {w.n}</span></div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 3 }}>{w.series} séries · {w.volumeKg.toLocaleString('pt-BR')} kg · {resumoFb}</div></div>
+                    {/* Sessão manual = MESMA aparência da guiada + texto discreto (não é badge/selo). */}
+                    <div><div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{w.dia}</span>{w.manual ? <span style={{ fontSize: '.72rem', color: 'rgba(234,229,219,.4)' }}>· registrado manualmente</span> : <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>Sessão {w.n}</span>}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 3 }}>{w.manual ? `${fmtDataCurta(w.dataISO)} · ` : ''}{w.series} série{w.series === 1 ? '' : 's'} · {w.volumeKg.toLocaleString('pt-BR')} kg · {resumoFb}</div></div>
                     <span style={{ color: 'rgba(234,229,219,.4)', fontSize: '1.2rem', flexShrink: 0 }}>→</span>
                   </div>
                 </div>
@@ -678,8 +723,8 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
           >
             <button onClick={onComecarTreino} className="hov-btn" style={estiloBotaoPrimario}>Começar treino de hoje</button>
           </EmptyCard>
-        )
-      )}
+        )}
+      </>)}
 
       {sub === 'peso' && (
         <div style={{ ...cardSoft, padding: 24 }}>

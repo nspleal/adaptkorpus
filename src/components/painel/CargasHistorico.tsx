@@ -16,11 +16,13 @@ const cardSoft = { background: 'rgba(234,229,219,.04)', border: '1px solid rgba(
 
 export default function CargasHistorico({ historico }: { historico: SessaoHistorico[] }) {
   // Exercícios COM carga presentes no histórico (únicos por id; nome como rótulo/fallback).
+  // Exercícios PERSONALIZADOS (registro manual, fora da biblioteca) ficam de fora — sem id
+  // estável não há série comparável (trava do handoff: "não alimenta o gráfico de carga").
   const exercicios = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of historico) for (const e of s.exercicios) {
       const key = e.id || e.nome;
-      if (e.loaded && key && !map.has(key)) map.set(key, e.nome);
+      if (e.loaded && !e.custom && key && !map.has(key)) map.set(key, e.nome);
     }
     return [...map].map(([id, nome]) => ({ id, nome }));
   }, [historico]);
@@ -34,7 +36,7 @@ export default function CargasHistorico({ historico }: { historico: SessaoHistor
   const serie = useMemo(() => {
     const porDia = new Map<string, number>();
     for (const s of historico) {
-      const e = s.exercicios.find((x) => (x.id || x.nome) === selKey && x.loaded);
+      const e = s.exercicios.find((x) => (x.id || x.nome) === selKey && x.loaded && !x.custom);
       if (!e) continue;
       const maxKg = Math.max(0, ...e.sets.map((st) => Number(st.kg) || 0));
       if (maxKg > 0) porDia.set(s.dataISO, Math.max(porDia.get(s.dataISO) ?? 0, maxKg));

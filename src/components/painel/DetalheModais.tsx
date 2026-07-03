@@ -126,7 +126,7 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, on
 
 const FB_LABEL: Record<string, string> = { facil: 'Fácil', na_medida: 'Na medida', dificil: 'Difícil' };
 
-export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSessao & { n: number }; rotulo: string; onFechar: () => void }) {
+export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSessao & { n: number; manual?: boolean; obs?: string }; rotulo: string; onFechar: () => void }) {
   const fbs = sessao.exercicios.map((e) => e.fb).filter(Boolean) as string[];
   const fbResumo = fbs.length ? (FB_LABEL[fbs.sort((a, c) => fbs.filter((x) => x === c).length - fbs.filter((x) => x === a).length)[0]!] ?? '—') : '—';
   return (
@@ -134,9 +134,14 @@ export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSess
       <h2 style={{ margin: '0 0 14px', fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-.02em' }}>{sessao.dia}</h2>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 8, padding: '6px 11px' }}>Volume {sessao.volumeKg.toLocaleString('pt-BR')} kg</span>
-        <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>{sessao.series} séries</span>
+        <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>{sessao.series} série{sessao.series === 1 ? '' : 's'}</span>
         <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>Como foi: {fbResumo}</span>
+        {/* Origem manual = chip discreto e neutro (handoff: não vira badge/selo de destaque). */}
+        {sessao.manual && <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.6)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' }}>Registrado manualmente</span>}
       </div>
+      {sessao.obs && (
+        <p style={{ margin: '0 0 18px', fontSize: '.88rem', color: 'rgba(234,229,219,.65)', lineHeight: 1.55, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.08)', borderRadius: 12, padding: '12px 14px' }}>{sessao.obs}</p>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {sessao.exercicios.map((e, i) => (
           <div key={i} style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '14px 16px' }}>

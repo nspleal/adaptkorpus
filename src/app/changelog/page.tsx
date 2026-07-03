@@ -10,6 +10,8 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
   {
     mes: 'Julho 2026',
     itens: [
+      { data: '03 jul', titulo: 'Registre um treino já feito', tag: 'Novo', desc: 'Treinou por fora ou em outro dia? Lance a sessão completa — exercícios, séries, cargas e esforço — direto no seu histórico.' },
+      { data: '03 jul', titulo: 'A chama dos quatro marcos', tag: 'Novo', desc: 'O total de dias de treino ganhou uma chama que muda de cor aos 15, 25, 50 e 100 dias. Um número que só cresce — sem sequência pra perder.' },
       { data: '02 jul', titulo: 'Erros comuns em cada exercício', tag: 'Novo', desc: 'Além do "como fazer", a tela do exercício agora mostra os deslizes mais comuns de execução e como corrigir.' },
       { data: '02 jul', titulo: 'Registre qualquer treino', tag: 'Novo', desc: 'Treinou por fora do plano? Marque o dia como treinado — ele conta para a sua constância.' },
       { data: '02 jul', titulo: 'Marcos de constância', tag: 'Novo', desc: 'Um marco que soma os seus dias de treino e nunca cobra a ausência: nenhum dia conta contra você.' },

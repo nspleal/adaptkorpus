@@ -52,8 +52,10 @@ export interface ResumoSessao {
   volumeKg: number;
   feedback: Record<string, Feedback>;
   /** Detalhe por exercício para o modal "Detalhe da sessão" no Histórico + a curva de cargas.
-   *  `id` = id do exercício (chave estável entre sessões p/ a progressão de carga). */
-  exercicios: { id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[] }[];
+   *  `id` = id do exercício (chave estável entre sessões p/ a progressão de carga).
+   *  Campos opcionais vêm do registro manual: `custom` (fora da biblioteca — NÃO alimenta a
+   *  curva de cargas), `rir` e `variacao` (peso corporal). */
+  exercicios: { id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[]; custom?: boolean; rir?: string; variacao?: string }[];
 }
 
 export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {

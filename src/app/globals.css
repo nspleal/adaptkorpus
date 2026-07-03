@@ -233,6 +233,22 @@ body {
 .evk-sugestao:hover { background: rgba(189,255,0,.08); }
 .evk-chip-x:hover { background: rgba(229,72,77,.2) !important; color: #E5484D !important; }
 
+/* ─── Chama dos 4 marcos (design_handoff_chama_marcos — nomes e tempos exatos) ── */
+@keyframes evkChamaBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.018); } }
+@keyframes evkChamaCore { 0%, 100% { transform: translateY(0) scaleY(1) rotate(0deg); } 35% { transform: translateY(-1.3px) scaleY(1.06) rotate(-1.4deg); } 68% { transform: translateY(-.4px) scaleY(.985) rotate(1.2deg); } }
+@keyframes evkChamaGlow { 0%, 100% { transform: scale(.92); opacity: .5; } 50% { transform: scale(1.06); opacity: .85; } }
+@keyframes evkChamaGlowSoft { 0%, 100% { transform: scale(.94); opacity: .3; } 50% { transform: scale(1.04); opacity: .56; } }
+@keyframes evkChamaCelebra { 0% { transform: scale(1); } 28% { transform: scale(1.13); } 100% { transform: scale(1); } }
+@keyframes evkChamaFlash { 0% { opacity: 0; transform: scale(.65); } 22% { opacity: .9; } 100% { opacity: 0; transform: scale(1.55); } }
+
+/* Registro manual de treino (design_handoff_registro_e_contador_treino) */
+.evk-registrar { transition: background .2s ease; }
+.evk-registrar:hover { background: rgba(189,255,0,.1); }
+.evk-picker-row { transition: background .2s ease; }
+.evk-picker-row:hover { background: rgba(189,255,0,.08); }
+.evk-start-card { transition: border-color .2s ease, background .2s ease; }
+.evk-start-card:hover { border-color: rgba(189,255,0,.4); background: rgba(189,255,0,.05); }
+
 /* Animações (do protótipo). */
 @keyframes evkStepIn {
   from {
