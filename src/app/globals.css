@@ -249,6 +249,44 @@ body {
 .evk-start-card { transition: border-color .2s ease, background .2s ease; }
 .evk-start-card:hover { border-color: rgba(189,255,0,.4); background: rgba(189,255,0,.05); }
 
+/* ─── Faixa de transparência / privacidade (design_handoff_banner_privacidade) ── */
+/* Aviso, não consentimento: ação única "Entendi" + link. Sem vermelho. Valores 1:1 do handoff. */
+.evk-cookie {
+  position: fixed; left: 24px; right: 24px; bottom: 24px; z-index: 90; box-sizing: border-box;
+  max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 18px 22px;
+  background: #0F0F0E; border: 1px solid rgba(234,229,219,.09); border-radius: 15px;
+  box-shadow: 0 20px 50px -16px rgba(0,0,0,.7); padding: 16px 20px; color: #EAE5DB;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  animation: evkCookieIn .55s cubic-bezier(.22,.61,.36,1) both;
+}
+.evk-cookie.is-leaving {
+  animation: none; transform: translateY(150%); opacity: 0;
+  transition: transform .45s cubic-bezier(.4,0,1,1), opacity .4s ease;
+}
+.evk-cookie__lead { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
+.evk-cookie__icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; background: rgba(234,229,219,.055); border: 1px solid rgba(234,229,219,.1); }
+.evk-cookie__icon svg { display: block; }
+.evk-cookie__text { margin: 0; font-size: .92rem; font-weight: 400; line-height: 1.5; letter-spacing: -.003em; color: #EAE5DB; }
+.evk-cookie__muted { color: rgba(234,229,219,.62); }
+.evk-cookie__actions { display: flex; align-items: center; gap: 18px; flex: none; }
+.evk-cookie__more { color: #EAE5DB; font-size: .9rem; font-weight: 600; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: rgba(234,229,219,.42); transition: color .2s ease, text-decoration-color .2s ease; }
+.evk-cookie__more:hover { color: #BDFF00; text-decoration-color: #BDFF00; }
+.evk-cookie__btn { flex: none; appearance: none; cursor: pointer; font-family: inherit; white-space: nowrap; background: #BDFF00; color: #0D2818; font-weight: 600; font-size: .92rem; padding: 11px 24px; border: none; border-radius: 999px; transition: transform .2s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease, filter .2s ease; }
+.evk-cookie__btn:hover { transform: translateY(-1px); box-shadow: 0 10px 26px -10px rgba(189,255,0,.75); filter: brightness(1.05); }
+.evk-cookie__btn:active { transform: translateY(0); }
+@media (max-width: 640px) {
+  .evk-cookie { flex-direction: column; align-items: stretch; gap: 15px; padding: 18px 18px 20px; left: 14px; right: 14px; bottom: 14px; }
+  .evk-cookie__lead { align-items: flex-start; }
+  .evk-cookie__actions { flex-direction: column-reverse; align-items: stretch; gap: 11px; width: 100%; }
+  .evk-cookie__btn { width: 100%; padding: 13px 24px; }
+  .evk-cookie__more { text-align: center; align-self: center; }
+}
+@keyframes evkCookieIn { from { opacity: 0; transform: translateY(130%); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .evk-cookie { animation-duration: .001s; }
+  .evk-cookie.is-leaving { transition-duration: .001s; }
+}
+
 /* Animações (do protótipo). */
 @keyframes evkStepIn {
   from {

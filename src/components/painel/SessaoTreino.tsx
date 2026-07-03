@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
+import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
 
 /**
  * Sessão de treino guiada — porte fiel do protótipo V2 (.dc.html):
@@ -30,6 +31,10 @@ interface ExView {
   rir: { min: number; max: number };
   restSeg: number;
   comoFazer: string;
+  /** Unidade de registro (cofre): 'segundos' nos 5 isométricos, 'reps' no resto. */
+  repUnit: RepUnit;
+  /** Faixa de tempo do hold no nível do usuário (só quando repUnit==='segundos'). */
+  faixaSeg: FaixaHold | null;
 }
 
 /** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
@@ -68,7 +73,11 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
     const comp = sl.padrao !== 'isolado';
     const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
     const desc = comp ? prescricao.descansoCompostoSeg : prescricao.descansoIsoladoSeg;
-    const loaded = (sl.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+    // Isométricos (cofre): registram SEGUNDOS pela faixa do nível; tratados como time-only
+    // (sem carga/%1RM/volume) — o motor só conhece reps, então a faixa vem de isometricos.ts.
+    const repUnit = repUnitDe(sl.exercicio.id);
+    const faixaSeg = repUnit === 'segundos' ? faixaSegundos(sl.exercicio.id, prescricao.nivel) : null;
+    const loaded = repUnit === 'segundos' ? false : (sl.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
     return {
       id: sl.exercicio.id,
       nome: sl.exercicio.nomePt,
@@ -78,6 +87,8 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
       rir: prescricao.rir,
       restSeg: Math.round((desc.min + desc.max) / 2),
       comoFazer: sl.exercicio.comoFazer,
+      repUnit,
+      faixaSeg,
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -181,8 +192,8 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '10px 20px', marginBottom: 24 }}>
               {exs.map((e, i) => (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '14px 0', borderBottom: i === exs.length - 1 ? 'none' : '1px solid rgba(234,229,219,.07)' }}>
-                  <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: '1rem' }}>{e.nome}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>RIR {e.rir.min}–{e.rir.max}</div></div>
-                  <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '6px 12px', borderRadius: 999 }}>{nSets} × {e.reps.min}–{e.reps.max}</span>
+                  <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: '1rem' }}>{e.nome}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>{e.repUnit === 'segundos' ? 'Isométrico · tempo' : `RIR ${e.rir.min}–${e.rir.max}`}</div></div>
+                  <span style={{ flexShrink: 0, fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '6px 12px', borderRadius: 999 }}>{e.repUnit === 'segundos' && e.faixaSeg ? `${nSets} × ${rotuloFaixaSeg(e.faixaSeg)} s` : `${nSets} × ${e.reps.min}–${e.reps.max}`}</span>
                 </div>
               ))}
             </div>
@@ -231,12 +242,15 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
             )}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{nSets} × {ex.reps.min}–{ex.reps.max} reps</span>
-              <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>RIR: {ex.rir.min}–{ex.rir.max}</span>
+              <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.repUnit === 'segundos' && ex.faixaSeg ? `${nSets} × ${rotuloFaixaSeg(ex.faixaSeg)} s` : `${nSets} × ${ex.reps.min}–${ex.reps.max} reps`}</span>
+              {/* RIR não se aplica a holds (cofre §Isométricos) — só o feedback fácil/na medida/difícil. */}
+              {ex.repUnit !== 'segundos' && <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>RIR: {ex.rir.min}–{ex.rir.max}</span>}
               <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {ex.restSeg}s</span>
             </div>
-            {/* Glosa amigável do RIR (jargão → linguagem simples, para quem não conhece o termo). */}
-            <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}><strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>RIR</strong> é a reserva: quantas repetições você ainda conseguiria fazer no fim da série. Pare com {ex.rir.min}–{ex.rir.max} na reserva — sem ir até a falha.</p>
+            {/* Glosa amigável do RIR (jargão → linguagem simples). Não se aplica a isométricos. */}
+            {ex.repUnit === 'segundos'
+              ? <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Exercício <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>isométrico</strong>: segure a posição pelo tempo-alvo, com boa forma. Aqui não tem RIR — o que guia é como foi (fácil / na medida / difícil).</p>
+              : <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}><strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>RIR</strong> é a reserva: quantas repetições você ainda conseguiria fazer no fim da série. Pare com {ex.rir.min}–{ex.rir.max} na reserva — sem ir até a falha.</p>}
 
             {/* %1RM opt-in (só com carga) */}
             {ex.loaded && (
@@ -260,21 +274,23 @@ export default function SessaoTreino({ dia, prescricao, onSair, onConcluir }: {
               </div>
             )}
 
-            {/* Linha-guia: diz explicitamente o que registrar e a meta de reps do dia. */}
-            <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre cada série abaixo: quantas repetições e o peso. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {ex.reps.min}–{ex.reps.max} reps</strong>.</p>
+            {/* Linha-guia: diz explicitamente o que registrar e a meta do dia (reps ou segundos). */}
+            {ex.repUnit === 'segundos' && ex.faixaSeg
+              ? <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre o tempo (em segundos) de cada série. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {rotuloFaixaSeg(ex.faixaSeg)} s</strong> · mínimo {PISO_HOLD_SEG} s.</p>
+              : <p style={{ margin: '0 0 8px 2px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Registre cada série abaixo: quantas repetições e o peso. Meta de hoje: <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>{nSets} séries de {ex.reps.min}–{ex.reps.max} reps</strong>.</p>}
 
             {/* tabela de séries */}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '8px 18px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0 6px', fontSize: '.72rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)' }}>
                 <span style={{ width: 36, minWidth: 36 }}>Série</span>
-                <span style={{ flex: 1 }}>Reps</span>
+                <span style={{ flex: 1 }}>{ex.repUnit === 'segundos' ? 'Segundos' : 'Reps'}</span>
                 {ex.loaded && <span style={{ flex: 1 }}>Carga (kg)</span>}
                 <span style={{ width: 36, minWidth: 36, textAlign: 'center' }}>✓</span>
               </div>
               {est.sets.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
                   <span style={{ width: 36, minWidth: 36, fontWeight: 800, color: 'rgba(234,229,219,.3)', fontSize: '1rem' }}>{i + 1}</span>
-                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder={`${ex.reps.min}–${ex.reps.max}`} style={inputCelula} />
+                  <input type="number" inputMode="numeric" value={r.reps} onChange={(e) => setSet(i, { reps: e.target.value })} placeholder={ex.repUnit === 'segundos' && ex.faixaSeg ? `${ex.faixaSeg.min}–${ex.faixaSeg.max}` : `${ex.reps.min}–${ex.reps.max}`} style={inputCelula} />
                   {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="kg" style={inputCelula} />}
                   <button onClick={() => toggleSet(i)} style={{ width: 36, minWidth: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${r.done ? '#BDFF00' : 'rgba(234,229,219,.2)'}`, background: r.done ? '#BDFF00' : 'transparent', color: r.done ? '#0D2818' : 'rgba(234,229,219,.3)' }}><svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                 </div>

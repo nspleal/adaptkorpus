@@ -6,6 +6,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
 import { EXERCISES_SEED } from '@/lib/data/seed';
 import { hojeISO } from '@/lib/treino-historico';
+import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
 
 /**
  * Registrar treino feito — porte FIEL do formulário do design
@@ -29,6 +30,8 @@ interface ExForm {
   nome: string;
   custom: boolean;
   temCarga: boolean;
+  /** Unidade de registro (cofre): 'segundos' nos 5 isométricos → coluna "Segundos". */
+  repUnit: RepUnit;
   dica: string;
   variacao: string;
   sets: { reps: string; kg: string }[];
@@ -72,12 +75,14 @@ export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSal
   const padraoOptions = useMemo(() => [...new Set(EXERCISES_SEED.map((e) => e.padraoMovimento))], []);
 
   function entradaDaBiblioteca(ex: Exercise, prefill: boolean): ExForm {
-    // Mesma regra do player guiado: peso corporal não tem coluna de carga.
-    const temCarga = (ex.equipamentoDetalhe ?? '') !== 'Peso corporal';
+    // Isométricos registram SEGUNDOS e são time-only (sem carga); o resto segue a regra do
+    // player: peso corporal não tem coluna de carga.
+    const repUnit = repUnitDe(ex.id);
+    const temCarga = repUnit === 'segundos' ? false : (ex.equipamentoDetalhe ?? '') !== 'Peso corporal';
     const nSets = prefill && prescricao ? prescricao.seriesPorExercicio.min : 3;
-    const repsDefault = prefill && prescricao ? String(prescricao.repsComposto.max) : '';
+    const repsDefault = prefill && prescricao && repUnit === 'reps' ? String(prescricao.repsComposto.max) : '';
     return {
-      uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga,
+      uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga, repUnit,
       dica: ex.comoFazer, variacao: '',
       sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '' })),
       chip: null, rir: '',
@@ -122,7 +127,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSal
     const nome = customName.trim();
     if (!nome) return;
     setExs((s) => [...s, {
-      uid: newUid(), refId: null, nome, custom: true, temCarga: true,
+      uid: newUid(), refId: null, nome, custom: true, temCarga: true, repUnit: 'reps',
       dica: 'Exercício personalizado — sem instruções da biblioteca.', variacao: '',
       sets: [{ reps: '', kg: '' }], chip: null, rir: '',
     }]);
@@ -319,7 +324,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSal
                       <div style={{ background: 'rgba(13,40,24,.3)', borderRadius: 12, padding: '4px 14px 10px', marginBottom: 14 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 6px', fontSize: '.66rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'rgba(234,229,219,.4)' }}>
                           <span style={{ width: 26, minWidth: 26 }}>Série</span>
-                          <span style={{ flex: 1 }}>Reps</span>
+                          <span style={{ flex: 1 }}>{e.repUnit === 'segundos' ? 'Segundos' : 'Reps'}</span>
                           {e.temCarga && <span style={{ flex: 1 }}>Carga (kg)</span>}
                           <span style={{ width: 28, minWidth: 28 }} />
                         </div>

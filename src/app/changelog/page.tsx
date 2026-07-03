@@ -10,6 +10,8 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
   {
     mes: 'Julho 2026',
     itens: [
+      { data: '03 jul', titulo: 'Aviso de privacidade transparente', tag: 'Novo', desc: 'Uma faixa explica, sem juridiquês, que usamos só medição anônima de uso — sem cookies de rastreio e sem dado de saúde para publicidade.' },
+      { data: '03 jul', titulo: 'Tempo nos exercícios isométricos', tag: 'Melhoria', desc: 'Prancha, pendura e afins agora registram segundos (não repetições), com a faixa de tempo certa para o seu nível.' },
       { data: '03 jul', titulo: 'Registre um treino já feito', tag: 'Novo', desc: 'Treinou por fora ou em outro dia? Lance a sessão completa — exercícios, séries, cargas e esforço — direto no seu histórico.' },
       { data: '03 jul', titulo: 'A chama dos quatro marcos', tag: 'Novo', desc: 'O total de dias de treino ganhou uma chama que muda de cor aos 15, 25, 50 e 100 dias. Um número que só cresce — sem sequência pra perder.' },
       { data: '02 jul', titulo: 'Erros comuns em cada exercício', tag: 'Novo', desc: 'Além do "como fazer", a tela do exercício agora mostra os deslizes mais comuns de execução e como corrigir.' },

@@ -6,12 +6,12 @@ import type { Alergeno, Exercise, Food } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
 import { DESCANSO_PRATO_DIAS } from '@/lib/rotacao-pratos';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
+import { repUnitDe } from '@/lib/engine/isometricos';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
  * detalhe de exercício. Tudo deriva de dados REAIS curados (TACO / biblioteca de
- * exercícios). Onde o protótipo previa conteúdo ainda não modelado (modo de preparo,
- * erros comuns), mostramos o fallback honesto "em breve" — nunca inventamos.
+ * exercícios). O prato não tem "modo de preparo" (descartado — não é app de culinária).
  */
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -103,11 +103,6 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, on
         {ingredientes.map((ig, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '9px 0', borderBottom: '1px solid rgba(234,229,219,.07)' }}><span style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.85)' }}>{ig.nome}</span><span style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)' }}>{ig.qtd}</span></div>)}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'rgba(234,229,219,.03)', border: '1px dashed rgba(234,229,219,.16)', borderRadius: 14, padding: 16, marginBottom: 18 }}>
-        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx={12} cy={12} r={9} stroke="rgba(234,229,219,.5)" strokeWidth={1.7} /><path d="M12 7v5l3 2" stroke="rgba(234,229,219,.5)" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></svg>
-        <div><div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 2 }}>Modo de preparo em breve</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Este prato ainda está sendo detalhado na nossa base de alimentos.</div></div>
-      </div>
-
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>Trocar prato</button>
         <button onClick={onPorcao} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>Editar porção</button>
@@ -126,11 +121,11 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, on
 
 const FB_LABEL: Record<string, string> = { facil: 'Fácil', na_medida: 'Na medida', dificil: 'Difícil' };
 
-export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSessao & { n: number; manual?: boolean; obs?: string }; rotulo: string; onFechar: () => void }) {
+export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSessao & { n: number; manual?: boolean; obs?: string; hora?: string }; rotulo: string; onFechar: () => void }) {
   const fbs = sessao.exercicios.map((e) => e.fb).filter(Boolean) as string[];
   const fbResumo = fbs.length ? (FB_LABEL[fbs.sort((a, c) => fbs.filter((x) => x === c).length - fbs.filter((x) => x === a).length)[0]!] ?? '—') : '—';
   return (
-    <Shell onClose={onFechar} kicker={rotulo}>
+    <Shell onClose={onFechar} kicker={sessao.hora ? `${rotulo} · ${sessao.hora}` : rotulo}>
       <h2 style={{ margin: '0 0 14px', fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-.02em' }}>{sessao.dia}</h2>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 8, padding: '6px 11px' }}>Volume {sessao.volumeKg.toLocaleString('pt-BR')} kg</span>
@@ -150,7 +145,7 @@ export function DetalheSessao({ sessao, rotulo, onFechar }: { sessao: ResumoSess
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {e.sets.map((s, si) => (
                   <span key={si} style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.82)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '5px 10px' }}>
-                    <span style={{ color: 'rgba(234,229,219,.45)', fontWeight: 700 }}>{si + 1}</span>&nbsp; {s.reps || '—'} reps{e.loaded && s.kg ? ` × ${s.kg} kg` : ''}
+                    <span style={{ color: 'rgba(234,229,219,.45)', fontWeight: 700 }}>{si + 1}</span>&nbsp; {s.reps || '—'} {repUnitDe(e.id) === 'segundos' ? 's' : 'reps'}{e.loaded && s.kg ? ` × ${s.kg} kg` : ''}
                   </span>
                 ))}
               </div>

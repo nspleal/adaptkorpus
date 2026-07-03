@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 import OfflineGuard from '@/components/estados/OfflineGuard';
 import RegistroSW from '@/components/pwa/RegistroSW';
+import AvisoPrivacidade from '@/components/AvisoPrivacidade';
 
 // Renderização dinâmica em todas as rotas: necessária para a CSP com NONCE por requisição
 // (HTML prerenderizado estático não recebe o nonce → scripts bloqueados). Ver middleware.ts.
@@ -47,6 +48,7 @@ export default function RootLayout({
         {children}
         <OfflineGuard />
         <RegistroSW />
+        <AvisoPrivacidade />
         {analyticsAtivo && <Analytics />}
       </body>
     </html>
