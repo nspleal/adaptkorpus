@@ -105,6 +105,9 @@ export interface AcaoProgressao {
 export interface SlotExercicio {
   padrao: PadraoMovimento;
   exercicio: Exercise;
+  /** true quando o exercício é FAVORITO do usuário e entrou no plano (badge "Favorito" —
+   *  B5, DF 2026-07-04: acende para todo favorito que entrou no plano). */
+  incluidoPorPreferencia?: boolean;
 }
 
 export interface DiaTreino {

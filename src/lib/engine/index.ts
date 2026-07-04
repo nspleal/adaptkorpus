@@ -36,8 +36,8 @@ export { montarRotina, locaisPermitidos } from './treino-montador';
 
 // --- Escadas de dificuldade (progressão vertical / hint "sobe de variação") ---
 export {
-  ESCADAS_DIFICULDADE, localizarNaEscada, posicaoNaEscada,
-  sugerirProximaVariacao, sugerirVariacaoAnterior, type Degrau,
+  ESCADAS_DIFICULDADE, escadaComNomes, localizarNaEscada, posicaoNaEscada,
+  sugerirProximaVariacao, sugerirVariacaoAnterior, type Degrau, type DegrauComNome,
 } from './escadas';
 
 // --- Modificações dos isométricos (B1 — Corpo C da calibração) ---
@@ -123,7 +123,7 @@ export interface ResultadoTreino {
  */
 export function gerarTreino(
   perfil: PerfilTreino,
-  opcoes?: { exercises?: readonly Exercise[] },
+  opcoes?: { exercises?: readonly Exercise[]; favoritos?: ReadonlySet<string> },
 ): ResultadoTreino {
   const gate = avaliarGateTreino(perfil);
 
@@ -132,7 +132,7 @@ export function gerarTreino(
   }
 
   const prescricao = prescreverTreino(perfil, gate);
-  const rotina = opcoes?.exercises ? montarRotina(prescricao, perfil, opcoes.exercises) : null;
+  const rotina = opcoes?.exercises ? montarRotina(prescricao, perfil, opcoes.exercises, opcoes.favoritos) : null;
 
   return { gate, prescricao, rotina };
 }

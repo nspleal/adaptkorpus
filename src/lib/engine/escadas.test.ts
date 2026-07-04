@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ESCADAS_DIFICULDADE, localizarNaEscada, posicaoNaEscada,
+  ESCADAS_DIFICULDADE, escadaComNomes, localizarNaEscada, posicaoNaEscada,
   sugerirProximaVariacao, sugerirVariacaoAnterior,
 } from './escadas';
 import { EXERCISES } from '../data/exercises';
@@ -83,5 +83,37 @@ describe('escadas — o hint RESPEITA equipamento (regra do cofre "barra fixa ex
   });
   it('e146 → e8 Roda abdominal exige roda: casa-sem sem hint (não pula degrau)', () => {
     expect(sugerirProximaVariacao('e146', EXERCISES, 'nenhum')).toBeNull();
+  });
+});
+
+describe('escadaComNomes — insumo da lista expandida / seletor (V8.3/V8.1)', () => {
+  const resolver = (id: string) => byId.get(id);
+
+  it('e1 Flexão: 6 degraus com nomes, atual = 3º', () => {
+    const r = escadaComNomes('e1', resolver)!;
+    expect(r.total).toBe(6);
+    expect(r.degrau).toBe(3);
+    expect(r.degraus.map((d) => d.nome)).toEqual([
+      'Flexão na parede',
+      'Flexão inclinada (mãos elevadas)',
+      'Flexão de braço',
+      'Flexão diamante',
+      'Flexão com pés elevados',
+      'Paralelas (mergulho)',
+    ]);
+    expect(r.degraus.map((d) => d.atual)).toEqual([false, false, true, false, false, false]);
+  });
+
+  it('degrau multi-id (agachar: [e16,e160,e17]) usa o 1º id como representante', () => {
+    const r = escadaComNomes('e16', resolver)!;
+    expect(r.degraus[1]!.idRepresentativo).toBe('e16');
+    expect(r.degraus[1]!.nome).toBe('Afundo (avanço)');
+    expect(r.degraus[1]!.atual).toBe(true);
+    // e160/e17 (variantes do mesmo degrau) apontam pro MESMO degrau atual
+    expect(escadaComNomes('e17', resolver)!.degrau).toBe(2);
+  });
+
+  it('fora da malha (e9 carga) → null', () => {
+    expect(escadaComNomes('e9', resolver)).toBeNull();
   });
 });

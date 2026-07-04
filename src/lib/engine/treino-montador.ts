@@ -70,6 +70,13 @@ export function montarRotina(
   prescricao: PrescricaoFITT,
   perfil: PerfilTreino,
   exercises: readonly Exercise[],
+  /**
+   * Exercícios FAVORITOS do usuário (DF #12, 2026-07-04): preferidos no slot cujo padrão
+   * servem e ISENTOS da variedade B5 — aparecem em toda sessão em que couberem. Respeitam
+   * os filtros duros (equipamento + dificuldade — favoritar NÃO fura o nível: acima do
+   * liberado nem entra no pool), nunca furam as invariantes e não adicionam slot.
+   */
+  favoritos: ReadonlySet<string> = new Set(),
 ): RotinaSemanal {
   const avisos: string[] = [];
   const dias = Math.max(0, Math.floor(perfil.diasDisponiveis));
@@ -89,15 +96,25 @@ export function montarRotina(
     .slice()
     .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-  // Índice de rotação por padrão (varia exercícios entre os dias).
-  const porPadrao = new Map<PadraoMovimento, Exercise[]>();
+  // Índice de rotação por padrão (varia exercícios entre os dias). Favoritos ficam num
+  // trilho próprio, ISENTOS da rotação (DF #12): preenchem primeiro, todo dia que couber,
+  // em ordem estável (o pool já vem em tier↑, id) — determinístico, sem estado escondido.
+  const porPadrao = new Map<PadraoMovimento, Exercise[]>();       // não-favoritos (rotacionam)
+  const favsPorPadrao = new Map<PadraoMovimento, Exercise[]>();   // favoritos (fixos)
   for (const e of pool) {
-    const arr = porPadrao.get(e.padraoMovimento) ?? [];
+    const alvo = favoritos.has(e.id) ? favsPorPadrao : porPadrao;
+    const arr = alvo.get(e.padraoMovimento) ?? [];
     arr.push(e);
-    porPadrao.set(e.padraoMovimento, arr);
+    alvo.set(e.padraoMovimento, arr);
   }
   const cursor = new Map<PadraoMovimento, number>();
-  function escolher(padrao: PadraoMovimento): Exercise | null {
+  function escolher(padrao: PadraoMovimento, usadosDia: Set<string>): Exercise | null {
+    // 1) favoritos do padrão, todo dia, sem repetir no MESMO dia (dois slots iguais no dia
+    //    ainda variam); a variedade entre sessões não se aplica a eles.
+    for (const f of favsPorPadrao.get(padrao) ?? []) {
+      if (!usadosDia.has(f.id)) { usadosDia.add(f.id); return f; }
+    }
+    // 2) rotação normal sobre os não-favoritos (comportamento original).
     const arr = porPadrao.get(padrao);
     if (!arr || arr.length === 0) return null;
     const i = cursor.get(padrao) ?? 0;
@@ -112,7 +129,7 @@ export function montarRotina(
   // --- Alocador semanal de padrões -----------------------------------------
   // Distribui os padrões pelos dias (respeitando o template e a capacidade por tempo),
   // garantindo por construção: dobradiça presente, puxar ≥ empurrar, e core ∈ [2,3].
-  const temPool = (p: PadraoMovimento) => (porPadrao.get(p)?.length ?? 0) > 0;
+  const temPool = (p: PadraoMovimento) => (porPadrao.get(p)?.length ?? 0) + (favsPorPadrao.get(p)?.length ?? 0) > 0;
   const capDia = spec.map((d) => Math.min(d.padroes.length, maxExercicios));
   const capTotal = capDia.reduce((a, b) => a + b, 0);
   const escolhidos: PadraoMovimento[][] = spec.map(() => []);
@@ -156,9 +173,11 @@ export function montarRotina(
 
   const diasTreino: DiaTreino[] = spec.map((d, i) => {
     const slots: SlotExercicio[] = [];
+    const usadosDia = new Set<string>(); // favoritos não repetem no MESMO dia
     for (const padrao of escolhidos[i]!) {
-      const ex = escolher(padrao);
-      if (ex) slots.push({ padrao, exercicio: ex });
+      const ex = escolher(padrao, usadosDia);
+      // Badge (B5, DF 2026-07-04): acende p/ TODO favorito que entrou no plano.
+      if (ex) slots.push({ padrao, exercicio: ex, ...(favoritos.has(ex.id) ? { incluidoPorPreferencia: true } : {}) });
     }
     return { nome: d.nome, slots };
   });

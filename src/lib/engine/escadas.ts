@@ -101,3 +101,33 @@ export function posicaoNaEscada(id: string): { degrau: number; total: number; es
   if (!loc) return null;
   return { degrau: loc.degrau + 1, total: ESCADAS_DIFICULDADE[loc.escada]!.length, escada: loc.escada };
 }
+
+/** Um degrau resolvido p/ exibição: id representativo (1º do degrau) + nome + se é o atual. */
+export interface DegrauComNome {
+  idRepresentativo: string;
+  nome: string;
+  atual: boolean;
+}
+
+/**
+ * A escada INTEIRA do exercício com nomes resolvidos — insumo da lista expandida
+ * read-only e do seletor de degraus (V8.3 §1 / V8.1 Corpo B). Degraus com vários ids
+ * (variantes equivalentes) usam o 1º id como representante. A lista mostra a escada
+ * COMPLETA (leitura) — a disponibilidade de equipamento só governa os HINTS
+ * (`sugerirProximaVariacao`/`Anterior`), não a visualização.
+ * Retorna null p/ exercício fora da malha (com carga / one-off).
+ */
+export function escadaComNomes(
+  id: string,
+  exercicioPorId: (id: string) => { nomePt: string } | undefined,
+): { degraus: DegrauComNome[]; degrau: number; total: number } | null {
+  const loc = localizarNaEscada(id);
+  if (!loc) return null;
+  const escada = ESCADAS_DIFICULDADE[loc.escada]!;
+  const degraus = escada.map((d, i) => ({
+    idRepresentativo: d[0]!,
+    nome: exercicioPorId(d[0]!)?.nomePt ?? d[0]!,
+    atual: i === loc.degrau,
+  }));
+  return { degraus, degrau: loc.degrau + 1, total: escada.length };
+}
