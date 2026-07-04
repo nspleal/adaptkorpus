@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { gerarDieta, gerarTreino } from '@/lib/engine';
+import { EQUIPAMENTOS_CASA, gerarDieta, gerarTreino } from '@/lib/engine';
 import type { PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { diasPadrao } from '@/lib/semana';
@@ -51,7 +51,19 @@ function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   const favoritos = Array.isArray(p.favoritos) ? p.favoritos : []; // V8.2 (DF #12) — sessões antigas: []
   const ativos = new Set(pratosCansadosAtivos(p.pratosCansados));
   const pratosCansados = Array.isArray(p.pratosCansados) ? p.pratosCansados.filter((c) => c && ativos.has(c.id)) : [];
-  return { ...p, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
+  // Modelo de equipamento 2 NÍVEIS (DF 2026-07-04) — migração não-destrutiva:
+  //   nenhum   → casa + checklist vazio (byte-idêntico ao antigo `nenhum`);
+  //   casa     → casa + TODOS os 7 marcados (preserva o acesso ao casa-com; revisável);
+  //   academia → academia.
+  let equipamento = p.equipamento;
+  let equipamentosCasa = Array.isArray(p.equipamentosCasa) ? p.equipamentosCasa : undefined;
+  if (equipamento === 'nenhum') {
+    equipamento = 'casa';
+    equipamentosCasa = [];
+  } else if (equipamentosCasa === undefined) {
+    equipamentosCasa = equipamento === 'casa' ? [...EQUIPAMENTOS_CASA] : [];
+  }
+  return { ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
 }
 
 /** Encerra a sessão local (logout). */
@@ -78,6 +90,7 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
   const perfilT: PerfilTreino = {
     pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade, flagsSaude: perfil.flagsSaude,
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
+    equipamentosCasa: perfil.equipamentosCasa, // checklist de casa (modelo 2 níveis)
     diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
   };
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +

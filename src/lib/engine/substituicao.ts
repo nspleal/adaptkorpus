@@ -9,7 +9,7 @@
 import { macrosDePrato } from '../data/nutrition';
 import { ESCALA_PORCAO } from './constants';
 import { dificuldadesLiberadas } from './treino';
-import { locaisPermitidos } from './treino-montador';
+import { exercicioDisponivel } from './equipamento';
 import { mesmaFamilia } from './familias';
 import type { Recipe, RecipeMacros } from '../data/types';
 import type {
@@ -181,14 +181,14 @@ export function listarSubstituicoesPrato(p: PedidoSubPrato, max = 3): ResultadoS
  */
 export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercicio {
   const atual = p.exercicioAtual;
-  const locais = locaisPermitidos(p.equipamento);
   const liberadas = new Set(dificuldadesLiberadas(p.nivelExperiencia));
   const evitar = new Set(p.historicoRecenteIds ?? []);
   const gostoExcluir = new Set(p.gostoExcluirIds ?? []);
 
   // Há algum candidato de mesmo tipo elegível? (decide a degradação do pliométrico)
+  // Filtro duro #1 (nunca relaxado): equipamento no modelo 2 níveis (checklist de casa).
   const baseElegivel = (y: typeof atual) =>
-    y.id !== atual.id && locais.includes(y.local) && liberadas.has(y.nivel);
+    y.id !== atual.id && exercicioDisponivel(y, p.equipamento, p.equipamentosCasa) && liberadas.has(y.nivel);
   const temMesmoTipo = p.exercises.some((y) => baseElegivel(y) && y.tipo === atual.tipo);
 
   function tipoCompativel(y: typeof atual): boolean {

@@ -15,8 +15,8 @@
  * mesma escada ao contrário. RESPEITA equipamento: degrau indisponível → sem hint (não
  * pula degrau — regra do cofre "barra fixa exige barra"). Puro, determinístico, sem I/O.
  */
-import { locaisPermitidos } from './treino-montador';
-import type { EquipamentoDisp, Exercise } from '../data/types';
+import { exercicioDisponivel } from './equipamento';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise } from '../data/types';
 
 /** Um degrau = um ou mais IDs equivalentes na mesma dificuldade (ordem estável). */
 export type Degrau = readonly string[];
@@ -58,13 +58,15 @@ function filtrarDegrau(
   degrau: Degrau | undefined,
   exercises?: readonly Exercise[],
   equipamento?: EquipamentoDisp,
+  equipamentosCasa?: readonly EquipamentoCasa[],
 ): string[] | null {
   if (!degrau) return null;
   if (!exercises || !equipamento) return [...degrau];
-  const locais = locaisPermitidos(equipamento);
+  // "Barra fixa exige barra" (cofre) agora é literal: exige `barra_fixa` MARCADA no
+  // checklist de casa (modelo 2 níveis — exercicioDisponivel).
   const ok = degrau.filter((id) => {
     const e = exercises.find((x) => x.id === id);
-    return !!e && locais.includes(e.local);
+    return !!e && exercicioDisponivel(e, equipamento, equipamentosCasa);
   });
   return ok.length > 0 ? ok : null; // degrau inteiro indisponível → sem hint
 }
@@ -78,10 +80,11 @@ export function sugerirProximaVariacao(
   id: string,
   exercises?: readonly Exercise[],
   equipamento?: EquipamentoDisp,
+  equipamentosCasa?: readonly EquipamentoCasa[],
 ): string[] | null {
   const loc = localizarNaEscada(id);
   if (!loc) return null;
-  return filtrarDegrau(ESCADAS_DIFICULDADE[loc.escada]![loc.degrau + 1], exercises, equipamento);
+  return filtrarDegrau(ESCADAS_DIFICULDADE[loc.escada]![loc.degrau + 1], exercises, equipamento, equipamentosCasa);
 }
 
 /** Regressão: IDs do degrau ANTERIOR, ou `null` (base · fora da malha). */
@@ -89,10 +92,11 @@ export function sugerirVariacaoAnterior(
   id: string,
   exercises?: readonly Exercise[],
   equipamento?: EquipamentoDisp,
+  equipamentosCasa?: readonly EquipamentoCasa[],
 ): string[] | null {
   const loc = localizarNaEscada(id);
   if (!loc) return null;
-  return filtrarDegrau(ESCADAS_DIFICULDADE[loc.escada]![loc.degrau - 1], exercises, equipamento);
+  return filtrarDegrau(ESCADAS_DIFICULDADE[loc.escada]![loc.degrau - 1], exercises, equipamento, equipamentosCasa);
 }
 
 /** Posição legível p/ a UI ("degrau 3 de 6") — insumo do componente de escada visual. */

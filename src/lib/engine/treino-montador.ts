@@ -10,6 +10,7 @@
  *  - determinístico (ordena por tier↑ depois id; rotaciona p/ variar).
  */
 import { dificuldadesLiberadas } from './treino';
+import { exercicioDisponivel } from './equipamento';
 import type { PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, LocalExercicio, PadraoMovimento } from '../data/types';
 
@@ -88,11 +89,11 @@ export function montarRotina(
     return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
   }
 
-  // Pool elegível: equipamento/local + dificuldade liberada. Ordenado (tier↑, depois id).
-  const locais = locaisPermitidos(perfil.equipamento);
+  // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
+  // liberada. Ordenado (tier↑, depois id).
   const liberadas = new Set(dificuldadesLiberadas(perfil.nivelExperiencia));
   const pool = exercises
-    .filter((e) => locais.includes(e.local) && liberadas.has(e.nivel))
+    .filter((e) => exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
     .slice()
     .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 

@@ -34,6 +34,9 @@ export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
 export { montarRotina, locaisPermitidos } from './treino-montador';
 
+// --- Equipamento (modelo 2 níveis — DF 2026-07-04) ---
+export { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA, exercicioDisponivel } from './equipamento';
+
 // --- Escadas de dificuldade (progressão vertical / hint "sobe de variação") ---
 export {
   ESCADAS_DIFICULDADE, escadaComNomes, localizarNaEscada, posicaoNaEscada,

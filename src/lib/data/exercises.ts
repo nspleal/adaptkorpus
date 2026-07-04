@@ -122,6 +122,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Roda abdominal",
     "local": "casa_com",
+    "equipamentoExigido": ["roda_abdominal"],
     "tier": 1,
     "comoFazer": "Ajoelhado, role a roda à frente estendendo o corpo e volte usando o abdômen. Mantenha a lombar protegida; desafiador."
   },
@@ -167,6 +168,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 1,
     "comoFazer": "Como o supino, mas com halteres: mais amplitude e estabilização. Ótimo para casa com um banco."
   },
@@ -182,6 +184,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 1,
     "comoFazer": "Supino inclinado com halteres; mais amplitude que a barra. Boa opção de casa com banco ajustável."
   },
@@ -287,6 +290,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 1,
     "comoFazer": "Em pé, cotovelos junto ao corpo; flexione levando o peso aos ombros e desça controlando. Sem balançar o tronco. Em casa, halteres ou até garrafas de água servem."
   },
@@ -302,6 +306,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 1,
     "comoFazer": "Pise no elástico e faça a rosca. A resistência cresce no fim do movimento; ótimo para casa/viagem."
   },
@@ -317,6 +322,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra fixa",
     "local": "casa_com",
+    "equipamentoExigido": ["barra_fixa"],
     "tier": 1,
     "comoFazer": "Pendurado na barra com pegada pronada, puxe o corpo até o queixo passar a barra e desça controlando. Uma barra de porta resolve em casa; iniciantes podem usar elástico de auxílio."
   },
@@ -332,6 +338,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra fixa",
     "local": "casa_com",
+    "equipamentoExigido": ["barra_fixa"],
     "tier": 1,
     "comoFazer": "Barra fixa com pegada supinada (palmas para você). Recruta mais o bíceps e costuma ser mais fácil que a pronada."
   },
@@ -497,6 +504,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halter / Kettlebell",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Segure um halter junto ao peito e agache. Ajuda a manter o tronco ereto — ótimo para aprender o agachamento com carga."
   },
@@ -617,6 +625,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Sentado ou em pé, empurre o peso acima da cabeça e desça até a linha dos ombros. Não arqueie demais a lombar. Halteres em casa funcionam bem."
   },
@@ -632,6 +641,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Sentado com apoio nas costas, empurre os halteres acima da cabeça e desça à linha dos ombros. Estável e seguro."
   },
@@ -662,6 +672,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 2,
     "comoFazer": "Pise no elástico e empurre as alças acima da cabeça. Desenvolvimento de ombros sem peso."
   },
@@ -677,6 +688,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra / Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Tronco inclinado à frente com coluna neutra; puxe o peso em direção ao abdômen e desça. Em casa, com halteres; na academia, com barra."
   },
@@ -782,6 +794,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Em pé, eleve os halteres pelos lados até a altura dos ombros, cotovelos levemente flexionados, e desça devagar. Movimento leve e controlado."
   },
@@ -812,6 +825,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Deitado de lado, eleve o halter pela lateral. Foca o deltoide lateral com uma tensão diferente."
   },
@@ -827,6 +841,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 2,
     "comoFazer": "Deitado num banco com halteres acima do peito e os cotovelos levemente flexionados, abra os braços em arco até alongar o peito e feche apertando o peitoral. (A versão em máquina é o Voador/peck deck.)"
   },
@@ -842,6 +857,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 2,
     "comoFazer": "Crucifixo no banco inclinado, focando a parte de cima do peito. Braços semiflexionados, abra e feche em arco."
   },
@@ -917,6 +933,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Afundo segurando halteres ao lado do corpo. Aumenta a carga do afundo tradicional."
   },
@@ -1007,6 +1024,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 2,
     "comoFazer": "Deitado, braços para cima, flexione só os cotovelos descendo o peso até perto da testa e estenda. Cotovelos apontando ao teto, sem abrir."
   },
@@ -1082,6 +1100,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Como a rosca direta, mas com os halteres na vertical (pegada neutra, polegar para cima). Trabalha mais o antebraço."
   },
@@ -1097,6 +1116,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Rosca com as palmas voltadas para baixo (pegada pronada), subindo o peso até os ombros. Foca a parte de cima do antebraço e o braquiorradial."
   },
@@ -1112,6 +1132,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halter",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Sentado, cotovelo apoiado na coxa, faça a rosca isolando o bíceps. Excelente para o pico do bíceps."
   },
@@ -1142,6 +1163,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 3,
     "comoFazer": "Sentado num banco inclinado, braços pendurados, faça a rosca. Alonga mais o bíceps no início."
   },
@@ -1202,6 +1224,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra / Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Joelhos levemente flexionados, leve o quadril para trás descendo o peso rente às pernas e suba. Sente o alongamento atrás da coxa; coluna neutra."
   },
@@ -1217,6 +1240,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Em pé com halteres à frente das coxas, leve o quadril para trás descendo os pesos rente às pernas (joelhos quase retos) até alongar o posterior; volte apertando os glúteos. Excelente opção de casa."
   },
@@ -1232,6 +1256,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Peso corporal",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Apoiado numa perna só, leve o quadril para trás descendo o peso enquanto a outra perna estende atrás, formando uma linha. Trabalha posterior, glúteo e equilíbrio, e corrige diferenças entre os lados."
   },
@@ -1262,6 +1287,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Apoie joelho e mão num banco, puxe o halter ao lado do tronco e desça. Um braço por vez, costas paralelas ao chão."
   },
@@ -1307,6 +1333,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 3,
     "comoFazer": "Deitado de bruços com uma faixa elástica presa nos tornozelos e ancorada atrás, flexione os joelhos trazendo os calcanhares aos glúteos contra a resistência. Versão caseira do isolador de posterior."
   },
@@ -1322,6 +1349,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra fixa",
     "local": "casa_com",
+    "equipamentoExigido": ["barra_fixa"],
     "tier": 3,
     "comoFazer": "Pendurado na barra, eleve as pernas (ou joelhos) à frente e desça controlando. Comece com joelhos dobrados."
   },
@@ -1382,6 +1410,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Corda",
     "local": "casa_com",
+    "equipamentoExigido": ["corda_pular"],
     "tier": 3,
     "comoFazer": "Saltos curtos girando a corda com os punhos; ótimo cardio de baixo custo. Aterrissar suave na ponta dos pés."
   },
@@ -1427,6 +1456,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Em pé, puxe o peso para cima rente ao corpo até a altura do peito, cotovelos liderando, e desça. Movimento moderado para poupar o ombro."
   },
@@ -1442,6 +1472,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 3,
     "comoFazer": "Pise no elástico e puxe as alças para cima rente ao corpo até o peito. Alternativa portátil da remada alta."
   },
@@ -1457,6 +1488,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Em pé com o peso nas mãos, eleve só os ombros em direção às orelhas e desça. Sem girar os ombros."
   },
@@ -1472,6 +1504,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Em pé, eleve os halteres à frente até a altura dos ombros e desça controlando. Um de cada vez ou juntos."
   },
@@ -1532,6 +1565,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halter",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Em pé com um halter de um lado, incline o tronco lateralmente e volte. Trabalha os oblíquos."
   },
@@ -1592,6 +1626,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Tronco inclinado à frente, abra os halteres pelos lados apertando as escápulas e desça. Trabalha a parte de trás do ombro."
   },
@@ -1622,6 +1657,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Kettlebell",
     "local": "casa_com",
+    "equipamentoExigido": ["kettlebell"],
     "tier": 3,
     "comoFazer": "Quadril para trás e impulsione o kettlebell à frente com a força do quadril (não dos braços), até a altura do peito. Explosivo e ótimo para condicionamento."
   },
@@ -1637,6 +1673,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Kettlebell",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Caminhe segurando peso pesado em cada mão, tronco ereto. Fortalece pegada, trapézio e core de forma funcional."
   },
@@ -1667,6 +1704,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Desenvolvimento em que você gira os punhos da frente para fora ao subir. Recruta mais o ombro inteiro."
   },
@@ -1682,6 +1720,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 3,
     "comoFazer": "Rosca direta feita um braço de cada vez, alternando. Permite mais concentração em cada lado."
   },
@@ -1772,6 +1811,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra fixa",
     "local": "casa_com",
+    "equipamentoExigido": ["barra_fixa"],
     "tier": 4,
     "comoFazer": "Pendure-se na barra com os braços estendidos pelo máximo de tempo que aguentar. Fortalece a pegada e o antebraço e ainda descomprime a coluna; uma barra de porta serve."
   },
@@ -1787,6 +1827,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 4,
     "comoFazer": "Com um elástico preso à frente na altura do rosto, puxe as mãos em direção à testa abrindo os cotovelos para fora e apertando a parte de trás dos ombros. Fortalece o deltoide posterior e ajuda na postura. Na academia, é feito na polia."
   },
@@ -1802,6 +1843,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 4,
     "comoFazer": "Prenda o elástico no alto e puxe para baixo até o peito abrindo os cotovelos. Simula a puxada alta em casa."
   },
@@ -1877,6 +1919,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres", "banco"],
     "tier": 4,
     "comoFazer": "Deitado, leve o halter atrás da cabeça com os braços quase estendidos e traga de volta sobre o peito. Alonga a caixa torácica."
   },
@@ -1997,6 +2040,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Tronco inclinado, cotovelo junto ao corpo, estenda o antebraço para trás e retorne. Isola o tríceps."
   },
@@ -2027,6 +2071,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Halter acima da cabeça, flexione os cotovelos descendo o peso atrás da nuca e estenda. Cotovelos apontando para cima."
   },
@@ -2042,6 +2087,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Barra / Halteres",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "7 repetições só na metade de baixo, 7 só na de cima e 7 completas, sem descanso. Técnica de intensidade para o bíceps."
   },
@@ -2057,6 +2103,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Antebraços apoiados, flexione só os punhos elevando o peso e desça. Isola o antebraço."
   },
@@ -2072,6 +2119,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Antebraços apoiados e palmas para baixo, estenda só os punhos elevando o peso e desça. Trabalha a parte de cima do antebraço (extensores), pouco treinada."
   },
@@ -2087,6 +2135,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Rolo de punho",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Com os braços à frente, enrole uma corda com peso num bastão girando só os punhos e desenrole devagar. Queima o antebraço inteiro rapidamente."
   },
@@ -2102,6 +2151,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Kettlebell",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Segure halteres ou kettlebells pesados parado, em pé e com o tronco ereto, pelo máximo de tempo. Treina a força de pegada de forma bem direta."
   },
@@ -2162,6 +2212,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Barra",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Agache e, ao subir, empurre o peso acima da cabeça num só movimento. Trabalha pernas e ombros e eleva muito o cardio."
   },
@@ -2372,6 +2423,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres ou anilha sobre os joelhos",
     "local": "casa_com",
+    "equipamentoExigido": ["halteres"],
     "tier": 4,
     "comoFazer": "Sentado, com halteres ou uma anilha apoiados sobre os joelhos, eleve os calcanhares e desça com amplitude total. Foca o sóleo (parte profunda da panturrilha), que só ativa com o joelho dobrado. Na academia, a máquina de panturrilha sentado faz o mesmo."
   },
@@ -2432,6 +2484,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Elástico",
     "local": "casa_com",
+    "equipamentoExigido": ["elastico"],
     "tier": 4,
     "comoFazer": "Prenda o elástico à frente e puxe em direção ao abdômen apertando as costas. Alternativa barata e portátil para costas em casa."
   },

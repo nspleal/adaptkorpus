@@ -4,7 +4,7 @@
  * Roda após o gate de saúde (herdado). Determinístico, sem IA em runtime.
  */
 import type { FlagsSaude, Objetivo } from './types';
-import type { EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
@@ -22,6 +22,9 @@ export interface PerfilTreino {
   objetivo: Objetivo;
   nivelExperiencia: NivelExperiencia;
   equipamento: EquipamentoDisp;
+  /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
+   *  equipamento" (≡ antigo `nenhum`); ausente = chamada legada (casa antiga = tudo). */
+  equipamentosCasa?: EquipamentoCasa[];
   /** Dias por semana que o usuário pode treinar (1–6). */
   diasDisponiveis: number;
   /** Tempo por sessão em minutos. */

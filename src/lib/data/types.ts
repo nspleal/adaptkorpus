@@ -102,9 +102,22 @@ export type PadraoMovimento =
 
 export type NivelExercicio = 'iniciante' | 'intermediario' | 'avancado';
 export type TipoExercicio = 'forca_hipertrofia' | 'cardio' | 'pliometrico' | 'mobilidade';
-/** Disponibilidade de equipamento exigida. */
+/**
+ * Disponibilidade de equipamento. Modelo "2 níveis" (DF 2026-07-04): o TOPO do perfil é
+ * `casa` (com checklist `equipamentosCasa`) ou `academia`. `nenhum` permanece como valor
+ * LEGADO aceito em runtime (≡ casa + checklist vazio — migrado na leitura da sessão) e
+ * como classe de exigência do EXERCÍCIO (Exercise.equipamento).
+ */
 export type EquipamentoDisp = 'nenhum' | 'casa' | 'academia';
 export type LocalExercicio = 'casa_sem' | 'casa_com' | 'academia';
+
+/**
+ * Vocabulário de equipamento de CASA (7 — DF 2026-07-04, modelo 2 níveis). Barbell fica
+ * fora de propósito: na A1 quase todo barbell é `academia`.
+ */
+export type EquipamentoCasa =
+  | 'halteres' | 'barra_fixa' | 'elastico' | 'banco'
+  | 'kettlebell' | 'corda_pular' | 'roda_abdominal';
 
 /**
  * Grupo muscular PRIMÁRIO normalizado (1ª entrada da coluna de grupo da A1) —
@@ -130,6 +143,13 @@ export interface Exercise {
   /** Equipamento específico (ex.: "Halteres", "Polia", "Peso corporal"). */
   equipamentoDetalhe?: string;
   local: LocalExercicio;
+  /**
+   * Equipamento de casa EXIGIDO (só nos `casa_com`; DF 2026-07-04 — 1º passo derivado do
+   * nome/atributos, curadoria pendente de aprovação no cofre). Disponível em "Casa" quando
+   * `equipamentoExigido ⊆ equipamentosCasa` do perfil. `casa_sem` não usa; `academia` é
+   * gateado pelo `local`.
+   */
+  equipamentoExigido?: EquipamentoCasa[];
   /** Faixa de popularidade (1 essencial → 4 específico), não dificuldade. */
   tier?: number;
   comoFazer: string;

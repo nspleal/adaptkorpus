@@ -19,7 +19,8 @@ export const perfilTreinoSchema = z.object({
   }),
   objetivo: z.enum(['emagrecimento', 'massa', 'saude']),
   nivelExperiencia: z.enum(['iniciante', 'intermediario', 'avancado']),
-  equipamento: z.enum(['nenhum', 'casa', 'academia']),
+  equipamento: z.enum(['nenhum', 'casa', 'academia']), // 'nenhum' = legado (≡ casa + [])
+  equipamentosCasa: z.array(z.enum(['halteres', 'barra_fixa', 'elastico', 'banco', 'kettlebell', 'corda_pular', 'roda_abdominal'])).optional(),
   diasDisponiveis: z.coerce.number().int().min(1).max(7),
   tempoPorSessaoMin: z.coerce.number().int().min(10).max(180),
 });
@@ -68,7 +69,8 @@ export const suporteSchema = z.object({
 /** Entrada da substituição de exercício. */
 export const subExercicioSchema = z.object({
   exercicioAtualId: z.string().min(1),
-  equipamento: z.enum(['nenhum', 'casa', 'academia']),
+  equipamento: z.enum(['nenhum', 'casa', 'academia']), // 'nenhum' = legado (≡ casa + [])
+  equipamentosCasa: z.array(z.enum(['halteres', 'barra_fixa', 'elastico', 'banco', 'kettlebell', 'corda_pular', 'roda_abdominal'])).optional(),
   nivelExperiencia: z.enum(['iniciante', 'intermediario', 'avancado']),
   historicoRecenteIds: z.array(z.string()).optional(),
   gostoExcluirIds: z.array(z.string()).optional(),

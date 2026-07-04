@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA } from '@/lib/engine';
+import type { EquipamentoCasa } from '@/lib/data/types';
 import { ORDEM_SEMANA, DIA_LABEL, type Weekday } from '@/lib/semana';
 import { buscarAlimentos, nomeAlimento } from '@/lib/data/paleta-alimentos';
 import type { Alergeno } from '@/lib/data/types';
@@ -177,6 +179,55 @@ function BuscaNaoCurto({ naoCurto, onAdd, onRemove }: { naoCurto: string[]; onAd
           <span style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.35)', flexShrink: 0 }} /><span style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.55)' }}>Nenhum alimento marcado — tudo bem, é opcional.</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Checklist de equipamento de CASA (modelo 2 níveis — DF 2026-07-04). Reusa o vocabulário
+ * visual do SeletorDias (toggles). "Nenhum equipamento" é opção legítima, não erro —
+ * checklist vazio = só peso do corpo (copy sem culpa).
+ */
+export function ChecklistEquipamento({ selecionados, onToggle, onLimpar }: {
+  selecionados: EquipamentoCasa[];
+  onToggle: (eq: EquipamentoCasa) => void;
+  onLimpar: () => void;
+}) {
+  const sel = new Set(selecionados);
+  const alvo = (on: boolean): CSSProperties => ({
+    flex: '1 1 0', minWidth: 104, minHeight: 60, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '10px 8px', textAlign: 'center', borderRadius: 13, cursor: 'pointer', fontWeight: 600, fontSize: '.86rem',
+    transition: 'transform .16s ease, background .2s ease, border-color .2s ease, box-shadow .25s ease',
+    ...(on
+      ? { background: 'rgba(189,255,0,.13)', border: '1.5px solid rgba(189,255,0,.55)', color: '#BDFF00', boxShadow: '0 10px 24px -16px rgba(189,255,0,.7)' }
+      : { background: 'rgba(234,229,219,.04)', border: '1.5px solid rgba(234,229,219,.13)', color: 'rgba(234,229,219,.82)' }),
+  });
+  const nenhum = selecionados.length === 0;
+  return (
+    <div>
+      <div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', margin: '2px 0 10px', lineHeight: 1.5 }}>
+        Marque o que você tem em casa — o plano usa só isso. Sem nada marcado, tudo sai do peso do corpo (e funciona).
+      </div>
+      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+        {EQUIPAMENTOS_CASA.map((eq) => {
+          const on = sel.has(eq);
+          return (
+            <button key={eq} onClick={() => onToggle(eq)} className="evk-dia" aria-pressed={on} style={alvo(on)}>
+              {ROTULO_EQUIPAMENTO_CASA[eq]}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={onLimpar}
+        aria-pressed={nenhum}
+        style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, cursor: 'pointer', fontWeight: 600, fontSize: '.86rem', transition: 'all .2s ease',
+          ...(nenhum
+            ? { background: 'rgba(189,255,0,.1)', border: '1.5px solid rgba(189,255,0,.45)', color: '#BDFF00' }
+            : { background: 'none', border: '1.5px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.7)' }) }}
+      >
+        Nenhum equipamento — só o peso do corpo
+      </button>
     </div>
   );
 }

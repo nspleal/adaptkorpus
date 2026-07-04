@@ -6,6 +6,7 @@
  */
 import type {
   Alergeno,
+  EquipamentoCasa,
   EquipamentoDisp,
   Exercise,
   Food,
@@ -69,6 +70,8 @@ export interface ResultadoSubPrato {
 export interface PedidoSubExercicio {
   exercicioAtual: Exercise;
   equipamento: EquipamentoDisp;
+  /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04); ausente = legado. */
+  equipamentosCasa?: readonly EquipamentoCasa[];
   nivelExperiencia: NivelExperiencia;
   exercises: readonly Exercise[];
   /** Variedade: ids recentes do mesmo padrão/grupo a evitar (relaxável). */

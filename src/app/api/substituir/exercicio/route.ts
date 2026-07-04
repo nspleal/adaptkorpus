@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'entrada inválida', detalhes: parsed.error.issues }, { status: 400 });
   }
-  const { exercicioAtualId, equipamento, nivelExperiencia, historicoRecenteIds, gostoExcluirIds } = parsed.data;
+  const { exercicioAtualId, equipamento, equipamentosCasa, nivelExperiencia, historicoRecenteIds, gostoExcluirIds } = parsed.data;
   const exercicioAtual = EXERCISES.find((e) => e.id === exercicioAtualId);
   if (!exercicioAtual) {
     return NextResponse.json({ error: 'exercicioAtualId não encontrado' }, { status: 404 });
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
   const resultado = substituirExercicio({
     exercicioAtual,
     equipamento,
+    equipamentosCasa, // checklist de casa (modelo 2 níveis; ausente = legado)
     nivelExperiencia,
     exercises: EXERCISES,
     historicoRecenteIds,

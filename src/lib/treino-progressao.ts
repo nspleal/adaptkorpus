@@ -12,7 +12,7 @@ import {
   type PrescricaoFITT,
 } from '@/lib/engine';
 import { DELOAD_SEMANAS_DEFAULT } from '@/lib/engine/treino-constants';
-import type { EquipamentoDisp, Exercise } from '@/lib/data/types';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise } from '@/lib/data/types';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
 /**
@@ -99,6 +99,8 @@ export function progressoDosExercicios(
   /** Biblioteca + equipamento: quando passados, popula `proximaVariacao` (hint de escada). */
   exercises?: readonly Exercise[],
   equipamento?: EquipamentoDisp,
+  /** Checklist de casa (modelo 2 níveis): o hint respeita o equipamento marcado. */
+  equipamentosCasa?: readonly EquipamentoCasa[],
 ): Record<string, ProgressoExercicio> {
   // Ordem cronológica real (o histórico vem mais-recente-primeiro; empate no dia → nº de sessão).
   const asc = [...historico].sort((a, b) => (a.dataISO < b.dataISO ? -1 : a.dataISO > b.dataISO ? 1 : a.n - b.n));
@@ -135,9 +137,9 @@ export function progressoDosExercicios(
     // o degrau absoluto oficial é o do exercício que a pessoa de fato faz).
     const degrauAdotadoId = degrauAdotadoPorId.get(id) ?? null;
     const idEfetivo = degrauAdotadoId ?? id;
-    const prox = exercises && equipamento ? sugerirProximaVariacao(idEfetivo, exercises, equipamento) : null;
+    const prox = exercises && equipamento ? sugerirProximaVariacao(idEfetivo, exercises, equipamento, equipamentosCasa) : null;
     const proximaVariacao = prox && prox[0] ? { id: prox[0], nome: exercicioPorId(prox[0])?.nomePt ?? prox[0] } : null;
-    const ant = exercises && equipamento ? sugerirVariacaoAnterior(idEfetivo, exercises, equipamento) : null;
+    const ant = exercises && equipamento ? sugerirVariacaoAnterior(idEfetivo, exercises, equipamento, equipamentosCasa) : null;
     const variacaoAnterior = ant && ant[0] ? { id: ant[0], nome: exercicioPorId(ant[0])?.nomePt ?? ant[0] } : null;
     const r = estadoAposHistorico(exercicio, prescricao, eventos);
     out[id] = {

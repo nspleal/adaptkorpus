@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { gerarDieta, type ResultadoMotor } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, PerfilUsuario, Sexo } from '@/lib/engine';
-import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
+import type { EquipamentoCasa, Alergeno, EquipamentoDisp } from '@/lib/data/types';
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
-import { SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
+import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 
 /**
  * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
@@ -49,9 +49,9 @@ const EXPERIENCIAS: { id: NivelExperiencia; t: string; d: string }[] = [
   { id: 'intermediario', t: 'Intermediário', d: 'Treino há alguns meses.' },
   { id: 'avancado', t: 'Avançado', d: 'Treino consistente há anos.' },
 ];
+// Modelo 2 NÍVEIS (DF 2026-07-04): Casa (com checklist do que você tem) ou Academia.
 const LOCAIS: { id: EquipamentoDisp; t: string; d: string }[] = [
-  { id: 'nenhum', t: 'Sem equipamento', d: 'Só o peso do corpo.' },
-  { id: 'casa', t: 'Em casa', d: 'Halteres, elásticos, o que tiver.' },
+  { id: 'casa', t: 'Em casa', d: 'Marque abaixo o que você tem — ou nada: só o peso do corpo também funciona.' },
   { id: 'academia', t: 'Academia', d: 'Equipamento completo.' },
 ];
 const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
@@ -90,6 +90,8 @@ export default function Onboarding() {
   const [atividade, setAtividade] = useState<NivelAtividade>('moderado');
   const [experiencia, setExperiencia] = useState<NivelExperiencia>('iniciante');
   const [local, setLocal] = useState<EquipamentoDisp>('casa');
+  const [equipsCasa, setEquipsCasa] = useState<EquipamentoCasa[]>([]);
+  const toggleEquip = (eq: EquipamentoCasa) => setEquipsCasa((p) => (p.includes(eq) ? p.filter((x) => x !== eq) : [...p, eq]));
   const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasPadrao(3));
   const [tempo, setTempo] = useState(45);
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>('');
@@ -140,7 +142,7 @@ export default function Onboarding() {
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude };
+    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
@@ -195,7 +197,7 @@ export default function Onboarding() {
                 {step === 3 && <StepCards titulo="Qual é o seu objetivo?" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />}
                 {step === 4 && <StepCards titulo="Seu nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} />}
                 {step === 5 && <StepCards titulo="Sua experiência de treino" sub="É diferente do seu dia a dia — aqui é há quanto tempo você treina de forma consistente." opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} />}
-                {step === 6 && <Step6 {...{ local, setLocal, treinoDias, toggleDia, tempo, setTempo }} />}
+                {step === 6 && <Step6 {...{ local, setLocal, equipsCasa, toggleEquip, limparEquips: () => setEquipsCasa([]), treinoDias, toggleDia, tempo, setTempo }} />}
                 {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood }} />}
               </div>
             </div>
@@ -318,8 +320,10 @@ function StepCards<T extends string>({ titulo, sub, opts, sel, onSel }: { titulo
   );
 }
 
-function Step6({ local, setLocal, treinoDias, toggleDia, tempo, setTempo }: {
-  local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void; treinoDias: Weekday[]; toggleDia: (w: Weekday) => void; tempo: number; setTempo: (v: number) => void;
+function Step6({ local, setLocal, equipsCasa, toggleEquip, limparEquips, treinoDias, toggleDia, tempo, setTempo }: {
+  local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void;
+  equipsCasa: EquipamentoCasa[]; toggleEquip: (eq: EquipamentoCasa) => void; limparEquips: () => void;
+  treinoDias: Weekday[]; toggleDia: (w: Weekday) => void; tempo: number; setTempo: (v: number) => void;
 }) {
   return (
     <div>
@@ -332,6 +336,11 @@ function Step6({ local, setLocal, treinoDias, toggleDia, tempo, setTempo }: {
               <div><div style={{ fontSize: '1.02rem', fontWeight: 700, marginBottom: 2 }}>{o.t}</div><div style={{ fontSize: '.88rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div></div>
               {local === o.id && <CheckCircle />}
             </div>
+            {o.id === 'casa' && local === 'casa' && (
+              <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(234,229,219,.1)' }}>
+                <ChecklistEquipamento selecionados={equipsCasa} onToggle={toggleEquip} onLimpar={limparEquips} />
+              </div>
+            )}
           </div>
         ))}
       </div>

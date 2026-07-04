@@ -33,7 +33,7 @@ import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed'
 import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
 } from '@/lib/engine';
-import type { Alergeno, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
+import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 
 /**
  * Painel (área logada) — porte FIEL do Evokorpus App.dc.html (estilos inline exatos +
@@ -51,6 +51,9 @@ export interface PerfilResumo {
   /** Exercícios FAVORITOS (⭐ V8.2, DF #12): o montador os prefere sempre que couberem
    *  (isentos da variedade; filtros duros intactos). Espelho positivo do "não gosto". */
   favoritos?: string[];
+  /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
+   *  equipamento". Só relevante quando equipamento === 'casa'. */
+  equipamentosCasa?: EquipamentoCasa[];
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -312,8 +315,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // Bloqueia exercícios já usados na rotina + os já mostrados; o motor deduplica e para no fim.
     const usados = [...rotinaDias.flatMap((dia) => dia.slots.map((sl) => sl.exercicio.id)), ...excluir];
     return listarSubstituicoesExercicio({
-      exercicioAtual: atual, equipamento: perfil.equipamento, nivelExperiencia: perfil.nivelExperiencia,
-      exercises: EXERCISES_SEED, historicoRecenteIds: usados,
+      exercicioAtual: atual, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa,
+      nivelExperiencia: perfil.nivelExperiencia, exercises: EXERCISES_SEED, historicoRecenteIds: usados,
     }).map((rr) => rr.exercicio!);
   }
   const abrirTrocaEx = (d: number, s: number) => { const o = gerarOpcoesEx(d, s, []); setModal({ tipo: 'exercicio', d, s, base: rotinaDias[d]!.slots[s]!.exercicio.nomePt, opcoes: o, excl: o.map((e) => e.id) }); };
@@ -332,7 +335,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   const prescricao = treino.prescricao;
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
-  const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento) : undefined;
+  const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
   const deloadAtivo = prescricao ? precisaDeloadDoHistorico(sessoes, prescricao.nivel, hojeISO()) : false;
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };

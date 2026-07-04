@@ -1,6 +1,6 @@
-import { locaisPermitidos } from '@/lib/engine';
+import { exercicioDisponivel } from '@/lib/engine';
 import { DIFICULDADE_LIBERADA } from '@/lib/engine/treino-constants';
-import type { EquipamentoDisp, Exercise } from '@/lib/data/types';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise } from '@/lib/data/types';
 import type { NivelExperiencia, RotinaSemanal } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
@@ -36,14 +36,14 @@ export function emPausaPorDor(exercicioId: string, historico: readonly SessaoHis
 
 export function elegibilidadeFavorito(
   ex: Exercise,
-  perfil: { equipamento: EquipamentoDisp; nivelExperiencia: NivelExperiencia },
+  perfil: { equipamento: EquipamentoDisp; nivelExperiencia: NivelExperiencia; equipamentosCasa?: readonly EquipamentoCasa[] },
   rotina: RotinaSemanal | null,
   historico: readonly SessaoHistorico[] = [],
 ): ElegibilidadeFavorito {
   // 1) Pausa por dor (re-check de runtime): o movimento está pausado até novo registro.
   if (emPausaPorDor(ex.id, historico)) return { elegivel: false, motivo: 'em pausa por dor' };
-  // 2) Equipamento — filtro duro do montador (locais cumulativos).
-  if (!locaisPermitidos(perfil.equipamento).includes(ex.local)) {
+  // 2) Equipamento — filtro duro do montador (modelo 2 níveis: checklist de casa).
+  if (!exercicioDisponivel(ex, perfil.equipamento, perfil.equipamentosCasa)) {
     return { elegivel: false, motivo: 'pede equipamento de academia' };
   }
   // 3) Dificuldade liberada — favoritar NÃO fura o nível (DF #12).

@@ -4,9 +4,9 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import type { PerfilResumo } from './Painel';
 import { gerarTreino } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
-import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
+import type { Alergeno, EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
-import { SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
+import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 import { MeusFavoritos, ToastDesfazer } from './Favoritos';
 import { elegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 import { lerHistorico } from '@/lib/treino-historico';
@@ -40,9 +40,9 @@ const EXPERIENCIAS: { id: NivelExperiencia; t: string; d: string }[] = [
   { id: 'intermediario', t: 'Intermediário', d: 'Treino há alguns meses.' },
   { id: 'avancado', t: 'Avançado', d: 'Treino consistente há anos.' },
 ];
+// Modelo 2 NÍVEIS (DF 2026-07-04): Casa (com checklist) ou Academia.
 const LOCAIS: { id: EquipamentoDisp; t: string; d: string }[] = [
-  { id: 'nenhum', t: 'Sem equipamento', d: 'Só o peso do corpo.' },
-  { id: 'casa', t: 'Em casa', d: 'Halteres, elásticos, o que tiver.' },
+  { id: 'casa', t: 'Em casa', d: 'Marque abaixo o que você tem — ou nada: só o peso do corpo também funciona.' },
   { id: 'academia', t: 'Academia', d: 'Acesso completo a máquinas e pesos.' },
 ];
 const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
@@ -62,7 +62,12 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   const [objetivo, setObjetivo] = useState<Objetivo>(inicial.objetivo);
   const [atividade, setAtividade] = useState<NivelAtividade>(inicial.nivelAtividade);
   const [experiencia, setExperiencia] = useState<NivelExperiencia>(inicial.nivelExperiencia);
-  const [local, setLocal] = useState<EquipamentoDisp>(inicial.equipamento);
+  // 'nenhum' legado (pré-migração) mapeia para casa + checklist vazio.
+  const [local, setLocal] = useState<EquipamentoDisp>(inicial.equipamento === 'nenhum' ? 'casa' : inicial.equipamento);
+  const [equipsCasa, setEquipsCasa] = useState<EquipamentoCasa[]>(
+    inicial.equipamento === 'nenhum' ? [] : (inicial.equipamentosCasa ?? []),
+  );
+  const toggleEquip = (eq: EquipamentoCasa) => setEquipsCasa((p) => (p.includes(eq) ? p.filter((x) => x !== eq) : [...p, eq]));
   const diasIniciais = inicial.treinoDias?.length ? inicial.treinoDias : diasPadrao(inicial.diasDisponiveis);
   const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasIniciais);
   const [tempo, setTempo] = useState(inicial.tempoPorSessaoMin);
@@ -97,11 +102,11 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   // monta a rotina determinística com os campos atuais e avalia cada favorito (B5).
   const rotinaAtual = useMemo(() => {
     const r = gerarTreino(
-      { pesoKg: +peso || inicial.pesoKg, alturaCm: +altura || inicial.alturaCm, idade: +idade || inicial.idade, flagsSaude: inicial.flagsSaude, objetivo, nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo },
+      { pesoKg: +peso || inicial.pesoKg, alturaCm: +altura || inicial.alturaCm, idade: +idade || inicial.idade, flagsSaude: inicial.flagsSaude, objetivo, nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo },
       { exercises: EXERCISES_SEED, favoritos: new Set(favoritos) },
     );
     return r.rotina;
-  }, [peso, altura, idade, objetivo, experiencia, local, treinoDias, tempo, favoritos, inicial]);
+  }, [peso, altura, idade, objetivo, experiencia, local, equipsCasa, treinoDias, tempo, favoritos, inicial]);
   const historicoRef = useMemo(() => lerHistorico(), []);
 
   const i = +idade, a = +altura, pz = +peso;
@@ -120,7 +125,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
     onSalvar({
       ...inicial,
       sexo, idade: i, alturaCm: a, pesoKg: pz, objetivo, nivelAtividade: atividade,
-      nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
+      nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [],
+      diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
     });
   }
@@ -154,7 +160,14 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
           <CardsBloco titulo="Objetivo" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />
           <CardsBloco titulo="Nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} desc />
           <CardsBloco titulo="Experiência de treino" opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} desc />
-          <CardsBloco titulo="Local e equipamento" opts={LOCAIS} sel={local} onSel={setLocal} desc />
+          <div>
+            <CardsBloco titulo="Local e equipamento" opts={LOCAIS} sel={local} onSel={setLocal} desc />
+            {local === 'casa' && (
+              <div style={{ marginTop: 14 }}>
+                <ChecklistEquipamento selecionados={equipsCasa} onToggle={toggleEquip} onLimpar={() => setEquipsCasa([])} />
+              </div>
+            )}
+          </div>
 
           <div>
             <div style={cap}>Dias de treino</div>
@@ -182,7 +195,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
           <MeusFavoritos
             favoritos={favoritos}
             exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
-            elegibilidadeDe={(ex) => elegibilidadeFavorito(ex, { equipamento: local, nivelExperiencia: experiencia }, rotinaAtual, historicoRef)}
+            elegibilidadeDe={(ex) => elegibilidadeFavorito(ex, { equipamento: local, nivelExperiencia: experiencia, equipamentosCasa: local === 'casa' ? equipsCasa : [] }, rotinaAtual, historicoRef)}
             onRemover={removerFavorito}
           />
 
