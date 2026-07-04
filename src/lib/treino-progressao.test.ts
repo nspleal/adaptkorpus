@@ -4,6 +4,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 import { precisaDeloadDoHistorico, progressoDosExercicios } from './treino-progressao';
+import { EXERCISES } from '@/lib/data/exercises';
 
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({ pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'saude', nivelExperiencia: 'iniciante', equipamento: 'academia', diasDisponiveis: 4, tempoPorSessaoMin: 60, ...over });
@@ -51,6 +52,25 @@ describe('progressoDosExercicios (deriva o alvo do histórico)', () => {
   it('exercício personalizado (id vazio) é ignorado', () => {
     const hist = [sessao('2026-07-01', [{ id: '', fb: 'facil' }])];
     expect(progressoDosExercicios(hist, p, byId)).toEqual({});
+  });
+
+  it('escada: com exercises+equipamento, popula proximaVariacao (e7 Prancha → e146)', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e7', fb: 'na_medida' }])];
+    const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
+    const prog = progressoDosExercicios(hist, p, resolver, EXERCISES, 'casa');
+    expect(prog.e7!.proximaVariacao).toEqual({ id: 'e146', nome: 'Prancha com toque no ombro' });
+  });
+
+  it('escada respeita equipamento: e116 → chin-up (barra) some p/ casa-sem', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e116', fb: 'na_medida' }])];
+    const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
+    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'nenhum').e116!.proximaVariacao).toBeNull();
+    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'casa').e116!.proximaVariacao).toEqual({ id: 'e22', nome: 'Barra fixa supinada (chin-up)' });
+  });
+
+  it('sem exercises/equipamento → proximaVariacao ausente (retrocompat)', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e7', fb: 'na_medida' }])];
+    expect(progressoDosExercicios(hist, p, byId).e7!.proximaVariacao ?? null).toBeNull();
   });
 });
 

@@ -55,6 +55,8 @@ interface ExView {
   placeholderAlvo: string;  // placeholder do input
   cargaHint: string | null; // "tente ~42,5 kg"
   evoluiuHint: string | null;
+  /** Hint "sobe de variação" (escada de peso corporal, cofre §Escadas): próximo degrau por nome. */
+  proximaVariacaoNome: string | null;
 }
 
 /** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
@@ -119,6 +121,9 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
     const placeholderAlvo = temAlvoUnico ? String(estado!.repsAlvo) : (esSeg && faixaSeg ? `${faixaSeg.min}–${faixaSeg.max}` : `${reps.min}–${reps.max}`);
     const cargaHint = modo === 'carga' && estado?.cargaKg ? `tente ~${r1(estado.cargaKg)} kg` : null;
     const evoluiuHint = hintEvolucao(progresso?.[sl.exercicio.id]?.ultimaAcao);
+    // Hint de escada (cofre §Escadas): quando ficar fácil, sugere o próximo degrau por nome.
+    // Só peso corporal; já vem filtrado por equipamento pelo adaptador (null se topo/carga/fora).
+    const proximaVariacaoNome = progresso?.[sl.exercicio.id]?.proximaVariacao?.nome ?? null;
 
     return {
       id: sl.exercicio.id,
@@ -137,6 +142,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
       placeholderAlvo,
       cargaHint,
       evoluiuHint,
+      proximaVariacaoNome,
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -300,6 +306,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
             </div>
             {/* Hint de evolução (subiu de meta / carga / degrau) — só quando houve progressão real. */}
             {ex.evoluiuHint && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{ex.evoluiuHint}</p>}
+            {/* Escada de dificuldade (cofre §Escadas): sugestão do próximo degrau — hint, você escolhe. */}
+            {ex.proximaVariacaoNome && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: 'rgba(234,229,219,.55)' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M6 20V10M6 10l-3 3M6 10l3 3M14 20V4M14 4l-3 3M14 4l3 3" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></svg>Quando ficar fácil, o próximo degrau é <strong style={{ color: 'rgba(234,229,219,.8)', fontWeight: 600, marginLeft: 3 }}>{ex.proximaVariacaoNome}</strong>.</p>}
             {/* Glosa amigável do RIR (jargão → linguagem simples). Não se aplica a isométricos. */}
             {ex.repUnit === 'segundos'
               ? <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Exercício <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>isométrico</strong>: segure a posição pelo tempo-alvo, com boa forma. Aqui não tem RIR — o que guia é como foi (fácil / na medida / difícil).</p>

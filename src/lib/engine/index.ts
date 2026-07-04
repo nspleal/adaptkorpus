@@ -33,6 +33,12 @@ export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
 export { montarRotina, locaisPermitidos } from './treino-montador';
 
+// --- Escadas de dificuldade (progressão vertical / hint "sobe de variação") ---
+export {
+  ESCADAS_DIFICULDADE, localizarNaEscada, posicaoNaEscada,
+  sugerirProximaVariacao, sugerirVariacaoAnterior, type Degrau,
+} from './escadas';
+
 // --- Substituição (F.2) ---
 export * from './substituicao-types';
 export {

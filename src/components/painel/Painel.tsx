@@ -304,7 +304,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   const prescricao = treino.prescricao;
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
-  const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id)) : undefined;
+  const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento) : undefined;
   const deloadAtivo = prescricao ? precisaDeloadDoHistorico(sessoes, prescricao.nivel, hojeISO()) : false;
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };

@@ -3,13 +3,14 @@
 import {
   estadoAposHistorico,
   precisaDeload,
+  sugerirProximaVariacao,
   type EstadoExercicio,
   type EventoProgressao,
   type Feedback,
   type PrescricaoFITT,
 } from '@/lib/engine';
 import { DELOAD_SEMANAS_DEFAULT } from '@/lib/engine/treino-constants';
-import type { Exercise } from '@/lib/data/types';
+import type { EquipamentoDisp, Exercise } from '@/lib/data/types';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
 /**
@@ -24,6 +25,13 @@ export interface ProgressoExercicio {
   estado: EstadoExercicio;
   /** Última ação da progressão (para o hint "subiu de A→B" na UI); null se nunca progrediu. */
   ultimaAcao: string | null;
+  /**
+   * Hint "sobe de variação" (escada de peso corporal, cofre §Escadas): o próximo degrau
+   * da malha, já filtrado por equipamento. `null` quando o exercício está no topo, tem
+   * carga, sai da malha, ou o próximo degrau exige implemento indisponível. Só é populado
+   * quando `exercises`+`equipamento` são passados a `progressoDosExercicios`.
+   */
+  proximaVariacao?: { id: string; nome: string } | null;
 }
 
 /** Dias inteiros entre duas datas ISO (b − a); NaN-safe → 0. */
@@ -49,6 +57,9 @@ export function progressoDosExercicios(
   historico: readonly SessaoHistorico[],
   prescricao: PrescricaoFITT,
   exercicioPorId: (id: string) => Exercise | undefined,
+  /** Biblioteca + equipamento: quando passados, popula `proximaVariacao` (hint de escada). */
+  exercises?: readonly Exercise[],
+  equipamento?: EquipamentoDisp,
 ): Record<string, ProgressoExercicio> {
   // Ordem cronológica real (o histórico vem mais-recente-primeiro; empate no dia → nº de sessão).
   const asc = [...historico].sort((a, b) => (a.dataISO < b.dataISO ? -1 : a.dataISO > b.dataISO ? 1 : a.n - b.n));
@@ -70,7 +81,11 @@ export function progressoDosExercicios(
   for (const [id, eventos] of eventosPorId) {
     const exercicio = exercicioPorId(id);
     if (!exercicio) continue; // exercício saiu da biblioteca — ignora (nunca aplica a outro)
-    out[id] = estadoAposHistorico(exercicio, prescricao, eventos);
+    // Hint de escada (só peso corporal, respeita equipamento). `sugerirProximaVariacao`
+    // já devolve null p/ exercícios com carga, no topo, ou fora da malha.
+    const prox = exercises && equipamento ? sugerirProximaVariacao(id, exercises, equipamento) : null;
+    const proximaVariacao = prox && prox[0] ? { id: prox[0], nome: exercicioPorId(prox[0])?.nomePt ?? prox[0] } : null;
+    out[id] = { ...estadoAposHistorico(exercicio, prescricao, eventos), proximaVariacao };
   }
   return out;
 }
