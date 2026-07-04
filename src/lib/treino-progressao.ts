@@ -1,9 +1,11 @@
 'use client';
 
 import {
+  ACAO_RECALIBRADO,
   estadoAposHistorico,
   precisaDeload,
   sugerirProximaVariacao,
+  sugerirVariacaoAnterior,
   type EstadoExercicio,
   type EventoProgressao,
   type Feedback,
@@ -32,6 +34,43 @@ export interface ProgressoExercicio {
    * quando `exercises`+`equipamento` são passados a `progressoDosExercicios`.
    */
   proximaVariacao?: { id: string; nome: string } | null;
+  /** Regressão (V8.3 Estado 5): o degrau ANTERIOR, filtrado por equipamento. */
+  variacaoAnterior?: { id: string; nome: string } | null;
+  /**
+   * true logo após o 2º "difícil" seguido ter disparado regressão no fold — gatilho do
+   * cartão de DESCIDA. Derivado dos rótulos LITERAIS de `ultimaAcao` de regressão
+   * (`progredirExercicio`): '−10% carga e reconstrói' · '−N s' · '−2 reps' · 'desce 1 variação'.
+   * O próximo feedback não-regressivo o limpa naturalmente.
+   */
+  sugereDescida: boolean;
+  /**
+   * Degrau ASSUMIDO (B3 — "Assumir este degrau" / calibração por escada): id do exercício
+   * efetivo que a sessão/montador devem exibir no lugar do planejado. null = sem adoção.
+   * Vem do último evento de calibração com `degrauId` (histórico = fonte única).
+   */
+  degrauAdotadoId?: string | null;
+  /**
+   * true quando o ÚLTIMO evento do exercício é uma calibração (B7): a próxima sessão
+   * guiada mostra "Sua meta foi recalibrada…" e o hint se consome sozinho quando o
+   * feedback seguinte chegar (semântica derivada — sem flag persistida).
+   */
+  recalibrado: boolean;
+}
+
+/** Rótulos de `ultimaAcao` que significam REGRESSÃO (fonte: progredirExercicio). */
+const ACOES_REGRESSAO = /^(−|desce 1 variação)/;
+
+/**
+ * Exercício EFETIVO a exibir (B3): o degrau adotado quando houver, senão o planejado.
+ * Overlay de render — a rotina/chaves de progressão continuam no id original.
+ */
+export function exercicioEfetivo(
+  id: string,
+  progresso: Record<string, ProgressoExercicio> | undefined,
+  exercicioPorId: (id: string) => Exercise | undefined,
+): Exercise | undefined {
+  const adotado = progresso?.[id]?.degrauAdotadoId;
+  return (adotado ? exercicioPorId(adotado) : undefined) ?? exercicioPorId(id);
 }
 
 /** Dias inteiros entre duas datas ISO (b − a); NaN-safe → 0. */
@@ -64,12 +103,23 @@ export function progressoDosExercicios(
   // Ordem cronológica real (o histórico vem mais-recente-primeiro; empate no dia → nº de sessão).
   const asc = [...historico].sort((a, b) => (a.dataISO < b.dataISO ? -1 : a.dataISO > b.dataISO ? 1 : a.n - b.n));
 
-  // Eventos por exercício (só exercícios da biblioteca com feedback; customs têm id '' e caem fora).
+  // Eventos por exercício: treino (feedback; customs têm id '' e caem fora) + CALIBRAÇÃO
+  // (sessões `tipo:'calibracao'` viram o evento correspondente — B2, ordem cronológica real).
   const eventosPorId = new Map<string, EventoProgressao[]>();
+  const degrauAdotadoPorId = new Map<string, string>();
   for (const s of asc) {
     for (const ex of s.exercicios) {
+      if (!ex.id) continue;
+      if (s.tipo === 'calibracao') {
+        if (!ex.calibracao) continue; // entrada de calibração sem payload → inerte
+        const arr = eventosPorId.get(ex.id) ?? [];
+        arr.push({ tipo: 'calibracao', ...ex.calibracao });
+        eventosPorId.set(ex.id, arr);
+        if (ex.calibracao.degrauId) degrauAdotadoPorId.set(ex.id, ex.calibracao.degrauId);
+        continue;
+      }
       const fb = (s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
-      if (!ex.id || !fb) continue;
+      if (!fb) continue; // sessão sem feedback (ex.: só pausado por dor) não progride nada
       const arr = eventosPorId.get(ex.id) ?? [];
       const cargaMaxKg = cargaMaxDaSessao(s, ex.id);
       arr.push(cargaMaxKg > 0 ? { fb, cargaMaxKg } : { fb });
@@ -81,11 +131,23 @@ export function progressoDosExercicios(
   for (const [id, eventos] of eventosPorId) {
     const exercicio = exercicioPorId(id);
     if (!exercicio) continue; // exercício saiu da biblioteca — ignora (nunca aplica a outro)
-    // Hint de escada (só peso corporal, respeita equipamento). `sugerirProximaVariacao`
-    // já devolve null p/ exercícios com carga, no topo, ou fora da malha.
-    const prox = exercises && equipamento ? sugerirProximaVariacao(id, exercises, equipamento) : null;
+    // Hints de escada ancorados no exercício EFETIVO (degrau adotado quando houver — B3/B6:
+    // o degrau absoluto oficial é o do exercício que a pessoa de fato faz).
+    const degrauAdotadoId = degrauAdotadoPorId.get(id) ?? null;
+    const idEfetivo = degrauAdotadoId ?? id;
+    const prox = exercises && equipamento ? sugerirProximaVariacao(idEfetivo, exercises, equipamento) : null;
     const proximaVariacao = prox && prox[0] ? { id: prox[0], nome: exercicioPorId(prox[0])?.nomePt ?? prox[0] } : null;
-    out[id] = { ...estadoAposHistorico(exercicio, prescricao, eventos), proximaVariacao };
+    const ant = exercises && equipamento ? sugerirVariacaoAnterior(idEfetivo, exercises, equipamento) : null;
+    const variacaoAnterior = ant && ant[0] ? { id: ant[0], nome: exercicioPorId(ant[0])?.nomePt ?? ant[0] } : null;
+    const r = estadoAposHistorico(exercicio, prescricao, eventos);
+    out[id] = {
+      ...r,
+      proximaVariacao,
+      variacaoAnterior,
+      sugereDescida: r.ultimaAcao !== null && ACOES_REGRESSAO.test(r.ultimaAcao),
+      degrauAdotadoId,
+      recalibrado: r.ultimaAcao === ACAO_RECALIBRADO,
+    };
   }
   return out;
 }

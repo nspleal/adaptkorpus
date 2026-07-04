@@ -18,6 +18,20 @@ export interface SessaoHistorico extends ResumoSessao {
   manual?: boolean; // true = registrada pelo formulário "Registrar treino feito"
   hora?: string;    // 'HH:MM' opcional (só registro manual)
   obs?: string;     // observação opcional (só registro manual)
+  /**
+   * 'calibracao' = entrada de CALIBRAÇÃO manual ("Muito fácil" / "Assumir este degrau" —
+   * cofre DF #13/B2, 2026-07-04). NÃO é treino: fica fora da Chama (dias de treino) e do
+   * gráfico de Cargas (ver `sessoesTreino`). Ausente = sessão de treino normal (legado ok).
+   */
+  tipo?: 'calibracao';
+}
+
+/**
+ * Só as sessões de TREINO (exclui calibrações) — salvaguarda travada do B2: evento de
+ * calibração não conta dia de treino (Chama/marcos) nem alimenta o gráfico de Cargas.
+ */
+export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHistorico[] {
+  return historico.filter((s) => s.tipo !== 'calibracao');
 }
 
 const KEY = 'evk_treinos';
@@ -59,7 +73,7 @@ export function lerHistorico(): SessaoHistorico[] {
  * primeiro. Retorna o histórico atualizado.
  */
 export function registrarSessaoEm(
-  resumo: ResumoSessao, dataISO: string, extra?: { manual?: boolean; hora?: string; obs?: string },
+  resumo: ResumoSessao, dataISO: string, extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: 'calibracao' },
 ): SessaoHistorico[] {
   const hist = lerHistorico();
   // n único = maior n existente + 1 (length+1 duplicaria após qualquer entrada descartada).
@@ -73,4 +87,24 @@ export function registrarSessaoEm(
 /** Registra uma sessão guiada concluída hoje (carimba data + nº). */
 export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date()): SessaoHistorico[] {
   return registrarSessaoEm(resumo, hojeISO(agora));
+}
+
+/**
+ * Grava uma CALIBRAÇÃO manual como evento no histórico (B2 — DF 2026-07-04): o alvo
+ * continua sendo função pura do `evk_treinos`. Um item por exercício calibrado, com a
+ * nova base no payload `calibracao`. `series: 0` + `tipo: 'calibracao'` deixam a entrada
+ * fora da Chama e das Cargas (via `sessoesTreino`).
+ */
+export function salvarCalibracao(
+  itens: readonly { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[],
+  agora: Date = new Date(),
+): SessaoHistorico[] {
+  const resumo: ResumoSessao = {
+    dia: 'Calibração manual',
+    series: 0,
+    volumeKg: 0,
+    feedback: {},
+    exercicios: itens.map((it) => ({ id: it.id, nome: it.nome, loaded: false, fb: null, sets: [], calibracao: it.calibracao })),
+  };
+  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'calibracao' });
 }

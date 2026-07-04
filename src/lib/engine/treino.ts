@@ -27,7 +27,8 @@ import type {
   ResultadoGateTreino,
 } from './treino-types';
 import type { Exercise, NivelExercicio } from '../data/types';
-import { DECREMENTO_SEG, INCREMENTO_SEG, faixaSegundos, repUnitDe } from './isometricos';
+import { DECREMENTO_SEG, INCREMENTO_SEG, PISO_HOLD_SEG, faixaSegundos, repUnitDe } from './isometricos';
+import { indiceBase } from './modificacoes-isometricos';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -197,12 +198,39 @@ export function repsRespeitaPisoAbsoluto(reps: number): boolean {
   return reps >= PISO_ABSOLUTO_REPS;
 }
 
-/** Um evento de progressão: o feedback do exercício naquela sessão + a maior carga logada (se houve). */
-export interface EventoProgressao {
+/** Evento de treino: o feedback do exercício naquela sessão + a maior carga logada (se houve). */
+export interface EventoTreino {
+  tipo?: undefined;
   fb: Feedback;
   /** Só no modo carga: a maior carga (kg) efetivamente logada na sessão (base do próximo alvo). */
   cargaMaxKg?: number;
 }
+
+/**
+ * Evento de CALIBRAÇÃO manual ("Muito fácil" — cofre parametros-motor-treino DF #11/#13,
+ * 2026-07-04). Grava a NOVA BASE do exercício como evento no histórico (B2: alvo segue
+ * sendo função pura do histórico). Exatamente uma das três formas:
+ *  - carga:        { cargaKg, reps }
+ *  - peso corporal: { degrauId, reps }  (degrau da escada assumido — B3; também usado
+ *                    pela adoção explícita "Assumir este degrau")
+ *  - isométrico:   { modificacaoIdx, segundos }  (índice na escada de modificações — B1)
+ * Salvaguarda travada: a calibração ZERA `dificeisSeguidos` (base nova invalida a
+ * estagnação antiga).
+ */
+export interface EventoCalibracao {
+  tipo: 'calibracao';
+  cargaKg?: number;
+  reps?: number;
+  degrauId?: string;
+  modificacaoIdx?: number;
+  segundos?: number;
+}
+
+export type EventoProgressao = EventoTreino | EventoCalibracao;
+
+/** Rótulo de `ultimaAcao` da calibração — NÃO casa com os rótulos de progressão/regressão
+ *  (o hint "meta recalibrada" da UI deriva dele; B7: some quando o próximo feedback chega). */
+export const ACAO_RECALIBRADO = 'recalibrado (base manual)';
 
 /** Estado inicial de um exercício (antes de qualquer sessão), pela prescrição e pelo tipo. */
 export function estadoInicial(exercicio: Exercise, prescricao: PrescricaoFITT): EstadoExercicio {
@@ -235,6 +263,11 @@ export function estadoAposHistorico(
   let estado = estadoInicial(exercicio, prescricao);
   let ultimaAcao: string | null = null;
   for (const ev of eventos) {
+    if (ev.tipo === 'calibracao') {
+      estado = aplicarCalibracao(estado, ev, prescricao, exercicio);
+      ultimaAcao = ACAO_RECALIBRADO;
+      continue;
+    }
     if (estado.modo === 'carga' && ev.cargaMaxKg != null && ev.cargaMaxKg > 0) {
       estado = { ...estado, cargaKg: ev.cargaMaxKg }; // base do próximo alvo = carga logada
     }
@@ -244,6 +277,52 @@ export function estadoAposHistorico(
     ultimaAcao = r.acao;
   }
   return { estado, ultimaAcao };
+}
+
+/**
+ * Aplica um evento de calibração ao estado (B2 — nova semente da dupla progressão).
+ * Trilhos (cofre DF #11): com carga, reps clampadas ao piso do nível (iniciante 6;
+ * demais 5 — o absoluto vale p/ todos; defesa em profundidade além da UI). Peso
+ * corporal: o "piso" é a própria variação escolhida (reps livres ≥ 1). Isométrico:
+ * segundos ≥ piso de registro (10 s). SEMPRE zera `dificeisSeguidos` (salvaguarda
+ * travada) e volta as séries ao piso da prescrição quando a base muda de degrau.
+ */
+function aplicarCalibracao(
+  estado: EstadoExercicio,
+  ev: EventoCalibracao,
+  prescricao: PrescricaoFITT,
+  exercicio: Exercise,
+): EstadoExercicio {
+  const esSeg = repUnitDe(exercicio.id) === 'segundos';
+  if (estado.modo === 'carga') {
+    const pisoNivel = prescricao.nivel === 'iniciante' ? PISO_REPS_COM_CARGA : PISO_ABSOLUTO_REPS;
+    return {
+      ...estado,
+      ...(ev.cargaKg != null && ev.cargaKg > 0 ? { cargaKg: round1(ev.cargaKg) } : {}),
+      ...(ev.reps != null ? { repsAlvo: Math.max(pisoNivel, Math.round(ev.reps)) } : {}),
+      dificeisSeguidos: 0,
+    };
+  }
+  if (esSeg) {
+    // Isométrico: nova modificação (índice absoluto na escada — B6: absoluto é o oficial;
+    // variacaoNivel vira o offset derivado a partir da base).
+    const base = indiceBase(exercicio.id);
+    return {
+      ...estado,
+      ...(ev.segundos != null ? { repsAlvo: Math.max(PISO_HOLD_SEG, Math.round(ev.segundos)) } : {}),
+      ...(ev.modificacaoIdx != null && base >= 0 ? { variacaoNivel: ev.modificacaoIdx - base } : {}),
+      series: prescricao.seriesPorExercicio.min,
+      dificeisSeguidos: 0,
+    };
+  }
+  // Peso corporal: nova base = degrau assumido (B3 — o degrauId efetivo vive no evento e
+  // é resolvido pelo adaptador/UI como overlay; aqui reancoramos alvo e séries).
+  return {
+    ...estado,
+    ...(ev.reps != null ? { repsAlvo: Math.max(1, Math.round(ev.reps)) } : {}),
+    series: prescricao.seriesPorExercicio.min,
+    dificeisSeguidos: 0,
+  };
 }
 
 /** Deload — precisa nesta semana? */

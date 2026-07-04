@@ -3,7 +3,7 @@ import { avaliarGateTreino, prescreverTreino } from '@/lib/engine';
 import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
-import { precisaDeloadDoHistorico, progressoDosExercicios } from './treino-progressao';
+import { exercicioEfetivo, precisaDeloadDoHistorico, progressoDosExercicios } from './treino-progressao';
 import { EXERCISES } from '@/lib/data/exercises';
 
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
@@ -92,5 +92,98 @@ describe('precisaDeloadDoHistorico', () => {
   it('sem fadiga e fora da semana agendada → sem alívio; histórico vazio → false', () => {
     expect(precisaDeloadDoHistorico([recente('na_medida', '2026-07-01')], 'intermediario', '2026-07-08')).toBe(false);
     expect(precisaDeloadDoHistorico([], 'intermediario', '2026-07-08')).toBe(false);
+  });
+});
+
+// ── Calibração (B2/B3/B7) + descida (V8.3) — DF 2026-07-04 ──────────────────
+function sessaoCalibracao(dataISO: string, exs: { id: string; calibracao: NonNullable<SessaoHistorico['exercicios'][number]['calibracao']> }[]): SessaoHistorico {
+  seq += 1;
+  return {
+    dia: 'Calibração manual', series: 0, volumeKg: 0, feedback: {}, n: seq, dataISO, tipo: 'calibracao',
+    exercicios: exs.map((e) => ({ id: e.id, nome: e.id, loaded: false, fb: null, sets: [], calibracao: e.calibracao })),
+  };
+}
+
+describe('calibração no adaptador (B2 — evento no histórico)', () => {
+  const p = prescricao({ nivelExperiencia: 'intermediario' });
+  const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
+
+  it('sessão calibração re-semeia a base; recalibrado=true (B7); some após o próximo feedback', () => {
+    const hist1 = [sessaoCalibracao('2026-07-02', [{ id: 'e_sup', calibracao: { cargaKg: 22, reps: 8 } }])];
+    const prog1 = progressoDosExercicios(hist1, p, byId);
+    expect(prog1.e_sup!.estado.cargaKg).toBe(22);
+    expect(prog1.e_sup!.estado.repsAlvo).toBe(8);
+    expect(prog1.e_sup!.recalibrado).toBe(true);
+    // treino DEPOIS da calibração → hint consumido (derivado)
+    const hist2 = [sessao('2026-07-03', [{ id: 'e_sup', fb: 'na_medida' }]), ...hist1];
+    const prog2 = progressoDosExercicios(hist2, p, byId);
+    expect(prog2.e_sup!.recalibrado).toBe(false);
+  });
+
+  it('ordem cronológica: calibração entre dois treinos entra no lugar certo', () => {
+    // difícil (01) → calibração 20kg (02) → fácil (03): fácil parte de 20 → 20,5
+    const hist = [
+      sessao('2026-07-03', [{ id: 'e_sup', fb: 'facil' }]),
+      sessaoCalibracao('2026-07-02', [{ id: 'e_sup', calibracao: { cargaKg: 20, reps: 8 } }]),
+      sessao('2026-07-01', [{ id: 'e_sup', fb: 'dificil' }]),
+    ];
+    const prog = progressoDosExercicios(hist, p, byId);
+    expect(prog.e_sup!.estado.cargaKg).toBe(20.5);
+  });
+
+  it('degrauId → degrauAdotadoId + exercicioEfetivo (overlay B3) + hints ancorados no efetivo', () => {
+    const pIni = prescricao({ nivelExperiencia: 'iniciante', equipamento: 'nenhum' });
+    // e1 Flexão: assume o degrau e113 (Diamante) — PODE exceder a dificuldade liberada (anti-"conserto")
+    const hist = [sessaoCalibracao('2026-07-01', [{ id: 'e1', calibracao: { degrauId: 'e113', reps: 6 } }])];
+    const prog = progressoDosExercicios(hist, pIni, resolver, EXERCISES, 'nenhum');
+    expect(prog.e1!.degrauAdotadoId).toBe('e113');
+    expect(exercicioEfetivo('e1', prog, resolver)!.id).toBe('e113');
+    expect(exercicioEfetivo('e1', prog, resolver)!.nomePt).toBe('Flexão diamante');
+    // hint de subida agora parte do e113 → próximo degrau = e2 (pés elevados)
+    expect(prog.e1!.proximaVariacao).toEqual({ id: 'e2', nome: 'Flexão com pés elevados' });
+    // sem adoção → efetivo = planejado
+    expect(exercicioEfetivo('e3', prog, resolver)!.id).toBe('e3');
+  });
+
+  it('entrada de calibração sem payload é inerte; entrada pausada sem fb não vira evento', () => {
+    const semPayload: SessaoHistorico = { ...sessaoCalibracao('2026-07-01', []), exercicios: [{ id: 'e_sup', nome: 'Supino', loaded: false, fb: null, sets: [] }] };
+    expect(progressoDosExercicios([semPayload], p, byId)).toEqual({});
+    const pausada: SessaoHistorico = { ...sessao('2026-07-01', []), exercicios: [{ id: 'e_sup', nome: 'Supino', loaded: false, fb: null, sets: [], pausado: true }] };
+    expect(progressoDosExercicios([pausada], p, byId)).toEqual({});
+  });
+});
+
+describe('descida (V8.3 Estado 5) — sugereDescida + variacaoAnterior', () => {
+  const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
+  const pIni = prescricao({ nivelExperiencia: 'iniciante', equipamento: 'nenhum' });
+
+  it('2 "difícil" seguidos disparam a regressão → sugereDescida=true + degrau anterior', () => {
+    // e78 Búlgaro (degrau 3 da escada agachar): −2 reps furaria o piso? faixa saúde 8–15,
+    // alvo inicial 8 → 8−2=6 < 8 → regressão vira "desce 1 variação"... na prática qualquer
+    // rótulo de regressão liga o gatilho; ancoramos o comportamento, não o rótulo exato.
+    const hist = [
+      sessao('2026-07-02', [{ id: 'e78', fb: 'dificil' }]),
+      sessao('2026-07-01', [{ id: 'e78', fb: 'dificil' }]),
+    ];
+    const prog = progressoDosExercicios(hist, pIni, resolver, EXERCISES, 'nenhum');
+    expect(prog.e78!.sugereDescida).toBe(true);
+    expect(prog.e78!.variacaoAnterior).toEqual({ id: 'e16', nome: 'Afundo (avanço)' });
+  });
+
+  it('1 "difícil" só segura — sem descida; feedback seguinte limpa o gatilho', () => {
+    const um = progressoDosExercicios([sessao('2026-07-01', [{ id: 'e78', fb: 'dificil' }])], pIni, resolver, EXERCISES, 'nenhum');
+    expect(um.e78!.sugereDescida).toBe(false);
+    const depois = progressoDosExercicios([
+      sessao('2026-07-03', [{ id: 'e78', fb: 'na_medida' }]),
+      sessao('2026-07-02', [{ id: 'e78', fb: 'dificil' }]),
+      sessao('2026-07-01', [{ id: 'e78', fb: 'dificil' }]),
+    ], pIni, resolver, EXERCISES, 'nenhum');
+    expect(depois.e78!.sugereDescida).toBe(false);
+  });
+
+  it('base da escada (e3) → variacaoAnterior null (não há degrau abaixo)', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e3', fb: 'na_medida' }])];
+    const prog = progressoDosExercicios(hist, pIni, resolver, EXERCISES, 'nenhum');
+    expect(prog.e3!.variacaoAnterior).toBeNull();
   });
 });

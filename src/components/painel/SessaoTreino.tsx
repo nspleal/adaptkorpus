@@ -82,7 +82,16 @@ export interface ResumoSessao {
    *  `id` = id do exercício (chave estável entre sessões p/ a progressão de carga).
    *  Campos opcionais vêm do registro manual: `custom` (fora da biblioteca — NÃO alimenta a
    *  curva de cargas), `rir` e `variacao` (peso corporal). */
-  exercicios: { id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[]; custom?: boolean; rir?: string; variacao?: string }[];
+  exercicios: {
+    id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string }[];
+    custom?: boolean; rir?: string; variacao?: string;
+    /** true se o exercício foi pausado por dor nesta sessão (re-check de runtime) —
+     *  persiste p/ o motivo "em pausa por dor" dos favoritos (B5, DF 2026-07-04). */
+    pausado?: boolean;
+    /** Payload de CALIBRAÇÃO (só em sessões `tipo:'calibracao'` — B2, DF 2026-07-04):
+     *  exatamente uma das formas {cargaKg,reps} | {degrauId,reps} | {modificacaoIdx,segundos}. */
+    calibracao?: { cargaKg?: number; reps?: number; degrauId?: string; modificacaoIdx?: number; segundos?: number };
+  }[];
 }
 
 export default function SessaoTreino({ dia, prescricao, progresso, deload, onSair, onConcluir }: {

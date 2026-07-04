@@ -186,3 +186,64 @@ describe('deload', () => {
     expect(d.volumePorGrupoSemana.max).toBe(Math.round(20 * 0.55));
   });
 });
+
+// ── Calibração manual (B2 — DF 2026-07-04): evento no histórico re-semeia a base ──
+describe('estadoAposHistorico — evento de calibração (cofre DF #11/#13)', () => {
+  it('carga: {cargaKg 20, reps 8} re-semeia e zera dificeisSeguidos; próximo "fácil" progride DA nova base', () => {
+    const p = prescrever();
+    const r = estadoAposHistorico(supino, p, [
+      { fb: 'dificil' }, // 1º difícil → dificeisSeguidos = 1
+      { tipo: 'calibracao', cargaKg: 20, reps: 8 },
+    ]);
+    expect(r.estado.cargaKg).toBe(20);
+    expect(r.estado.repsAlvo).toBe(8);
+    expect(r.estado.dificeisSeguidos).toBe(0); // salvaguarda travada
+    expect(r.ultimaAcao).toBe('recalibrado (base manual)');
+    // próximo "fácil" parte da base calibrada: +2,5% de 20 = 20,5 kg, reps ao piso (6)
+    const r2 = estadoAposHistorico(supino, p, [
+      { tipo: 'calibracao', cargaKg: 20, reps: 8 },
+      { fb: 'facil' },
+    ]);
+    expect(r2.estado.cargaKg).toBe(20.5);
+    expect(r2.estado.repsAlvo).toBe(6);
+    expect(r2.ultimaAcao).not.toBe('recalibrado (base manual)'); // B7: hint se consome
+  });
+
+  it('carga: clamp defensivo — iniciante nunca abaixo de 6; demais nunca abaixo de 5 (pisos travados)', () => {
+    const pIni = prescrever({ nivelExperiencia: 'iniciante' });
+    const rIni = estadoAposHistorico(supino, pIni, [{ tipo: 'calibracao', cargaKg: 30, reps: 3 }]);
+    expect(rIni.estado.repsAlvo).toBe(6); // PISO_REPS_COM_CARGA
+    const pInt = prescrever({ nivelExperiencia: 'intermediario' });
+    const rInt = estadoAposHistorico(supino, pInt, [{ tipo: 'calibracao', cargaKg: 30, reps: 3 }]);
+    expect(rInt.estado.repsAlvo).toBe(5); // PISO_ABSOLUTO_REPS
+  });
+
+  it('isométrico: {modificacaoIdx, segundos} re-semeia segundos (piso 10 s) + offset da base', () => {
+    const p = prescrever({ nivelExperiencia: 'iniciante', equipamento: 'nenhum' });
+    const r = estadoAposHistorico(prancha, p, [{ tipo: 'calibracao', modificacaoIdx: 3, segundos: 30 }]);
+    expect(r.estado.repsAlvo).toBe(30);
+    // base da Prancha = idx 2 ("Prancha padrão"); idx 3 ("Pés elevados") → offset +1
+    expect(r.estado.variacaoNivel).toBe(1);
+    expect(r.estado.series).toBe(p.seriesPorExercicio.min);
+    const rPiso = estadoAposHistorico(prancha, p, [{ tipo: 'calibracao', modificacaoIdx: 2, segundos: 4 }]);
+    expect(rPiso.estado.repsAlvo).toBe(10); // PISO_HOLD_SEG
+  });
+
+  it('peso corporal: {degrauId, reps} re-semeia reps e séries ao piso; zera streak de difícil', () => {
+    const p = prescrever({ nivelExperiencia: 'iniciante', equipamento: 'nenhum' });
+    const r = estadoAposHistorico(agacho, p, [
+      { fb: 'dificil' },
+      { tipo: 'calibracao', degrauId: 'e78', reps: 6 },
+    ]);
+    expect(r.estado.repsAlvo).toBe(6);
+    expect(r.estado.series).toBe(p.seriesPorExercicio.min);
+    expect(r.estado.dificeisSeguidos).toBe(0);
+  });
+
+  it('fixture legado (só eventos de treino) → comportamento byte-idêntico ao anterior', () => {
+    const p = prescrever();
+    const antes = estadoAposHistorico(supino, p, [{ fb: 'facil', cargaMaxKg: 40 }, { fb: 'na_medida' }]);
+    expect(antes.estado.cargaKg).toBe(41); // +2,5% de 40 (regressão do Bloco B)
+    expect(antes.ultimaAcao).toBe('repete (consolida)');
+  });
+});

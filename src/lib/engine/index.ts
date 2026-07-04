@@ -28,7 +28,8 @@ export {
   aplicarDeload,
   dificuldadesLiberadas,
 } from './treino';
-export type { EventoProgressao } from './treino';
+export type { EventoProgressao, EventoTreino, EventoCalibracao } from './treino';
+export { ACAO_RECALIBRADO } from './treino';
 export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
 export { montarRotina, locaisPermitidos } from './treino-montador';
