@@ -6,6 +6,8 @@ import type { Exercise } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
 import { EXERCISES_SEED } from '@/lib/data/seed';
 import { hojeISO } from '@/lib/treino-historico';
+import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
+import CalibracaoModal, { type PayloadCalibracao } from './CalibracaoModal';
 import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
 
 /**
@@ -48,14 +50,21 @@ const chipStyle = (active: boolean): CSSProperties => ({ padding: '8px 12px', bo
 let seq = 0;
 const newUid = () => `exf${++seq}`;
 
-export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSalvar, onVerHistorico }: {
+export default function RegistrarTreino({ diaHoje, prescricao, progresso, exercicioPorId, onCalibrar, onCancelar, onSalvar, onVerHistorico }: {
   diaHoje?: DiaTreino;
   prescricao: PrescricaoFITT | null;
+  /** Progressão atual (pré-preenche a calibração "Muito fácil"). */
+  progresso?: Record<string, ProgressoExercicio>;
+  exercicioPorId?: (id: string) => Exercise | undefined;
+  /** Grava calibração como evento no histórico (B2 — "Muito fácil" também vive aqui, V8.1). */
+  onCalibrar?: (itens: { id: string; nome: string; calibracao: PayloadCalibracao }[]) => void;
   onCancelar: () => void;
   /** Persiste a sessão (Painel: registrarSessaoEm + celebração do marco). Deve ser síncrono. */
   onSalvar: (resumo: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) => void;
   onVerHistorico: () => void;
 }) {
+  // "Muito fácil" (V8.1): uid do exercício com o modal de calibração aberto.
+  const [calibrando, setCalibrando] = useState<string | null>(null);
   const [dataISO, setDataISO] = useState(() => hojeISO());
   const [hora, setHora] = useState(() => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; });
   const [startMode, setStartMode] = useState<'plano' | 'zero' | null>(null);
@@ -345,6 +354,14 @@ export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSal
                           <button style={chipStyle(e.chip === 'facil')} onClick={() => mut(e.uid, (x) => ({ ...x, chip: x.chip === 'facil' ? null : 'facil' }))}>Fácil</button>
                           <button style={chipStyle(e.chip === 'na_medida')} onClick={() => mut(e.uid, (x) => ({ ...x, chip: x.chip === 'na_medida' ? null : 'na_medida' }))}>Na medida</button>
                           <button style={chipStyle(e.chip === 'dificil')} onClick={() => mut(e.uid, (x) => ({ ...x, chip: x.chip === 'dificil' ? null : 'dificil' }))}>Difícil</button>
+                          {/* 4ª pílula (V8.1): abre a calibração — não registra chip. Custom (sem id) não calibra. */}
+                          {onCalibrar && !e.custom && e.refId && (
+                            <button onClick={() => setCalibrando(e.uid)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 15px', borderRadius: 11, fontSize: '.9rem', fontWeight: 700, cursor: 'pointer', transition: 'all .2s ease', border: '1.5px solid rgba(189,255,0,.55)', background: 'rgba(189,255,0,.06)', color: '#BDFF00' }}>
+                              <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 8h9M18 8h2M4 16h2M11 16h9" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /><circle cx={15.5} cy={8} r={2.4} stroke="currentColor" strokeWidth={2} /><circle cx={8.5} cy={16} r={2.4} stroke="currentColor" strokeWidth={2} /></svg>
+                              Muito fácil
+                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" style={{ opacity: 0.75 }}><path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                          )}
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 4 }}><span style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)' }}>RIR</span><input type="number" inputMode="numeric" min={0} max={5} value={e.rir} placeholder="—" onChange={(ev) => mut(e.uid, (x) => ({ ...x, rir: ev.target.value }))} className="input-foco" style={{ width: 52, boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.16)', borderRadius: 9, padding: '8px 9px', color: '#EAE5DB', fontSize: '.88rem', fontWeight: 600, outline: 'none' }} /></span>
                         </div>
                       </div>
@@ -368,6 +385,25 @@ export default function RegistrarTreino({ diaHoje, prescricao, onCancelar, onSal
           </div>
         )}
       </div>
+
+      {/* MODAL · CALIBRAÇÃO MANUAL (V8.1 "Muito fácil" — mesmo fluxo da guiada) */}
+      {calibrando !== null && exercicioPorId && onCalibrar && (() => {
+        const entrada = exs.find((x) => x.uid === calibrando);
+        if (!entrada?.refId) return null;
+        const efetivoC = exercicioEfetivo(entrada.refId, progresso, exercicioPorId) ?? exercicioPorId(entrada.refId);
+        if (!efetivoC) return null;
+        return (
+          <CalibracaoModal
+            exercicioEfetivo={efetivoC}
+            loaded={entrada.temCarga && entrada.repUnit !== 'segundos'}
+            nivel={prescricao?.nivel ?? 'iniciante'}
+            estado={progresso?.[entrada.refId]?.estado}
+            exercicioPorId={exercicioPorId}
+            onFechar={() => setCalibrando(null)}
+            onSalvar={(payload) => { onCalibrar([{ id: entrada.refId!, nome: efetivoC.nomePt, calibracao: payload }]); setCalibrando(null); }}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -347,6 +347,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         <RegistrarTreino
           diaHoje={rotinaDias[0]}
           prescricao={prescricao ?? null}
+          progresso={progresso}
+          exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
+          onCalibrar={calibrarExercicios}
           onCancelar={() => setRegistrando(false)}
           onSalvar={salvarTreinoManual}
           onVerHistorico={() => { setRegistrando(false); setAba('historico'); window.scrollTo(0, 0); }}

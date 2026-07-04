@@ -7,6 +7,7 @@ import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, 
 import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { HintVariacao } from './EscadaDegraus';
 import { DetalheExercicio } from './DetalheModais';
+import CalibracaoModal from './CalibracaoModal';
 import type { Exercise } from '@/lib/data/types';
 
 /** Hint amigável a partir da última ação da progressão (evita jargão). */
@@ -116,6 +117,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
 }) {
   // "Ver variação": detalhe em LEITURA do degrau-alvo (nunca troca nada — V8.3).
   const [verVariacao, setVerVariacao] = useState<Exercise | null>(null);
+  // "Muito fácil" (V8.1): índice do exercício com o modal de calibração aberto.
+  const [calibrando, setCalibrando] = useState<number | null>(null);
   const exs: ExView[] = dia.slots.map((sl) => {
     const comp = sl.padrao !== 'isolado';
     const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
@@ -422,11 +425,20 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '16px 18px', marginTop: 16 }}>
               <div style={{ fontSize: '.9rem', fontWeight: 600, marginBottom: 4 }}>Como foi este exercício?</div>
               <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)', marginBottom: 12 }}>Seu retorno ajusta o próximo treino.</div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {(['facil', 'na_medida', 'dificil'] as Feedback[]).map((f) => {
                   const on = est.fb === f;
-                  return <button key={f} onClick={() => setFb(f)} style={{ cursor: 'pointer', flex: 1, padding: '10px 6px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{f === 'facil' ? 'Fácil' : f === 'na_medida' ? 'Na medida' : 'Difícil'}</button>;
+                  return <button key={f} onClick={() => setFb(f)} style={{ cursor: 'pointer', flex: 1, minWidth: 88, padding: '10px 6px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{f === 'facil' ? 'Fácil' : f === 'na_medida' ? 'Na medida' : 'Difícil'}</button>;
                 })}
+                {/* 4ª pílula (V8.1, DF #11): "Muito fácil" NÃO registra feedback de 1 toque —
+                    abre a CALIBRAÇÃO manual; o resultado dela É a calibração salva. */}
+                {onCalibrar && (
+                  <button onClick={() => setCalibrando(cur)} style={{ cursor: 'pointer', flex: 1, minWidth: 118, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 6px', borderRadius: 11, fontWeight: 700, fontSize: '.85rem', transition: 'all .2s ease', border: '1.5px solid rgba(189,255,0,.55)', background: 'rgba(189,255,0,.06)', color: '#BDFF00' }}>
+                    <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 8h9M18 8h2M4 16h2M11 16h9" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /><circle cx={15.5} cy={8} r={2.4} stroke="currentColor" strokeWidth={2} /><circle cx={8.5} cy={16} r={2.4} stroke="currentColor" strokeWidth={2} /></svg>
+                    Muito fácil
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" style={{ opacity: 0.75 }}><path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -497,6 +509,24 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
 
       {/* MODAL · VER VARIAÇÃO (V8.3 — leitura; nunca troca nada) */}
       {verVariacao && <DetalheExercicio ex={verVariacao} readOnly onFechar={() => setVerVariacao(null)} />}
+
+      {/* MODAL · CALIBRAÇÃO MANUAL (V8.1 "Muito fácil") */}
+      {calibrando !== null && exercicioPorId && onCalibrar && (() => {
+        const exC = exs[calibrando]!;
+        const efetivoC = exercicioEfetivo(exC.id, progresso, exercicioPorId) ?? exercicioPorId(exC.id);
+        if (!efetivoC) return null;
+        return (
+          <CalibracaoModal
+            exercicioEfetivo={efetivoC}
+            loaded={exC.loaded}
+            nivel={prescricao.nivel}
+            estado={progresso?.[exC.id]?.estado}
+            exercicioPorId={exercicioPorId}
+            onFechar={() => setCalibrando(null)}
+            onSalvar={(payload) => { onCalibrar([{ id: exC.id, nome: efetivoC.nomePt, calibracao: payload }]); setCalibrando(null); }}
+          />
+        );
+      })()}
     </div>
   );
 }
