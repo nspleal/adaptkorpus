@@ -106,11 +106,23 @@ export type TipoExercicio = 'forca_hipertrofia' | 'cardio' | 'pliometrico' | 'mo
 export type EquipamentoDisp = 'nenhum' | 'casa' | 'academia';
 export type LocalExercicio = 'casa_sem' | 'casa_com' | 'academia';
 
+/**
+ * Grupo muscular PRIMÁRIO normalizado (1ª entrada da coluna de grupo da A1) —
+ * curadoria aprovada no cofre `parametros-motor-substituicao-evokorpus` §2
+ * (DF 2026-07-04). É a chave da PRESERVAÇÃO como filtro duro na troca (F.2).
+ */
+export type GrupoPrimario =
+  | 'abdomen' | 'adutores' | 'antebraco' | 'biceps' | 'cardio' | 'core'
+  | 'corpo-inteiro' | 'costas' | 'gluteos' | 'lombar' | 'ombros' | 'panturrilha'
+  | 'peito' | 'pernas' | 'posterior' | 'quadriceps' | 'trapezio' | 'triceps';
+
 export interface Exercise {
   id: string;
   nomePt: string;
   nomeEn?: string;
   grupoMuscular: string;
+  /** Grupo primário normalizado (cofre F.2 §2) — governa a preservação da troca. */
+  grupoPrimario: GrupoPrimario;
   padraoMovimento: PadraoMovimento;
   nivel: NivelExercicio;
   tipo: TipoExercicio;

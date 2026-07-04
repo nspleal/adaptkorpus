@@ -31,6 +31,31 @@ describe('integridade da base curada', () => {
     expect(conta).toEqual({ vegano: 35, vegetariano: 29, onivoro: 32 });
   });
 
+  // Âncoras do grupoPrimario (cofre: parametros-motor-substituicao §2, DF 2026-07-04 —
+  // 1ª entrada da coluna de grupo muscular da A1, vocabulário normalizado de 18 valores).
+  it('grupoPrimario: 163/163 preenchidos com vocabulário fechado (18 valores)', () => {
+    const VOCAB = new Set([
+      'abdomen', 'adutores', 'antebraco', 'biceps', 'cardio', 'core', 'corpo-inteiro',
+      'costas', 'gluteos', 'lombar', 'ombros', 'panturrilha', 'peito', 'pernas',
+      'posterior', 'quadriceps', 'trapezio', 'triceps',
+    ]);
+    for (const e of EXERCISES) {
+      expect(e.grupoPrimario, `${e.id} sem grupoPrimario`).toBeTruthy();
+      expect(VOCAB.has(e.grupoPrimario), `${e.id}: "${e.grupoPrimario}" fora do vocabulário`).toBe(true);
+    }
+    expect(new Set(EXERCISES.map((e) => e.grupoPrimario)).size).toBe(18);
+  });
+
+  it('grupoPrimario: spot-anchors da curadoria do autor', () => {
+    const g = (id: string) => EXERCISES.find((e) => e.id === id)!.grupoPrimario;
+    expect(g('e1')).toBe('peito'); // Flexão
+    expect(g('e9')).toBe('peito'); // Supino reto
+    expect(g('e3')).toBe('quadriceps'); // Agachamento livre
+    expect(g('e116')).toBe('costas'); // Remada invertida
+    expect(g('e24')).toBe('cardio'); // Esteira
+    expect(g('e7')).toBe('core'); // Prancha
+  });
+
   it('rótulo amigável (vocabulário do cofre): 100% preenchido e único', () => {
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
     const vistos = new Set<string>();

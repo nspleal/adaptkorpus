@@ -39,6 +39,12 @@ export {
   sugerirProximaVariacao, sugerirVariacaoAnterior, type Degrau,
 } from './escadas';
 
+// --- Modificações dos isométricos (B1 — Corpo C da calibração) ---
+export {
+  MODIFICACOES_ISOMETRICOS, indiceBase, modificacoesDe, temModificacoes,
+  type ModificacaoIsometrico,
+} from './modificacoes-isometricos';
+
 // --- Substituição (F.2) ---
 export * from './substituicao-types';
 export {
