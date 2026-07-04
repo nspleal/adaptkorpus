@@ -786,7 +786,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
         <div style={{ ...cardSoft, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
           <Grafico pesos={pesos} />
-          {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre seu peso na aba Progresso para ver a curva.</p>}
+          {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Seu peso inicial já está aqui — registre de novo na aba Progresso para ver a curva.</p>}
         </div>
       )}
     </div>

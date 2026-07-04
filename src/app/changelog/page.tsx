@@ -10,6 +10,11 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
   {
     mes: 'Julho 2026',
     itens: [
+      { data: '04 jul', titulo: 'Calibre o treino ao seu nível real', tag: 'Novo', desc: 'Muito fácil? A quarta opção de esforço abre a calibração manual: você define a nova base (carga e repetições, degrau da escada ou segundos) e o plano recalcula a partir dela — com os pisos de segurança de sempre.' },
+      { data: '04 jul', titulo: 'Exercícios favoritos', tag: 'Novo', desc: 'Marque com a estrela os exercícios que você gosta: eles entram no seu plano sempre que couberem — sem furar seu nível nem seu equipamento. E quando um favorito não aparece, a lista explica o porquê.' },
+      { data: '04 jul', titulo: 'A escada de cada exercício', tag: 'Novo', desc: 'Exercícios de peso corporal agora mostram em que degrau você está ("Degrau 3 de 6") e sugerem subir ou aliviar a variação na hora certa — você decide, com o botão "Assumir este degrau".' },
+      { data: '04 jul', titulo: 'Trocas mais inteligentes', tag: 'Melhoria', desc: 'Trocar um exercício agora prioriza o mesmo movimento em outro implemento (supino com barra → halteres → máquina). E quando não existe troca equivalente, o app diz isso com honestidade.' },
+      { data: '04 jul', titulo: 'Sequência da dieta proporcional ao seu plano', tag: 'Melhoria', desc: 'Um dia conta para a sua sequência quando você segue pelo menos ¾ das refeições do SEU plano — quem tem 3 refeições não precisa mais de 100% para pontuar.' },
       { data: '03 jul', titulo: 'Seu treino evolui com você', tag: 'Novo', desc: 'A meta de cada exercício sobe ou ajusta conforme o seu feedback (fácil / na medida / difícil) — reps, tempo e carga. E, quando a fadiga aparece, entra uma semana de alívio pra você recuperar.' },
       { data: '03 jul', titulo: 'Aviso de privacidade transparente', tag: 'Novo', desc: 'Uma faixa explica, sem juridiquês, que usamos só medição anônima de uso — sem cookies de rastreio e sem dado de saúde para publicidade.' },
       { data: '03 jul', titulo: 'Tempo nos exercícios isométricos', tag: 'Melhoria', desc: 'Prancha, pendura e afins agora registram segundos (não repetições), com a faixa de tempo certa para o seu nível.' },

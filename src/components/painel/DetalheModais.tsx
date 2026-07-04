@@ -98,9 +98,6 @@ export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, on
   });
   return (
     <Shell onClose={onFechar} kicker={REFEICAO_LABEL[item.refeicao] ?? 'Prato'}>
-      <div style={{ position: 'relative', height: 140, borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(160deg, rgba(22,163,74,.12), rgba(15,15,14,.6))', border: '1px solid rgba(234,229,219,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-        <div style={{ textAlign: 'center' }}><div style={{ width: 42, height: 42, margin: '0 auto 7px', borderRadius: 12, background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={22} height={22} viewBox="0 0 24 24" fill="none"><path d="M6 3v8a2 2 0 002 2v8M6 3v4M9 3v4M16 3c-1.5 0-2 2-2 5s.5 4 2 4v9" stroke="#BDFF00" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></svg></div><div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.5)' }}>Imagem do prato · em breve</div></div>
-      </div>
       <h2 style={{ margin: '0 0 14px', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-.02em' }}>{item.prato.nome}</h2>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>

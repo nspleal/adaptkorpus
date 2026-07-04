@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { limiarAderencia } from '@/lib/aderencia';
 
 /**
  * Registrar refeição + histórico de aderência — porte fiel do V5.
@@ -172,9 +173,11 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
   for (let i = 0; i < diasJanela; i++) { const d = new Date(agora); d.setDate(agora.getDate() - i); datas.push(d); }
   const comDados = datas.filter((d) => temRegistro(merged[d.toISOString().slice(0, 10)]));
   const pctPeriodo = comDados.length ? Math.round(comDados.reduce((s, d) => s + seguiuDoDia(merged[d.toISOString().slice(0, 10)]) / total, 0) / comDados.length * 100) : 0;
-  // streak: dias consecutivos (de hoje p/ trás) com ≥3/4 no plano
+  // streak: dias consecutivos (de hoje p/ trás) com ≥ ¾ das refeições do plano no dia
+  // (PROPORCIONAL, arredondado — DF 2026-07-04; o "3 fixo" exigiria 100% num plano de 3).
+  const limiar = limiarAderencia(total);
   let streak = 0;
-  for (const d of datas) { const k = d.toISOString().slice(0, 10); const dl = merged[k]; if (temRegistro(dl) && seguiuDoDia(dl) >= Math.min(3, total)) streak++; else break; }
+  for (const d of datas) { const k = d.toISOString().slice(0, 10); const dl = merged[k]; if (temRegistro(dl) && seguiuDoDia(dl) >= limiar) streak++; else break; }
 
   const segMini = (st: StatusRefeicao): CSSProperties => ({ flex: 1, height: 8, borderRadius: 99, ...(st === 'seguiu' ? { background: '#BDFF00' } : st === 'fora' ? { background: 'rgba(234,229,219,.32)' } : { background: 'rgba(234,229,219,.09)', border: '1px solid rgba(234,229,219,.2)' }) });
   const rotuloDia = (d: Date) => { const dd = Math.round((agora.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000); return dd === 0 ? 'Hoje' : dd === 1 ? 'Ontem' : DOWS[d.getDay()]!; };
@@ -186,7 +189,7 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 18 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Resumo · {periodo === 'semana' ? 'Esta semana' : 'Este mês'}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}><span style={{ fontSize: '2.6rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00' }}>~{pctPeriodo}%</span><span style={{ fontSize: '1rem', color: 'rgba(234,229,219,.7)' }}>do plano {periodo === 'semana' ? 'nesta semana' : 'neste mês'}</span></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}><span style={{ fontSize: '2.6rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00' }}>~{pctPeriodo}%</span><span style={{ fontSize: '1rem', color: 'rgba(234,229,219,.7)' }}>do plano {periodo === 'semana' ? 'nesta semana' : 'neste mês'} · dos dias com registro</span></div>
             <p style={{ margin: 0, maxWidth: 440, fontSize: '.92rem', color: 'rgba(234,229,219,.62)', lineHeight: 1.55 }}>Constância, não perfeição — você está num bom ritmo. Cada refeição marcada conta.</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
@@ -211,7 +214,7 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
                 <div onClick={() => setAberto(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '15px 18px', cursor: 'pointer' }}>
                   <div style={{ minWidth: 96 }}><div style={{ fontWeight: 700, fontSize: '.98rem' }}>{rotuloDia(d)}</div><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>{fmtData(d)}</div></div>
                   <div style={{ flex: 1, display: 'flex', gap: 6, minWidth: 0 }}>{refeicoes.map((r) => <div key={r} style={segMini(dl?.logs?.[r] ?? null)} />)}</div>
-                  <span style={{ fontSize: '.86rem', fontWeight: 600, color: reg && cnt >= 3 ? '#BDFF00' : 'rgba(234,229,219,.6)', whiteSpace: 'nowrap' }}>{reg ? `${cnt}/${total}` : '—'} no plano</span>
+                  <span style={{ fontSize: '.86rem', fontWeight: 600, color: reg && cnt >= limiar ? '#BDFF00' : 'rgba(234,229,219,.6)', whiteSpace: 'nowrap' }}>{reg ? `${cnt}/${total}` : '—'} no plano</span>
                   <span aria-hidden style={{ color: 'rgba(234,229,219,.4)', fontSize: '1.1rem', flexShrink: 0, transition: 'transform .2s ease', transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
                 </div>
                 {open && <DetalheDia dl={dl} refeicoes={refeicoes} />}
