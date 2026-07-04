@@ -4,7 +4,10 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
-import type { ProgressoExercicio } from '@/lib/treino-progressao';
+import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
+import { HintVariacao } from './EscadaDegraus';
+import { DetalheExercicio } from './DetalheModais';
+import type { Exercise } from '@/lib/data/types';
 
 /** Hint amigável a partir da última ação da progressão (evita jargão). */
 function hintEvolucao(acao: string | null | undefined): string | null {
@@ -55,8 +58,11 @@ interface ExView {
   placeholderAlvo: string;  // placeholder do input
   cargaHint: string | null; // "tente ~42,5 kg"
   evoluiuHint: string | null;
-  /** Hint "sobe de variação" (escada de peso corporal, cofre §Escadas): próximo degrau por nome. */
-  proximaVariacaoNome: string | null;
+  /** Hint de escada (V8.3): direção + degrau-alvo ({id,nome}); null = sem sugestão. */
+  hintDirecao: 'sobe' | 'desce' | null;
+  hintAlvo: { id: string; nome: string } | null;
+  /** B7: última ação foi calibração manual → "Sua meta foi recalibrada…" (consome no próximo feedback). */
+  recalibrado: boolean;
 }
 
 /** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
@@ -94,16 +100,22 @@ export interface ResumoSessao {
   }[];
 }
 
-export default function SessaoTreino({ dia, prescricao, progresso, deload, onSair, onConcluir }: {
+export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir }: {
   dia: DiaTreino;
   prescricao: PrescricaoFITT;
   /** Alvo progredido por exercício (Bloco B), derivado do histórico; ausente na 1ª sessão. */
   progresso?: Record<string, ProgressoExercicio>;
   /** Semana de alívio ativa → corta ~metade das séries, mantém movimentos (cofre §Deload). */
   deload?: boolean;
+  /** Resolve um exercício da biblioteca por id (overlay de adoção + "Ver variação"). */
+  exercicioPorId?: (id: string) => Exercise | undefined;
+  /** Grava calibração/adoção de degrau como evento no histórico (B2/B3, DF 2026-07-04). */
+  onCalibrar?: (itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) => void;
   onSair: () => void;
   onConcluir: (resumo: ResumoSessao) => void;
 }) {
+  // "Ver variação": detalhe em LEITURA do degrau-alvo (nunca troca nada — V8.3).
+  const [verVariacao, setVerVariacao] = useState<Exercise | null>(null);
   const exs: ExView[] = dia.slots.map((sl) => {
     const comp = sl.padrao !== 'isolado';
     const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
@@ -129,20 +141,28 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
     const metaFaixa = temAlvoUnico ? `faixa ${faixaCtx.min}–${faixaCtx.max}${esSeg && faixaSeg?.aberto ? '+' : ''}` : null;
     const placeholderAlvo = temAlvoUnico ? String(estado!.repsAlvo) : (esSeg && faixaSeg ? `${faixaSeg.min}–${faixaSeg.max}` : `${reps.min}–${reps.max}`);
     const cargaHint = modo === 'carga' && estado?.cargaKg ? `tente ~${r1(estado.cargaKg)} kg` : null;
-    const evoluiuHint = hintEvolucao(progresso?.[sl.exercicio.id]?.ultimaAcao);
-    // Hint de escada (cofre §Escadas): quando ficar fácil, sugere o próximo degrau por nome.
-    // Só peso corporal; já vem filtrado por equipamento pelo adaptador (null se topo/carga/fora).
-    const proximaVariacaoNome = progresso?.[sl.exercicio.id]?.proximaVariacao?.nome ?? null;
+    const prog = progresso?.[sl.exercicio.id];
+    const recalibrado = prog?.recalibrado ?? false;
+    // B7: quando a última ação foi calibração manual, o hint É "meta recalibrada" — o de
+    // evolução automática não concorre com ele.
+    const evoluiuHint = recalibrado ? null : hintEvolucao(prog?.ultimaAcao);
+    // Hint de escada (V8.3): descida tem precedência (difícil 2× é sinal mais urgente que
+    // a subida especulativa); ambos filtrados por equipamento no adaptador.
+    const hintDirecao: ExView['hintDirecao'] = prog?.sugereDescida && prog.variacaoAnterior ? 'desce' : prog?.proximaVariacao ? 'sobe' : null;
+    const hintAlvo = hintDirecao === 'desce' ? prog!.variacaoAnterior! : hintDirecao === 'sobe' ? prog!.proximaVariacao! : null;
+    // Overlay B3: degrau ASSUMIDO → a sessão exibe o exercício efetivo (nome/grupos/como
+    // fazer); as chaves de progressão/feedback continuam no id ORIGINAL do slot.
+    const efetivo = exercicioPorId ? (exercicioEfetivo(sl.exercicio.id, progresso, exercicioPorId) ?? sl.exercicio) : sl.exercicio;
 
     return {
       id: sl.exercicio.id,
-      nome: sl.exercicio.nomePt,
-      grupos: sl.exercicio.grupoMuscular,
+      nome: efetivo.nomePt,
+      grupos: efetivo.grupoMuscular,
       loaded,
       reps,
       rir: prescricao.rir,
       restSeg: Math.round((desc.min + desc.max) / 2),
-      comoFazer: sl.exercicio.comoFazer,
+      comoFazer: efetivo.comoFazer,
       repUnit,
       faixaSeg,
       nSetsEx,
@@ -151,7 +171,9 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
       placeholderAlvo,
       cargaHint,
       evoluiuHint,
-      proximaVariacaoNome,
+      hintDirecao,
+      hintAlvo,
+      recalibrado,
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -229,6 +251,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
       loaded: ex.loaded,
       fb: estados[ei]!.fb,
       sets: estados[ei]!.sets.filter((s) => s.done).map((s) => ({ reps: s.reps, kg: s.kg })),
+      // Pausa por dor PERSISTE no histórico (insumo do motivo "em pausa por dor" — B5).
+      ...(estados[ei]!.paused ? { pausado: true } : {}),
     }));
     onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios });
   }
@@ -305,6 +329,9 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
               </details>
             )}
 
+            {/* B7 (DF 2026-07-04): hint de recalibração — mesma família do hint de progressão,
+                posicionado ANTES dos chips (design V8.1 §7); consome no próximo feedback. */}
+            {ex.recalibrado && <p style={{ margin: '0 0 13px 2px', display: 'inline-flex', alignItems: 'center', gap: 9, fontSize: '.86rem', fontWeight: 600, color: '#BDFF00', animation: `evkStepIn .4s ${EASE}` }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>Sua meta foi recalibrada com base no que você registrou.</p>}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.nSetsEx} × {ex.metaCurta}</span>
               {/* Progressão (Bloco B): sugestão de carga a partir do que você levantou. */}
@@ -315,8 +342,16 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
             </div>
             {/* Hint de evolução (subiu de meta / carga / degrau) — só quando houve progressão real. */}
             {ex.evoluiuHint && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{ex.evoluiuHint}</p>}
-            {/* Escada de dificuldade (cofre §Escadas): sugestão do próximo degrau — hint, você escolhe. */}
-            {ex.proximaVariacaoNome && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: 'rgba(234,229,219,.55)' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M6 20V10M6 10l-3 3M6 10l3 3M14 20V4M14 4l-3 3M14 4l3 3" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></svg>Quando ficar fácil, o próximo degrau é <strong style={{ color: 'rgba(234,229,219,.8)', fontWeight: 600, marginLeft: 3 }}>{ex.proximaVariacaoNome}</strong>.</p>}
+            {/* Escada de dificuldade (V8.3 Estados 4/5): cartão de sugestão — subir/descer é a
+                mesma família, só a seta inverte. O app sugere, você decide (B3: adoção explícita). */}
+            {ex.hintDirecao && ex.hintAlvo && (
+              <HintVariacao
+                direcao={ex.hintDirecao === 'sobe' ? 'sobe' : 'desce'}
+                nomeVariacao={ex.hintAlvo.nome}
+                onVerVariacao={() => { const alvo = exercicioPorId?.(ex.hintAlvo!.id); if (alvo) setVerVariacao(alvo); }}
+                onAssumir={() => onCalibrar?.([{ id: ex.id, nome: ex.nome, calibracao: { degrauId: ex.hintAlvo!.id, ...(progresso?.[ex.id]?.estado.repsAlvo != null && ex.repUnit !== 'segundos' ? { reps: progresso[ex.id]!.estado.repsAlvo } : {}) } }])}
+              />
+            )}
             {/* Glosa amigável do RIR (jargão → linguagem simples). Não se aplica a isométricos. */}
             {ex.repUnit === 'segundos'
               ? <p style={{ margin: '0 0 18px', fontSize: '.8rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Exercício <strong style={{ color: 'rgba(234,229,219,.75)', fontWeight: 600 }}>isométrico</strong>: segure a posição pelo tempo-alvo, com boa forma. Aqui não tem RIR — o que guia é como foi (fácil / na medida / difícil).</p>
@@ -459,6 +494,9 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, onSai
           </div>
         </div>
       )}
+
+      {/* MODAL · VER VARIAÇÃO (V8.3 — leitura; nunca troca nada) */}
+      {verVariacao && <DetalheExercicio ex={verVariacao} readOnly onFechar={() => setVerVariacao(null)} />}
     </div>
   );
 }

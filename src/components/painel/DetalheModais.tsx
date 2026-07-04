@@ -7,6 +7,8 @@ import type { ResumoSessao } from './SessaoTreino';
 import { DESCANSO_PRATO_DIAS } from '@/lib/rotacao-pratos';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe } from '@/lib/engine/isometricos';
+import { EscadaPill } from './EscadaDegraus';
+import { EXERCISES_SEED } from '@/lib/data/seed';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
@@ -39,14 +41,24 @@ function Shell({ children, onClose, kicker }: { children: ReactNode; onClose: ()
 
 const secCap: CSSProperties = { fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 10 };
 
-export function DetalheExercicio({ ex, onFechar, onTrocar }: { ex: Exercise; onFechar: () => void; onTrocar: () => void }) {
+export function DetalheExercicio({ ex, onFechar, onTrocar, readOnly }: {
+  ex: Exercise;
+  onFechar: () => void;
+  /** Ausente/ignorado quando readOnly ("Ver variação" é LEITURA — nunca troca, V8.3). */
+  onTrocar?: () => void;
+  /** Modo leitura (V8.3 "Ver variação"): esconde o botão "Trocar exercício". */
+  readOnly?: boolean;
+}) {
   return (
     <Shell onClose={onFechar} kicker="Detalhe do exercício">
       <div style={{ position: 'relative', height: 150, borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(160deg, rgba(22,163,74,.14), rgba(15,15,14,.6))', border: '1px solid rgba(234,229,219,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
         <svg viewBox="0 0 200 110" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.5 }}><path d="M16 96 Q70 84 110 52 T188 16" stroke="rgba(189,255,0,.45)" strokeWidth={2} fill="none" strokeLinecap="round" strokeDasharray={600} strokeDashoffset={600} style={{ animation: `evkDraw 2.4s cubic-bezier(.16,.84,.3,1) infinite` }} /></svg>
         <div style={{ position: 'relative', textAlign: 'center' }}><div style={{ width: 42, height: 42, margin: '0 auto 7px', borderRadius: 12, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={22} height={22} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={5} r={2.4} stroke="#BDFF00" strokeWidth={1.8} /><path d="M12 8v6M12 11l-5 3M12 11l5 3M12 14l-3 6M12 14l3 6" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" /></svg></div><div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.5)' }}>Demonstração faceless · em breve</div></div>
       </div>
-      <h2 style={{ margin: '0 0 14px', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-.02em' }}>{ex.nomePt}</h2>
+      <h2 style={{ margin: '0 0 12px', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-.02em' }}>{ex.nomePt}</h2>
+      {/* Indicador "Degrau X de Y" (V8.3 Estado 2) — só peso corporal com escada mapeada;
+          e7/e90 mostram o indicador (B4). EscadaPill devolve null fora da malha. */}
+      <EscadaPill exercicioId={ex.id} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} margemBaixo={8} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px 16px', marginBottom: 20 }}>
         <Campo k="Padrão" v={PADRAO_LABEL[ex.padraoMovimento] ?? ex.padraoMovimento} />
         <Campo k="Nível" v={NIVEL_LABEL[ex.nivel] ?? ex.nivel} />
@@ -61,7 +73,7 @@ export function DetalheExercicio({ ex, onFechar, onTrocar }: { ex: Exercise; onF
         <div style={{ marginBottom: 22 }}><ListaErrosComuns exId={ex.id} /></div>
       </>)}
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar exercício</button>
+        {!readOnly && onTrocar && <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar exercício</button>}
         <button onClick={onFechar} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.94rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Voltar</button>
       </div>
     </Shell>

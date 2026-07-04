@@ -7,8 +7,9 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, type SessaoHistorico } from '@/lib/treino-historico';
-import { progressoDosExercicios, precisaDeloadDoHistorico } from '@/lib/treino-progressao';
+import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, salvarCalibracao, sessoesTreino, type SessaoHistorico } from '@/lib/treino-historico';
+import { exercicioEfetivo, progressoDosExercicios, precisaDeloadDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
+import { EscadaPill } from './EscadaDegraus';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
 import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
@@ -144,13 +145,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // acontece em telas cheias (sessão guiada / formulário) com a Chama DESMONTADA, o cruzamento
   // fica pendente e o token só incrementa quando a Hoje está visível — a Chama montada vê a
   // mudança e toca a comemoração única (~1,25s) do handoff.
-  const diasTreinados = diasDeTreino(sessoes.map((s) => s.dataISO));
+  // Salvaguarda B2 (DF 2026-07-04): eventos de CALIBRAÇÃO não contam dia de treino —
+  // a Chama/marcos só veem sessões de treino (sessoesTreino filtra tipo:'calibracao').
+  const diasTreinados = diasDeTreino(sessoesTreino(sessoes).map((s) => s.dataISO));
   const [celebrarToken, setCelebrarToken] = useState(0);
   const [celebrarPendente, setCelebrarPendente] = useState(false);
   function aplicarNovoHistorico(novo: SessaoHistorico[]) {
     const antes = bandaChama(diasTreinados);
-    if (bandaChama(diasDeTreino(novo.map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
+    if (bandaChama(diasDeTreino(sessoesTreino(novo).map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
     setSessoes(novo);
+  }
+
+  // Calibração manual / adoção de degrau (B2/B3): grava o evento no histórico — o alvo
+  // continua função pura do evk_treinos; o próximo render recomputa o progresso.
+  function calibrarExercicios(itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) {
+    aplicarNovoHistorico(salvarCalibracao(itens));
   }
 
   function concluirSessao(r: ResumoSessao) {
@@ -351,7 +360,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} progresso={progresso} deload={deloadAtivo} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
+        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
       </div>
     );
   }
@@ -408,9 +417,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} />
           </div>
         )}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
-        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoes.length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
       </div>
@@ -479,9 +488,10 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
-  trocados: Set<string>; feedback: Record<string, Feedback>; onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
+  trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
+  onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
   onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
@@ -507,6 +517,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
               const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
               const desc = comp ? prescricao.descansoCompostoSeg : prescricao.descansoIsoladoSeg;
               const k = `${d}-${s}`;
+              // Overlay B3: degrau assumido → o cartão exibe o exercício EFETIVO (a rotina
+              // e as chaves de feedback/troca continuam no id original do slot).
+              const efetivo = exercicioEfetivo(sl.exercicio.id, progresso, (id) => EXERCISES_SEED.find((e) => e.id === id)) ?? sl.exercicio;
               return (
                 <div key={`${k}-${sl.exercicio.id}`} style={{ ...cardSoft, padding: '20px 22px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
@@ -515,11 +528,13 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, onTrocar,
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                           <span style={{ ...kicker, color: 'rgba(234,229,219,.4)' }}>{PADRAO_LABEL[sl.padrao] ?? sl.padrao}</span>
-                          <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{sl.exercicio.nomePt}</div>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{efetivo.nomePt}</div>
                           {trocados.has(`e${k}`) && <span style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', background: 'rgba(189,255,0,.12)', borderRadius: 6, padding: '3px 8px' }}>trocado</span>}
                         </div>
                         <button onClick={() => onTrocar(d, s)} className="evk-troca" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.85rem', padding: '8px 14px', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar</button>
                       </div>
+                      {/* Indicador "Degrau X de Y" (V8.3 Estado 1) — só peso corporal com escada mapeada. */}
+                      <EscadaPill exercicioId={efetivo.id} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} margemBaixo={12} />
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                         <span style={pill}>{prescricao.seriesPorExercicio.min}–{prescricao.seriesPorExercicio.max} × {reps.min}–{reps.max} reps</span>
                         <span style={pill}>RIR {prescricao.rir.min}–{prescricao.rir.max}</span>
@@ -683,7 +698,8 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
       {sub === 'dieta' && <HistoricoDieta refeicoes={refeicoes} hojeLogs={logs} hojeNotes={notes} onVerDieta={onVerDieta} />}
 
-      {sub === 'cargas' && <CargasHistorico historico={sessoes} />}
+      {/* Salvaguarda B2: calibrações ficam FORA do gráfico de Cargas (sessoesTreino). */}
+      {sub === 'cargas' && <CargasHistorico historico={sessoesTreino(sessoes)} />}
 
       {sub === 'treinos' && (<>
         {/* Entrada A3 do registro manual (handoff): topo da lista de sessões. */}
