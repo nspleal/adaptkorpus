@@ -48,9 +48,10 @@ export function lerSessao(): PerfilResumo | null {
 function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   const treinoDias = Array.isArray(p.treinoDias) && p.treinoDias.length > 0 ? p.treinoDias : diasPadrao(p.diasDisponiveis ?? 3);
   const naoCurto = Array.isArray(p.naoCurto) ? p.naoCurto : [];
+  const favoritos = Array.isArray(p.favoritos) ? p.favoritos : []; // V8.2 (DF #12) — sessões antigas: []
   const ativos = new Set(pratosCansadosAtivos(p.pratosCansados));
   const pratosCansados = Array.isArray(p.pratosCansados) ? p.pratosCansados.filter((c) => c && ativos.has(c.id)) : [];
-  return { ...p, treinoDias, naoCurto, pratosCansados, diasDisponiveis: treinoDias.length };
+  return { ...p, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
 }
 
 /** Encerra a sessão local (logout). */
@@ -89,7 +90,9 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
   };
   return {
     dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),
-    treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED }),
+    // Favoritos (DF #12): viés determinístico do montador — preferidos no slot, isentos
+    // da variedade; filtros duros e invariantes intactos.
+    treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED, favoritos: new Set(perfil.favoritos ?? []) }),
   };
 }
 

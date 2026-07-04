@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import type { PerfilResumo } from './Painel';
+import { gerarTreino } from '@/lib/engine';
 import type { NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
 import type { Alergeno, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
+import { MeusFavoritos, ToastDesfazer } from './Favoritos';
+import { elegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
+import { lerHistorico } from '@/lib/treino-historico';
+import { EXERCISES_SEED } from '@/lib/data/seed';
 
 /**
  * Editar perfil — porte fiel do protótipo V2 (.dc.html). Coleta os mesmos campos do
@@ -64,12 +69,40 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>(inicial.preferencia ?? '');
   const [alergias, setAlergias] = useState<Alergeno[]>(inicial.alergenos);
   const [naoCurto, setNaoCurto] = useState<string[]>(inicial.naoCurto ?? []);
+  // Favoritos (⭐ V8.2): edição local como o "não gosto" — persiste no Salvar. Remover é
+  // reversível por toast (4,5 s; sair da tela = confirma, como o Cancelar descarta tudo).
+  const [favoritos, setFavoritos] = useState<string[]>(inicial.favoritos ?? []);
+  const [removidoFav, setRemovidoFav] = useState<{ id: string; idx: number } | null>(null);
   const [confirmar, setConfirmar] = useState(false);
 
   const toggleAlergia = (a: Alergeno) => setAlergias((p) => (p.includes(a) ? p.filter((x) => x !== a) : [...p, a]));
   const toggleDia = (w: Weekday) => setTreinoDias((p) => (p.includes(w) ? p.filter((x) => x !== w) : [...p, w].sort((x, y) => ORDEM_SEMANA.indexOf(x) - ORDEM_SEMANA.indexOf(y))));
   const addFood = (id: string) => setNaoCurto((p) => (p.includes(id) ? p : [...p, id]));
   const removeFood = (id: string) => setNaoCurto((p) => p.filter((x) => x !== id));
+  const removerFavorito = (id: string) => {
+    setFavoritos((p) => {
+      const idx = p.indexOf(id);
+      if (idx === -1) return p;
+      setRemovidoFav({ id, idx });
+      return p.filter((x) => x !== id);
+    });
+  };
+  const desfazerRemocao = () => {
+    setRemovidoFav((r) => {
+      if (r) setFavoritos((p) => { const arr = [...p]; arr.splice(Math.min(r.idx, arr.length), 0, r.id); return arr; });
+      return null;
+    });
+  };
+  // Elegibilidade dos favoritos no plano DESTE formulário (equipamento/nível/dias em edição):
+  // monta a rotina determinística com os campos atuais e avalia cada favorito (B5).
+  const rotinaAtual = useMemo(() => {
+    const r = gerarTreino(
+      { pesoKg: +peso || inicial.pesoKg, alturaCm: +altura || inicial.alturaCm, idade: +idade || inicial.idade, flagsSaude: inicial.flagsSaude, objetivo, nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo },
+      { exercises: EXERCISES_SEED, favoritos: new Set(favoritos) },
+    );
+    return r.rotina;
+  }, [peso, altura, idade, objetivo, experiencia, local, treinoDias, tempo, favoritos, inicial]);
+  const historicoRef = useMemo(() => lerHistorico(), []);
 
   const i = +idade, a = +altura, pz = +peso;
   const valido = i >= 18 && i <= 100 && a >= 100 && a <= 250 && pz >= 30 && pz <= 300 && treinoDias.length >= 1;
@@ -88,7 +121,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
       ...inicial,
       sexo, idade: i, alturaCm: a, pesoKg: pz, objetivo, nivelAtividade: atividade,
       nivelExperiencia: experiencia, equipamento: local, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
-      preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto,
+      preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
     });
   }
 
@@ -145,6 +178,14 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
 
           <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="editar" />
 
+          {/* Espelho POSITIVO do bloco acima (V8.2 — mesma família de preferências). */}
+          <MeusFavoritos
+            favoritos={favoritos}
+            exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
+            elegibilidadeDe={(ex) => elegibilidadeFavorito(ex, { equipamento: local, nivelExperiencia: experiencia }, rotinaAtual, historicoRef)}
+            onRemover={removerFavorito}
+          />
+
         </div>
 
         {!valido && <p style={{ color: '#E5484D', fontSize: '.88rem', margin: '14px 2px 0' }}>Confira idade (18–100), altura (100–250 cm) e peso (30–300 kg).</p>}
@@ -154,6 +195,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
           <button onClick={tentarSalvar} disabled={!valido} className={valido ? 'hov-btn' : ''} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: valido ? 'pointer' : 'not-allowed', opacity: valido ? 1 : 0.4 }}>Salvar alterações</button>
         </div>
       </div>
+
+      {/* TOAST · remover favorito é reversível (4,5 s; sair da tela = confirma). */}
+      {removidoFav && <ToastDesfazer mensagem="Removido dos favoritos." onDesfazer={desfazerRemocao} onExpirar={() => setRemovidoFav(null)} />}
 
       {/* MODAL · RECALCULAR PLANO */}
       {confirmar && (

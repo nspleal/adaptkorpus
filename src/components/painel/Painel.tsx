@@ -10,6 +10,7 @@ import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/l
 import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, salvarCalibracao, sessoesTreino, type SessaoHistorico } from '@/lib/treino-historico';
 import { exercicioEfetivo, progressoDosExercicios, precisaDeloadDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { EscadaPill } from './EscadaDegraus';
+import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
 import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
@@ -47,6 +48,9 @@ export interface PerfilResumo {
   treinoDias: Weekday[];
   /** "Alimentos que não curto" — IDs da paleta curada (preferência relaxável no motor). */
   naoCurto: string[];
+  /** Exercícios FAVORITOS (⭐ V8.2, DF #12): o montador os prefere sempre que couberem
+   *  (isentos da variedade; filtros duros intactos). Espelho positivo do "não gosto". */
+  favoritos?: string[];
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -161,6 +165,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function calibrarExercicios(itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) {
     aplicarNovoHistorico(salvarCalibracao(itens));
   }
+
+  // Favoritos (⭐ V8.2, DF #12): alterna o conjunto, persiste na sessão e re-monta o
+  // treino (viés determinístico do montador). Estrela do cartão e do modal compartilham
+  // este estado único.
+  function toggleFavorito(id: string) {
+    const atual = new Set(perfil.favoritos ?? []);
+    if (atual.has(id)) atual.delete(id); else atual.add(id);
+    const novo = { ...perfil, favoritos: [...atual] };
+    setPerfil(novo);
+    onPerfilChange?.(novo);
+    const { treino: nt } = recomputarPlano(novo);
+    setTreino(nt);
+  }
+  const favoritosSet = new Set(perfil.favoritos ?? []);
 
   function concluirSessao(r: ResumoSessao) {
     aplicarNovoHistorico(registrarSessao(r)); // carimba data + persiste (evk_treinos)
@@ -420,7 +438,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} />
           </div>
         )}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -432,7 +450,13 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
       )}
       {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
-        <DetalheExercicio ex={rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio} onFechar={() => setDetalhe(null)} onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }} />
+        <DetalheExercicio
+          ex={exercicioEfetivo(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id, progresso, (id) => EXERCISES_SEED.find((e) => e.id === id)) ?? rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio}
+          favoritado={favoritosSet.has(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id)}
+          onToggleFavorito={() => toggleFavorito(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id)}
+          onFechar={() => setDetalhe(null)}
+          onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }}
+        />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
       {notifModal && <ModalNotificacoes onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
@@ -491,9 +515,10 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
+  favoritos: Set<string>; onToggleFavorito: (id: string) => void;
   onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
   onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
 }) {
@@ -531,10 +556,18 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                           <span style={{ ...kicker, color: 'rgba(234,229,219,.4)' }}>{PADRAO_LABEL[sl.padrao] ?? sl.padrao}</span>
-                          <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{efetivo.nomePt}</div>
+                          {/* Badge "Favorito" (B5): todo favorito que entrou no plano. */}
+                          {sl.incluidoPorPreferencia && <BadgeFavorito />}
+                          {/* Nome clicável (padrão da lista da Dieta) → abre o detalhe. */}
+                          <button onClick={() => onDetalhe(d, s)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '1.15rem', fontWeight: 700, color: '#EAE5DB', textAlign: 'left', borderBottom: '1px dashed rgba(234,229,219,.28)' }}>{efetivo.nomePt}</button>
                           {trocados.has(`e${k}`) && <span style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', background: 'rgba(189,255,0,.12)', borderRadius: 6, padding: '3px 8px' }}>trocado</span>}
                         </div>
-                        <button onClick={() => onTrocar(d, s)} className="evk-troca" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.85rem', padding: '8px 14px', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar</button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          {/* Estrela (lugar principal — canto superior direito do cartão). Favorita o
+                              exercício DO SLOT (id original), não o degrau adotado. */}
+                          <EstrelaFavorito favoritado={favoritos.has(sl.exercicio.id)} onToggle={() => onToggleFavorito(sl.exercicio.id)} />
+                          <button onClick={() => onTrocar(d, s)} className="evk-troca" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.85rem', padding: '8px 14px', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar</button>
+                        </div>
                       </div>
                       {/* Indicador "Degrau X de Y" (V8.3 Estado 1) — só peso corporal com escada mapeada. */}
                       <EscadaPill exercicioId={efetivo.id} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} margemBaixo={12} />

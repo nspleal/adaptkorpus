@@ -222,8 +222,11 @@ body {
 @keyframes evkPop { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
 /* Escada de dificuldade (V8.3): expansão da lista do indicador "Degrau X de Y". */
 @keyframes evkExpand { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+/* Favoritos (V8.2): confirmação da estrela (só na transição) + entrada do toast. */
+@keyframes evkStarPop { 0% { transform: scale(.55); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes evkToastIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @media (prefers-reduced-motion: reduce) {
-  [style*="evkExpand"] { animation-duration: .001s !important; }
+  [style*="evkExpand"], [style*="evkStarPop"], [style*="evkToastIn"] { animation-duration: .001s !important; }
 }
 .modal-opt { transition: transform .25s cubic-bezier(.22,.61,.36,1), border-color .25s ease, background .25s ease; }
 .modal-opt:hover { border-color: #BDFF00; background: rgba(189,255,0,.08); transform: translateX(3px); }

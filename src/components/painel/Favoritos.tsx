@@ -1,0 +1,144 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type { Exercise } from '@/lib/data/types';
+import type { ElegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
+
+/**
+ * Favoritos (⭐ V8.2) — porte fiel do protótipo `Evokorpus Favoritos.dc.html`:
+ *  - <EstrelaFavorito>: botão 42px, contorno Bone quando não-favoritado / preenchido
+ *    Pulso quando favoritado, com `evkStarPop` só na transição de estado.
+ *  - <BadgeFavorito>: pílula "Favorito" (contorno neon + texto Bone — distinta da tag
+ *    "trocado") quando o montador incluiu por preferência.
+ *  - <MeusFavoritos>: seção do Editar-perfil (irmã de "Alimentos que você não gosta"),
+ *    com etiqueta honesta de descompasso (4 motivos travados, NUNCA vermelho), remover
+ *    reversível via <ToastDesfazer> (4,5 s; sair da tela = confirma) e estado vazio
+ *    como convite. DF B5 2026-07-04.
+ */
+
+const STAR_PATH = 'M12 3.4l2.62 5.31 5.86.85-4.24 4.13 1 5.84L12 16.9l-5.24 2.76 1-5.84-4.24-4.13 5.86-.85z';
+
+export function EstrelaFavorito({ favoritado, onToggle, tamanho = 42, iconSize = 21 }: {
+  favoritado: boolean;
+  onToggle: () => void;
+  tamanho?: number;
+  iconSize?: number;
+}) {
+  // Anima SÓ na transição de estado (nunca em cada render — spec do protótipo).
+  const [pop, setPop] = useState(false);
+  const primeiro = useRef(true);
+  useEffect(() => {
+    if (primeiro.current) { primeiro.current = false; return; }
+    setPop(true);
+    const t = setTimeout(() => setPop(false), 340);
+    return () => clearTimeout(t);
+  }, [favoritado]);
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      aria-label={favoritado ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+      aria-pressed={favoritado}
+      style={{
+        width: tamanho, height: tamanho, minWidth: tamanho, borderRadius: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'border-color .2s ease, background .2s ease',
+        ...(favoritado
+          ? { background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.35)' }
+          : { background: 'none', border: '1px solid rgba(234,229,219,.16)' }),
+      }}
+    >
+      <span style={{ display: 'flex', animation: pop ? 'evkStarPop .32s cubic-bezier(.22,.61,.36,1)' : undefined }}>
+        {favoritado
+          ? <svg width={iconSize} height={iconSize} viewBox="0 0 24 24"><path d={STAR_PATH} fill="#BDFF00" /></svg>
+          : <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none"><path d={STAR_PATH} stroke="rgba(234,229,219,.55)" strokeWidth={1.6} strokeLinejoin="round" /></svg>}
+      </span>
+    </button>
+  );
+}
+
+/** Pílula "Favorito" — transparência de "por que isso está aqui de novo" (B5: todo favorito no plano). */
+export function BadgeFavorito() {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.66rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'rgba(234,229,219,.85)', background: 'rgba(189,255,0,.06)', border: '1px solid rgba(189,255,0,.4)', borderRadius: 999, padding: '3px 10px 3px 8px' }}>
+      <svg width={11} height={11} viewBox="0 0 24 24"><path d={STAR_PATH} fill="#BDFF00" /></svg>
+      Favorito
+    </span>
+  );
+}
+
+/** Toast não-modal com "Desfazer" (4,5 s; some sozinho — sair da tela = confirma). */
+export function ToastDesfazer({ mensagem, onDesfazer, onExpirar }: {
+  mensagem: string;
+  onDesfazer: () => void;
+  onExpirar: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onExpirar, 4500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div style={{ position: 'fixed', bottom: 26, left: '50%', transform: 'translateX(-50%)', zIndex: 320, display: 'flex', alignItems: 'center', gap: 14, background: '#10241a', border: '1px solid rgba(234,229,219,.16)', borderRadius: 13, padding: '13px 16px', boxShadow: '0 24px 55px -22px rgba(0,0,0,.75)', animation: 'evkToastIn .3s cubic-bezier(.22,.61,.36,1)' }}>
+      <span style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.85)' }}>{mensagem}</span>
+      <button onClick={onDesfazer} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#BDFF00', fontWeight: 700, fontSize: '.88rem', cursor: 'pointer', padding: 0 }}>
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        Desfazer
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Seção "Meus favoritos" (Editar perfil — irmã do bloco de alimentos). Read/write no
+ * estado local do formulário (persiste no Salvar, como o "não gosto").
+ */
+export function MeusFavoritos({ favoritos, exercicioPorId, elegibilidadeDe, onRemover }: {
+  favoritos: readonly string[];
+  exercicioPorId: (id: string) => Exercise | undefined;
+  /** Avaliação de descompasso por favorito (motivo travado quando não elegível). */
+  elegibilidadeDe: (ex: Exercise) => ElegibilidadeFavorito;
+  onRemover: (id: string) => void;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Meus favoritos</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Exercícios que você gosta e quer ver com frequência — o montador prioriza sempre que couber no seu plano.</p>
+      {favoritos.length === 0 ? (
+        <div style={{ border: '1px dashed rgba(234,229,219,.16)', borderRadius: 16, padding: '22px 18px', textAlign: 'center' }}>
+          <div style={{ width: 42, height: 42, margin: '0 auto 10px', borderRadius: 12, background: 'rgba(189,255,0,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width={20} height={20} viewBox="0 0 24 24" fill="none"><path d={STAR_PATH} stroke="#BDFF00" strokeWidth={1.6} strokeLinejoin="round" /></svg>
+          </div>
+          <p style={{ margin: 0, fontSize: '.88rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.55 }}>Você ainda não marcou nenhum exercício como favorito. Toque na estrela em qualquer exercício do seu treino para ele aparecer sempre que couber.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {favoritos.map((id) => {
+            const ex = exercicioPorId(id);
+            if (!ex) return null;
+            const eleg = elegibilidadeDe(ex);
+            return (
+              <div key={id} style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '13px 15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 600 }}>{ex.nomePt}</div>
+                  <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)' }}>{ex.grupoMuscular}</div>
+                  {/* Descompasso honesto (Estado 5): motivo travado, Bone neutro — NUNCA vermelho. */}
+                  {!eleg.elegivel && eleg.motivo && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 7, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '4px 11px', fontSize: '.74rem', color: 'rgba(234,229,219,.55)' }}>
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>
+                      Não aparece agora — {eleg.motivo}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <EstrelaFavorito favoritado onToggle={() => onRemover(id)} iconSize={20} />
+                  <button onClick={() => onRemover(id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.7)', fontSize: '.8rem', fontWeight: 600, padding: '9px 12px', borderRadius: 10, cursor: 'pointer' }}>
+                    <span style={{ fontSize: '1rem', lineHeight: 1 }}>×</span>Remover
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
