@@ -12,31 +12,8 @@ import {
 import { substituirExercicio, listarSubstituicoesExercicio } from '../src/lib/engine/substituicao.ts';
 import { locaisPermitidos } from '../src/lib/engine/treino-montador.ts';
 import type { EquipamentoDisp } from '../src/lib/data/types.ts';
+import { FAMILIAS } from '../src/lib/engine/familias.ts';
 
-// FAMÍLIAS_PROPOSTA fica FORA do engine (é proposta dormente — precisa DF do autor).
-// Inlined aqui só para validar cobertura contra os dados reais. IDs no formato "eN".
-const FAMILIAS_PROPOSTA: Record<string, string[]> = {
-  flexao: ['e157', 'e156', 'e1', 'e113', 'e2', 'e100'],
-  'supino-horizontal': ['e15', 'e11', 'e9'],
-  'supino-inclinado': ['e12', 'e10'],
-  desenvolvimento: ['e43', 'e44', 'e42', 'e41', 'e111', 'e155'],
-  'remada-horizontal': ['e47', 'e48', 'e46', 'e162', 'e120', 'e84', 'e45', 'e154'],
-  'puxada-vertical': ['e49', 'e50', 'e51'],
-  'barra-fixa': ['e116', 'e22', 'e21'],
-  'agachamento-bilateral': ['e3', 'e33', 'e34', 'e28', 'e141', 'e32', 'e121'],
-  afundo: ['e16', 'e160', 'e17', 'e18', 'e79', 'e61', 'e78', 'e143'],
-  'ponte-hip-thrust': ['e57', 'e58', 'e59', 'e161', 'e153'],
-  'stiff-terra': ['e80', 'e81', 'e82', 'e26', 'e27', 'e117'],
-  'flexora-posterior': ['e64', 'e65', 'e66', 'e87', 'e86', 'e123'],
-  'rosca-biceps': ['e19', 'e20', 'e72', 'e74', 'e75', 'e77', 'e112', 'e122', 'e124', 'e76', 'e136'],
-  'triceps-extensao': ['e68', 'e69', 'e71', 'e133', 'e134', 'e67', 'e135', 'e40'],
-  'elevacao-lateral': ['e52', 'e53', 'e54'],
-  'crucifixo-peito': ['e14', 'e55', 'e130', 'e131', 'e132', 'e56'],
-  'crucifixo-invertido': ['e106', 'e107', 'e119'],
-  'panturrilha-em-pe': ['e36', 'e37', 'e38', 'e39'],
-  'abdominal-flexao': ['e4', 'e5', 'e6', 'e149', 'e159'],
-  'cardio-continuo': ['e24', 'e29', 'e31', 'e93'],
-};
 
 const byId = new Map(EXERCISES.map((e) => [e.id, e]));
 const nome = (id: string) => `${id} ${byId.get(id)?.nomePt ?? '???'}`;
@@ -96,8 +73,8 @@ console.log('\n═══ SUBSTITUIÇÃO REAL — C2: intermediário · academia 
 const r2 = troca('e9', 'academia', 'intermediario', 5);
 console.log('   →', r2.map(nome).join(' · ') || '(vazio)');
 check(!r2.some((id) => byId.get(id)!.nivel === 'avancado'), 'nenhum avançado (dificuldade ≤ liberada)');
-console.log('   ACHADO (motiva FAMÍLIAS): 1ª sugestão =', nome(r2[0] ?? '—'),
-  '— com grupoMuscular por texto-livre o resultado difere do motor normalizado.');
+check(r2.join(',') === 'e11,e15,e10,e12,e13',
+  'FAMÍLIAS LIGADAS (DF 2026-07-04): supino-horizontal primeiro (e11, e15), depois inclinados');
 
 console.log('\n═══ SUBSTITUIÇÃO REAL — C3: intermediário · nenhum · troca e151 Skater ═══');
 const r3 = troca('e151', 'nenhum', 'intermediario', 4);
@@ -108,11 +85,7 @@ check(r3.every((id) => byId.get(id)!.padraoMovimento === 'cardio' || byId.get(id
 console.log('\n═══ SUBSTITUIÇÃO REAL — C4: iniciante · nenhum · troca e116 Remada invertida ═══');
 const r4 = troca('e116', 'nenhum', 'iniciante');
 console.log('   →', r4.map(nome).join(' · ') || '(vazio)');
-console.log('   ⚠️ DIVERGÊNCIA-CHAVE: o motor sinalizaria VAZIO (único puxar casa-sem INI).');
-console.log('   O app devolve exercícios que NÃO preservam grupo NEM padrão (empurrar/agachar) —');
-console.log('   substituicao.ts usa preservação só como desempate no sort, não como filtro DURO.');
-console.log('   Causa raiz: `grupoMuscular` é texto-livre composto; o app não tem grupo PRIMÁRIO');
-console.log('   normalizado que a trava F.2 §2 exige. → decisão de dados/autor (ver relatório).');
+check(r4.length === 0, 'FILTRO DURO LIGADO (DF 2026-07-04): e116 → VAZIO sinalizado honesto');
 
 // ── Determinismo ────────────────────────────────────────────────────────────
 console.log('\n═══ Determinismo (mesma entrada 100×) ═══');
@@ -133,15 +106,18 @@ for (const e of EXERCISES)
     }
 console.log(`   combinações sem candidato: ${vazios.length}`);
 for (const v of vazios.slice(0, 15)) console.log('     ·', v);
-check(vazios.length < 15, 'degradações totais raras e conhecidas (pontos magros do doc)');
+// Assert DURO de propósito: quando o conteúdo 164+ (puxar casa-sem) chegar, isto quebra
+// e força revisão — o furo deve SUMIR, não crescer.
+check(vazios.length === 3 && vazios.every((v) => v.startsWith('e116 ')),
+  'EXATAMENTE 3 vazios = o furo conhecido do e116 (igual ao motor standalone)');
 
 // ── Famílias (proposta dormente) — cobertura contra dados reais ─────────────
-console.log('\n═══ FAMÍLIAS_PROPOSTA — cobertura (dormente, precisa DF) ═══');
+console.log('\n═══ FAMÍLIAS (engine — aprovadas DF 2026-07-04) — cobertura ═══');
 let famOk = true;
-for (const [fam, fids] of Object.entries(FAMILIAS_PROPOSTA))
+for (const [fam, fids] of Object.entries(FAMILIAS))
   for (const id of fids) if (!byId.has(id)) { famOk = false; console.log(`  ❌ ${fam}: ${id} não existe`); }
 check(famOk, 'todos os ids das 20 famílias existem na biblioteca real');
-const cobertos = new Set(Object.values(FAMILIAS_PROPOSTA).flat());
+const cobertos = new Set(Object.values(FAMILIAS).flat());
 console.log(`   famílias cobrem ${cobertos.size} exercícios distintos`);
 
 console.log(`\n${'═'.repeat(60)}`);

@@ -861,7 +861,9 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
         <div style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-.01em', marginBottom: 6 }}>{modal.base}</div>
         <p style={{ margin: '0 0 18px', fontSize: '.86rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>{sub}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: showMore ? 14 : 0 }}>
-          {opcoes.length === 0 && <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>Sem alternativa elegível agora.</p>}
+          {/* Vazio honesto (DF 2026-07-04): com o filtro duro de preservação, um movimento único
+              no seu equipamento não tem troca equivalente — sinalizamos em vez de inventar. */}
+          {opcoes.length === 0 && <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Não achei uma troca equivalente para este exercício com o seu equipamento — melhor manter do que trocar por algo que trabalha outra coisa.</p>}
           {opcoes.map((o) => (
             <button key={o.chave} onClick={o.onClick} className="modal-opt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 14, padding: '15px 17px', color: '#EAE5DB', cursor: 'pointer' }}>
               <span><span style={{ display: 'block', fontSize: '1rem', fontWeight: 600 }}>{o.nome}</span>{o.detalhe && <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.55)', marginTop: 2 }}>{o.detalhe}</span>}</span>

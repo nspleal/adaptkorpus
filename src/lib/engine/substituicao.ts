@@ -10,6 +10,7 @@ import { macrosDePrato } from '../data/nutrition';
 import { ESCALA_PORCAO } from './constants';
 import { dificuldadesLiberadas } from './treino';
 import { locaisPermitidos } from './treino-montador';
+import { mesmaFamilia } from './familias';
 import type { Recipe, RecipeMacros } from '../data/types';
 import type {
   PedidoSubExercicio,
@@ -168,9 +169,14 @@ export function listarSubstituicoesPrato(p: PedidoSubPrato, max = 3): ResultadoS
 
 /**
  * Substitui um exercício. Função PURA e determinística.
- * Filtros DUROS: equipamento/local · tipo compatível · dificuldade ≤ liberada pelo nível.
- * Preservação: grupo muscular → padrão. Desempate: mesma dificuldade → MAIS FAMILIAR
- * (tier T1) → id lexicográfico. Gosto/variedade são relaxáveis (fallback).
+ * Filtros DUROS: equipamento/local · tipo compatível · dificuldade ≤ liberada pelo nível ·
+ * PRESERVAÇÃO (DF 2026-07-04, cofre substituicao §2): candidato que não preserva NEM o
+ * grupoPrimario NEM o padrão perde o estímulo inteiro → fica FORA (era só desempate; o
+ * grupoPrimario normalizado destravou o filtro fiel). Slot sem opção → VAZIO sinalizado
+ * honesto (o furo conhecido do e116 fica visível — conteúdo 164+ vem depois, nunca renumerar).
+ * Preservação ordenada: grupo+padrão (e DENTRO dele, mesma FAMÍLIA primeiro — §Famílias)
+ * → grupo → padrão. Desempate: mesma dificuldade → MAIS FAMILIAR (tier T1) → id lexicográfico.
+ * Gosto/variedade são relaxáveis (fallback).
  * NÃO substitui por dor/lesão — isso é pausa + aviso no motor de treino (re-check).
  */
 export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercicio {
@@ -200,16 +206,26 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
     return false;
   }
 
-  const duros = p.exercises.filter((y) => baseElegivel(y) && tipoCompativel(y));
+  /** Rank de preservação (menor = melhor): 0 grupo+padrão · 1 grupo · 2 padrão · 3 nada (FORA). */
+  const rankPreservacao = (y: typeof atual): number => {
+    const g = y.grupoPrimario === atual.grupoPrimario;
+    const pd = y.padraoMovimento === atual.padraoMovimento;
+    return g && pd ? 0 : g ? 1 : pd ? 2 : 3;
+  };
+
+  // FILTRO DURO da preservação (DF 2026-07-04): quem não preserva nada fica fora.
+  const duros = p.exercises.filter((y) => baseElegivel(y) && tipoCompativel(y) && rankPreservacao(y) < 3);
 
   const ordenar = (cands: typeof duros) =>
     cands.slice().sort((a, b) => {
-      const ga = a.grupoMuscular === atual.grupoMuscular ? 0 : 1;
-      const gb = b.grupoMuscular === atual.grupoMuscular ? 0 : 1;
-      if (ga !== gb) return ga - gb; // preserva grupo muscular
-      const pa = a.padraoMovimento === atual.padraoMovimento ? 0 : 1;
-      const pb = b.padraoMovimento === atual.padraoMovimento ? 0 : 1;
-      if (pa !== pb) return pa - pb; // preserva padrão
+      const ra = rankPreservacao(a);
+      const rb = rankPreservacao(b);
+      if (ra !== rb) return ra - rb; // preservação travada (grupo+padrão → grupo → padrão)
+      // Famílias (§Famílias, DF 2026-07-04): DENTRO do nível 0, mesma família rankeia antes
+      // do "mesmo grupo+padrão" genérico (resolve o C2: supino → halteres antes de flexão).
+      const fa = ra === 0 && mesmaFamilia(atual.id, a.id) ? 0 : 1;
+      const fb = rb === 0 && mesmaFamilia(atual.id, b.id) ? 0 : 1;
+      if (fa !== fb) return fa - fb;
       const da = a.nivel === atual.nivel ? 0 : 1;
       const db = b.nivel === atual.nivel ? 0 : 1;
       if (da !== db) return da - db; // mesma dificuldade

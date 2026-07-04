@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { substituirExercicio, substituirPrato, listarSubstituicoesPrato, listarSubstituicoesExercicio } from './substituicao';
 import { ESCALA_PORCAO } from './constants';
+import { locaisPermitidos } from './treino-montador';
 import { gerarDieta } from './index';
 import { macrosDePrato } from '../data/nutrition';
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '../data/seed';
@@ -247,5 +248,65 @@ describe('listarSubstituicoesExercicio — lista sem duplicatas', () => {
     for (const x of lista) expect(x.exercicio!.id).not.toBe(supino.id);
     const lote2 = listarSubstituicoesExercicio({ exercicioAtual: supino, equipamento: 'academia', nivelExperiencia: 'avancado', exercises: EXERCISES, historicoRecenteIds: ids }, 3);
     for (const x of lote2) expect(ids).not.toContain(x.exercicio!.id);
+  });
+});
+
+// ── Filtro DURO de preservação + famílias (DF 2026-07-04 — cofre substituicao §2/§Famílias) ──
+describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
+  const byId = new Map(EXERCISES.map((e) => [e.id, e]));
+
+  it('C2: trocar e9 Supino (INT, academia) → família supino-horizontal PRIMEIRO (e11, e15), depois os demais', () => {
+    // Antes da DF: e11 vinha 1º por acaso de string e e1 Flexão aparecia em 2º.
+    // Com famílias: e11 (mesma família, mesma dificuldade) → e15 (mesma família, INI) →
+    // e10/e12 (inclinado — OUTRA família, rank0 genérico) → e13.
+    const lista = listarSubstituicoesExercicio(
+      { exercicioAtual: byId.get('e9')!, equipamento: 'academia', nivelExperiencia: 'intermediario', exercises: EXERCISES }, 5,
+    ).map((r) => r.exercicio!.id);
+    expect(lista).toEqual(['e11', 'e15', 'e10', 'e12', 'e13']);
+  });
+
+  it('C4: trocar e116 Remada invertida (único puxar casa-sem) → VAZIO sinalizado honesto', () => {
+    // Gap conhecido do conteúdo (cofre §2 ⚠️): os +puxar casa-sem virão como ids 164+
+    // (NUNCA renumerar). Até lá, a UI sinaliza honestamente em vez de devolver
+    // empurrar/agachar (que não preservam nada — antes da DF isso era mascarado).
+    for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
+      const r = substituirExercicio({ exercicioAtual: byId.get('e116')!, equipamento: 'nenhum', nivelExperiencia: nivel, exercises: EXERCISES });
+      expect(r.status).toBe('sinalizado');
+      expect(r.exercicio).toBeNull();
+    }
+    expect(listarSubstituicoesExercicio(
+      { exercicioAtual: byId.get('e116')!, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES }, 3,
+    )).toEqual([]);
+  });
+
+  it('C1: trocar e1 Flexão (INI, casa-sem) → família flexao primeiro (e156, e157), depois e40', () => {
+    const lista = listarSubstituicoesExercicio(
+      { exercicioAtual: byId.get('e1')!, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES }, 3,
+    ).map((r) => r.exercicio!.id);
+    expect(lista).toEqual(['e156', 'e157', 'e40']);
+  });
+
+  it('refino skater intocado: e151 cruza tipo dentro do padrão Cardio (preserva padrão → passa o duro)', () => {
+    const int = listarSubstituicoesExercicio(
+      { exercicioAtual: byId.get('e151')!, equipamento: 'nenhum', nivelExperiencia: 'intermediario', exercises: EXERCISES }, 4,
+    ).map((r) => r.exercicio!.id);
+    expect(int).toEqual(['e143', 'e163']); // pliométricos (mesmo grupo pernas)
+    const ini = substituirExercicio({ exercicioAtual: byId.get('e151')!, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES });
+    expect(ini.status).toBe('ok'); // degrada p/ cardio do mesmo padrão — nunca vazio
+    expect(ini.exercicio!.padraoMovimento).toBe('cardio');
+  });
+
+  it('varredura 163×3×3: EXATAMENTE 3 vazios (o furo do e116) — igual ao motor standalone', () => {
+    // Assert duro de propósito: quando o conteúdo 164+ (puxar casa-sem) chegar, este teste
+    // quebra e força a revisão — o furo deve SUMIR, não crescer.
+    const vazios: string[] = [];
+    for (const e of EXERCISES)
+      for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
+        for (const eq of ['nenhum', 'casa', 'academia'] as const) {
+          if (!locaisPermitidos(eq).includes(e.local)) continue;
+          const r = substituirExercicio({ exercicioAtual: e, equipamento: eq, nivelExperiencia: nivel, exercises: EXERCISES });
+          if (r.status === 'sinalizado') vazios.push(`${e.id}·${nivel}·${eq}`);
+        }
+    expect(vazios).toEqual(['e116·iniciante·nenhum', 'e116·intermediario·nenhum', 'e116·avancado·nenhum']);
   });
 });
