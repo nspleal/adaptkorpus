@@ -177,6 +177,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     onPerfilChange?.(novo);
     const { treino: nt } = recomputarPlano(novo);
     setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
   const favoritosSet = new Set(perfil.favoritos ?? []);
 
