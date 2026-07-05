@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
 import { baixarArquivo } from '@/lib/export';
 import { limparSessao } from '@/lib/session';
+import { sairDaConta } from '@/lib/auth/sair';
 
 /**
  * Conta e assinatura — porte fiel do protótipo V2 (.dc.html): status da assinatura
@@ -77,7 +78,7 @@ export default function ContaPage() {
                 <div style={{ position: 'absolute', top: 48, right: 0, width: 190, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
                   <button onClick={() => router.push('/app')} style={menuItem(false)}>Meu perfil</button>
                   <button onClick={() => setMenu(false)} aria-current="page" style={{ ...menuItem(false), background: 'rgba(189,255,0,.08)', color: '#BDFF00', fontWeight: 600 }}>Conta e assinatura</button>
-                  <button onClick={() => { limparSessao(); router.replace('/'); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
+                  <button onClick={() => { void sairDaConta().finally(() => router.replace('/')); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
                 </div>
               )}
             </div>

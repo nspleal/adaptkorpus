@@ -79,7 +79,22 @@ export async function middleware(request: NextRequest) {
         },
       },
     );
-    await supabase.auth.getUser();
+    // `getUser()` valida o JWT no servidor Auth (assinatura + expiração + usuário existe).
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Gating (leva 3): rotas privadas exigem sessão. Sem usuário → /login. PRESERVA o
+    // nonce/CSP e os cookies que o `setAll` possa ter renovado (senão volta a tela branca).
+    const path = request.nextUrl.pathname;
+    const protegida = path.startsWith('/app') || path.startsWith('/conta');
+    if (protegida && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.search = '';
+      const redir = NextResponse.redirect(url);
+      redir.headers.set('content-security-policy', csp);
+      for (const c of response.cookies.getAll()) redir.cookies.set(c.name, c.value, c);
+      return redir;
+    }
   }
 
   return response;

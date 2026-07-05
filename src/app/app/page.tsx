@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Painel, { type PerfilResumo } from '@/components/painel/Painel';
 import type { ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { lerSessao, limparSessao, recomputarPlano, salvarSessao } from '@/lib/session';
+import { sairDaConta } from '@/lib/auth/sair';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -44,7 +45,7 @@ export default function AppPage() {
       treino={estado.treino}
       desfechoC={estado.dieta.gate.comportamento === 'RESTRINGIR' || estado.dieta.gate.comportamento === 'PISAR'}
       onPerfilChange={salvarSessao}
-      onSair={() => { limparSessao(); router.replace('/'); }}
+      onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
     />
   );
 }
