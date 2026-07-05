@@ -85,7 +85,8 @@ export async function middleware(request: NextRequest) {
     // Gating (leva 3): rotas privadas exigem sessão. Sem usuário → /login. PRESERVA o
     // nonce/CSP e os cookies que o `setAll` possa ter renovado (senão volta a tela branca).
     const path = request.nextUrl.pathname;
-    const protegida = path.startsWith('/app') || path.startsWith('/conta');
+    // /onboarding também é protegido (DF 2026-07-05): o perfil nasce preso à conta.
+    const protegida = path.startsWith('/app') || path.startsWith('/conta') || path.startsWith('/onboarding');
     if (protegida && !user) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';

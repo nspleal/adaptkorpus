@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, btnGhost, EASE, forcaSenha } from '@/components/auth/ui';
+import { supabaseConfigurado } from '@/lib/supabase/env';
 
 /**
- * Redefinir senha — porte fiel do protótipo V2 (4 estados locais):
- * fRequest → fSent → fReset → fDone. UI apenas; o envio real de link é backend (Fase 2).
+ * Redefinir senha (4 estados): request → sent → reset → done. Fluxo real (Supabase):
+ * `resetPasswordForEmail` → link do e-mail → `/auth/callback` estabelece a sessão de
+ * recuperação e volta aqui → detectamos a sessão e mostramos o passo "nova senha" →
+ * `updateUser({ password })`. Sem backend (modo mock) os passos avançam localmente.
  */
 type Fase = 'request' | 'sent' | 'reset' | 'done';
 
@@ -17,6 +20,56 @@ export default function RedefinirPage() {
   const [showPw, setShowPw] = useState(false);
   const [npw, setNpw] = useState('');
   const [npw2, setNpw2] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(false);
+
+  // Voltando do link do e-mail (via /auth/callback) há uma sessão de recuperação → vai
+  // direto ao passo de nova senha.
+  useEffect(() => {
+    if (!supabaseConfigurado()) return;
+    let vivo = true;
+    void (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const { data } = await createClient().auth.getSession();
+        if (vivo && data.session) setFase('reset');
+      } catch { /* segue no passo request */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  async function enviarLink() {
+    setErro(null);
+    if (!supabaseConfigurado()) { setFase('sent'); return; }
+    if (!email) { setErro('Informe seu e-mail.'); return; }
+    setCarregando(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const { error } = await createClient().auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/redefinir`,
+      });
+      setFase('sent'); // mensagem neutra (não revela se o e-mail existe), mesmo em erro
+      void error;
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function salvarSenha() {
+    if (!podeSalvar) return;
+    setErro(null);
+    if (!supabaseConfigurado()) { setFase('done'); return; }
+    setCarregando(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const { error } = await createClient().auth.updateUser({ password: npw });
+      if (error) { setErro('Não foi possível salvar a senha. Peça um novo link.'); setCarregando(false); return; }
+      setFase('done');
+    } catch {
+      setErro('Não foi possível salvar a senha agora. Tente de novo.');
+      setCarregando(false);
+    }
+  }
 
   const f = forcaSenha(npw);
   const mismatch = npw2.length > 0 && npw !== npw2;
@@ -40,7 +93,8 @@ export default function RedefinirPage() {
                 <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Informe seu e-mail e enviamos um link para criar uma nova senha.</p>
                 <label style={labelAuth}>E-mail</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={{ ...inputAuth, marginBottom: 22 }} />
-                <button onClick={() => setFase('sent')} className="hov-btn" style={btnNeon}>Enviar link</button>
+                {erro && <p style={{ margin: '0 0 12px', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}
+                <button onClick={enviarLink} disabled={carregando} className="hov-btn" style={{ ...btnNeon, opacity: carregando ? 0.6 : 1 }}>{carregando ? 'Enviando…' : 'Enviar link'}</button>
                 <p style={{ textAlign: 'center', margin: '18px 0 0', fontSize: '.9rem' }}>
                   <a onClick={() => router.push('/login')} style={{ color: 'rgba(234,229,219,.7)', textDecoration: 'underline', cursor: 'pointer' }}>Voltar para o login</a>
                 </p>
@@ -57,10 +111,10 @@ export default function RedefinirPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
                   {/* "Reenviar link" reenvia (permanece neste passo) — NÃO avança para criar senha:
                       quem chega ao passo de nova senha é pelo link do e-mail (abaixo). */}
-                  <button onClick={() => setFase('sent')} className="evk-voltar" style={btnGhost}>Reenviar link</button>
+                  <button onClick={enviarLink} disabled={carregando} className="evk-voltar" style={btnGhost}>Reenviar link</button>
                   <button onClick={() => router.push('/login')} style={{ width: '100%', background: 'none', border: 'none', color: 'rgba(234,229,219,.6)', fontWeight: 600, fontSize: '.92rem', padding: 6, cursor: 'pointer' }}>Voltar ao login</button>
                 </div>
-                <p style={{ margin: '18px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.45)', textAlign: 'center' }}>Não achou? Veja a caixa de spam. <a onClick={() => setFase('reset')} style={{ color: 'rgba(234,229,219,.6)', textDecoration: 'underline', cursor: 'pointer' }}>Abri o link do e-mail</a>.</p>
+                <p style={{ margin: '18px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.45)', textAlign: 'center' }}>Não achou? Veja a caixa de spam.{!supabaseConfigurado() && <> <a onClick={() => setFase('reset')} style={{ color: 'rgba(234,229,219,.6)', textDecoration: 'underline', cursor: 'pointer' }}>Abri o link do e-mail</a>.</>}</p>
               </div>
             )}
 
@@ -87,7 +141,8 @@ export default function RedefinirPage() {
                 <input type={showPw ? 'text' : 'password'} value={npw2} onChange={(e) => setNpw2(e.target.value)} placeholder="Repita a senha" style={inputAuth} />
                 {mismatch && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#E5484D' }}>As senhas não coincidem.</p>}
                 {match && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#16A34A' }}>As senhas coincidem.</p>}
-                <button onClick={() => podeSalvar && setFase('done')} disabled={!podeSalvar} className="hov-btn" style={{ ...btnNeon, marginTop: 22, opacity: podeSalvar ? 1 : 0.4, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>Salvar nova senha</button>
+                {erro && <p style={{ margin: '12px 0 0', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}
+                <button onClick={salvarSenha} disabled={!podeSalvar || carregando} className="hov-btn" style={{ ...btnNeon, marginTop: 22, opacity: podeSalvar && !carregando ? 1 : 0.4, cursor: podeSalvar && !carregando ? 'pointer' : 'not-allowed' }}>{carregando ? 'Salvando…' : 'Salvar nova senha'}</button>
               </div>
             )}
 

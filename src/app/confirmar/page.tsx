@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Backdrop, AuthHead, cardAuth, EASE } from '@/components/auth/ui';
+import { supabaseConfigurado } from '@/lib/supabase/env';
 
 /**
- * Confirmação de e-mail — porte fiel do protótipo V2 (2 estados: vSent → vConfirmed).
- * UI apenas; o link real de confirmação é backend (Fase 2). Lê o e-mail do cadastro
- * via sessionStorage (gravado em /cadastro).
+ * Confirmação de e-mail. A confirmação REAL chega pelo link do e-mail → `/auth/callback`
+ * (troca o code por sessão e leva ao app). Esta tela é informativa + "reenviar link"
+ * (`auth.resend`). Sem backend (modo mock) o "reenviar" demonstra o passo final.
  */
 type Fase = 'sent' | 'confirmed';
 
@@ -15,11 +16,29 @@ export default function ConfirmarPage() {
   const router = useRouter();
   const [fase, setFase] = useState<Fase>('sent');
   const [email, setEmail] = useState('seu e-mail');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
     const e = sessionStorage.getItem('evk_email');
     if (e) setEmail(e);
   }, []);
+
+  async function reenviar() {
+    setMsg(null);
+    if (!supabaseConfigurado()) { setFase('confirmed'); return; } // mock: demonstra o passo final
+    setEnviando(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const alvo = sessionStorage.getItem('evk_email') || '';
+      const { error } = await createClient().auth.resend({ type: 'signup', email: alvo });
+      setMsg(error ? 'Não deu para reenviar agora. Tente em instantes.' : 'Reenviamos o link para o seu e-mail.');
+    } catch {
+      setMsg('Não deu para reenviar agora. Tente em instantes.');
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
@@ -42,9 +61,10 @@ export default function ConfirmarPage() {
                 <h1 style={{ margin: '0 0 10px', fontSize: '1.55rem', fontWeight: 700, letterSpacing: '-.02em' }}>Confirme seu e-mail</h1>
                 <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.66)', fontSize: '.98rem', lineHeight: 1.6 }}>Enviamos um link de confirmação para <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{email}</strong>. Abra para ativar sua conta e começar.</p>
                 <div style={{ display: 'flex', gap: 11, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button onClick={() => setFase('confirmed')} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: '13px 24px', border: 'none', borderRadius: 12, cursor: 'pointer', transition: `transform .25s ease, box-shadow .3s ease` }}>Reenviar e-mail</button>
+                  <button onClick={reenviar} disabled={enviando} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: '13px 24px', border: 'none', borderRadius: 12, cursor: enviando ? 'wait' : 'pointer', opacity: enviando ? 0.6 : 1, transition: `transform .25s ease, box-shadow .3s ease` }}>{enviando ? 'Reenviando…' : 'Reenviar e-mail'}</button>
                   <button onClick={() => router.push('/cadastro')} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.96rem', padding: '13px 24px', borderRadius: 12, cursor: 'pointer', transition: 'border-color .25s ease, background .25s ease' }}>Trocar e-mail</button>
                 </div>
+                {msg && <p style={{ margin: '16px 0 0', fontSize: '.85rem', color: '#BDFF00' }}>{msg}</p>}
                 <p style={{ margin: '20px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>Não achou? Veja a caixa de spam.</p>
               </div>
             )}
