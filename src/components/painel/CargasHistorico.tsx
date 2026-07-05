@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import type { SessaoHistorico } from '@/lib/treino-historico';
+import { exerciciosComCarga, serieCargaPorExercicio } from '@/lib/cargas-serie';
 import GraficoLinha from './GraficoLinha';
 
 /**
  * Progressão de carga por exercício (porte fiel do V6.2 §Peça6). Reusa a técnica do gráfico
- * de peso (GraficoLinha) alimentada por outra série: para o exercício escolhido, a MAIOR carga
- * de cada dia ao longo das sessões registradas. Dados reais do histórico (evk_treinos).
+ * de peso (GraficoLinha) alimentada por outra série: para o exercício escolhido, a maior
+ * carga de cada SESSÃO registrada (lógica pura + testada em `@/lib/cargas-serie`).
  *
  * 🔒 Trava: o resumo é sempre passado/presente ("você estava… hoje…") — NUNCA promessa futura.
  */
@@ -15,34 +16,17 @@ import GraficoLinha from './GraficoLinha';
 const cardSoft = { background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '20px 22px' } as const;
 
 export default function CargasHistorico({ historico }: { historico: SessaoHistorico[] }) {
-  // Exercícios COM carga presentes no histórico (únicos por id; nome como rótulo/fallback).
-  // Exercícios PERSONALIZADOS (registro manual, fora da biblioteca) ficam de fora — sem id
-  // estável não há série comparável (trava do handoff: "não alimenta o gráfico de carga").
-  const exercicios = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of historico) for (const e of s.exercicios) {
-      const key = e.id || e.nome;
-      if (e.loaded && !e.custom && key && !map.has(key)) map.set(key, e.nome);
-    }
-    return [...map].map(([id, nome]) => ({ id, nome }));
-  }, [historico]);
+  // Exercícios plotáveis (biblioteca, com kg registrado). Personalizados ficam de fora —
+  // sem id estável não há série comparável (trava do handoff: "não alimenta o gráfico").
+  const exercicios = useMemo(() => exerciciosComCarga(historico), [historico]);
 
   const [sel, setSel] = useState<string>('');
   const [aberto, setAberto] = useState(false);
   const selKey = sel || exercicios[0]?.id || '';
   const selNome = exercicios.find((e) => e.id === selKey)?.nome ?? '';
 
-  // Série: maior carga do dia, por dia, em ordem cronológica.
-  const serie = useMemo(() => {
-    const porDia = new Map<string, number>();
-    for (const s of historico) {
-      const e = s.exercicios.find((x) => (x.id || x.nome) === selKey && x.loaded && !x.custom);
-      if (!e) continue;
-      const maxKg = Math.max(0, ...e.sets.map((st) => Number(st.kg) || 0));
-      if (maxKg > 0) porDia.set(s.dataISO, Math.max(porDia.get(s.dataISO) ?? 0, maxKg));
-    }
-    return [...porDia.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, kg]) => kg);
-  }, [historico, selKey]);
+  // Série: maior carga de cada SESSÃO, em ordem cronológica (pura + testada).
+  const serie = useMemo(() => serieCargaPorExercicio(historico, selKey), [historico, selKey]);
 
   if (exercicios.length === 0) {
     return <div style={{ ...cardSoft, padding: 24 }}><p style={{ margin: 0, fontSize: '.92rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.6 }}>Ainda não há cargas registradas. Conclua uma sessão de treino anotando o peso de cada série para ver sua progressão aqui.</p></div>;
