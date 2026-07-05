@@ -10,13 +10,14 @@
  *  - "Halteres" → [halteres] · "Elástico" → [elastico] · "Barra fixa" → [barra_fixa]
  *  - "Halteres / Barra": barbell está FORA do vocabulário (quase todo barbell é academia)
  *    → a versão com halteres basta → [halteres].
- *  - "Halter(es) / Kettlebell" (goblet, farmer): semântica do filtro é E (⊆), não OU →
- *    1º passo = [halteres] (mais comum) + marcado AMBÍGUO (o modelo não expressa OU).
+ *  - "Halter(es) / Kettlebell" (goblet, farmer): ANY-OF (`ou`) — DF V8.5 2026-07-04:
+ *    `equipamentoExigidoQualquerUm: [halteres, kettlebell]` (algum marcado satisfaz).
  *  - Inclinados (supino/crucifixo/rosca inclinada) exigem banco → [halteres, banco].
- *  - Supino reto/crucifixo/pullover com halteres: banco clássico, chão possível (floor
- *    press) → [halteres, banco] + AMBÍGUO.
- *  - e139 Rolo de punho: NÃO cabe no vocabulário de 7 (implemento próprio) → 1º passo
- *    [halteres] (usa peso) + AMBÍGUO/fora-do-vocabulário (candidato a 8º item).
+ *  - e11 Supino reto c/ halteres: floor press (chão) EQUIVALE → só [halteres]
+ *    (DF V8.5 2026-07-04). Crucifixo/pullover (e55/e125) SEGUEM [halteres, banco]
+ *    (no chão limitam amplitude — mesma DF).
+ *  - e139 Rolo de punho: DF V8.5 2026-07-04 — NÃO criar 8º item; fica [halteres]
+ *    (usa o peso do halter como resistência).
  *
  * Uso: node scripts/derivar-equipamento-exigido.mjs
  */
@@ -24,16 +25,16 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const ALVO = new URL('../src/lib/data/exercises.ts', import.meta.url).pathname;
 
-/** id → { eq, ambiguo? } — a TABELA (volta no handoff p/ aprovação). */
+/** id → { eq?, ou?, ambiguo? } — a TABELA (`eq` = E/⊆; `ou` = any-of, V8.5). */
 export const TABELA = {
   e8: { eq: ['roda_abdominal'] },
-  e11: { eq: ['halteres', 'banco'], ambiguo: 'floor press (chão) é alternativa aceitável?' },
+  e11: { eq: ['halteres'] }, // DF V8.5: floor press equivale — banco NÃO exigido
   e12: { eq: ['halteres', 'banco'] },
   e19: { eq: ['halteres'] },
   e20: { eq: ['elastico'] },
   e21: { eq: ['barra_fixa'] },
   e22: { eq: ['barra_fixa'] },
-  e33: { eq: ['halteres'], ambiguo: 'OU kettlebell (goblet) — o filtro só expressa E' },
+  e33: { ou: ['halteres', 'kettlebell'] }, // DF V8.5: goblet = halteres OU kettlebell
   e41: { eq: ['halteres'] },
   e42: { eq: ['halteres'] },
   e44: { eq: ['elastico'] },
@@ -62,7 +63,7 @@ export const TABELA = {
   e102: { eq: ['halteres'] },
   e106: { eq: ['halteres'] },
   e108: { eq: ['kettlebell'] },
-  e109: { eq: ['halteres'], ambiguo: 'OU kettlebell (farmer walk)' },
+  e109: { ou: ['halteres', 'kettlebell'] }, // DF V8.5: farmer walk = halteres OU kettlebell
   e111: { eq: ['halteres'] },
   e112: { eq: ['halteres'] },
   e118: { eq: ['barra_fixa'] },
@@ -74,8 +75,8 @@ export const TABELA = {
   e136: { eq: ['halteres'] },
   e137: { eq: ['halteres'] },
   e138: { eq: ['halteres'] },
-  e139: { eq: ['halteres'], ambiguo: 'FORA DO VOCABULÁRIO: rolo de punho é implemento próprio (candidato a 8º item ou reclassificação)' },
-  e140: { eq: ['halteres'], ambiguo: 'OU kettlebell (farmer hold)' },
+  e139: { eq: ['halteres'] }, // DF V8.5: sem 8º item — rolo de punho fica em halteres
+  e140: { ou: ['halteres', 'kettlebell'] }, // DF V8.5: farmer hold = halteres OU kettlebell
   e144: { eq: ['halteres'] },
   e158: { eq: ['halteres'], ambiguo: 'ou anilha sobre os joelhos (improviso comum)' },
   e162: { eq: ['elastico'] },
@@ -95,20 +96,20 @@ if (faltam.length || sobram.length) {
 }
 
 let injetados = 0;
-for (const [id, { eq }] of Object.entries(TABELA)) {
+for (const [id, { eq, ou }] of Object.entries(TABELA)) {
   const anchor = `"id": "${id}",`;
   const start = out.indexOf(anchor);
   const nextId = out.indexOf('"id": "e', start + anchor.length);
   const end = nextId === -1 ? out.length : nextId;
   let bloco = out.slice(start, end);
-  const valor = JSON.stringify(eq).replace(/,/g, ', ').replace(/\[/, '[').replace(/\]/, ']');
-  if (bloco.includes('"equipamentoExigido"')) {
-    bloco = bloco.replace(/"equipamentoExigido": \[[^\]]*\]/, `"equipamentoExigido": ${valor}`);
-  } else {
-    const m = bloco.match(/("local": "casa_com",\n)(\s*)/);
-    if (!m) { console.error(`FALHA: âncora local não achada em ${id}`); process.exit(1); }
-    bloco = bloco.replace(m[0], `${m[1]}${m[2]}"equipamentoExigido": ${valor},\n${m[2]}`);
-  }
+  // Idempotência: remove os campos existentes e reinjeta a partir da TABELA.
+  bloco = bloco.replace(/\s*"equipamentoExigido(?:QualquerUm)?": \[[^\]]*\],/g, '');
+  const m = bloco.match(/("local": "casa_com",\n)(\s*)/);
+  if (!m) { console.error(`FALHA: âncora local não achada em ${id}`); process.exit(1); }
+  const linhas = [];
+  if (eq) linhas.push(`"equipamentoExigido": ${JSON.stringify(eq).replace(/,/g, ', ')},`);
+  if (ou) linhas.push(`"equipamentoExigidoQualquerUm": ${JSON.stringify(ou).replace(/,/g, ', ')},`);
+  bloco = bloco.replace(m[0], `${m[1]}${linhas.map((l) => `${m[2]}${l}\n`).join('')}${m[2]}`);
   out = out.slice(0, start) + bloco + out.slice(end);
   injetados++;
 }
@@ -117,8 +118,8 @@ writeFileSync(ALVO, out);
 
 // Emite a tabela p/ o handoff (aprovação do cofre).
 console.log(`OK: equipamentoExigido injetado em ${injetados}/53 casa_com.`);
-console.log('\n| id | equipamentoExigido | ⚠️ ambíguo |');
-console.log('|---|---|---|');
-for (const [id, { eq, ambiguo }] of Object.entries(TABELA)) {
-  console.log(`| ${id} | ${eq.join(' + ')} | ${ambiguo ?? '—'} |`);
+console.log('\n| id | equipamentoExigido (E) | any-of (OU) | ⚠️ ambíguo |');
+console.log('|---|---|---|---|');
+for (const [id, { eq, ou, ambiguo }] of Object.entries(TABELA)) {
+  console.log(`| ${id} | ${eq ? eq.join(' + ') : '—'} | ${ou ? ou.join(' ou ') : '—'} | ${ambiguo ?? '—'} |`);
 }

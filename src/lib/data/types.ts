@@ -150,6 +150,12 @@ export interface Exercise {
    * gateado pelo `local`.
    */
   equipamentoExigido?: EquipamentoCasa[];
+  /**
+   * Equipamento ANY-OF (V8.5, DF 2026-07-04): satisfeito quando ALGUM item da lista está
+   * marcado no checklist (ex.: goblet/farmer = halteres OU kettlebell). Complementa o
+   * `equipamentoExigido` (que é E/⊆). Só nos casa_com que têm alternativa real.
+   */
+  equipamentoExigidoQualquerUm?: EquipamentoCasa[];
   /** Faixa de popularidade (1 essencial → 4 específico), não dificuldade. */
   tier?: number;
   comoFazer: string;

@@ -44,18 +44,39 @@ describe('exercicioDisponivel — modelo 2 níveis', () => {
     }
   });
 
-  it('curadoria: TODOS os 53 casa_com têm equipamentoExigido não-vazio dentro do vocabulário', () => {
+  it('curadoria: TODOS os 53 casa_com têm exigência não-vazia (E ou any-of) no vocabulário', () => {
     const casaCom = EXERCISES.filter((e) => e.local === 'casa_com');
     expect(casaCom).toHaveLength(53);
     for (const e of casaCom) {
-      expect(e.equipamentoExigido, `${e.id} sem equipamentoExigido`).toBeTruthy();
-      expect(e.equipamentoExigido!.length).toBeGreaterThan(0);
-      for (const eq of e.equipamentoExigido!) expect(EQUIPAMENTOS_CASA).toContain(eq);
+      const exigido = e.equipamentoExigido ?? [];
+      const qualquerUm = e.equipamentoExigidoQualquerUm ?? [];
+      expect(exigido.length + qualquerUm.length, `${e.id} sem exigência de equipamento`).toBeGreaterThan(0);
+      for (const eq of [...exigido, ...qualquerUm]) expect(EQUIPAMENTOS_CASA).toContain(eq);
     }
-    // casa_sem/academia não carregam o campo
+    // casa_sem/academia não carregam os campos
     for (const e of EXERCISES.filter((x) => x.local !== 'casa_com')) {
       expect(e.equipamentoExigido, `${e.id} não devia ter equipamentoExigido`).toBeUndefined();
+      expect(e.equipamentoExigidoQualquerUm, `${e.id} não devia ter any-of`).toBeUndefined();
     }
+  });
+
+  it('any-of (V8.5): goblet/farmer (e33/e109/e140) = halteres OU kettlebell; e11 sem banco', () => {
+    for (const id of ['e33', 'e109', 'e140']) {
+      const e = byId(id);
+      expect(e.equipamentoExigidoQualquerUm).toEqual(['halteres', 'kettlebell']);
+      expect(e.equipamentoExigido).toBeUndefined();
+      expect(exercicioDisponivel(e, 'casa', ['kettlebell']), `${id} só kettlebell`).toBe(true);
+      expect(exercicioDisponivel(e, 'casa', ['halteres']), `${id} só halteres`).toBe(true);
+      expect(exercicioDisponivel(e, 'casa', []), `${id} checklist vazio`).toBe(false);
+      expect(exercicioDisponivel(e, 'casa', ['banco', 'elastico']), `${id} sem os dois`).toBe(false);
+    }
+    // e11 supino reto: floor press equivale (DF V8.5) → só halteres; e139 fica [halteres] (sem 8º item)
+    expect(byId('e11').equipamentoExigido).toEqual(['halteres']);
+    expect(exercicioDisponivel(byId('e11'), 'casa', ['halteres'])).toBe(true);
+    expect(byId('e139').equipamentoExigido).toEqual(['halteres']);
+    // e55/e125 (crucifixo/pullover) SEGUEM exigindo banco (chão limita amplitude — DF V8.5)
+    expect(byId('e55').equipamentoExigido).toEqual(['halteres', 'banco']);
+    expect(byId('e125').equipamentoExigido).toEqual(['halteres', 'banco']);
   });
 });
 

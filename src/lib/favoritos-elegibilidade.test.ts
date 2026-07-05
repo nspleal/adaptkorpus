@@ -6,8 +6,9 @@ import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
 /**
- * Âncoras da DF B5 (2026-07-04): 4 motivos FECHADOS de descompasso, copy verbatim do
- * cofre. Descompasso não é erro — o favorito continua na lista.
+ * Âncoras da DF B5 (2026-07-04) + refino V8.5: nível/dias/pausa fixos, copy verbatim do
+ * cofre; o motivo de EQUIPAMENTO é dinâmico ("pede academia" / "pede {o que falta}").
+ * Descompasso não é erro — o favorito continua na lista.
  */
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 const perfilT = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({ pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'massa', nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 4, tempoPorSessaoMin: 60, ...over });
@@ -20,10 +21,25 @@ const sessaoCom = (exId: string, pausado: boolean, dataISO: string, n: number): 
 });
 
 describe('elegibilidadeFavorito — os 4 motivos travados (B5)', () => {
-  it('equipamento: e9 Supino (academia) p/ quem treina sem equipamento', () => {
+  it('equipamento (academia): e9 Supino p/ quem treina sem equipamento → "pede academia"', () => {
     const p = perfilT({ equipamento: 'nenhum' });
     const r = elegibilidadeFavorito(byId('e9'), p, rotinaDe(p));
-    expect(r).toEqual({ elegivel: false, motivo: 'pede equipamento de academia' });
+    expect(r).toEqual({ elegivel: false, motivo: 'pede academia' });
+  });
+
+  it('equipamento (casa-com): motivo dinâmico = "pede {o que falta}" (V8.5)', () => {
+    const casa = (equipamentosCasa: PerfilTreino['equipamentosCasa']) =>
+      perfilT({ equipamento: 'casa', equipamentosCasa });
+    // exigido simples: e22 Barra fixa
+    expect(elegibilidadeFavorito(byId('e22'), casa([]), null).motivo).toBe('pede barra fixa');
+    // exigido composto: e12 Supino inclinado (halteres + banco) — lista SÓ o que falta
+    expect(elegibilidadeFavorito(byId('e12'), casa([]), null).motivo).toBe('pede halteres + banco');
+    expect(elegibilidadeFavorito(byId('e12'), casa(['halteres']), null).motivo).toBe('pede banco');
+    // any-of insatisfeito: e33 Goblet (halteres OU kettlebell) → cláusula "ou"
+    expect(elegibilidadeFavorito(byId('e33'), casa([]), null).motivo).toBe('pede halteres ou kettlebell');
+    // any-of satisfeito por QUALQUER um dos dois → elegível
+    expect(elegibilidadeFavorito(byId('e33'), casa(['kettlebell']), null)).toEqual({ elegivel: true });
+    expect(elegibilidadeFavorito(byId('e33'), casa(['halteres']), null)).toEqual({ elegivel: true });
   });
 
   it('nível: e26 Terra (avançado) favoritado por um iniciante', () => {

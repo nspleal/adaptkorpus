@@ -168,7 +168,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres",
     "local": "casa_com",
-    "equipamentoExigido": ["halteres", "banco"],
+    "equipamentoExigido": ["halteres"],
     "tier": 1,
     "comoFazer": "Como o supino, mas com halteres: mais amplitude e estabilização. Ótimo para casa com um banco."
   },
@@ -504,7 +504,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halter / Kettlebell",
     "local": "casa_com",
-    "equipamentoExigido": ["halteres"],
+    "equipamentoExigidoQualquerUm": ["halteres", "kettlebell"],
     "tier": 2,
     "comoFazer": "Segure um halter junto ao peito e agache. Ajuda a manter o tronco ereto — ótimo para aprender o agachamento com carga."
   },
@@ -1673,7 +1673,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Kettlebell",
     "local": "casa_com",
-    "equipamentoExigido": ["halteres"],
+    "equipamentoExigidoQualquerUm": ["halteres", "kettlebell"],
     "tier": 3,
     "comoFazer": "Caminhe segurando peso pesado em cada mão, tronco ereto. Fortalece pegada, trapézio e core de forma funcional."
   },
@@ -2151,7 +2151,7 @@ export const EXERCISES: Exercise[] = [
     "equipamento": "casa",
     "equipamentoDetalhe": "Halteres / Kettlebell",
     "local": "casa_com",
-    "equipamentoExigido": ["halteres"],
+    "equipamentoExigidoQualquerUm": ["halteres", "kettlebell"],
     "tier": 4,
     "comoFazer": "Segure halteres ou kettlebells pesados parado, em pé e com o tronco ereto, pelo máximo de tempo. Treina a força de pegada de forma bem direta."
   },

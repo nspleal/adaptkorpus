@@ -34,7 +34,7 @@ export const ROTULO_EQUIPAMENTO_CASA: Record<EquipamentoCasa, string> = {
  * `equipamentosCasa`: checklist do modelo novo; `undefined` = chamada legada (casa antiga).
  */
 export function exercicioDisponivel(
-  ex: Pick<Exercise, 'local' | 'equipamentoExigido'>,
+  ex: Pick<Exercise, 'local' | 'equipamentoExigido' | 'equipamentoExigidoQualquerUm'>,
   equipamento: EquipamentoDisp,
   equipamentosCasa?: readonly EquipamentoCasa[],
 ): boolean {
@@ -45,6 +45,10 @@ export function exercicioDisponivel(
   if (ex.local === 'casa_sem') return true;
   if (equipamentosCasa === undefined) return true; // legado: casa = todo casa_com
   const exigido = ex.equipamentoExigido;
-  if (!exigido) return false; // casa_com sem curadoria → indisponível (fail-closed)
-  return exigido.every((eq) => equipamentosCasa.includes(eq));
+  const qualquerUm = ex.equipamentoExigidoQualquerUm;
+  if (!exigido && !qualquerUm) return false; // casa_com sem curadoria → fail-closed
+  // E (⊆): todos os exigidos marcados; ANY-OF (V8.5): algum da lista alternativa marcado.
+  const eOk = !exigido || exigido.every((eq) => equipamentosCasa.includes(eq));
+  const ouOk = !qualquerUm || qualquerUm.length === 0 || qualquerUm.some((eq) => equipamentosCasa.includes(eq));
+  return eOk && ouOk;
 }
