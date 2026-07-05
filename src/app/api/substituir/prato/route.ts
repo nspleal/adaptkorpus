@@ -7,12 +7,19 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { gerarDieta, substituirPrato } from '@/lib/engine';
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { subPratoSchema } from '@/lib/validation/api';
+import { barreiraCompute } from '@/lib/auth/guard';
+import { criarRateLimit } from '@/lib/rate-limit';
 import type { PerfilUsuario } from '@/lib/engine';
 import type { Alergeno } from '@/lib/data/types';
 
 export const runtime = 'nodejs';
 
+// Auth (inerte até o Supabase existir) + rate-limit por instância (Hardening-1).
+const limitador = criarRateLimit({ limite: 30, janelaMs: 60_000 });
+
 export async function POST(req: NextRequest) {
+  const barra = await barreiraCompute(req, limitador);
+  if (barra) return barra;
   const body = await req.json().catch(() => null);
   const parsed = subPratoSchema.safeParse(body);
   if (!parsed.success) {
