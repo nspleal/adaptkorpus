@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { limiarAderencia } from '@/lib/aderencia';
+import { faixaTint, limiarAderencia, streakAderencia } from '@/lib/aderencia';
+import { diaLocalISO } from '@/lib/dia-local';
 
 /**
  * Registrar refeição + histórico de aderência — porte fiel do V5.
@@ -20,7 +21,9 @@ const KEY = 'evk_aderencia';
 type DiaLog = { logs: Record<string, StatusRefeicao>; notes: Record<string, string> };
 type Historico = Record<string, DiaLog>;
 
-function hojeISO(): string { return new Date().toISOString().slice(0, 10); }
+// Dia LOCAL (não UTC): à noite no Brasil, toISOString() viraria "amanhã" e mis-arquivaria
+// as refeições + discordaria da Chama (que já usa data local). Ver `dia-local.ts`.
+function hojeISO(): string { return diaLocalISO(new Date()); }
 function lerTudo(): Historico {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(localStorage.getItem(KEY) || '{}') as Historico; } catch { return {}; }
@@ -171,13 +174,13 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
   const diasJanela = periodo === 'semana' ? 7 : 30;
   const datas: Date[] = [];
   for (let i = 0; i < diasJanela; i++) { const d = new Date(agora); d.setDate(agora.getDate() - i); datas.push(d); }
-  const comDados = datas.filter((d) => temRegistro(merged[d.toISOString().slice(0, 10)]));
-  const pctPeriodo = comDados.length ? Math.round(comDados.reduce((s, d) => s + seguiuDoDia(merged[d.toISOString().slice(0, 10)]) / total, 0) / comDados.length * 100) : 0;
+  const comDados = datas.filter((d) => temRegistro(merged[diaLocalISO(d)]));
+  const pctPeriodo = comDados.length ? Math.round(comDados.reduce((s, d) => s + seguiuDoDia(merged[diaLocalISO(d)]) / total, 0) / comDados.length * 100) : 0;
   // streak: dias consecutivos (de hoje p/ trás) com ≥ ¾ das refeições do plano no dia
   // (PROPORCIONAL, arredondado — DF 2026-07-04; o "3 fixo" exigiria 100% num plano de 3).
+  // GLOBAL (helper puro): não limitado à janela visível — antes divergia entre Semana e Mês.
   const limiar = limiarAderencia(total);
-  let streak = 0;
-  for (const d of datas) { const k = d.toISOString().slice(0, 10); const dl = merged[k]; if (temRegistro(dl) && seguiuDoDia(dl) >= limiar) streak++; else break; }
+  const streak = streakAderencia(hoje, (dia) => { const dl = merged[dia]; return temRegistro(dl) ? seguiuDoDia(dl) : null; }, total);
 
   const segMini = (st: StatusRefeicao): CSSProperties => ({ flex: 1, height: 8, borderRadius: 99, ...(st === 'seguiu' ? { background: '#BDFF00' } : st === 'fora' ? { background: 'rgba(234,229,219,.32)' } : { background: 'rgba(234,229,219,.09)', border: '1px solid rgba(234,229,219,.2)' }) });
   const rotuloDia = (d: Date) => { const dd = Math.round((agora.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000); return dd === 0 ? 'Hoje' : dd === 1 ? 'Ontem' : DOWS[d.getDay()]!; };
@@ -204,7 +207,7 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
       {periodo === 'semana' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {datas.map((d) => {
-            const k = d.toISOString().slice(0, 10);
+            const k = diaLocalISO(d);
             const dl = merged[k];
             const cnt = seguiuDoDia(dl);
             const open = aberto === k;
@@ -269,10 +272,13 @@ function Mes({ merged, refeicoes, total, aberto, setAberto }: { merged: Historic
   const hojeISOv = hojeISO();
   const seguiuDoDia = (d?: DiaLog) => refeicoes.filter((r) => d?.logs?.[r] === 'seguiu').length;
   const temRegistro = (d?: DiaLog) => !!d && refeicoes.some((r) => d.logs?.[r]);
-  const tint = (cnt: number, reg: boolean) => !reg ? 'rgba(234,229,219,.07)' : cnt >= 4 ? 'rgba(189,255,0,.55)' : cnt === 3 ? 'rgba(22,163,74,.42)' : cnt === 2 ? 'rgba(22,163,74,.26)' : cnt === 1 ? 'rgba(22,163,74,.14)' : 'rgba(234,229,219,.07)';
+  // Calor PROPORCIONAL ao plano (faixaTint 0..4) — antes travado em `cnt>=4`, o que impedia
+  // um plano de 3 refeições de atingir o tier neon num dia perfeito.
+  const TINT = ['rgba(234,229,219,.07)', 'rgba(22,163,74,.14)', 'rgba(22,163,74,.26)', 'rgba(22,163,74,.42)', 'rgba(189,255,0,.55)'] as const;
+  const tint = (cnt: number, reg: boolean) => !reg ? TINT[0] : TINT[faixaTint(cnt, total)];
   const cels: ({ day: number; k: string } | null)[] = [];
   for (let i = 0; i < primeiroDow; i++) cels.push(null);
-  for (let dia = 1; dia <= diasNoMes; dia++) cels.push({ day: dia, k: new Date(ano, mes, dia).toISOString().slice(0, 10) });
+  for (let dia = 1; dia <= diasNoMes; dia++) cels.push({ day: dia, k: diaLocalISO(new Date(ano, mes, dia)) });
   const det = aberto ? merged[aberto] : undefined;
 
   return (
@@ -285,7 +291,7 @@ function Mes({ merged, refeicoes, total, aberto, setAberto }: { merged: Historic
             const dl = merged[c.k]; const reg = temRegistro(dl); const cnt = seguiuDoDia(dl);
             const isHoje = c.k === hojeISOv;
             return (
-              <div key={c.k} onClick={() => reg && setAberto(aberto === c.k ? null : c.k)} style={{ position: 'relative', aspectRatio: '1', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.82rem', fontWeight: 600, cursor: reg ? 'pointer' : 'default', background: tint(cnt, reg), color: cnt >= 4 ? '#0D2818' : 'rgba(234,229,219,.7)', boxShadow: isHoje ? '0 0 0 2px #BDFF00' : undefined }}><span style={{ position: 'relative', zIndex: 1 }}>{c.day}</span></div>
+              <div key={c.k} onClick={() => reg && setAberto(aberto === c.k ? null : c.k)} style={{ position: 'relative', aspectRatio: '1', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.82rem', fontWeight: 600, cursor: reg ? 'pointer' : 'default', background: tint(cnt, reg), color: reg && cnt >= total ? '#0D2818' : 'rgba(234,229,219,.7)', boxShadow: isHoje ? '0 0 0 2px #BDFF00' : undefined }}><span style={{ position: 'relative', zIndex: 1 }}>{c.day}</span></div>
             );
           })}
         </div>

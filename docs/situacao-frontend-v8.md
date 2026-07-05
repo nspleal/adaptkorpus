@@ -1,5 +1,12 @@
 # Situação — Pacotes de design V8 (muito-fácil/calibração · favoritos · escada)
 
+> ⚠️ **SUPERSEDED (2026-07-05).** Documento histórico. Os bloqueadores **B1/B2/B3** listados aqui como
+> abertos **já foram implementados**: a calibração é gravada como evento `tipo:'calibracao'` no
+> histórico (`src/lib/treino-historico.ts`), a adoção de degrau existe ("Assumir este degrau" +
+> `degrauId`, `src/lib/treino-progressao.ts`), e as modificações isométricas existem
+> (`src/lib/engine/modificacoes-isometricos.ts`). Ver os handoffs `docs/handoff-*` para o estado
+> atual. Mantido apenas como registro da auditoria original — **não é backlog vigente**.
+
 > **Insumo para o cofre.** Escrito pela sessão do app (nuvem) em 2026-07-04 — esta sessão **não
 > escreve no cofre** (regra de escritor único); o autor arquiva. Branch: `claude/evokorpus-app-dev-9in0hs`.
 > Base: auditoria de 4 verificadores independentes contra o código real do app, com evidência

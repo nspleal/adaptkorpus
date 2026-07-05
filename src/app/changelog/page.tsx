@@ -10,6 +10,8 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
   {
     mes: 'Julho 2026',
     itens: [
+      { data: '05 jul', titulo: 'Escolha o que você tem em casa', tag: 'Novo', desc: 'Treina em casa? Agora você marca exatamente o que tem — halteres, barra fixa, elástico, banco, kettlebell — e o plano usa só os exercícios que cabem no seu equipamento.' },
+      { data: '05 jul', titulo: 'Curva de carga a cada sessão', tag: 'Correção', desc: 'A progressão de carga marca um ponto por sessão registrada. Antes, treinos do mesmo exercício no mesmo dia se juntavam num só ponto e a curva podia não aparecer.' },
       { data: '04 jul', titulo: 'Calibre o treino ao seu nível real', tag: 'Novo', desc: 'Muito fácil? A quarta opção de esforço abre a calibração manual: você define a nova base (carga e repetições, degrau da escada ou segundos) e o plano recalcula a partir dela — com os pisos de segurança de sempre.' },
       { data: '04 jul', titulo: 'Exercícios favoritos', tag: 'Novo', desc: 'Marque com a estrela os exercícios que você gosta: eles entram no seu plano sempre que couberem — sem furar seu nível nem seu equipamento. E quando um favorito não aparece, a lista explica o porquê.' },
       { data: '04 jul', titulo: 'A escada de cada exercício', tag: 'Novo', desc: 'Exercícios de peso corporal agora mostram em que degrau você está ("Degrau 3 de 6") e sugerem subir ou aliviar a variação na hora certa — você decide, com o botão "Assumir este degrau".' },
@@ -21,8 +23,6 @@ const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; de
       { data: '03 jul', titulo: 'Registre um treino já feito', tag: 'Novo', desc: 'Treinou por fora ou em outro dia? Lance a sessão completa — exercícios, séries, cargas e esforço — direto no seu histórico.' },
       { data: '03 jul', titulo: 'A chama dos quatro marcos', tag: 'Novo', desc: 'O total de dias de treino ganhou uma chama que muda de cor aos 15, 25, 50 e 100 dias. Um número que só cresce — sem sequência pra perder.' },
       { data: '02 jul', titulo: 'Erros comuns em cada exercício', tag: 'Novo', desc: 'Além do "como fazer", a tela do exercício agora mostra os deslizes mais comuns de execução e como corrigir.' },
-      { data: '02 jul', titulo: 'Registre qualquer treino', tag: 'Novo', desc: 'Treinou por fora do plano? Marque o dia como treinado — ele conta para a sua constância.' },
-      { data: '02 jul', titulo: 'Marcos de constância', tag: 'Novo', desc: 'Um marco que soma os seus dias de treino e nunca cobra a ausência: nenhum dia conta contra você.' },
       { data: '02 jul', titulo: 'Progressão de carga por exercício', tag: 'Novo', desc: 'Acompanhe a evolução da sua carga ao longo do tempo, direto no Histórico.' },
       { data: '02 jul', titulo: 'Base ampliada: 167 alimentos e 96 pratos', tag: 'Melhoria', desc: 'Cardápios com mais opções, incluindo 35 pratos veganos e 29 vegetarianos, com dados TACO e USDA.' },
       { data: '02 jul', titulo: 'Perguntas frequentes com busca', tag: 'Melhoria', desc: 'A central de ajuda agora cobre assinatura, treino, dieta, seus dados e os limites da ferramenta.' },

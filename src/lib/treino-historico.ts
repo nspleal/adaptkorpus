@@ -1,6 +1,7 @@
 'use client';
 
 import type { ResumoSessao } from '@/components/painel/SessaoTreino';
+import { diaLocalISO } from '@/lib/dia-local';
 
 /**
  * Histórico de treinos concluídos — persistido em localStorage (transitório, mesmo padrão de
@@ -37,11 +38,9 @@ export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHist
 const KEY = 'evk_treinos';
 
 /** Dia atual em ISO (só na UI) — dia LOCAL do usuário, não UTC (às 21h de Brasília,
- *  toISOString() já viraria "amanhã" e inflaria o dedupe do contador). */
+ *  toISOString() já viraria "amanhã" e inflaria o dedupe do contador). Reusa `diaLocalISO`. */
 export function hojeISO(agora: Date = new Date()): string {
-  const m = String(agora.getMonth() + 1).padStart(2, '0');
-  const d = String(agora.getDate()).padStart(2, '0');
-  return `${agora.getFullYear()}-${m}-${d}`;
+  return diaLocalISO(agora);
 }
 
 /** Lê o histórico (mais recente primeiro). Robusto a storage ausente/corrompido:

@@ -55,10 +55,12 @@ export default function RedefinirPage() {
                 <h1 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-.02em' }}>Verifique seu e-mail</h1>
                 <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.66)', fontSize: '.96rem', lineHeight: 1.6 }}>Se houver uma conta para <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{email || 'seu e-mail'}</strong>, enviamos um link para redefinir a senha.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                  <button onClick={() => setFase('reset')} className="evk-voltar" style={btnGhost}>Reenviar link</button>
+                  {/* "Reenviar link" reenvia (permanece neste passo) — NÃO avança para criar senha:
+                      quem chega ao passo de nova senha é pelo link do e-mail (abaixo). */}
+                  <button onClick={() => setFase('sent')} className="evk-voltar" style={btnGhost}>Reenviar link</button>
                   <button onClick={() => router.push('/login')} style={{ width: '100%', background: 'none', border: 'none', color: 'rgba(234,229,219,.6)', fontWeight: 600, fontSize: '.92rem', padding: 6, cursor: 'pointer' }}>Voltar ao login</button>
                 </div>
-                <p style={{ margin: '18px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.45)', textAlign: 'center' }}>Não achou? Veja a caixa de spam.</p>
+                <p style={{ margin: '18px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.45)', textAlign: 'center' }}>Não achou? Veja a caixa de spam. <a onClick={() => setFase('reset')} style={{ color: 'rgba(234,229,219,.6)', textDecoration: 'underline', cursor: 'pointer' }}>Abri o link do e-mail</a>.</p>
               </div>
             )}
 

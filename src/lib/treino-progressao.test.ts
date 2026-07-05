@@ -3,6 +3,7 @@ import { avaliarGateTreino, prescreverTreino } from '@/lib/engine';
 import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
+import { sessoesTreino } from '@/lib/treino-historico';
 import { exercicioEfetivo, precisaDeloadDoHistorico, progressoDosExercicios } from './treino-progressao';
 import { EXERCISES } from '@/lib/data/exercises';
 
@@ -92,6 +93,17 @@ describe('precisaDeloadDoHistorico', () => {
   it('sem fadiga e fora da semana agendada → sem alívio; histórico vazio → false', () => {
     expect(precisaDeloadDoHistorico([recente('na_medida', '2026-07-01')], 'intermediario', '2026-07-08')).toBe(false);
     expect(precisaDeloadDoHistorico([], 'intermediario', '2026-07-08')).toBe(false);
+  });
+
+  it('salvaguarda B2: calibração NÃO ancora o deload agendado (filtrar via sessoesTreino)', () => {
+    // Calibração no dia 06-20 (42 dias antes de 08-01) + 1ª sessão REAL no 06-23 (39 dias).
+    const hist = [
+      recente('na_medida', '2026-06-23'),
+      sessaoCalibracao('2026-06-20', [{ id: 'e_sup', calibracao: { reps: 10 } }]),
+    ];
+    // Cru → âncora na calibração (6 semanas) dispararia; filtrado → âncora na 1ª sessão (5 semanas) não.
+    expect(precisaDeloadDoHistorico(hist, 'intermediario', '2026-08-01')).toBe(true);
+    expect(precisaDeloadDoHistorico(sessoesTreino(hist), 'intermediario', '2026-08-01')).toBe(false);
   });
 });
 
