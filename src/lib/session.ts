@@ -31,14 +31,39 @@ export function salvarSessao(perfil: PerfilResumo): void {
   try { localStorage.setItem(KEY, JSON.stringify({ v: VERSAO, perfil })); } catch { /* storage indisponível */ }
 }
 
-/** Lê o perfil da sessão; null se não houver (ou se corrompido/versão antiga). */
+/**
+ * Migra um blob de sessão bruto — política travada (DF 2026-07-05): **NUNCA descartar o
+ * perfil num bump de versão**. Um `v` mais ANTIGO (`<= versaoAtual`) é MIGRADO via
+ * `normalizarPerfil` (que já faz as migrações aditivas: nenhum→casa+[], backfill de
+ * `equipamentosCasa`/`favoritos`/`treinoDias`, poda de `pratosCansados`). Só o irrecuperável
+ * vira `null`: JSON quebrado, sem `perfil`, ou `v` ausente/futuro (`> versaoAtual`, ex.: app
+ * mais novo abriu em app mais velho). Puro/testável (`versaoAtual` injetável).
+ *
+ * `migrou` sinaliza que o blob veio de uma versão antiga → o chamador re-carimba (`salvarSessao`).
+ * Seam p/ futuro: se um campo mudar de tipo/renomear, um pré-transform por versão entra ANTES
+ * do `normalizarPerfil` (hoje desnecessário — todas as mudanças são aditivas).
+ */
+export function migrarSessao(
+  raw: string | null,
+  versaoAtual = VERSAO,
+): { perfil: PerfilResumo; migrou: boolean } | null {
+  if (!raw) return null;
+  let obj: unknown;
+  try { obj = JSON.parse(raw); } catch { return null; }
+  if (!obj || typeof obj !== 'object') return null;
+  const { v, perfil } = obj as { v?: unknown; perfil?: unknown };
+  if (typeof v !== 'number' || v > versaoAtual || !perfil || typeof perfil !== 'object') return null;
+  return { perfil: normalizarPerfil(perfil as PerfilResumo), migrou: v !== versaoAtual };
+}
+
+/** Lê o perfil da sessão; null se não houver ou se irrecuperável. Migra versões antigas
+ *  (sem descartar) e re-carimba o storage para a VERSAO atual. */
 export function lerSessao(): PerfilResumo | null {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const obj = JSON.parse(raw) as { v?: number; perfil?: PerfilResumo };
-    if (!obj || obj.v !== VERSAO || !obj.perfil) return null;
-    return normalizarPerfil(obj.perfil);
+    const res = migrarSessao(localStorage.getItem(KEY));
+    if (!res) return null;
+    if (res.migrou) salvarSessao(res.perfil); // upgrade persistido — não perde o perfil
+    return res.perfil;
   } catch { return null; }
 }
 

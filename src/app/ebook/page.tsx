@@ -1,8 +1,6 @@
 import Link from 'next/link';
 import InstitucionalShell from '@/components/legal/InstitucionalShell';
-import { AValidar } from '@/components/legal/ui';
-
-export const metadata = { title: 'Ebook · Evokorpus' };
+export const metadata = { title: 'A Curva · Evokorpus' };
 
 const BULLETS = [
   'Como montar uma rotina de treino que cabe no seu dia.',
@@ -28,15 +26,17 @@ export default function Ebook() {
               </div>
               <div style={{ position: 'absolute', left: 22, right: 22, bottom: 24 }}>
                 <div style={{ fontSize: '.66rem', letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', marginBottom: 6 }}>Ebook</div>
-                <div style={{ fontSize: '1.04rem', fontWeight: 700, lineHeight: 1.2, color: '#EAE5DB' }}>O básico do fitness honesto</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-.01em', color: '#EAE5DB' }}>A Curva</div>
+                <div style={{ fontSize: '.72rem', lineHeight: 1.3, color: 'rgba(234,229,219,.55)', marginTop: 3 }}>O básico do fitness honesto</div>
               </div>
               <div style={{ position: 'absolute', top: 12, right: 12, fontSize: '.62rem', color: 'rgba(234,229,219,.4)', border: '1px solid rgba(234,229,219,.18)', borderRadius: 6, padding: '2px 7px' }}>capa ilustrativa</div>
             </div>
           </div>
           {/* info */}
           <div>
-            <h1 style={{ margin: '0 0 12px', fontWeight: 800, fontSize: 'clamp(1.7rem,3.2vw,2.4rem)', lineHeight: 1.08, letterSpacing: '-.02em' }}>O básico do fitness honesto</h1>
-            <p style={{ margin: '0 0 18px', fontSize: '1.02rem', lineHeight: 1.6, color: 'rgba(234,229,219,.66)' }}>Um material introdutório, curto e direto, para quem quer começar com clareza. <AValidar>título e conteúdo final</AValidar></p>
+            <h1 style={{ margin: '0 0 6px', fontWeight: 800, fontSize: 'clamp(1.7rem,3.2vw,2.4rem)', lineHeight: 1.08, letterSpacing: '-.02em' }}>A Curva</h1>
+            <div style={{ margin: '0 0 14px', fontSize: '1.05rem', fontWeight: 600, color: 'rgba(234,229,219,.78)' }}>O básico do fitness honesto</div>
+            <p style={{ margin: '0 0 18px', fontSize: '1.02rem', lineHeight: 1.6, color: 'rgba(234,229,219,.66)' }}>Um material introdutório, curto e direto, para quem quer começar com clareza.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 24 }}>
               {BULLETS.map((b) => (
                 <div key={b} style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>

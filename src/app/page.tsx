@@ -302,7 +302,7 @@ export default function Home() {
       {/* EBOOK */}
       <section style={{ position: 'relative', zIndex: 1, padding: '0 24px 40px' }}>
         <div className="rv" style={{ maxWidth: 1180, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, padding: '16px 22px', background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.08)', borderRadius: 14, fontSize: '.92rem', color: 'rgba(234,229,219,.55)' }}>
-          <span>Prefere começar pelo básico? Temos um ebook de entrada por R$ 27.</span>
+          <span>Prefere começar pelo básico? Temos <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>A Curva</strong>, um ebook de entrada por R$ 27.</span>
           <Link href="/ebook" style={{ color: '#EAE5DB', textDecoration: 'underline', fontWeight: 500 }}>Ver o ebook</Link>
         </div>
       </section>
