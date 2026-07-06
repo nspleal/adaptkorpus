@@ -9,6 +9,8 @@ import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, novaSessaoDe, salvarCalibracao, sessoesTreino, substituirHistorico, type SessaoHistorico } from '@/lib/treino-historico';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
+import { inicialDe } from '@/lib/auth/usuario';
+import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, progressoDosExercicios, precisaDeloadDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
@@ -127,6 +129,24 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
   const [trocados, setTrocados] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
+  // Inicial do avatar: NOME real do usuário (user_metadata.nome, gravado no signUp),
+  // fallback e-mail — o "V" é só o placeholder do modo MOCK (sem usuário).
+  const [inicial, setInicial] = useState(supabaseConfigurado() ? '' : 'V');
+  useEffect(() => {
+    if (!supabaseConfigurado()) return;
+    let vivo = true;
+    void (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const { data } = await createClient().auth.getUser();
+        if (!vivo || !data.user) return;
+        const n = (data.user.user_metadata as { nome?: string } | null)?.nome;
+        setInicial(inicialDe(n, data.user.email));
+      } catch { /* mantém o estado atual */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
   const [pesos, setPesos] = useState<number[]>([perfil.pesoKg]);
   // Logado: pesos registrados vêm do servidor (antes eram só memória — resetavam no reload).
   useEffect(() => {
@@ -432,7 +452,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           </nav>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button onClick={() => setMenu((m) => !m)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 999, padding: '5px 12px 5px 5px', cursor: 'pointer' }}>
-              <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(189,255,0,.16)', color: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '.92rem' }}>V</span>
+              <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(189,255,0,.16)', color: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '.92rem' }}>{inicial}</span>
               <svg width={14} height={14} viewBox="0 0 24 24" style={{ color: 'rgba(234,229,219,.5)' }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
             {menu && (
