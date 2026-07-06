@@ -32,7 +32,7 @@ export default function CadastroPage() {
     setCarregando(true);
     try {
       const { createClient } = await import('@/lib/supabase/client');
-      const { error } = await createClient().auth.signUp({
+      const { data, error } = await createClient().auth.signUp({
         email,
         password: senha,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback`, data: { nome: nome.trim() } },
@@ -44,7 +44,10 @@ export default function CadastroPage() {
         setCarregando(false);
         return;
       }
-      router.push('/confirmar'); // confirmação chega por e-mail → /auth/callback
+      // Confirmação de e-mail DESLIGADA no Supabase → o signUp já devolve sessão: vai
+      // direto ao onboarding (a tela de "confirme seu e-mail" não faz sentido). Com
+      // confirmação LIGADA (sem sessão), segue ao /confirmar como antes.
+      router.replace(data.session ? '/onboarding' : '/confirmar');
     } catch {
       setErro('Não foi possível criar a conta agora. Tente de novo.');
       setCarregando(false);

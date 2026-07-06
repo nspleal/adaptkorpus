@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
@@ -34,8 +34,24 @@ export default function ContaPage() {
   const [cardOpen, setCardOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
-  const [nome, setNome] = useState('Lucas Almeida');
-  const [email, setEmail] = useState('lucas@email.com');
+  // Placeholder só no modo MOCK; com backend, os dados reais chegam do getUser() abaixo.
+  const [nome, setNome] = useState(supabaseConfigurado() ? '' : 'Lucas Almeida');
+  const [email, setEmail] = useState(supabaseConfigurado() ? '' : 'lucas@email.com');
+  useEffect(() => {
+    if (!supabaseConfigurado()) return;
+    let vivo = true;
+    void (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const { data } = await createClient().auth.getUser();
+        if (!vivo || !data.user) return;
+        setEmail(data.user.email ?? '');
+        const n = (data.user.user_metadata as { nome?: string } | null)?.nome;
+        setNome(n || data.user.email?.split('@')[0] || 'Sua conta');
+      } catch { /* mantém o estado atual */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
   const [editar, setEditar] = useState<null | { campo: 'nome' | 'email'; valor: string }>(null);
 
   function salvarEdicao() {
