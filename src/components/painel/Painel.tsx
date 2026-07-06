@@ -7,7 +7,8 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, salvarCalibracao, sessoesTreino, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, novaSessaoDe, salvarCalibracao, sessoesTreino, substituirHistorico, type SessaoHistorico } from '@/lib/treino-historico';
+import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { exercicioEfetivo, progressoDosExercicios, precisaDeloadDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
@@ -127,6 +128,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [trocados, setTrocados] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const [pesos, setPesos] = useState<number[]>([perfil.pesoKg]);
+  // Logado: pesos registrados vêm do servidor (antes eram só memória — resetavam no reload).
+  useEffect(() => {
+    let vivo = true;
+    void carregarPesosServidor().then((doServidor) => {
+      if (vivo && doServidor && doServidor.length > 0) setPesos([perfil.pesoKg, ...doServidor]);
+    });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- semente única no mount
+  }, []);
   const [modal, setModal] = useState<Modal>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
@@ -134,7 +144,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
   const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
   // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
-  useEffect(() => { setSessoes(lerHistorico()); }, []);
+  useEffect(() => {
+    setSessoes(lerHistorico());
+    // Logado: o histórico do SERVIDOR vence (2º device vê os mesmos dados); o local vira
+    // cache. Sem backend/sessão o sync devolve null e o local fica (modo mock intacto).
+    let vivo = true;
+    void carregarHistoricoServidor().then((doServidor) => {
+      if (vivo && doServidor) setSessoes(substituirHistorico(doServidor));
+    });
+    return () => { vivo = false; };
+  }, []);
   // Notificações (opt-in explícito, persistido em evk_notif).
   const [notif, setNotif] = useState<NotifPrefs>({ optIn: null, treino: true, refeicao: true });
   const [notifModal, setNotifModal] = useState(false);
@@ -161,6 +180,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const antes = bandaChama(diasTreinados);
     if (bandaChama(diasDeTreino(sessoesTreino(novo).map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
     setSessoes(novo);
+    // Write-through p/ o servidor (um gancho cobre guiada/manual/calibração): a sessão
+    // recém-gravada é a de maior n. Fire-and-forget — o local já está persistido.
+    void enviarSessaoTreino(novaSessaoDe(novo));
   }
 
   // Calibração manual / adoção de degrau (B2/B3): grava o evento no histórico — o alvo
@@ -331,7 +353,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novos = rotinaDias.map((dia) => ({ ...dia, slots: dia.slots.slice() })); novos[d]!.slots[s] = { ...novos[d]!.slots[s]!, exercicio: ex };
     setRotinaDias(novos); marcar(`e${d}-${s}`); setModal(null);
   }
-  const registrarPeso = (v: number) => { if (Number.isFinite(v) && v >= 30 && v <= 300) setPesos((p) => [...p, v]); };
+  const registrarPeso = (v: number) => {
+    if (!Number.isFinite(v) || v < 30 || v > 300) return;
+    setPesos((p) => [...p, v]);
+    void registrarPesoServidor(v); // write-through (no-op sem backend)
+  };
 
   const prescricao = treino.prescricao;
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.

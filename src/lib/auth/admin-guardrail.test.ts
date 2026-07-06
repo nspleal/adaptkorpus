@@ -26,6 +26,7 @@ describe('guard-rail: createAdminClient (service_role) só em webhooks', () => {
     const refs = arquivos.filter((f) => USO_ADMIN.test(readFileSync(f, 'utf8')));
     const permitido = (f: string) =>
       f.includes(`${join('api', 'webhooks')}`) ||          // webhooks (uso legítimo)
+      f.includes(`${join('api', 'lgpd')}`) ||              // exclusão LGPD (deleteUser — auditado)
       f.endsWith(join('lib', 'supabase', 'admin.ts')) ||   // a própria definição
       f.endsWith('admin-guardrail.test.ts');               // este teste
     const violacoes = refs.filter((f) => !permitido(f)).map((f) => f.replace(process.cwd(), ''));

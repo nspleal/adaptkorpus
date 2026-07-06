@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PerfilResumo } from '@/components/painel/Painel';
-import { linhaParaPerfil, perfilParaLinha } from './perfil-profile';
+import { linhaComConsentimentos, linhaParaPerfil, perfilParaLinha } from './perfil-profile';
 
 /**
  * Contrato schema↔tipo (DF 2026-07-05): os ~9 campos sem coluna vivem no jsonb `preferencias`;
@@ -47,5 +47,15 @@ describe('perfil-profile — mapeador PerfilResumo ↔ linha de profile', () => 
   it('opcionais ausentes (favoritos/equipamentosCasa) sobrevivem ao round-trip', () => {
     const semOpc: PerfilResumo = { ...perfil, favoritos: undefined, equipamentosCasa: undefined };
     expect(linhaParaPerfil(perfilParaLinha(semOpc))).toEqual(semOpc);
+  });
+
+  it('linhaComConsentimentos: mescla aceite_18/termos/lgpd + carimbo (LGPD quer o registro)', () => {
+    const linha = perfilParaLinha(perfil);
+    const out = linhaComConsentimentos(linha, { aceite18: true, aceiteTermos: true, aceiteLgpd: true }, '2026-07-06T00:00:00.000Z');
+    expect(out.aceite_18).toBe(true);
+    expect(out.aceite_termos).toBe(true);
+    expect(out.aceite_lgpd).toBe(true);
+    expect(out.aceite_em).toBe('2026-07-06T00:00:00.000Z');
+    expect(out.peso_kg).toBe(80); // linha original preservada
   });
 });

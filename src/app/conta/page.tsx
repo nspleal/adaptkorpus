@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
 import { baixarArquivo } from '@/lib/export';
-import { limparSessao } from '@/lib/session';
+import { limparDadosLocais, limparSessao } from '@/lib/session';
 import { sairDaConta } from '@/lib/auth/sair';
+import { supabaseConfigurado } from '@/lib/supabase/env';
 
 /**
  * Conta e assinatura — porte fiel do protótipo V2 (.dc.html): status da assinatura
@@ -44,13 +45,51 @@ export default function ContaPage() {
     setEditar(null);
   }
 
-  function baixarMeusDados() {
+  async function baixarMeusDados() {
+    // Portabilidade LGPD: com backend, exporta TUDO (profile+plans+logs+feedback+
+    // subscription, via RLS); sem backend, o parcial honesto de sempre (modo mock).
+    if (supabaseConfigurado()) {
+      try {
+        const r = await fetch('/api/lgpd/exportar', { cache: 'no-store' });
+        if (r.ok) {
+          baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(await r.json(), null, 2));
+          return;
+        }
+      } catch { /* cai no parcial local */ }
+    }
     const dados = {
       exportadoEm: new Date().toISOString(),
       aviso: 'Exportação parcial (dados da conta nesta tela). A exportação completa de perfil, plano e histórico depende do backend (LGPD / Ownership-4).',
       conta: { nome, email, assinatura: { plano: 'Evokorpus', valorMensal: 'R$ 29', status: sub } },
     };
     baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(dados, null, 2));
+  }
+
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  async function excluirConta() {
+    setErroExclusao(null);
+    // Sem backend (mock): comportamento demo de sempre — limpa o local e sai.
+    if (!supabaseConfigurado()) { setDeleteOpen(false); limparSessao(); router.replace('/'); return; }
+    setExcluindo(true);
+    try {
+      const r = await fetch('/api/lgpd/excluir', { method: 'POST' });
+      if (r.ok) {
+        // Conta excluída no servidor (cascata FK) → encerra sessão e limpa TODO o local.
+        await sairDaConta();
+        limparDadosLocais();
+        router.replace('/');
+        return;
+      }
+      // 503 = service_role ausente neste ambiente — honestidade: NÃO fingir exclusão.
+      setErroExclusao(r.status === 503
+        ? 'A exclusão está temporariamente indisponível. Tente de novo mais tarde ou fale com o suporte.'
+        : 'Não foi possível excluir agora. Tente de novo.');
+    } catch {
+      setErroExclusao('Não foi possível excluir agora. Tente de novo.');
+    } finally {
+      setExcluindo(false);
+    }
   }
 
   const status = {
@@ -235,8 +274,9 @@ export default function ContaPage() {
           <h2 style={{ ...modalH, marginBottom: 10 }}>Excluir minha conta</h2>
           <p style={{ margin: '0 0 16px', fontSize: '.94rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Isso apaga <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>permanentemente</strong> sua conta, seu plano e todo o seu histórico. Esta ação não pode ser desfeita.</p>
           <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes. Cancelar a assinatura não exige excluir a conta.</p>
+          {erroExclusao && <p style={{ margin: '0 0 14px', fontSize: '.88rem', color: '#E5C04D', lineHeight: 1.5 }}>{erroExclusao}</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button onClick={() => { setDeleteOpen(false); limparSessao(); router.replace('/'); }} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Excluir definitivamente</button>
+            <button onClick={excluirConta} disabled={excluindo} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: excluindo ? 'wait' : 'pointer', opacity: excluindo ? 0.6 : 1 }}>{excluindo ? 'Excluindo…' : 'Excluir definitivamente'}</button>
             <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Manter minha conta</button>
           </div>
         </Modal>

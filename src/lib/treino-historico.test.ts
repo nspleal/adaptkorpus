@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessoesTreino, type SessaoHistorico } from './treino-historico';
+import { novaSessaoDe, sessoesTreino, type SessaoHistorico } from './treino-historico';
 import { diasDeTreino } from './chama';
 
 /**
@@ -26,5 +26,17 @@ describe('sessoesTreino — calibração fora da Chama e das Cargas', () => {
     expect(diasDeTreino(sessoesTreino(hist).map((s) => s.dataISO))).toBe(1);
     // sem o filtro seriam 2 — é exatamente o que a salvaguarda impede
     expect(diasDeTreino(hist.map((s) => s.dataISO))).toBe(2);
+  });
+});
+
+describe('novaSessaoDe — a recém-gravada é a de maior n (write-through p/ o servidor)', () => {
+  it('acha o max n independente da ordem do array; vazio → null', () => {
+    const hist: SessaoHistorico[] = [
+      { ...base, n: 2, dataISO: '2026-07-02' },
+      { ...base, n: 5, dataISO: '2026-07-01' }, // registrada por último (n máximo), data antiga
+      { ...base, n: 3, dataISO: '2026-07-03' },
+    ];
+    expect(novaSessaoDe(hist)?.n).toBe(5);
+    expect(novaSessaoDe([])).toBeNull();
   });
 });

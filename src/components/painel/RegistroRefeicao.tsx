@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { faixaTint, limiarAderencia, streakAderencia } from '@/lib/aderencia';
 import { diaLocalISO } from '@/lib/dia-local';
+import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from '@/lib/persistencia/sync';
 
 /**
  * Registrar refeição + histórico de aderência — porte fiel do V5.
@@ -39,6 +40,16 @@ export function useRegistro() {
     const d = lerTudo()[hojeISO()];
     if (d) { setLogs(d.logs || {}); setNotes(d.notes || {}); }
     hidratado.current = true;
+    // Logado: o dia de HOJE do servidor vence (2º device continua de onde parou).
+    let vivo = true;
+    void carregarAderenciaServidor().then((dias) => {
+      const hoje = dias?.[hojeISO()];
+      if (vivo && hoje) {
+        setLogs((hoje.logs as Record<string, StatusRefeicao>) || {});
+        setNotes(hoje.notes || {});
+      }
+    });
+    return () => { vivo = false; };
   }, []);
 
   useEffect(() => {
@@ -46,6 +57,8 @@ export function useRegistro() {
     const all = lerTudo();
     all[hojeISO()] = { logs, notes };
     try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* quota */ }
+    // Write-through p/ o servidor (no-op sem backend); o local já está gravado.
+    void salvarAderenciaDia(hojeISO(), logs, notes);
   }, [logs, notes]);
 
   return {
@@ -145,7 +158,18 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
   const [periodo, setPeriodo] = useState<'semana' | 'mes'>('semana');
   const [aberto, setAberto] = useState<string | null>(null);
   const [hist, setHist] = useState<Historico>({});
-  useEffect(() => { setHist(lerTudo()); }, []);
+  useEffect(() => {
+    setHist(lerTudo());
+    // Logado: merge servidor-sobre-local (o servidor vence por dia) e re-grava o cache.
+    let vivo = true;
+    void carregarAderenciaServidor().then((dias: Record<string, DiaAderencia> | null) => {
+      if (!vivo || !dias) return;
+      const merged: Historico = { ...lerTudo(), ...(dias as unknown as Historico) };
+      try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch { /* quota */ }
+      setHist(merged);
+    });
+    return () => { vivo = false; };
+  }, []);
 
   const hoje = hojeISO();
   // Mescla o dia de hoje ao vivo (props) sobre o que está no storage.

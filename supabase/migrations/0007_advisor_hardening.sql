@@ -19,9 +19,11 @@ end;
 $$;
 
 -- profile_email_mirror é FUNÇÃO DE TRIGGER: ninguém a chama diretamente. Tira o
--- execute de todos (o trigger continua disparando independentemente de grants).
-revoke all on function public.profile_email_mirror() from public;
+-- execute de TODOS os papéis (o trigger continua disparando independentemente de
+-- grants). ⚠️ "from public" NÃO basta: os default privileges do Supabase concedem
+-- execute a anon/authenticated diretamente — revogar dos três.
+revoke all on function public.profile_email_mirror() from public, anon, authenticated;
 
--- beta_liberado: executável só por authenticated (revoke public/anon; reafirma o grant).
-revoke all on function public.beta_liberado() from public;
+-- beta_liberado: executável SÓ por authenticated (revoga public E anon; reafirma o grant).
+revoke all on function public.beta_liberado() from public, anon;
 grant execute on function public.beta_liberado() to authenticated;

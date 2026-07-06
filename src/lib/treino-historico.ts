@@ -35,6 +35,17 @@ export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHist
   return historico.filter((s) => s.tipo !== 'calibracao');
 }
 
+/**
+ * A sessão RECÉM-GRAVADA de um histórico devolvido por `registrarSessao(Em)`/
+ * `salvarCalibracao`: é a de maior `n` (o contador é `max(n)+1`, único e crescente).
+ * Insumo do write-through p/ o servidor (um gancho cobre guiada/manual/calibração).
+ */
+export function novaSessaoDe(historico: readonly SessaoHistorico[]): SessaoHistorico | null {
+  let max: SessaoHistorico | null = null;
+  for (const s of historico) if (!max || s.n > max.n) max = s;
+  return max;
+}
+
 const KEY = 'evk_treinos';
 
 /** Dia atual em ISO (só na UI) — dia LOCAL do usuário, não UTC (às 21h de Brasília,
@@ -86,6 +97,17 @@ export function registrarSessaoEm(
 /** Registra uma sessão guiada concluída hoje (carimba data + nº). */
 export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date()): SessaoHistorico[] {
   return registrarSessaoEm(resumo, hojeISO(agora));
+}
+
+/**
+ * Substitui o histórico local pela cópia do SERVIDOR (hidratação logada: o servidor
+ * vence; o localStorage vira cache — regra do write-through da persistência). Reordena
+ * decrescente por data (empate: n maior primeiro), o invariante de `lerHistorico`.
+ */
+export function substituirHistorico(sessoes: readonly SessaoHistorico[]): SessaoHistorico[] {
+  const ordenado = [...sessoes].sort((a, b) => b.dataISO.localeCompare(a.dataISO) || b.n - a.n);
+  try { localStorage.setItem(KEY, JSON.stringify(ordenado)); } catch { /* storage indisponível */ }
+  return ordenado;
 }
 
 /**

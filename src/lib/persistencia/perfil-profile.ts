@@ -73,6 +73,30 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
   };
 }
 
+/** Consentimentos do onboarding (LGPD/18+): a base legal exige o REGISTRO, não só o
+ *  checkbox. Chaves camelCase = validação da borda (`consentimentoSchema`). */
+export interface Consentimentos {
+  aceite18: boolean;
+  aceiteTermos: boolean;
+  aceiteLgpd: boolean;
+}
+
+/** Mescla os consentimentos + carimbo na linha de `profile` (colunas do 0001). PURO —
+ *  `agoraISO` entra por parâmetro (sem relógio embutido). */
+export function linhaComConsentimentos<T extends object>(
+  linha: T,
+  consent: Consentimentos,
+  agoraISO: string,
+): T & { aceite_18: boolean; aceite_termos: boolean; aceite_lgpd: boolean; aceite_em: string } {
+  return {
+    ...linha,
+    aceite_18: consent.aceite18,
+    aceite_termos: consent.aceiteTermos,
+    aceite_lgpd: consent.aceiteLgpd,
+    aceite_em: agoraISO,
+  };
+}
+
 /** Linha de `profile` → `PerfilResumo` (inverso fiel de `perfilParaLinha`). */
 export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
   const pref = row.preferencias;

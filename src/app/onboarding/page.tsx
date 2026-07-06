@@ -10,6 +10,7 @@ import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
+import { salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 
@@ -157,7 +158,14 @@ export default function Onboarding() {
           // Gate B (ROTEAR) → encaminhamento (não gera plano, não cria sessão).
           // Desfecho A/C → salva a sessão e abre a área logada estável (/app).
           if (d.gate.comportamento === 'ROTEAR') { setFase('resultado'); }
-          else { salvarSessao(resumo); router.replace('/app'); }
+          else {
+            salvarSessao(resumo);
+            // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
+            // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
+            // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
+            void salvarPerfilServidor(resumo, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+            router.replace('/app');
+          }
         }, 450);
       }
     }, 150);

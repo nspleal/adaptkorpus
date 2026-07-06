@@ -6,6 +6,9 @@ import Painel, { type PerfilResumo } from '@/components/painel/Painel';
 import type { ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { lerSessao, limparSessao, recomputarPlano, salvarSessao } from '@/lib/session';
 import { sairDaConta } from '@/lib/auth/sair';
+import { carregarPerfilServidor, consultarAcesso, salvarPerfilServidor } from '@/lib/persistencia/sync';
+import { supabaseConfigurado } from '@/lib/supabase/env';
+import VigiaSessao from '@/components/auth/VigiaSessao';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -24,29 +27,67 @@ export default function AppPage() {
   const [pronto, setPronto] = useState(false);
 
   useEffect(() => {
-    const perfil = lerSessao();
-    if (!perfil) { router.replace('/onboarding'); return; }
-    const { dieta, treino } = recomputarPlano(perfil);
-    // Defesa: se o perfil salvo não gera plano (gate ROTEAR) — não deveria acontecer, só
-    // salvamos sessão em desfecho com plano — recomeça o onboarding em vez de quebrar.
-    if (dieta.gate.comportamento === 'ROTEAR' || !dieta.plano || !treino.rotina) {
-      limparSessao(); router.replace('/onboarding'); return;
+    let vivo = true;
+    // Monta o painel a partir de um perfil resolvido (local ou do servidor).
+    function montar(perfil: PerfilResumo) {
+      if (!vivo) return;
+      const { dieta, treino } = recomputarPlano(perfil);
+      // Defesa: se o perfil salvo não gera plano (gate ROTEAR) — não deveria acontecer, só
+      // salvamos sessão em desfecho com plano — recomeça o onboarding em vez de quebrar.
+      if (dieta.gate.comportamento === 'ROTEAR' || !dieta.plano || !treino.rotina) {
+        limparSessao(); router.replace('/onboarding'); return;
+      }
+      setEstado({ perfil, dieta, treino });
+      setPronto(true);
     }
-    setEstado({ perfil, dieta, treino });
-    setPronto(true);
+
+    if (!supabaseConfigurado()) {
+      // Modo mock: caminho local de sempre.
+      const perfil = lerSessao();
+      if (!perfil) { router.replace('/onboarding'); return; }
+      montar(perfil);
+      return () => { vivo = false; };
+    }
+
+    // Backend vivo: (1) gate do beta (allowlist OU assinatura — regra 4.2.1);
+    // (2) perfil server-first (o servidor vence; localStorage vira cache p/ reload rápido);
+    // (3) sem perfil no servidor mas com local → migra (write-through).
+    void (async () => {
+      const acesso = await consultarAcesso();
+      if (!vivo) return;
+      if (acesso && !acesso.liberado) { router.replace('/acesso-restrito?motivo=assinatura'); return; }
+      const doServidor = await carregarPerfilServidor();
+      if (!vivo) return;
+      if (doServidor) {
+        salvarSessao(doServidor); // cache local (2º device ganha os dados na hora)
+        montar(doServidor);
+        return;
+      }
+      const local = lerSessao();
+      if (local) {
+        void salvarPerfilServidor(local); // migra o perfil pré-backend p/ o servidor
+        montar(local);
+        return;
+      }
+      router.replace('/onboarding');
+    })();
+    return () => { vivo = false; };
   }, [router]);
 
   if (!pronto || !estado) return <Splash />;
 
   return (
-    <Painel
-      perfil={estado.perfil}
-      dieta={estado.dieta}
-      treino={estado.treino}
-      desfechoC={estado.dieta.gate.comportamento === 'RESTRINGIR' || estado.dieta.gate.comportamento === 'PISAR'}
-      onPerfilChange={salvarSessao}
-      onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
-    />
+    <>
+      <VigiaSessao />
+      <Painel
+        perfil={estado.perfil}
+        dieta={estado.dieta}
+        treino={estado.treino}
+        desfechoC={estado.dieta.gate.comportamento === 'RESTRINGIR' || estado.dieta.gate.comportamento === 'PISAR'}
+        onPerfilChange={(p) => { salvarSessao(p); void salvarPerfilServidor(p); }}
+        onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
+      />
+    </>
   );
 }
 

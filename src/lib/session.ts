@@ -16,12 +16,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { EQUIPAMENTOS_CASA, gerarDieta, gerarTreino } from '@/lib/engine';
-import type { PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
-import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
+import { EQUIPAMENTOS_CASA } from '@/lib/engine';
 import { diasPadrao } from '@/lib/semana';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
+
+// Mapeamento PerfilResumo → motor extraído p/ módulo PURO (o servidor também recomputa
+// o plano no PUT do perfil — snapshot auditável em `plans`). Re-export mantém a API.
+export { recomputarPlano } from '@/lib/plano';
 
 const KEY = 'evk_sessao';
 const VERSAO = 1;
@@ -96,42 +98,16 @@ export function limparSessao(): void {
   try { localStorage.removeItem(KEY); } catch { /* storage indisponível */ }
 }
 
+/** Exclusão de conta (LGPD): limpa TODOS os dados locais do app, não só a sessão. */
+export function limparDadosLocais(): void {
+  for (const k of [KEY, 'evk_treinos', 'evk_aderencia', 'evk_notif', 'evk_aba']) {
+    try { localStorage.removeItem(k); } catch { /* storage indisponível */ }
+  }
+}
+
 /** True se há uma sessão salva (uso síncrono em event handlers no cliente). */
 export function temSessao(): boolean {
   return lerSessao() !== null;
-}
-
-/**
- * Recomputa dieta + treino a partir do perfil salvo. Determinístico — produz exatamente
- * o mesmo plano que o onboarding gerou. Fonte única do mapeamento PerfilResumo → motor.
- */
-export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; treino: ResultadoTreino } {
-  const perfilU: PerfilUsuario = {
-    sexo: perfil.sexo, pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,
-    nivelAtividade: perfil.nivelAtividade, objetivo: perfil.objetivo, flagsSaude: perfil.flagsSaude,
-  };
-  // A agenda (treinoDias) é a fonte de verdade; o motor de treino usa a CONTAGEM de dias.
-  const diasDisponiveis = perfil.treinoDias?.length ?? perfil.diasDisponiveis;
-  const perfilT: PerfilTreino = {
-    pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade, flagsSaude: perfil.flagsSaude,
-    objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
-    equipamentosCasa: perfil.equipamentosCasa, // checklist de casa (modelo 2 níveis)
-    diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
-  };
-  // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
-  // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é
-  // resolvido aqui, fora do motor). Ambas cedem antes de deixar o cardápio sem fechar.
-  const restricoes = {
-    alergenos: perfil.alergenos, preferencia: perfil.preferencia,
-    excluirAlimentoIds: perfil.naoCurto ?? [],
-    excluirPratoIds: pratosCansadosAtivos(perfil.pratosCansados),
-  };
-  return {
-    dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),
-    // Favoritos (DF #12): viés determinístico do montador — preferidos no slot, isentos
-    // da variedade; filtros duros e invariantes intactos.
-    treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED, favoritos: new Set(perfil.favoritos ?? []) }),
-  };
 }
 
 /**

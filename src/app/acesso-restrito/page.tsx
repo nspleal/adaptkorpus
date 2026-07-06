@@ -1,19 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Medalhao, estiloBotaoPrimario, estiloBotaoSecundario } from '@/components/estados/ui';
 
 /**
- * Acesso restrito (V4 A4). No app real, o guard de sessão/assinatura escolhe a variante
- * pela causa; aqui a rota permite ver as duas (segmentado). Tom honesto, sem pressão.
- * Quando o backend de auth existir, este vira a tela do guard (Gating-2 / Entitlement-1).
+ * Acesso restrito (V4 A4) — agora É a tela do guard (Gating-2 / Entitlement-1): o vigia
+ * de sessão e o gate do beta chegam aqui com `?motivo=sessao|assinatura`, que semeia a
+ * variante (lida de window.location p/ evitar o Suspense do useSearchParams). O
+ * segmentado continua para inspeção manual. Tom honesto, sem pressão.
  */
 type Variante = 'sessao' | 'assinatura';
 
 export default function AcessoRestrito() {
   const router = useRouter();
   const [v, setV] = useState<Variante>('sessao');
+  useEffect(() => {
+    const motivo = new URLSearchParams(window.location.search).get('motivo');
+    if (motivo === 'assinatura' || motivo === 'sessao') setV(motivo);
+  }, []);
 
   const copy = v === 'assinatura'
     ? { title: 'Sua assinatura está inativa.', sup: 'Renove quando quiser para voltar ao seu plano — sem pressa e sem letra miúda. Você decide.', pri: 'Ver minha assinatura', priGo: () => router.push('/conta'), sec: 'Falar com o suporte', secGo: () => router.push('/suporte') }
