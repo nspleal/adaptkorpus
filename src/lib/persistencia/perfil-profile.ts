@@ -12,7 +12,9 @@ import type { PerfilResumo } from '@/components/painel/Painel';
  * `email`, `aceite_18/termos/lgpd/em`, `created_at/updated_at`. O chamador os mescla.
  */
 
-/** Bloco `preferencias` (jsonb) — os 9 campos do perfil que não têm coluna própria. */
+/** Bloco `preferencias` (jsonb) — os campos do perfil que não têm coluna própria
+ *  (9 do v1 + 3 do mesociclo/modo força — v2 §7, DF 2026-07-08; o jsonb do 0005
+ *  absorve as chaves novas sem migração). */
 export interface PreferenciasPerfil {
   nivelExperiencia: PerfilResumo['nivelExperiencia'];
   equipamento: PerfilResumo['equipamento'];
@@ -23,6 +25,9 @@ export interface PreferenciasPerfil {
   naoCurto: PerfilResumo['naoCurto'];
   favoritos: PerfilResumo['favoritos'];
   pratosCansados: PerfilResumo['pratosCansados'];
+  mesocicloInicio?: PerfilResumo['mesocicloInicio'];
+  mesocicloSemana?: PerfilResumo['mesocicloSemana'];
+  modoForca?: PerfilResumo['modoForca'];
 }
 
 /** Subconjunto de colunas de `public.profile` derivado do `PerfilResumo`. */
@@ -69,6 +74,9 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       naoCurto: p.naoCurto,
       favoritos: p.favoritos,
       pratosCansados: p.pratosCansados,
+      ...(p.mesocicloInicio != null ? { mesocicloInicio: p.mesocicloInicio } : {}),
+      ...(p.mesocicloSemana != null ? { mesocicloSemana: p.mesocicloSemana } : {}),
+      ...(p.modoForca != null ? { modoForca: p.modoForca } : {}),
     },
   };
 }
@@ -118,6 +126,9 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     favoritos: pref.favoritos,
     equipamentosCasa: pref.equipamentosCasa,
     pratosCansados: pref.pratosCansados,
+    ...(pref.mesocicloInicio != null ? { mesocicloInicio: pref.mesocicloInicio } : {}),
+    ...(pref.mesocicloSemana != null ? { mesocicloSemana: pref.mesocicloSemana } : {}),
+    ...(pref.modoForca != null ? { modoForca: pref.modoForca } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,
       renal: row.renal,

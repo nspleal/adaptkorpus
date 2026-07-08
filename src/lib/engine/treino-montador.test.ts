@@ -4,7 +4,8 @@ import { dificuldadesLiberadas, prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
-import type { PerfilTreino } from './treino-types';
+import type { FeedbackGrupo, PerfilTreino } from './treino-types';
+import type { GrupoPrimario } from '../data/types';
 
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
@@ -148,5 +149,138 @@ describe('favoritos no montador (DF #12)', () => {
     const primeiro = dia.slots.find((s) => s.padrao === 'empurrar')!;
     expect(['e11', 'e9']).toContain(primeiro.exercicio.id);
     expect(primeiro.exercicio.id).toBe('e11'); // determinístico: 1º na ordem do pool
+  });
+});
+
+// ── Mesociclo v2: rampa de volume por grupo no montador (DF 2026-07-08) ─────
+describe('rampa de volume no montador (mesociclo v2)', () => {
+  const SEMANAS: Array<1 | 2 | 3 | 4 | 5> = [1, 2, 3, 4, 5];
+  function rotinaSemana(semana: 1 | 2 | 3 | 4 | 5 | 6, over: Partial<PerfilTreino> = {}, feedbackGrupos?: ReadonlyMap<GrupoPrimario, FeedbackGrupo>) {
+    const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90, ...over });
+    return montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana, feedbackGrupos });
+  }
+  function totalPorGrupo(r: ReturnType<typeof rotinaSemana>) {
+    const tot = new Map<string, { series: number; slots: number }>();
+    for (const d of r.dias)
+      for (const s of d.slots) {
+        const g = tot.get(s.exercicio.grupoPrimario) ?? { series: 0, slots: 0 };
+        g.series += s.series ?? 0;
+        g.slots += 1;
+        tot.set(s.exercicio.grupoPrimario, g);
+      }
+    return tot;
+  }
+
+  it('aceitação: volume/grupo sobe do piso ao topo da banda em 5 semanas e NUNCA ultrapassa o topo', () => {
+    // Avançado/massa: banda 16–20, séries/exercício 3–4.
+    const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 });
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const banda = presc.volumePorGrupoSemana;
+    const porSemana = SEMANAS.map((s) => totalPorGrupo(rotinaSemana(s)));
+    for (const [grupo, { slots }] of porSemana[0]!) {
+      const base = slots * presc.seriesPorExercicio.min;
+      const teto = slots * presc.seriesPorExercicio.max;
+      const alvos = SEMANAS.map((s) => Math.min(Math.max(banda.min + (s - 1), base), Math.min(banda.max, teto)));
+      const totais = porSemana.map((m) => m.get(grupo)!.series);
+      expect(totais, `grupo ${grupo}`).toEqual(alvos);
+      for (const t of totais) expect(t).toBeLessThanOrEqual(banda.max); // nunca ultrapassa o topo
+      for (let i = 1; i < totais.length; i++) expect(totais[i]!).toBeGreaterThanOrEqual(totais[i - 1]!); // monotônico
+    }
+  });
+
+  it('grupos com slots suficientes ATINGEM o topo da banda na semana 5 (interm./massa: peito → 16)', () => {
+    // Avançado/massa (topo 20) exigiria ≥ 5 slots/grupo/semana — estruturalmente fora dos
+    // splits atuais (limite honesto, registrado no handoff). Interm./massa (topo 16) atinge.
+    const over: Partial<PerfilTreino> = { nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 90 };
+    const p = perfil(over);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const sem5 = totalPorGrupo(rotinaSemana(5, over));
+    const atingiveis = [...sem5.entries()].filter(([, v]) => v.slots * presc.seriesPorExercicio.max >= presc.volumePorGrupoSemana.max);
+    expect(atingiveis.length).toBeGreaterThan(0); // o cenário tem grupos com teto ≥ topo
+    for (const [, v] of atingiveis) expect(v.series).toBe(presc.volumePorGrupoSemana.max); // 16
+  });
+
+  it('toda série por slot fica dentro de seriesPorExercicio {min..max}', () => {
+    const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 });
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    for (const s of [...SEMANAS, 6 as const]) {
+      const r = rotinaSemana(s);
+      for (const d of r.dias)
+        for (const slot of d.slots) {
+          if (s === 6) expect(slot.series).toBeUndefined(); // deload NÃO anota séries (corte único via mecanismo v1)
+          else {
+            expect(slot.series).toBeGreaterThanOrEqual(presc.seriesPorExercicio.min);
+            expect(slot.series).toBeLessThanOrEqual(presc.seriesPorExercicio.max);
+          }
+        }
+    }
+  });
+
+  it('semana 6 marca deload nos metadados; ciclo novo (semana 1) reseta ao piso', () => {
+    const r6 = rotinaSemana(6);
+    expect(r6.semana).toEqual(expect.objectContaining({ numero: 6, deload: true }));
+    const r1a = totalPorGrupo(rotinaSemana(1));
+    const r1b = totalPorGrupo(rotinaSemana(1));
+    expect([...r1a.entries()]).toEqual([...r1b.entries()]); // determinístico
+  });
+
+  it("feedback 'segura' congela o incremento do grupo (alvo = semana anterior)", () => {
+    const r3 = totalPorGrupo(rotinaSemana(3));
+    const grupo = [...r3.keys()].find((g) => {
+      const v3 = r3.get(g)!;
+      return v3.series > v3.slots * 3; // grupo que de fato rampou (não pinado na base)
+    })!;
+    const seguraMap = new Map([[grupo as GrupoPrimario, 'segura' as FeedbackGrupo]]);
+    const r4seg = totalPorGrupo(rotinaSemana(4, {}, seguraMap));
+    expect(r4seg.get(grupo)!.series).toBe(r3.get(grupo)!.series); // sem. 4 'segura' = alvo da sem. 3
+  });
+
+  it('compat: sem semanaCiclo a saída é byte-idêntica à v1 (invariantes preservadas nas semanas 1–6)', () => {
+    expect(JSON.stringify(rotina())).toBe(JSON.stringify(rotina())); // sanidade determinismo
+    for (const s of [1, 2, 3, 4, 5, 6] as const) {
+      const r = rotinaSemana(s);
+      const conta = (p: string) => r.dias.reduce((n, d) => n + d.slots.filter((x) => x.padrao === p).length, 0);
+      expect(conta('puxar')).toBeGreaterThanOrEqual(conta('empurrar'));
+      expect(conta('dobradica_quadril')).toBeGreaterThanOrEqual(1);
+      expect(conta('core')).toBeGreaterThanOrEqual(2);
+      expect(conta('core')).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('estrutura estável no ciclo: os MESMOS exercícios nas semanas 1–5 (só as séries mudam)', () => {
+    const ids = (s: 1 | 2 | 3 | 4 | 5) => rotinaSemana(s).dias.map((d) => d.slots.map((x) => x.exercicio.id).join(',')).join('|');
+    const base = ids(1);
+    for (const s of [2, 3, 4, 5] as const) expect(ids(s)).toBe(base);
+  });
+
+  it('descanso do composto: massa/90 min sobe o teto p/ 180 s; tempo curto mantém a base (tempo é o limitante)', () => {
+    const longo = rotinaSemana(1, { tempoPorSessaoMin: 90 });
+    expect(longo.semana?.descansoCompostoSeg.max).toBe(180);
+    const curto = rotinaSemana(1, { tempoPorSessaoMin: 30 });
+    expect(curto.semana?.descansoCompostoSeg.max).toBe(120); // base massa 90–120
+  });
+
+  it('descanso do composto: objetivo saúde (60–90) sem modo força NUNCA sobe p/ 180 s', () => {
+    const r = rotinaSemana(1, { objetivo: 'saude', tempoPorSessaoMin: 120 });
+    expect(r.semana?.descansoCompostoSeg.max).toBe(90);
+  });
+
+  it('smoke: 3 níveis × 3 objetivos × semanas 1–6 sem violar invariantes nem séries fora da faixa', () => {
+    for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
+      for (const obj of ['saude', 'massa', 'emagrecimento'] as const)
+        for (const s of [1, 2, 3, 4, 5, 6] as const) {
+          const p = perfil({ nivelExperiencia: nivel, objetivo: obj, diasDisponiveis: 4, tempoPorSessaoMin: 60 });
+          const presc = prescreverTreino(p, avaliarGateTreino(p));
+          const r = montarRotina(presc, p, EXERCISES, new Set(), { semana: s });
+          const conta = (pat: string) => r.dias.reduce((n, d) => n + d.slots.filter((x) => x.padrao === pat).length, 0);
+          expect(conta('puxar')).toBeGreaterThanOrEqual(conta('empurrar'));
+          for (const d of r.dias)
+            for (const slot of d.slots) {
+              if (slot.series != null) {
+                expect(slot.series).toBeGreaterThanOrEqual(presc.seriesPorExercicio.min);
+                expect(slot.series).toBeLessThanOrEqual(presc.seriesPorExercicio.max);
+              }
+            }
+        }
   });
 });

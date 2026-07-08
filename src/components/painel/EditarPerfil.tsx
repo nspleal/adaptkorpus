@@ -62,6 +62,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
   const [objetivo, setObjetivo] = useState<Objetivo>(inicial.objetivo);
   const [atividade, setAtividade] = useState<NivelAtividade>(inicial.nivelAtividade);
   const [experiencia, setExperiencia] = useState<NivelExperiencia>(inicial.nivelExperiencia);
+  // Modo força (v2 §4, DF 2026-07-08): preset opt-in SÓ interm./avançado (o motor ignora
+  // p/ iniciante e o toggle nem aparece — se o nível voltar a iniciante, o flag fica inerte).
+  const [modoForca, setModoForca] = useState(inicial.modoForca ?? false);
   // 'nenhum' legado (pré-migração) mapeia para casa + checklist vazio.
   const [local, setLocal] = useState<EquipamentoDisp>(inicial.equipamento === 'nenhum' ? 'casa' : inicial.equipamento);
   const [equipsCasa, setEquipsCasa] = useState<EquipamentoCasa[]>(
@@ -128,6 +131,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
       nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [],
       diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
+      modoForca,
     });
   }
 
@@ -159,7 +163,24 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
 
           <CardsBloco titulo="Objetivo" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />
           <CardsBloco titulo="Nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} desc />
-          <CardsBloco titulo="Experiência de treino" opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} desc />
+          <div>
+            <CardsBloco titulo="Experiência de treino" opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} desc />
+            {/* Modo força (v2 §4): visível SÓ p/ intermediário/avançado — 6 reps fixas nos
+                compostos, progressão só por carga (rumo ao 6RM). Mesmo padrão do switch %1RM. */}
+            {experiencia !== 'iniciante' && (
+              <div style={{ marginTop: 14, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 13, padding: '13px 16px' }}>
+                <div onClick={() => setModoForca((v) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '.92rem', fontWeight: 500, color: 'rgba(234,229,219,.85)' }}>Modo força</span>
+                    <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.45, marginTop: 2 }}>Compostos com alvo fixo de 6 repetições — você progride subindo a carga. Isolados seguem normais.</span>
+                  </span>
+                  <span style={{ width: 44, minWidth: 44, height: 26, borderRadius: 999, padding: 3, transition: 'background .25s ease', background: modoForca ? '#BDFF00' : 'rgba(234,229,219,.18)', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: modoForca ? '#0D2818' : '#EAE5DB', transition: `transform .25s ${EASE}`, transform: modoForca ? 'translateX(18px)' : 'translateX(0)' }} />
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
           <div>
             <CardsBloco titulo="Local e equipamento" opts={LOCAIS} sel={local} onSel={setLocal} desc />
             {local === 'casa' && (

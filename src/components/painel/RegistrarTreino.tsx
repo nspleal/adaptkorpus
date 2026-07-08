@@ -36,9 +36,9 @@ interface ExForm {
   repUnit: RepUnit;
   dica: string;
   variacao: string;
-  sets: { reps: string; kg: string }[];
+  /** `rir` por série (v2 §3, DF 2026-07-08): RIR numérico opcional — alimenta a autorregulação. */
+  sets: { reps: string; kg: string; rir: string }[];
   chip: Feedback | null;
-  rir: string;
 }
 
 const lbl: CSSProperties = { display: 'block', fontSize: '.74rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 7 };
@@ -93,8 +93,8 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
     return {
       uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga, repUnit,
       dica: ex.comoFazer, variacao: '',
-      sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '' })),
-      chip: null, rir: '',
+      sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '', rir: '' })),
+      chip: null,
     };
   }
 
@@ -105,7 +105,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
         const e = entradaDaBiblioteca(sl.exercicio, true);
         // reps default = TOPO da faixa prescrita (composto/isolado), editável; carga em branco.
         const reps = String((comp ? prescricao.repsComposto : prescricao.repsIsolado).max);
-        return { ...e, sets: e.sets.map(() => ({ reps, kg: '' })) };
+        return { ...e, sets: e.sets.map(() => ({ reps, kg: '', rir: '' })) };
       });
       setStartMode('plano'); setExs(lista);
     } else {
@@ -138,7 +138,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
     setExs((s) => [...s, {
       uid: newUid(), refId: null, nome, custom: true, temCarga: true, repUnit: 'reps',
       dica: 'Exercício personalizado — sem instruções da biblioteca.', variacao: '',
-      sets: [{ reps: '', kg: '' }], chip: null, rir: '',
+      sets: [{ reps: '', kg: '', rir: '' }], chip: null,
     }]);
     setCustomOpen(false); setCustomName('');
   }
@@ -156,15 +156,14 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
       nome: e.nome,
       loaded: e.temCarga,
       fb: e.chip,
-      sets: e.sets.filter((r) => r.reps !== '' || r.kg !== '').map((r) => ({ reps: r.reps, kg: r.kg })),
+      sets: e.sets.filter((r) => r.reps !== '' || r.kg !== '').map((r) => ({ reps: r.reps, kg: r.kg, ...(r.rir !== '' ? { rir: r.rir } : {}) })),
       ...(e.custom ? { custom: true } : {}),
-      ...(e.rir !== '' ? { rir: e.rir } : {}),
       ...(e.variacao.trim() !== '' ? { variacao: e.variacao.trim() } : {}),
     }));
     const series = exercicios.reduce((n, e) => n + e.sets.length, 0);
     const volumeKg = exercicios.reduce((n, e) => (e.loaded ? n + e.sets.reduce((v, r) => v + (Number(r.reps) || 0) * (Number(r.kg) || 0), 0) : n), 0);
     onSalvar(
-      { dia: 'Treino registrado', series, volumeKg, feedback: fbMap, exercicios },
+      { dia: 'Treino registrado', series, volumeKg, feedback: fbMap, exercicios, ...(prescricao?.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}) },
       !dataISO || dataISO > maxDate ? maxDate : dataISO, // nunca futuro (regra do handoff)
       { hora, ...(obs.trim() ? { obs: obs.trim() } : {}) },
     );
@@ -335,6 +334,8 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
                           <span style={{ width: 26, minWidth: 26 }}>Série</span>
                           <span style={{ flex: 1 }}>{e.repUnit === 'segundos' ? 'Segundos' : 'Reps'}</span>
                           {e.temCarga && <span style={{ flex: 1 }}>Carga (kg)</span>}
+                          {/* RIR numérico por série (v2 §3) — não se aplica a holds. */}
+                          {e.repUnit !== 'segundos' && <span style={{ flex: 1 }}>RIR</span>}
                           <span style={{ width: 28, minWidth: 28 }} />
                         </div>
                         {e.sets.map((row, i) => (
@@ -342,10 +343,11 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
                             <span style={{ width: 26, minWidth: 26, fontWeight: 800, color: 'rgba(234,229,219,.3)', fontSize: '.9rem' }}>{i + 1}</span>
                             <input type="number" inputMode="numeric" value={row.reps} placeholder="—" onChange={(ev) => mut(e.uid, (x) => ({ ...x, sets: x.sets.map((r, ri) => (ri === i ? { ...r, reps: ev.target.value } : r)) }))} className="input-foco" style={setInput} />
                             {e.temCarga && <input type="number" inputMode="numeric" value={row.kg} placeholder="—" onChange={(ev) => mut(e.uid, (x) => ({ ...x, sets: x.sets.map((r, ri) => (ri === i ? { ...r, kg: ev.target.value } : r)) }))} className="input-foco" style={setInput} />}
+                            {e.repUnit !== 'segundos' && <input type="number" inputMode="numeric" min={0} max={5} value={row.rir} placeholder="RIR" onChange={(ev) => mut(e.uid, (x) => ({ ...x, sets: x.sets.map((r, ri) => (ri === i ? { ...r, rir: ev.target.value } : r)) }))} className="input-foco" style={setInput} />}
                             {e.sets.length > 1 && <button onClick={() => mut(e.uid, (x) => ({ ...x, sets: x.sets.filter((_, ri) => ri !== i) }))} aria-label="Remover série" style={{ width: 28, height: 28, minWidth: 28, borderRadius: 8, border: 'none', background: 'none', color: 'rgba(234,229,219,.4)', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1 }}>×</button>}
                           </div>
                         ))}
-                        <button onClick={() => mut(e.uid, (x) => ({ ...x, sets: [...x.sets, { reps: '', kg: '' }] }))} style={{ marginTop: 10, background: 'none', border: 'none', color: '#BDFF00', fontWeight: 600, fontSize: '.82rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>+ Adicionar série</button>
+                        <button onClick={() => mut(e.uid, (x) => ({ ...x, sets: [...x.sets, { reps: '', kg: '', rir: '' }] }))} style={{ marginTop: 10, background: 'none', border: 'none', color: '#BDFF00', fontWeight: 600, fontSize: '.82rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>+ Adicionar série</button>
                       </div>
 
                       <div style={{ borderTop: '1px solid rgba(234,229,219,.08)', paddingTop: 14 }}>
@@ -362,7 +364,6 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
                               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" style={{ opacity: 0.75 }}><path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
                             </button>
                           )}
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 4 }}><span style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)' }}>RIR</span><input type="number" inputMode="numeric" min={0} max={5} value={e.rir} placeholder="—" onChange={(ev) => mut(e.uid, (x) => ({ ...x, rir: ev.target.value }))} className="input-foco" style={{ width: 52, boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.16)', borderRadius: 9, padding: '8px 9px', color: '#EAE5DB', fontSize: '.88rem', fontWeight: 600, outline: 'none' }} /></span>
                         </div>
                       </div>
                     </div>

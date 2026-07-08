@@ -7,11 +7,12 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, novaSessaoDe, salvarCalibracao, sessoesTreino, substituirHistorico, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, novaSessaoDe, registrarSinalFadiga, salvarCalibracao, sessoesTreino, substituirHistorico, type SessaoHistorico } from '@/lib/treino-historico';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
-import { exercicioEfetivo, progressoDosExercicios, precisaDeloadDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
+import { exercicioEfetivo, feedbackAgregadoPorGrupo, progressoDosExercicios, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
+import { estadoDoCiclo, rirAlvoDaSemana } from '@/lib/engine';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
@@ -62,6 +63,16 @@ export interface PerfilResumo {
   pratosCansados: PratoCansado[];
   /** Flags de saúde do gate — necessárias para recalcular o plano (Editar perfil). */
   flagsSaude: FlagsSaude;
+  /** Âncora do MESOCICLO (v2 §1/§7, DF 2026-07-08): data ISO do início do ciclo de 6
+   *  semanas (fonte de verdade da semana). Nasce no 1º boot do Painel; o deload reativo
+   *  reancora (hoje − 35 d). Ausente = conta ainda não ancorada (v1). */
+  mesocicloInicio?: string;
+  /** Espelho DERIVADO da semana do ciclo (1–6) gravado a cada save p/ observabilidade
+   *  (spec §7 pede os dois); a fonte é sempre `mesocicloInicio` + hoje. */
+  mesocicloSemana?: number;
+  /** Modo força (preset opt-in v2 §4): compostos travados em 6 reps → 6RM. O motor
+   *  IGNORA o flag p/ iniciante (o toggle nem aparece). */
+  modoForca?: boolean;
 }
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -220,7 +231,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novo = { ...perfil, favoritos: [...atual] };
     setPerfil(novo);
     onPerfilChange?.(novo);
-    const { treino: nt } = recomputarPlano(novo);
+    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana() });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
@@ -265,7 +276,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
   // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
   function recalcular(novo: PerfilResumo) {
-    const { dieta: nd, treino: nt } = recomputarPlano(novo);
+    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana() });
     // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
@@ -382,9 +393,54 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const prescricao = treino.prescricao;
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
-  // Salvaguarda B2: a âncora das 6 semanas conta da 1ª SESSÃO de treino — calibrações não
-  // contam como dia de treino (sessoesTreino), senão o deload agendado desliza.
-  const deloadAtivo = prescricao ? precisaDeloadDoHistorico(sessoesTreino(sessoes), prescricao.nivel, hojeISO()) : false;
+
+  // --- Mesociclo v2 (DF 2026-07-08) ------------------------------------------------------
+  // Semana do ciclo derivada da âncora persistida no perfil (`mesocicloInicio`); o gatilho
+  // REATIVO (≥3 "difícil"/14d OU botão de fadiga ≤7d) antecipa a semana 6 e pede re-âncora.
+  const sinaisFadiga = sinaisFadigaDoHistorico(sessoes, hojeISO());
+  const ciclo = estadoDoCiclo({ mesocicloInicioISO: perfil.mesocicloInicio ?? null, hojeISO: hojeISO(), sinaisFadiga });
+  const deloadAtivo = prescricao ? ciclo.deload : false;
+  /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
+  function opcoesDaSemana() {
+    return {
+      semana: ciclo.semanaEfetiva,
+      feedbackGrupos: feedbackAgregadoPorGrupo(lerHistorico(), hojeISO(), (id) => EXERCISES_SEED.find((e) => e.id === id)),
+    };
+  }
+  // Persiste a âncora nova (1º uso / deload reativo) + o espelho da semana (spec §7) —
+  // idempotente: só grava quando algo mudou (evita loop de render).
+  useEffect(() => {
+    const ancora = ciclo.novaAncoraISO ?? perfil.mesocicloInicio;
+    if (!ancora) return;
+    if (ancora === perfil.mesocicloInicio && ciclo.semanaEfetiva === perfil.mesocicloSemana) return;
+    const novo = { ...perfil, mesocicloInicio: ancora, mesocicloSemana: ciclo.semanaEfetiva };
+    setPerfil(novo);
+    onPerfilChange?.(novo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gravação idempotente da âncora
+  }, [ciclo.novaAncoraISO, ciclo.semanaEfetiva]);
+  // Rampa de volume da semana (v2 §1): re-monta a rotina com as séries por slot da semana
+  // corrente + feedback agregado por grupo. Roda no mount e quando a semana muda (não em
+  // cada registro — troca manual de exercício não é clobrada no meio do uso).
+  useEffect(() => {
+    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana() });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-monta só quando a semana do ciclo muda
+  }, [ciclo.semanaEfetiva]);
+  // Prescrição EFETIVA da semana p/ a sessão (RIR-alvo da rampa 3→1 + descanso do composto
+  // até ~180 s quando o tempo permite — o montador decide e devolve em rotina.semana).
+  const prescricaoEfetiva = prescricao
+    ? {
+        ...prescricao,
+        rirAlvoSemana: rirAlvoDaSemana(prescricao.rir, ciclo.semanaEfetiva),
+        descansoCompostoSeg: treino.rotina?.semana?.descansoCompostoSeg ?? prescricao.descansoCompostoSeg,
+      }
+    : null;
+  // Botão de fadiga (v2 §6): grava o evento (não conta dia de treino) → o deload reativo
+  // dispara na hora (sinaisFadiga → estadoDoCiclo antecipa a semana 6 e reancora).
+  function sinalizarFadiga() {
+    aplicarNovoHistorico(registrarSinalFadiga());
+  }
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
@@ -416,7 +472,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         <Backdrop />
         <RegistrarTreino
           diaHoje={rotinaDias[0]}
-          prescricao={prescricao ?? null}
+          prescricao={prescricaoEfetiva}
           progresso={progresso}
           exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
           onCalibrar={calibrarExercicios}
@@ -429,11 +485,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
 
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
-  if (sessaoDia !== null && prescricao && rotinaDias[sessaoDia]) {
+  if (sessaoDia !== null && prescricaoEfetiva && rotinaDias[sessaoDia]) {
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricao} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
+        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricaoEfetiva} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} />
       </div>
     );
   }
@@ -487,7 +543,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} />
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -518,14 +574,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
   onRegistrarTreino: () => void; deload: boolean;
+  /** Semana do mesociclo (v2 §6): contador "Semana X/6 do ciclo". */
+  semanaCiclo?: number;
+  /** Botão de fadiga (v2 §6): dispara o deload reativo (antecipa a semana de alívio). */
+  onSinalFadiga?: () => void;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
   const totK = plano.macros.kcalProteina + plano.macros.kcalCarboidrato + plano.macros.kcalGordura || 1;
+  // Confirmação do sinal de fadiga (tom acolhedor, SEM vermelho — fadiga ≠ dor/lesão).
+  const [fadigaOpen, setFadigaOpen] = useState(false);
   return (
     <div style={sec}>
       {mostrarC && (
@@ -538,13 +600,46 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18, marginBottom: 18 }}>
         {dia && (
           <div style={gradCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}><span style={kicker}>Treino de hoje</span>{deload && <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Semana de alívio</span>}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+              <span style={kicker}>Treino de hoje</span>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {/* Contador de mesociclo (v2 §6): a semana do ciclo de 6 (5 rampa + 1 alívio). */}
+                {semanaCiclo != null && <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'rgba(234,229,219,.7)', background: 'rgba(234,229,219,.07)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 999, padding: '3px 10px' }}>Semana {semanaCiclo}/6 do ciclo</span>}
+                {deload && <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Semana de alívio</span>}
+              </span>
+            </div>
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
             <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload ? ' · séries reduzidas esta semana' : ''}</div>
             {/* Entrada A1 do registro manual (handoff): botão ao lado de "Começar treino". */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onComecar} className="hov-btn" style={{ flex: 2, minWidth: 150, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>
               <button onClick={onRegistrarTreino} className="evk-registrar" style={{ flex: 1, minWidth: 170, background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.9rem', padding: 14, borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
+            </div>
+            {/* Botão de fadiga (v2 §6): gatilho do deload REATIVO. Some quando o alívio já está ativo. */}
+            {onSinalFadiga && !deload && (
+              <div style={{ textAlign: 'center', marginTop: 14 }}>
+                <button onClick={() => setFadigaOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', color: 'rgba(234,229,219,.6)', fontWeight: 600, fontSize: '.84rem', padding: 6, cursor: 'pointer', textDecoration: 'underline' }}>
+                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9-9a5 5 0 0 1 9-2 5 5 0 0 1 9 2c-2 4.5-9 9-9 9z" stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round" /></svg>
+                  Estou exausto / muito dolorido
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {/* Confirmação do sinal de fadiga — tom acolhedor, sem vermelho (fadiga ≠ dor/lesão). */}
+        {fadigaOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }} onClick={() => setFadigaOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: '100%', background: '#10241a', border: '1px solid rgba(189,255,0,.28)', borderRadius: 18, padding: '22px 22px 18px', animation: `evkPop .3s ${EASE}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ width: 34, height: 34, minWidth: 34, borderRadius: 10, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={18} height={18} viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9-9a5 5 0 0 1 9-2 5 5 0 0 1 9 2c-2 4.5-9 9-9 9z" stroke="#BDFF00" strokeWidth={1.7} strokeLinejoin="round" /></svg></span>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#BDFF00' }}>Vamos aliviar esta semana?</div>
+              </div>
+              <p style={{ margin: '0 0 8px', fontSize: '.9rem', color: 'rgba(234,229,219,.75)', lineHeight: 1.55 }}>Cansaço acumulado faz parte do processo. Se você está exausto ou muito dolorido, antecipamos a <strong style={{ color: 'rgba(234,229,219,.9)', fontWeight: 600 }}>semana de alívio</strong>: menos séries e ~10% menos carga por uma semana — depois um ciclo novo começa.</p>
+              <p style={{ margin: '0 0 16px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Se for dor localizada (não só cansaço), use o &quot;Senti dor&quot; do exercício e procure um profissional.</p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setFadigaOpen(false)} style={{ flex: 1, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.9rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Agora não</button>
+                <button onClick={() => { setFadigaOpen(false); onSinalFadiga?.(); }} style={{ flex: 1.4, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.9rem', padding: 12, border: 'none', borderRadius: 11, cursor: 'pointer' }}>Ativar semana de alívio</button>
+              </div>
             </div>
           </div>
         )}
@@ -870,6 +965,8 @@ function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTrein
           {linha('Objetivo', OBJETIVO_LABEL[perfil.objetivo])}
           {linha('Atividade', ATIV_LABEL[perfil.nivelAtividade])}
           {linha('Experiência', perfil.nivelExperiencia.charAt(0).toUpperCase() + perfil.nivelExperiencia.slice(1))}
+          {/* Chip do modo força (v2 §4) — só interm./avançado com o preset ativo. */}
+          {perfil.modoForca && perfil.nivelExperiencia !== 'iniciante' && linha('Modo força', 'Ativo — compostos a 6 reps')}
           {linha('Padrão alimentar', perfil.preferencia ? (perfil.preferencia === 'vegano' ? 'Vegano' : 'Vegetariano') : 'Onívoro')}
           {linha('Alergias', perfil.alergenos.length ? perfil.alergenos.join(', ') : 'nenhuma', true)}
         </div>

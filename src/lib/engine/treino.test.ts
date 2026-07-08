@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
-import { aplicarDeload, estadoAposHistorico, estadoInicial, precisaDeload, prescreverTreino, progredirExercicio } from './treino';
+import { aplicarDeload, estadoAposHistorico, estadoInicial, feedbackRefinado, precisaDeload, prescreverTreino, progredirExercicio } from './treino';
 import type { EstadoExercicio, PerfilTreino } from './treino-types';
 import type { FlagsSaude } from './types';
 import type { Exercise } from '../data/types';
@@ -171,10 +171,10 @@ describe('estadoAposHistorico (dobra pura sobre o histórico)', () => {
 });
 
 describe('deload', () => {
-  it('intermediário a cada 6 semanas; iniciante só reativo', () => {
+  it('agendado a cada 6 semanas p/ TODOS os níveis (mesociclo universal, v2 DF 2026-07-08); reativo imediato', () => {
     expect(precisaDeload({ nivel: 'intermediario', semanasDesdeUltimoDeload: 6, sinaisFadiga: false })).toBe(true);
     expect(precisaDeload({ nivel: 'intermediario', semanasDesdeUltimoDeload: 3, sinaisFadiga: false })).toBe(false);
-    expect(precisaDeload({ nivel: 'iniciante', semanasDesdeUltimoDeload: 8, sinaisFadiga: false })).toBe(false);
+    expect(precisaDeload({ nivel: 'iniciante', semanasDesdeUltimoDeload: 6, sinaisFadiga: false })).toBe(true); // v2: universal
     expect(precisaDeload({ nivel: 'iniciante', semanasDesdeUltimoDeload: 1, sinaisFadiga: true })).toBe(true);
   });
 
@@ -184,6 +184,62 @@ describe('deload', () => {
     expect(d.deload).toBe(true);
     expect(d.volumePorGrupoSemana.max).toBeLessThan(p.volumePorGrupoSemana.max);
     expect(d.volumePorGrupoSemana.max).toBe(Math.round(20 * 0.55));
+  });
+});
+
+// ── Modo força (v2 §4, DF 2026-07-08): preset opt-in interm./avançado ─────────
+describe('modo força (preset opt-in)', () => {
+  it('interm./avançado: compostos travam em 6–6; isolados mantêm a faixa v1', () => {
+    const p = prescrever({ objetivo: 'massa', nivelExperiencia: 'avancado', modoForca: true });
+    expect(p.modoForca).toBe(true);
+    expect(p.repsComposto).toEqual({ min: 6, max: 6 });
+    expect(p.repsIsolado).toEqual({ min: 8, max: 15 }); // decisão 2026-07-08: só compostos
+  });
+
+  it('iniciante NÃO acessa: flag ignorado, faixa e RIR ≥ 2 do v1 intactos', () => {
+    const p = prescrever({ objetivo: 'massa', nivelExperiencia: 'iniciante', modoForca: true });
+    expect(p.modoForca).toBeUndefined();
+    expect(p.repsComposto).toEqual({ min: 6, max: 12 });
+    expect(p.rir.min).toBe(2);
+  });
+
+  it('progride SÓ por carga: fácil → +carga com reps de volta a 6; nunca < 6 nem > 6', () => {
+    const p = prescrever({ objetivo: 'massa', nivelExperiencia: 'avancado', modoForca: true });
+    const e: EstadoExercicio = { exercicioId: 'e_sup', modo: 'carga', series: 3, repsAlvo: 6, cargaKg: 100, rirAlvo: 1, dificeisSeguidos: 0 };
+    const facil = progredirExercicio(e, 'facil', p, supino);
+    expect(facil.proximo.cargaKg).toBeCloseTo(102.5, 3);
+    expect(facil.proximo.repsAlvo).toBe(6);
+    const dificil2 = progredirExercicio({ ...e, dificeisSeguidos: 1 }, 'dificil', p, supino);
+    expect(dificil2.proximo.cargaKg).toBeCloseTo(90, 3); // −10%, reps seguem em 6
+    expect(dificil2.proximo.repsAlvo).toBe(6);
+    expect(estadoInicial(supino, p).repsAlvo).toBe(6);
+  });
+});
+
+// ── Autorregulação por RIR numérico (v2 §3): refina o gatilho, trilhos intactos ──
+describe('feedbackRefinado (RIR numérico por série)', () => {
+  const faixa = { min: 6, max: 12 };
+
+  it('reps > topo E RIR > alvo → fácil (+carga)', () => {
+    expect(feedbackRefinado({ fb: 'na_medida', faixa, rirAlvo: 2, repsMax: 13, rirMin: 3 })).toBe('facil');
+  });
+
+  it('reps < piso OU RIR < alvo → difícil (segura/−carga com pisos)', () => {
+    expect(feedbackRefinado({ fb: 'na_medida', faixa, rirAlvo: 2, repsMax: 5, rirMin: 3 })).toBe('dificil');
+    expect(feedbackRefinado({ fb: 'facil', faixa, rirAlvo: 2, repsMax: 10, rirMin: 1 })).toBe('dificil');
+  });
+
+  it('sem registro numérico (ou dentro da faixa/alvo) → mantém o feedback qualitativo', () => {
+    expect(feedbackRefinado({ fb: 'na_medida', faixa, rirAlvo: 2 })).toBe('na_medida');
+    expect(feedbackRefinado({ fb: 'dificil', faixa, rirAlvo: 2, repsMax: 10, rirMin: 2 })).toBe('dificil');
+    expect(feedbackRefinado({ fb: 'facil', faixa, rirAlvo: 2, repsMax: 13 })).toBe('facil'); // só reps, sem RIR → não infere +carga
+  });
+
+  it('modo força (faixa 6–6): as 6 saem NO RIR-alvo (≥) → fácil (+carga → 6RM)', () => {
+    const f6 = { min: 6, max: 6 };
+    expect(feedbackRefinado({ fb: 'na_medida', faixa: f6, rirAlvo: 1, repsMax: 6, rirMin: 1, modoForca: true })).toBe('facil');
+    expect(feedbackRefinado({ fb: 'na_medida', faixa: f6, rirAlvo: 1, repsMax: 6, rirMin: 0, modoForca: true })).toBe('dificil'); // abaixo do alvo
+    expect(feedbackRefinado({ fb: 'na_medida', faixa: f6, rirAlvo: 1, repsMax: 6, rirMin: 1 })).toBe('na_medida'); // sem o preset, 6 no alvo não infere
   });
 });
 

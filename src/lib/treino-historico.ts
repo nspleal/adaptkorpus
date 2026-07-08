@@ -20,19 +20,22 @@ export interface SessaoHistorico extends ResumoSessao {
   hora?: string;    // 'HH:MM' opcional (só registro manual)
   obs?: string;     // observação opcional (só registro manual)
   /**
-   * 'calibracao' = entrada de CALIBRAÇÃO manual ("Muito fácil" / "Assumir este degrau" —
-   * cofre DF #13/B2, 2026-07-04). NÃO é treino: fica fora da Chama (dias de treino) e do
-   * gráfico de Cargas (ver `sessoesTreino`). Ausente = sessão de treino normal (legado ok).
+   * Entradas de EVENTO (não são treino; ausente = sessão de treino normal, legado ok):
+   *  - 'calibracao' = calibração manual ("Muito fácil" / "Assumir este degrau" — cofre
+   *    DF #13/B2, 2026-07-04);
+   *  - 'sinal_fadiga' = botão "estou exausto/muito dolorido" (v2 §2/§6, DF 2026-07-08):
+   *    dispara o deload REATIVO; NÃO conta como dia de treino (fora da Chama/Cargas).
    */
-  tipo?: 'calibracao';
+  tipo?: 'calibracao' | 'sinal_fadiga';
 }
 
 /**
- * Só as sessões de TREINO (exclui calibrações) — salvaguarda travada do B2: evento de
- * calibração não conta dia de treino (Chama/marcos) nem alimenta o gráfico de Cargas.
+ * Só as sessões de TREINO (exclui entradas de evento — calibração, sinal de fadiga):
+ * salvaguarda travada do B2/v2 — evento não conta dia de treino (Chama/marcos) nem
+ * alimenta o gráfico de Cargas.
  */
 export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHistorico[] {
-  return historico.filter((s) => s.tipo !== 'calibracao');
+  return historico.filter((s) => !s.tipo);
 }
 
 /**
@@ -83,7 +86,7 @@ export function lerHistorico(): SessaoHistorico[] {
  * primeiro. Retorna o histórico atualizado.
  */
 export function registrarSessaoEm(
-  resumo: ResumoSessao, dataISO: string, extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: 'calibracao' },
+  resumo: ResumoSessao, dataISO: string, extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo'] },
 ): SessaoHistorico[] {
   const hist = lerHistorico();
   // n único = maior n existente + 1 (length+1 duplicaria após qualquer entrada descartada).
@@ -128,4 +131,27 @@ export function salvarCalibracao(
     exercicios: itens.map((it) => ({ id: it.id, nome: it.nome, loaded: false, fb: null, sets: [], calibracao: it.calibracao })),
   };
   return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'calibracao' });
+}
+
+/**
+ * Grava um SINAL DE FADIGA ("estou exausto/muito dolorido" — v2 §2/§6, DF 2026-07-08)
+ * como evento no histórico: dispara o deload REATIVO (o `estadoDoCiclo` antecipa a
+ * semana 6 e reancora o ciclo). `tipo: 'sinal_fadiga'` deixa a entrada fora da Chama,
+ * das Cargas e da progressão (não é treino). Sincroniza pelo mesmo funil das sessões.
+ */
+export function registrarSinalFadiga(agora: Date = new Date()): SessaoHistorico[] {
+  const resumo: ResumoSessao = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [] };
+  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'sinal_fadiga' });
+}
+
+/**
+ * Há sinal de fadiga RECENTE (janela de 7 dias)? Alimenta o gatilho reativo do deload
+ * (v2 §2). Determinístico: `hojeISO` injetado; a janela de 7 dias casa com a duração da
+ * semana de alívio (o sinal "se consome" quando o ciclo novo começa).
+ */
+export function temSinalFadigaRecente(historico: readonly SessaoHistorico[], hojeISO: string): boolean {
+  const limite = Date.parse(`${hojeISO}T00:00:00Z`) - 7 * 86_400_000;
+  if (!Number.isFinite(limite)) return false;
+  const limiteISO = new Date(limite).toISOString().slice(0, 10);
+  return historico.some((s) => s.tipo === 'sinal_fadiga' && s.dataISO >= limiteISO && s.dataISO <= hojeISO);
 }

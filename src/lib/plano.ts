@@ -6,12 +6,16 @@
  * cansados é resolvido por `pratosCansadosAtivos`, que recebe a data de quem chama).
  */
 import { gerarDieta, gerarTreino } from '@/lib/engine';
-import type { PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
+import type { OpcoesSemana, PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
 
-export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; treino: ResultadoTreino } {
+export function recomputarPlano(
+  perfil: PerfilResumo,
+  /** Semana do mesociclo (v2): quem tem relógio (Painel) deriva e injeta; ausente = v1. */
+  opcoes?: { semanaCiclo?: OpcoesSemana },
+): { dieta: ResultadoMotor; treino: ResultadoTreino } {
   const perfilU: PerfilUsuario = {
     sexo: perfil.sexo, pesoKg: perfil.pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,
     nivelAtividade: perfil.nivelAtividade, objetivo: perfil.objetivo, flagsSaude: perfil.flagsSaude,
@@ -23,6 +27,8 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
     equipamentosCasa: perfil.equipamentosCasa, // checklist de casa (modelo 2 níveis)
     diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+    // Modo força (v2 §4): preset opt-in — o motor ignora p/ iniciante.
+    ...(perfil.modoForca ? { modoForca: true } : {}),
   };
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
   // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é
@@ -36,6 +42,11 @@ export function recomputarPlano(perfil: PerfilResumo): { dieta: ResultadoMotor; 
     dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),
     // Favoritos (DF #12): viés determinístico do montador — preferidos no slot, isentos
     // da variedade; filtros duros e invariantes intactos.
-    treino: gerarTreino(perfilT, { exercises: EXERCISES_SEED, favoritos: new Set(perfil.favoritos ?? []) }),
+    treino: gerarTreino(perfilT, {
+      exercises: EXERCISES_SEED,
+      favoritos: new Set(perfil.favoritos ?? []),
+      // Rampa do mesociclo (v2 §1): séries por slot da semana corrente.
+      ...(opcoes?.semanaCiclo ? { semanaCiclo: opcoes.semanaCiclo } : {}),
+    }),
   };
 }

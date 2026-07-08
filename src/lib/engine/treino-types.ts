@@ -29,7 +29,24 @@ export interface PerfilTreino {
   diasDisponiveis: number;
   /** Tempo por sessão em minutos. */
   tempoPorSessaoMin: number;
+  /**
+   * Modo força (preset opt-in, v2 — cofre parametros-motor-treino §"v2 — decisões travadas",
+   * DF 2026-07-08): alvo FIXO de 6 reps nos compostos com carga, progride só por carga (→ 6RM).
+   * Só intermediário/avançado — para iniciante o flag é IGNORADO (RIR ≥ 2 intacto).
+   */
+  modoForca?: boolean;
 }
+
+// --- Mesociclo (v2 — DF 2026-07-08) -----------------------------------------
+
+/** Semana do mesociclo: 1–5 = rampa de volume; 6 = deload (semana de alívio). */
+export type SemanaCiclo = 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
+ * Sinal agregado de feedback por grupo muscular (v2 §6): 'segura' = o grupo acumulou
+ * "difícil" recente e NÃO recebe o incremento da semana (alvo = semana anterior).
+ */
+export type FeedbackGrupo = 'ok' | 'segura';
 
 export interface ResultadoGateTreino {
   comportamento: ComportamentoTreino;
@@ -72,6 +89,10 @@ export interface PrescricaoFITT {
   semFalhaIniciante: boolean;
   /** Piso de reps com carga (faixas começam em 6; nunca < 5). */
   pisoRepsComCarga: number;
+  /** Modo força ativo (v2): compostos travados em 6 reps, progressão só por carga. */
+  modoForca?: true;
+  /** RIR-alvo da semana do ciclo (v2 §3: rampa 3→1). Ausente = prescrição fora do ciclo. */
+  rirAlvoSemana?: number;
 }
 
 // --- Progressão (dupla progressão dirigida por feedback) ---------------------
@@ -111,6 +132,11 @@ export interface SlotExercicio {
   /** true quando o exercício é FAVORITO do usuário e entrou no plano (badge "Favorito" —
    *  B5, DF 2026-07-04: acende para todo favorito que entrou no plano). */
   incluidoPorPreferencia?: boolean;
+  /**
+   * Séries planejadas pela RAMPA da semana do mesociclo (v2 §1). Ausente = chamada v1
+   * (a UI usa o min da prescrição / estado da progressão).
+   */
+  series?: number;
 }
 
 export interface DiaTreino {
@@ -126,4 +152,11 @@ export interface RotinaSemanal {
   dias: DiaTreino[];
   cardio: CardioPrescricao;
   avisos: string[];
+  /** Metadados do mesociclo (v2) — ausente em chamadas v1 (sem semana). */
+  semana?: {
+    numero: SemanaCiclo;
+    deload: boolean;
+    /** Descanso do composto EFETIVO da rotina (teto ~180 s quando o tempo permite — v2 §5). */
+    descansoCompostoSeg: Faixa;
+  };
 }

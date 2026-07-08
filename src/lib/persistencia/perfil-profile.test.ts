@@ -49,6 +49,20 @@ describe('perfil-profile — mapeador PerfilResumo ↔ linha de profile', () => 
     expect(linhaParaPerfil(perfilParaLinha(semOpc))).toEqual(semOpc);
   });
 
+  it('mesociclo + modo força (v2, DF 2026-07-08) vão no jsonb e fazem round-trip fiel', () => {
+    const v2: PerfilResumo = { ...perfil, mesocicloInicio: '2026-07-08', mesocicloSemana: 3, modoForca: true };
+    const linha = perfilParaLinha(v2);
+    expect(linha.preferencias.mesocicloInicio).toBe('2026-07-08');
+    expect(linha.preferencias.mesocicloSemana).toBe(3);
+    expect(linha.preferencias.modoForca).toBe(true);
+    for (const k of ['mesocicloInicio', 'mesocicloSemana', 'modoForca']) expect(k in linha).toBe(false); // não vazam como coluna
+    expect(linhaParaPerfil(linha)).toEqual(v2);
+    // ausentes (conta v1) seguem ausentes — nada de default fantasma
+    const semV2 = perfilParaLinha(perfil);
+    expect('mesocicloInicio' in semV2.preferencias).toBe(false);
+    expect(linhaParaPerfil(semV2)).toEqual(perfil);
+  });
+
   it('linhaComConsentimentos: mescla aceite_18/termos/lgpd + carimbo (LGPD quer o registro)', () => {
     const linha = perfilParaLinha(perfil);
     const out = linhaComConsentimentos(linha, { aceite18: true, aceiteTermos: true, aceiteLgpd: true }, '2026-07-06T00:00:00.000Z');

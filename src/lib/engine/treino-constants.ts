@@ -95,8 +95,22 @@ export const INCREMENTO_CARGA = {
 export const REDUCAO_CARGA_DIFICIL = 0.1; // −~10% após 2 "difícil" seguidas
 
 /** Deload (semana de alívio). */
-export const DELOAD_SEMANAS_DEFAULT = 6; // interm./avançado; iniciante reativo
+export const DELOAD_SEMANAS_DEFAULT = 6; // v2: agendado = semana 6 do mesociclo (universal)
 export const DELOAD_REDUCAO_VOLUME = 0.45; // −40–50% do volume (ponto: 45%)
+
+/** v2 — Mesociclo + autorregulação (cofre parametros-motor-treino §"v2 — decisões
+ *  travadas" + outputs/handoff-motor-treino-v2, DFs 2026-07-08). */
+export const MESOCICLO_SEMANAS = 6; // 5 de rampa + 1 de deload
+export const MESOCICLO_SEMANAS_RAMPA = 5;
+/** Largura de banda acima da qual a rampa sobe +2 séries/sem (tabela 1.2 atual: nunca). */
+export const RAMPA_BANDA_LARGA = 4;
+/** RIR-alvo por semana da rampa (linear 3→1; sem. 6 = deload volta a 3). Piso do
+ *  iniciante (2) e do objetivo entram por cima via `rirAlvoDaSemana`. Nunca 0. */
+export const RIR_ALVO_POR_SEMANA = [3, 3, 2, 2, 1] as const;
+/** Teto do descanso do composto quando o tempo por sessão permite (v2 §5). */
+export const DESCANSO_COMPOSTO_TETO_SEG = 180;
+/** Modo força: alvo fixo de reps nos compostos (nunca < 6 nem > 6; → 6RM). */
+export const MODO_FORCA_REPS = 6;
 
 /** Nível de experiência → dificuldades de exercício liberadas (escada da biblioteca A1). */
 export const DIFICULDADE_LIBERADA: Record<NivelExperiencia, NivelExercicio[]> = {

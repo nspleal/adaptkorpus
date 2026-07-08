@@ -9,6 +9,7 @@ import {
   FITT_OBJETIVO,
   FREQ_POR_GRUPO_MIN,
   INCREMENTO_CARGA,
+  MODO_FORCA_REPS,
   PISO_ABSOLUTO_REPS,
   PISO_REPS_COM_CARGA,
   REDUCAO_CARGA_DIFICIL,
@@ -56,10 +57,18 @@ export function prescreverTreino(
   // RIR: piso global 1; iniciante nunca abaixo de 2.
   const rirMin = Math.max(base.rir.min, nivel === 'iniciante' ? RIR_MIN_INICIANTE : RIR_MIN_GLOBAL);
 
+  // Modo força (v2, DF 2026-07-08): preset opt-in SÓ interm./avançado — compostos travados
+  // em 6 reps (nunca < 6 nem > 6), progressão só por carga (→ 6RM); isolados mantêm a faixa
+  // v1. Iniciante IGNORA o flag (mantém RIR ≥ 2, sem 6RM real).
+  const modoForca = perfil.modoForca === true && nivel !== 'iniciante';
+
   // Reps com carga começam em 6 (defensivo; as faixas da spec já respeitam).
-  const repsComposto: Faixa = { min: Math.max(base.repsComposto.min, PISO_REPS_COM_CARGA), max: base.repsComposto.max };
+  const repsComposto: Faixa = modoForca
+    ? { min: MODO_FORCA_REPS, max: MODO_FORCA_REPS }
+    : { min: Math.max(base.repsComposto.min, PISO_REPS_COM_CARGA), max: base.repsComposto.max };
 
   return {
+    ...(modoForca ? { modoForca: true as const } : {}),
     objetivoEfetivo: obj,
     nivel,
     repsComposto,
@@ -325,15 +334,48 @@ function aplicarCalibracao(
   };
 }
 
-/** Deload — precisa nesta semana? */
+/**
+ * Deload — precisa nesta semana? v2 (DF 2026-07-08): o agendado é UNIVERSAL (mesociclo
+ * de 6 semanas vale p/ todos os níveis, iniciante incluído — substitui o "iniciante só
+ * reativo" do v1). O reativo (fadiga) segue valendo para qualquer nível e antecipa.
+ */
 export function precisaDeload(args: {
   nivel: NivelExperiencia;
   semanasDesdeUltimoDeload: number;
   sinaisFadiga: boolean;
 }): boolean {
   if (args.sinaisFadiga) return true; // reativo (qualquer nível)
-  if (args.nivel === 'iniciante') return false; // iniciante é só reativo, não agendado
   return args.semanasDesdeUltimoDeload >= DELOAD_SEMANAS_DEFAULT;
+}
+
+/**
+ * Autorregulação por RIR numérico (v2 §3): refina o feedback qualitativo com os números
+ * registrados na sessão ANTES da dobra da dupla progressão — `progredirExercicio` fica
+ * intocado (trilhos preservados; a regressão continua exigindo 2 "difícil" seguidos e a
+ * carga nunca leva as reps abaixo do piso da faixa).
+ *  - reps > topo da faixa E RIR > alvo → 'facil' (+carga)
+ *  - reps < piso da faixa OU RIR < alvo → 'dificil' (segura / −carga com pisos)
+ *  - modo força (faixa 6–6): as 6 saem NO RIR-alvo (≥) → 'facil' (+carga → 6RM)
+ *  - senão → mantém o feedback qualitativo (que segue existindo como atalho).
+ */
+export function feedbackRefinado(args: {
+  fb: Feedback;
+  faixa: Faixa;
+  rirAlvo: number;
+  /** Maior nº de reps registrado nas séries da sessão (ausente = sem registro numérico). */
+  repsMax?: number;
+  /** Menor RIR numérico registrado nas séries da sessão (ausente = sem registro). */
+  rirMin?: number;
+  /** Prescrição em modo força (faixa travada em 6): +carga quando as 6 saem no alvo. */
+  modoForca?: boolean;
+}): Feedback {
+  const { fb, faixa, rirAlvo, repsMax, rirMin, modoForca } = args;
+  if ((repsMax != null && repsMax < faixa.min) || (rirMin != null && rirMin < rirAlvo)) return 'dificil';
+  if (repsMax != null && rirMin != null) {
+    if (modoForca && repsMax >= faixa.max && rirMin >= rirAlvo) return 'facil';
+    if (repsMax > faixa.max && rirMin > rirAlvo) return 'facil';
+  }
+  return fb;
 }
 
 /** Aplica a semana de deload à prescrição: −~45% do volume (carga −10% é por exercício). */

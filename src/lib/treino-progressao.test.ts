@@ -4,7 +4,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 import { sessoesTreino } from '@/lib/treino-historico';
-import { exercicioEfetivo, precisaDeloadDoHistorico, progressoDosExercicios } from './treino-progressao';
+import { exercicioEfetivo, feedbackAgregadoPorGrupo, precisaDeloadDoHistorico, progressoDosExercicios, sinaisFadigaDoHistorico } from './treino-progressao';
 import { EXERCISES } from '@/lib/data/exercises';
 
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
@@ -83,11 +83,11 @@ describe('precisaDeloadDoHistorico', () => {
     expect(precisaDeloadDoHistorico(hist, 'iniciante', '2026-07-03')).toBe(true);
   });
 
-  it('agendado: intermediário a cada 6 semanas (42 dias) desde a 1ª sessão', () => {
+  it('agendado: a cada 6 semanas (42 dias) desde a 1ª sessão — TODOS os níveis (v2 universal, DF 2026-07-08)', () => {
     const hist = [recente('na_medida', '2026-06-20')]; // 42 dias antes de 2026-08-01
     expect(precisaDeloadDoHistorico(hist, 'intermediario', '2026-08-01')).toBe(true);
-    // iniciante nunca é agendado (só reativo)
-    expect(precisaDeloadDoHistorico(hist, 'iniciante', '2026-08-01')).toBe(false);
+    // v2: o mesociclo é universal — iniciante também deloada no agendado
+    expect(precisaDeloadDoHistorico(hist, 'iniciante', '2026-08-01')).toBe(true);
   });
 
   it('sem fadiga e fora da semana agendada → sem alívio; histórico vazio → false', () => {
@@ -197,5 +197,83 @@ describe('descida (V8.3 Estado 5) — sugereDescida + variacaoAnterior', () => {
     const hist = [sessao('2026-07-01', [{ id: 'e3', fb: 'na_medida' }])];
     const prog = progressoDosExercicios(hist, pIni, resolver, EXERCISES, 'nenhum');
     expect(prog.e3!.variacaoAnterior).toBeNull();
+  });
+});
+
+// ── v2 (DF 2026-07-08): autorregulação por RIR + fadiga + agregação por grupo ──
+describe('autorregulação por RIR numérico no fold (v2 §3)', () => {
+  const p = prescricao({ nivelExperiencia: 'intermediario', objetivo: 'massa' }); // composto 6–12, rir.min 1
+
+  function sessaoRir(dataISO: string, fb: 'facil' | 'na_medida' | 'dificil', sets: { reps: string; kg: string; rir?: string }[], rirAlvo?: number): SessaoHistorico {
+    seq += 1;
+    return {
+      dia: 'Treino', series: sets.length, volumeKg: 0, feedback: { e_sup: fb }, n: seq, dataISO,
+      ...(rirAlvo != null ? { rirAlvo } : {}),
+      exercicios: [{ id: 'e_sup', nome: 'Supino', loaded: true, fb, sets }],
+    };
+  }
+
+  it('reps acima do topo + RIR acima do alvo refinam "na medida" → +carga', () => {
+    // 13 reps (topo 12) com RIR 3 (alvo 2) → 'facil' → +2,5% da carga logada (40 → 41)
+    const hist = [sessaoRir('2026-07-01', 'na_medida', [{ reps: '13', kg: '40', rir: '3' }], 2)];
+    const prog = progressoDosExercicios(hist, p, byId);
+    expect(prog.e_sup!.estado.cargaKg).toBeCloseTo(41, 3);
+  });
+
+  it('RIR abaixo do alvo refina "na medida" → difícil (1ª segura; pisos respeitados)', () => {
+    const hist = [sessaoRir('2026-07-01', 'na_medida', [{ reps: '8', kg: '40', rir: '0' }], 2)];
+    const prog = progressoDosExercicios(hist, p, byId);
+    expect(prog.e_sup!.estado.dificeisSeguidos).toBe(1); // 1º difícil → segura
+    expect(prog.e_sup!.estado.repsAlvo).toBeGreaterThanOrEqual(6); // piso intacto
+  });
+
+  it('sem RIR numérico o feedback qualitativo segue mandando (retrocompat)', () => {
+    const hist = [sessaoRir('2026-07-01', 'na_medida', [{ reps: '10', kg: '40' }])];
+    const prog = progressoDosExercicios(hist, p, byId);
+    expect(prog.e_sup!.estado.cargaKg).toBe(40); // consolida, sem +carga
+    expect(prog.e_sup!.estado.dificeisSeguidos).toBe(0);
+  });
+});
+
+describe('sinaisFadigaDoHistorico + sinal_fadiga (v2 §2)', () => {
+  it('botão de fadiga (tipo sinal_fadiga) nos últimos 7 dias dispara o sinal reativo', () => {
+    const fadiga: SessaoHistorico = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [], n: 999, dataISO: '2026-07-05', tipo: 'sinal_fadiga' };
+    expect(sinaisFadigaDoHistorico([fadiga], '2026-07-08')).toBe(true);
+    expect(sinaisFadigaDoHistorico([fadiga], '2026-07-20')).toBe(false); // sinal antigo (> 7 d) não conta
+  });
+
+  it('sinal_fadiga NÃO conta como dia de treino (fora de sessoesTreino)', () => {
+    const fadiga: SessaoHistorico = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [], n: 999, dataISO: '2026-07-05', tipo: 'sinal_fadiga' };
+    const treino = sessao('2026-07-04', [{ id: 'e_sup', fb: 'na_medida' }]);
+    expect(sessoesTreino([fadiga, treino])).toEqual([treino]);
+  });
+
+  it('≥3 "difícil" em ~2 semanas segue disparando (regra do v1 preservada)', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e_sup', fb: 'dificil' }]), sessao('2026-06-30', [{ id: 'e7', fb: 'dificil' }]), sessao('2026-06-29', [{ id: 'e_sup', fb: 'dificil' }])];
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-03')).toBe(true);
+    expect(sinaisFadigaDoHistorico(hist.slice(0, 2), '2026-07-03')).toBe(false);
+  });
+});
+
+describe('feedbackAgregadoPorGrupo (v2 §6)', () => {
+  it("≥2 'difícil' no MESMO grupo em ≤7 dias → 'segura'; 1 só → ausente ('ok')", () => {
+    const hist = [sessao('2026-07-07', [{ id: 'e_sup', fb: 'dificil' }]), sessao('2026-07-05', [{ id: 'e_sup', fb: 'dificil' }, { id: 'e7', fb: 'dificil' }])];
+    const m = feedbackAgregadoPorGrupo(hist, '2026-07-08', byId);
+    expect(m.get('peito')).toBe('segura'); // supino 2× difícil
+    expect(m.get('core')).toBeUndefined(); // prancha 1× só
+  });
+
+  it("'difícil' há mais de 7 dias não conta (janela = semana corrente do ciclo)", () => {
+    const hist = [sessao('2026-06-25', [{ id: 'e_sup', fb: 'dificil' }]), sessao('2026-06-24', [{ id: 'e_sup', fb: 'dificil' }])];
+    expect(feedbackAgregadoPorGrupo(hist, '2026-07-08', byId).size).toBe(0);
+  });
+
+  it('determinístico com hojeISO injetado; entradas de evento (calibração/fadiga) ficam fora', () => {
+    const fadiga: SessaoHistorico = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: { e_sup: 'dificil' }, exercicios: [], n: 998, dataISO: '2026-07-07', tipo: 'sinal_fadiga' };
+    const hist = [fadiga, sessao('2026-07-06', [{ id: 'e_sup', fb: 'dificil' }])];
+    const a = feedbackAgregadoPorGrupo(hist, '2026-07-08', byId);
+    const b = feedbackAgregadoPorGrupo(hist, '2026-07-08', byId);
+    expect([...a.entries()]).toEqual([...b.entries()]);
+    expect(a.get('peito')).toBeUndefined(); // só 1 difícil de sessão real
   });
 });

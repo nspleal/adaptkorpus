@@ -27,12 +27,18 @@ export {
   precisaDeload,
   aplicarDeload,
   dificuldadesLiberadas,
+  feedbackRefinado,
 } from './treino';
+// --- Mesociclo v2 (DF 2026-07-08) ---
+export {
+  semanaDoCiclo, alvoDaSemana, rirAlvoDaSemana, estadoDoCiclo, isoMaisDias,
+  type EstadoCiclo,
+} from './treino-mesociclo';
 export type { EventoProgressao, EventoTreino, EventoCalibracao } from './treino';
 export { ACAO_RECALIBRADO } from './treino';
 export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
-export { montarRotina, locaisPermitidos } from './treino-montador';
+export { montarRotina, locaisPermitidos, type OpcoesSemana } from './treino-montador';
 
 // --- Equipamento (modelo 2 níveis — DF 2026-07-04) ---
 export { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA, exercicioDisponivel } from './equipamento';
@@ -61,7 +67,7 @@ import { gerarPlanoDieta } from './diet';
 import { avaliarGateSaude } from './health-gate';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
-import { montarRotina } from './treino-montador';
+import { montarRotina, type OpcoesSemana as OpcoesSemanaMontador } from './treino-montador';
 import type { Exercise, Food, Recipe } from '../data/types';
 import type { PerfilUsuario, PlanoDieta, ResultadoGate } from './types';
 import type {
@@ -126,7 +132,12 @@ export interface ResultadoTreino {
  */
 export function gerarTreino(
   perfil: PerfilTreino,
-  opcoes?: { exercises?: readonly Exercise[]; favoritos?: ReadonlySet<string> },
+  opcoes?: {
+    exercises?: readonly Exercise[];
+    favoritos?: ReadonlySet<string>;
+    /** Semana do mesociclo (v2): liga a rampa de volume por grupo no montador. */
+    semanaCiclo?: OpcoesSemanaMontador;
+  },
 ): ResultadoTreino {
   const gate = avaliarGateTreino(perfil);
 
@@ -135,7 +146,9 @@ export function gerarTreino(
   }
 
   const prescricao = prescreverTreino(perfil, gate);
-  const rotina = opcoes?.exercises ? montarRotina(prescricao, perfil, opcoes.exercises, opcoes.favoritos) : null;
+  const rotina = opcoes?.exercises
+    ? montarRotina(prescricao, perfil, opcoes.exercises, opcoes.favoritos, opcoes.semanaCiclo)
+    : null;
 
   return { gate, prescricao, rotina };
 }

@@ -11,8 +11,10 @@
  */
 import { dificuldadesLiberadas } from './treino';
 import { exercicioDisponivel } from './equipamento';
-import type { PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SlotExercicio } from './treino-types';
-import type { EquipamentoDisp, Exercise, LocalExercicio, PadraoMovimento } from '../data/types';
+import { alvoDaSemana } from './treino-mesociclo';
+import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
+import type { Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
 export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
@@ -65,6 +67,16 @@ const CORE_MIN = 2;
 const CORE_MAX = 3;
 
 /**
+ * Semana do mesociclo passada ao montador (v2 — DF 2026-07-08): dirige a RAMPA de volume
+ * por grupo (séries por slot) e o descanso efetivo do composto. Ausente = comportamento v1.
+ */
+export interface OpcoesSemana {
+  semana: SemanaCiclo;
+  /** Feedback agregado por grupo muscular (v2 §6): 'segura' congela o incremento do grupo. */
+  feedbackGrupos?: ReadonlyMap<GrupoPrimario, FeedbackGrupo>;
+}
+
+/**
  * Monta a rotina semanal. Função PURA e determinística.
  */
 export function montarRotina(
@@ -78,6 +90,7 @@ export function montarRotina(
    * liberado nem entra no pool), nunca furam as invariantes e não adicionam slot.
    */
   favoritos: ReadonlySet<string> = new Set(),
+  semanaCiclo?: OpcoesSemana,
 ): RotinaSemanal {
   const avisos: string[] = [];
   const dias = Math.max(0, Math.floor(perfil.diasDisponiveis));
@@ -123,9 +136,37 @@ export function montarRotina(
     return arr[i % arr.length]!;
   }
 
-  const maxExercicios = Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / tempoPorExercicioSeg(prescricao)));
-
   const { split, dias: spec } = montarSplit(diasForca, perfil.nivelExperiencia);
+
+  // --- Orçamento de tempo + descanso efetivo do composto -------------------
+  // v1: custo = séries mín × (execução ~40 s + descanso mín).
+  // v2 (semana passada): custo ESTÁVEL no ciclo inteiro, dimensionado p/ o pior caso da
+  // rampa (evita a rotina encolher no meio do ciclo), e o teto do descanso do composto
+  // sobe p/ ~180 s QUANDO o tempo permite (v2 §5) — i.e., só se não reduzir o nº de
+  // exercícios que o descanso base comportaria (tempo é o limitante; cobertura > descanso).
+  let descansoEfetivo: Faixa = prescricao.descansoCompostoSeg;
+  let maxExercicios: number;
+  if (semanaCiclo) {
+    const banda = prescricao.volumePorGrupoSemana;
+    const sPlan = Math.min(
+      prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
+      prescricao.seriesPorExercicio.max,
+    );
+    const restMid = (f: Faixa) => Math.round((f.min + f.max) / 2);
+    const cap = (rest: Faixa) => Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / (sPlan * (40 + restMid(rest)))));
+    const capBase = cap(prescricao.descansoCompostoSeg);
+    // Elegível ao teto 180 s: descanso base já "pesado" (massa, 90–120) OU modo força
+    // (compostos a 6RM). Subir saúde/emagrec. de 60–90 p/ 180 destoa do objetivo.
+    const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
+    if (elegivel180) {
+      const rest180: Faixa = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
+      const precisaSlots = Math.max(...spec.map((d) => Math.min(d.padroes.length, capBase)));
+      if (cap(rest180) >= precisaSlots) descansoEfetivo = rest180;
+    }
+    maxExercicios = cap(descansoEfetivo);
+  } else {
+    maxExercicios = Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / tempoPorExercicioSeg(prescricao)));
+  }
 
   // --- Alocador semanal de padrões -----------------------------------------
   // Distribui os padrões pelos dias (respeitando o template e a capacidade por tempo),
@@ -183,6 +224,53 @@ export function montarRotina(
     return { nome: d.nome, slots };
   });
 
+  // --- Rampa de volume por grupo (v2 §1, DF 2026-07-08) ---------------------
+  // Distribui o volume-alvo da SEMANA (dentro da banda da tabela 1.2 — sem tabela nova)
+  // pelos slots de cada grupoPrimario, em round-robin determinístico na ordem (dia, slot),
+  // clampado a seriesPorExercicio {min..max}. Semana 6 NÃO anota séries: o deload usa o
+  // mecanismo existente (aplicarDeload + corte de séries na sessão) — evita corte duplo.
+  if (semanaCiclo && semanaCiclo.semana !== 6) {
+    const { semana, feedbackGrupos } = semanaCiclo;
+    const sMin = prescricao.seriesPorExercicio.min;
+    const sMax = prescricao.seriesPorExercicio.max;
+    const banda = prescricao.volumePorGrupoSemana;
+    const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
+    for (const d of diasTreino) {
+      for (const s of d.slots) {
+        const arr = porGrupo.get(s.exercicio.grupoPrimario) ?? [];
+        arr.push(s);
+        porGrupo.set(s.exercicio.grupoPrimario, arr);
+      }
+    }
+    for (const grupo of [...porGrupo.keys()].sort()) {
+      const slots = porGrupo.get(grupo)!;
+      const alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
+      const n = slots.length;
+      const base = n * sMin;
+      const teto = n * sMax;
+      const series = slots.map(() => sMin);
+      if (alvo > base) {
+        // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
+        // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
+        if (alvo > teto && teto >= banda.min) {
+          avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${teto}.`);
+        }
+        let extra = Math.min(alvo, teto) - base;
+        let i = 0;
+        while (extra > 0) {
+          if (series[i]! < sMax) {
+            series[i]!++;
+            extra--;
+          }
+          i = (i + 1) % n;
+        }
+      }
+      slots.forEach((s, i) => {
+        s.series = series[i]!;
+      });
+    }
+  }
+
   // Invariantes (verificação + aviso honesto, sem afrouxar segurança).
   const contaPadrao = (p: PadraoMovimento) => diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
   if (contaPadrao('puxar') < contaPadrao('empurrar')) {
@@ -205,5 +293,9 @@ export function montarRotina(
     dias: diasTreino,
     cardio: prescricao.cardio,
     avisos,
+    // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
+    ...(semanaCiclo
+      ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
+      : {}),
   };
 }

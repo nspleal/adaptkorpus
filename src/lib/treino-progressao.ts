@@ -3,17 +3,20 @@
 import {
   ACAO_RECALIBRADO,
   estadoAposHistorico,
+  feedbackRefinado,
   precisaDeload,
+  repUnitDe,
   sugerirProximaVariacao,
   sugerirVariacaoAnterior,
   type EstadoExercicio,
   type EventoProgressao,
   type Feedback,
+  type FeedbackGrupo,
   type PrescricaoFITT,
 } from '@/lib/engine';
 import { DELOAD_SEMANAS_DEFAULT } from '@/lib/engine/treino-constants';
-import type { EquipamentoCasa, EquipamentoDisp, Exercise } from '@/lib/data/types';
-import type { SessaoHistorico } from '@/lib/treino-historico';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario } from '@/lib/data/types';
+import { temSinalFadigaRecente, type SessaoHistorico } from '@/lib/treino-historico';
 
 /**
  * Adaptador client da progressão (Passo 2 / Bloco B). Deriva o alvo ATUAL de cada exercício
@@ -88,6 +91,22 @@ function cargaMaxDaSessao(s: SessaoHistorico, exId: string): number {
   return ex.sets.reduce((m, r) => Math.max(m, Number(r.kg) || 0), 0);
 }
 
+/** Evento de treino + os números da sessão (RIR/reps por série — v2 §3) p/ o refinamento. */
+type EventoComNumeros = EventoProgressao & { repsMax?: number; rirMin?: number; rirAlvoSessao?: number };
+
+/** Extrai do exercício da sessão o pior RIR e o maior nº de reps registrados nas séries. */
+function numerosDaSessao(ex: SessaoHistorico['exercicios'][number]): { repsMax?: number; rirMin?: number } {
+  let repsMax: number | undefined;
+  let rirMin: number | undefined;
+  for (const s of ex.sets) {
+    const reps = Number(s.reps);
+    if (Number.isFinite(reps) && reps > 0) repsMax = Math.max(repsMax ?? 0, reps);
+    const rir = s.rir != null && s.rir !== '' ? Number(s.rir) : NaN;
+    if (Number.isFinite(rir) && rir >= 0) rirMin = Math.min(rirMin ?? Infinity, rir);
+  }
+  return { ...(repsMax != null ? { repsMax } : {}), ...(rirMin != null ? { rirMin } : {}) };
+}
+
 /**
  * Alvo atual de cada exercício (id → estado + última ação), derivado do histórico.
  * `exercicioPorId` resolve o `Exercise` (para o motor saber modo/faixa) — ex.: EXERCISES_SEED.
@@ -107,7 +126,7 @@ export function progressoDosExercicios(
 
   // Eventos por exercício: treino (feedback; customs têm id '' e caem fora) + CALIBRAÇÃO
   // (sessões `tipo:'calibracao'` viram o evento correspondente — B2, ordem cronológica real).
-  const eventosPorId = new Map<string, EventoProgressao[]>();
+  const eventosPorId = new Map<string, EventoComNumeros[]>();
   const degrauAdotadoPorId = new Map<string, string>();
   for (const s of asc) {
     for (const ex of s.exercicios) {
@@ -124,7 +143,14 @@ export function progressoDosExercicios(
       if (!fb) continue; // sessão sem feedback (ex.: só pausado por dor) não progride nada
       const arr = eventosPorId.get(ex.id) ?? [];
       const cargaMaxKg = cargaMaxDaSessao(s, ex.id);
-      arr.push(cargaMaxKg > 0 ? { fb, cargaMaxKg } : { fb });
+      // Números da sessão (RIR por série — v2 §3) acompanham o evento p/ o refinamento
+      // adiante (feedbackRefinado, quando o Exercise/faixa está resolvido).
+      arr.push({
+        fb,
+        ...(cargaMaxKg > 0 ? { cargaMaxKg } : {}),
+        ...numerosDaSessao(ex),
+        ...(s.rirAlvo != null ? { rirAlvoSessao: s.rirAlvo } : {}),
+      });
       eventosPorId.set(ex.id, arr);
     }
   }
@@ -141,7 +167,27 @@ export function progressoDosExercicios(
     const proximaVariacao = prox && prox[0] ? { id: prox[0], nome: exercicioPorId(prox[0])?.nomePt ?? prox[0] } : null;
     const ant = exercises && equipamento ? sugerirVariacaoAnterior(idEfetivo, exercises, equipamento, equipamentosCasa) : null;
     const variacaoAnterior = ant && ant[0] ? { id: ant[0], nome: exercicioPorId(ant[0])?.nomePt ?? ant[0] } : null;
-    const r = estadoAposHistorico(exercicio, prescricao, eventos);
+    // Autorregulação (v2 §3): o RIR numérico por série REFINA o feedback qualitativo antes
+    // da dobra — `progredirExercicio` fica intocado (trilhos do v1 preservados). Isométricos
+    // ficam de fora (segundos, sem RIR). Âncora = RIR-alvo gravado na sessão; sessões
+    // antigas caem no piso da prescrição (conservador).
+    const esSeg = repUnitDe(id) === 'segundos';
+    const faixa = exercicio.padraoMovimento === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto;
+    const eventosRefinados: EventoProgressao[] = eventos.map((ev) => {
+      if (ev.tipo === 'calibracao' || esSeg) return ev;
+      return {
+        ...ev,
+        fb: feedbackRefinado({
+          fb: ev.fb,
+          faixa,
+          rirAlvo: ev.rirAlvoSessao ?? prescricao.rir.min,
+          repsMax: ev.repsMax,
+          rirMin: ev.rirMin,
+          modoForca: prescricao.modoForca === true && exercicio.padraoMovimento !== 'isolado',
+        }),
+      };
+    });
+    const r = estadoAposHistorico(exercicio, prescricao, eventosRefinados);
     out[id] = {
       ...r,
       proximaVariacao,
@@ -169,13 +215,52 @@ export function precisaDeloadDoHistorico(
   if (datas.length === 0) return false;
   const semanas = Math.floor(diasEntreISO(datas[0]!, hojeISO) / 7);
 
+  const sinaisFadiga = sinaisFadigaDoHistorico(historico, hojeISO);
+  const semanaDeAlivio = semanas > 0 && semanas % DELOAD_SEMANAS_DEFAULT === 0;
+  return precisaDeload({ nivel, semanasDesdeUltimoDeload: semanaDeAlivio ? DELOAD_SEMANAS_DEFAULT : 0, sinaisFadiga });
+}
+
+/**
+ * Sinal REATIVO de fadiga (v2 §2, DF 2026-07-08): ≥ 3 "difícil" nas últimas ~2 semanas
+ * (regra do v1) OU sinal explícito de fadiga (botão "estou exausto/muito dolorido") nos
+ * últimos 7 dias. Alimenta `estadoDoCiclo` (deload reativo, que antecipa a semana 6).
+ */
+export function sinaisFadigaDoHistorico(historico: readonly SessaoHistorico[], hojeISO: string): boolean {
   const limite = Date.parse(`${hojeISO}T00:00:00Z`) - 14 * 86_400_000;
   const limiteISO = Number.isFinite(limite) ? new Date(limite).toISOString().slice(0, 10) : hojeISO;
   const dificeisRecentes = historico
-    .filter((s) => s.dataISO >= limiteISO)
+    .filter((s) => !s.tipo && s.dataISO >= limiteISO)
     .reduce((n, s) => n + Object.values(s.feedback ?? {}).filter((f) => f === 'dificil').length, 0);
-  const sinaisFadiga = dificeisRecentes >= 3;
+  return dificeisRecentes >= 3 || temSinalFadigaRecente(historico, hojeISO);
+}
 
-  const semanaDeAlivio = semanas > 0 && semanas % DELOAD_SEMANAS_DEFAULT === 0;
-  return precisaDeload({ nivel, semanasDesdeUltimoDeload: semanaDeAlivio ? DELOAD_SEMANAS_DEFAULT : 0, sinaisFadiga });
+/**
+ * Feedback AGREGADO por grupo muscular (v2 §6): grupo com ≥ 2 "difícil" nos últimos 7 dias
+ * → 'segura' (o montador NÃO aplica o incremento da semana àquele grupo; alvo = semana
+ * anterior). Ausente do mapa = 'ok'. Determinístico: `hojeISO` injetado; janela de 7 dias
+ * = a semana corrente do ciclo. Interpretação registrada no handoff ('segura' sem memória).
+ */
+export function feedbackAgregadoPorGrupo(
+  historico: readonly SessaoHistorico[],
+  hojeISO: string,
+  exercicioPorId: (id: string) => Exercise | undefined,
+): Map<GrupoPrimario, FeedbackGrupo> {
+  const limite = Date.parse(`${hojeISO}T00:00:00Z`) - 7 * 86_400_000;
+  const out = new Map<GrupoPrimario, FeedbackGrupo>();
+  if (!Number.isFinite(limite)) return out;
+  const limiteISO = new Date(limite).toISOString().slice(0, 10);
+  const dificeis = new Map<GrupoPrimario, number>();
+  for (const s of historico) {
+    if (s.tipo || !s.dataISO || s.dataISO < limiteISO || s.dataISO > hojeISO) continue;
+    for (const ex of s.exercicios) {
+      if (!ex.id) continue;
+      const fb = (s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
+      if (fb !== 'dificil') continue;
+      const grupo = exercicioPorId(ex.id)?.grupoPrimario;
+      if (!grupo) continue;
+      dificeis.set(grupo, (dificeis.get(grupo) ?? 0) + 1);
+    }
+  }
+  for (const [grupo, n] of dificeis) if (n >= 2) out.set(grupo, 'segura');
+  return out;
 }
