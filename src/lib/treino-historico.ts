@@ -113,6 +113,63 @@ export function substituirHistorico(sessoes: readonly SessaoHistorico[]): Sessao
   return ordenado;
 }
 
+/** Chave estável de uma sessão p/ reconciliação local × servidor. */
+function chaveSessao(s: SessaoHistorico): string {
+  return `${s.dataISO}|${s.n}|${s.tipo ?? 'treino'}`;
+}
+
+/**
+ * Reconciliação local × servidor (fix do bug bloqueador 2026-07-08 — cofre
+ * outputs/bug-persistencia-e-avatar): a hidratação NUNCA destrói dado local.
+ *  - Chaves compartilhadas → o SERVIDOR vence (regra do write-through; 2º device coerente).
+ *  - Sessões SÓ-locais (write-through silenciosamente perdido — ex.: 401 intermitente)
+ *    sobrevivem na união e saem em `faltantes` p/ o chamador RE-SUBIR ao servidor
+ *    (a re-migração é o retry — paridade com o self-heal do profile no boot).
+ * Em particular: servidor `[]` + local não-vazio ⇒ união = local e tudo é faltante
+ * (antes: `substituirHistorico([])` gravava '[]' e APAGAVA o evk_treinos).
+ * Pura e determinística; a união sai na ordem canônica de `substituirHistorico`.
+ */
+export function reconciliarHistorico(
+  locais: readonly SessaoHistorico[],
+  doServidor: readonly SessaoHistorico[],
+): { uniao: SessaoHistorico[]; faltantes: SessaoHistorico[] } {
+  const noServidor = new Set(doServidor.map(chaveSessao));
+  const faltantes = locais.filter((s) => !noServidor.has(chaveSessao(s)));
+  const uniao = [...doServidor, ...faltantes].sort((a, b) => b.dataISO.localeCompare(a.dataISO) || b.n - a.n);
+  return { uniao, faltantes };
+}
+
+// ---- Pesos registrados (evk_pesos) ------------------------------------------
+// Fix 2026-07-08: pesos eram SÓ memória (resetavam a cada reload se o write-through
+// falhasse). Passam a ter cópia local, mesmo padrão offline-first dos demais dados.
+
+const KEY_PESOS = 'evk_pesos';
+
+/** Lê os pesos registrados (ordem de registro). Robusto a storage ausente/corrompido. */
+export function lerPesos(): number[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const arr = JSON.parse(localStorage.getItem(KEY_PESOS) || '[]');
+    return Array.isArray(arr) ? arr.filter((v): v is number => Number.isFinite(v)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Acrescenta um peso à cópia local (write-through: o servidor recebe em paralelo). */
+export function registrarPesoLocal(pesoKg: number): number[] {
+  const todos = [...lerPesos(), pesoKg];
+  try { localStorage.setItem(KEY_PESOS, JSON.stringify(todos)); } catch { /* storage indisponível */ }
+  return todos;
+}
+
+/** Substitui a cópia local pelos pesos do SERVIDOR (hidratação com servidor não-vazio). */
+export function substituirPesos(pesos: readonly number[]): number[] {
+  const arr = [...pesos];
+  try { localStorage.setItem(KEY_PESOS, JSON.stringify(arr)); } catch { /* storage indisponível */ }
+  return arr;
+}
+
 /**
  * Grava uma CALIBRAÇÃO manual como evento no histórico (B2 — DF 2026-07-04): o alvo
  * continua sendo função pura do `evk_treinos`. Um item por exercício calibrado, com a

@@ -7,7 +7,7 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, hojeISO, novaSessaoDe, registrarSinalFadiga, salvarCalibracao, sessoesTreino, substituirHistorico, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
@@ -142,6 +142,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   // Inicial do avatar: NOME real do usuário (user_metadata.nome, gravado no signUp),
   // fallback e-mail — o "V" é só o placeholder do modo MOCK (sem usuário).
+  // Fix bloqueador 2026-07-08: ler PRIMEIRO a sessão LOCAL (`getSession()` — síncrona ao
+  // storage, sem rede) e só cair no `getUser()` (chamada de REDE ao servidor Auth, que
+  // corria com a rotação do refresh-token no boot e intermitentemente falhava → círculo
+  // vazio). Uso é SÓ DE EXIBIÇÃO (a inicial) — nenhuma decisão de segurança depende disto.
   const [inicial, setInicial] = useState(supabaseConfigurado() ? '' : 'V');
   useEffect(() => {
     if (!supabaseConfigurado()) return;
@@ -149,21 +153,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     void (async () => {
       try {
         const { createClient } = await import('@/lib/supabase/client');
-        const { data } = await createClient().auth.getUser();
-        if (!vivo || !data.user) return;
-        const n = (data.user.user_metadata as { nome?: string } | null)?.nome;
-        setInicial(inicialDe(n, data.user.email));
+        const auth = createClient().auth;
+        const { data: { session } } = await auth.getSession();
+        let u = session?.user ?? null;
+        if (!u) u = (await auth.getUser()).data.user; // sem sessão local → valida na rede
+        if (!vivo || !u) return;
+        const n = (u.user_metadata as { nome?: string } | null)?.nome;
+        setInicial(inicialDe(n, u.email));
       } catch { /* mantém o estado atual */ }
     })();
     return () => { vivo = false; };
   }, []);
 
   const [pesos, setPesos] = useState<number[]>([perfil.pesoKg]);
-  // Logado: pesos registrados vêm do servidor (antes eram só memória — resetavam no reload).
+  // Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
+  // resetavam a cada reload quando o write-through falhava); depois o servidor:
+  //  - servidor NÃO-vazio vence (2º device coerente) e renova a cópia local;
+  //  - servidor vazio com local não-vazio → mantém o local e RE-SOBE cada peso (retry
+  //    dos writes silenciosamente perdidos); GET falho (null) → local fica.
   useEffect(() => {
+    const locais = lerPesos();
+    if (locais.length > 0) setPesos([perfil.pesoKg, ...locais]);
     let vivo = true;
     void carregarPesosServidor().then((doServidor) => {
-      if (vivo && doServidor && doServidor.length > 0) setPesos([perfil.pesoKg, ...doServidor]);
+      if (!vivo || !doServidor) return;
+      if (doServidor.length > 0) {
+        setPesos([perfil.pesoKg, ...substituirPesos(doServidor)]);
+      } else if (locais.length > 0) {
+        for (const v of locais) void registrarPesoServidor(v);
+      }
     });
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- semente única no mount
@@ -177,11 +195,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
   useEffect(() => {
     setSessoes(lerHistorico());
-    // Logado: o histórico do SERVIDOR vence (2º device vê os mesmos dados); o local vira
-    // cache. Sem backend/sessão o sync devolve null e o local fica (modo mock intacto).
+    // Logado: RECONCILIAÇÃO local × servidor (fix bloqueador 2026-07-08 — antes um 200
+    // com [] APAGAVA o evk_treinos): o servidor vence nas chaves compartilhadas; sessões
+    // só-locais sobrevivem e são re-subidas (retry dos writes silenciosamente perdidos —
+    // paridade com o self-heal do profile). GET falho (null) → local fica (mock intacto).
     let vivo = true;
     void carregarHistoricoServidor().then((doServidor) => {
-      if (vivo && doServidor) setSessoes(substituirHistorico(doServidor));
+      if (!vivo || !doServidor) return;
+      const { uniao, faltantes } = reconciliarHistorico(lerHistorico(), doServidor);
+      for (const s of faltantes) void enviarSessaoTreino(s);
+      setSessoes(substituirHistorico(uniao));
     });
     return () => { vivo = false; };
   }, []);
@@ -387,6 +410,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const registrarPeso = (v: number) => {
     if (!Number.isFinite(v) || v < 30 || v > 300) return;
     setPesos((p) => [...p, v]);
+    registrarPesoLocal(v); // cópia local primeiro (offline-first — fix 2026-07-08)
     void registrarPesoServidor(v); // write-through (no-op sem backend)
   };
 

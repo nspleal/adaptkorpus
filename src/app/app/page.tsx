@@ -51,21 +51,24 @@ export default function AppPage() {
 
     // Backend vivo: (1) gate do beta (allowlist OU assinatura — regra 4.2.1);
     // (2) perfil server-first (o servidor vence; localStorage vira cache p/ reload rápido);
-    // (3) sem perfil no servidor mas com local → migra (write-through).
+    // (3) 'sem_perfil' no servidor mas com local → migra (write-through);
+    // (4) FALHA de chamada (401/rede) → monta do local SEM subir (fix 2026-07-08: subir
+    //     aqui regredia o perfil do servidor com um cache velho de outro device).
     void (async () => {
       const acesso = await consultarAcesso();
       if (!vivo) return;
       if (acesso && !acesso.liberado) { router.replace('/acesso-restrito?motivo=assinatura'); return; }
       const doServidor = await carregarPerfilServidor();
       if (!vivo) return;
-      if (doServidor) {
+      if (doServidor && doServidor !== 'sem_perfil') {
         salvarSessao(doServidor); // cache local (2º device ganha os dados na hora)
         montar(doServidor);
         return;
       }
       const local = lerSessao();
       if (local) {
-        void salvarPerfilServidor(local); // migra o perfil pré-backend p/ o servidor
+        // Só a conta comprovadamente SEM perfil migra o local p/ o servidor.
+        if (doServidor === 'sem_perfil') void salvarPerfilServidor(local);
         montar(local);
         return;
       }

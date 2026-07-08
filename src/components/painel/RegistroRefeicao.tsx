@@ -43,10 +43,20 @@ export function useRegistro() {
     // Logado: o dia de HOJE do servidor vence (2º device continua de onde parou).
     let vivo = true;
     void carregarAderenciaServidor().then((dias) => {
-      const hoje = dias?.[hojeISO()];
-      if (vivo && hoje) {
+      if (!vivo || !dias) return; // falha de chamada → local fica (mock intacto)
+      const hoje = dias[hojeISO()];
+      if (hoje) {
         setLogs((hoje.logs as Record<string, StatusRefeicao>) || {});
         setNotes(hoje.notes || {});
+      }
+      // Re-migração (fix bloqueador 2026-07-08): dias que só existem no LOCAL são
+      // writes silenciosamente perdidos — re-sobem (janela de 30 dias p/ bound de
+      // requests). É o retry do write-through, paridade com o self-heal do profile.
+      const limite = Date.parse(`${hojeISO()}T00:00:00Z`) - 30 * 86_400_000;
+      for (const [dia, d] of Object.entries(lerTudo())) {
+        if (dias[dia] || !d) continue;
+        if (Number.isFinite(limite) && Date.parse(`${dia}T00:00:00Z`) < limite) continue;
+        void salvarAderenciaDia(dia, d.logs ?? {}, d.notes ?? {});
       }
     });
     return () => { vivo = false; };

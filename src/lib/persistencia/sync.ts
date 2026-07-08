@@ -13,27 +13,55 @@ import type { PerfilResumo } from '@/components/painel/Painel';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
 
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * fetch com UMA nova tentativa em 401 (fix bloqueador 2026-07-08): no boot várias
+ * requisições paralelas disputam a rotação do refresh-token no middleware — a 1ª renova
+ * o cookie e as demais podem chegar com o token já consumido (401 intermitente). Na 2ª
+ * ida (~600 ms depois) o cookie renovado já está no browser. 401 persistente → null.
+ */
+async function fetchComRetry401(url: string, init?: RequestInit): Promise<Response | null> {
+  try {
+    let r = await fetch(url, init);
+    if (r.status === 401) {
+      await espera(600);
+      r = await fetch(url, init);
+    }
+    return r;
+  } catch { return null; }
+}
+
 async function getJson<T>(url: string): Promise<T | null> {
   if (!supabaseConfigurado()) return null;
-  try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch { return null; }
+  const r = await fetchComRetry401(url, { cache: 'no-store' });
+  if (!r || !r.ok) return null;
+  try { return (await r.json()) as T; } catch { return null; }
 }
 
 async function enviarJson(url: string, method: 'PUT' | 'POST', body: unknown): Promise<boolean> {
   if (!supabaseConfigurado()) return false;
-  try {
-    const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    return r.ok;
-  } catch { return false; }
+  const r = await fetchComRetry401(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return r?.ok ?? false;
 }
 
 // ---- perfil -----------------------------------------------------------------
-export async function carregarPerfilServidor(): Promise<PerfilResumo | null> {
-  const r = await getJson<{ perfil: PerfilResumo }>('/api/dados/perfil');
-  return r?.perfil ?? null;
+/**
+ * Tri-estado (fix 2026-07-08): distingue "a conta NÃO tem perfil no servidor"
+ * (`'sem_perfil'` — 404 da rota; é o único caso em que o boot deve MIGRAR o local p/
+ * cima) de FALHA de chamada (`null` — 401/rede/500; o boot usa o local SEM subir, senão
+ * um cache velho regride o perfil do servidor gravado por outro device).
+ */
+export async function carregarPerfilServidor(): Promise<PerfilResumo | 'sem_perfil' | null> {
+  if (!supabaseConfigurado()) return null;
+  const r = await fetchComRetry401('/api/dados/perfil', { cache: 'no-store' });
+  if (!r) return null;
+  if (r.status === 404) return 'sem_perfil';
+  if (!r.ok) return null;
+  try {
+    const j = (await r.json()) as { perfil?: PerfilResumo };
+    return j.perfil ?? null;
+  } catch { return null; }
 }
 export async function salvarPerfilServidor(perfil: PerfilResumo, consentimentos?: Consentimentos): Promise<boolean> {
   return enviarJson('/api/dados/perfil', 'PUT', { perfil, ...(consentimentos ? { consentimentos } : {}) });

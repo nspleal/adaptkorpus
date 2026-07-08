@@ -100,7 +100,7 @@ export function limparSessao(): void {
 
 /** Exclusão de conta (LGPD): limpa TODOS os dados locais do app, não só a sessão. */
 export function limparDadosLocais(): void {
-  for (const k of [KEY, 'evk_treinos', 'evk_aderencia', 'evk_notif', 'evk_aba']) {
+  for (const k of [KEY, 'evk_treinos', 'evk_pesos', 'evk_aderencia', 'evk_notif', 'evk_aba']) {
     try { localStorage.removeItem(k); } catch { /* storage indisponível */ }
   }
 }

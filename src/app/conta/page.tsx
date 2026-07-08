@@ -7,6 +7,7 @@ import { Backdrop } from '@/components/auth/ui';
 import { baixarArquivo } from '@/lib/export';
 import { limparDadosLocais, limparSessao } from '@/lib/session';
 import { sairDaConta } from '@/lib/auth/sair';
+import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 
 /**
@@ -42,12 +43,17 @@ export default function ContaPage() {
     let vivo = true;
     void (async () => {
       try {
+        // Fix bloqueador 2026-07-08: sessão LOCAL primeiro (getSession — sem rede; uso
+        // só de EXIBIÇÃO); getUser (rede) apenas se não houver sessão no storage.
         const { createClient } = await import('@/lib/supabase/client');
-        const { data } = await createClient().auth.getUser();
-        if (!vivo || !data.user) return;
-        setEmail(data.user.email ?? '');
-        const n = (data.user.user_metadata as { nome?: string } | null)?.nome;
-        setNome(n || data.user.email?.split('@')[0] || 'Sua conta');
+        const auth = createClient().auth;
+        const { data: { session } } = await auth.getSession();
+        let u = session?.user ?? null;
+        if (!u) u = (await auth.getUser()).data.user;
+        if (!vivo || !u) return;
+        setEmail(u.email ?? '');
+        const n = (u.user_metadata as { nome?: string } | null)?.nome;
+        setNome(n || u.email?.split('@')[0] || 'Sua conta');
       } catch { /* mantém o estado atual */ }
     })();
     return () => { vivo = false; };
@@ -126,7 +132,9 @@ export default function ContaPage() {
             <div style={{ flex: 1 }} />
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button onClick={() => setMenu((m) => !m)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '5px 12px 5px 5px', cursor: 'pointer' }}>
-                <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(189,255,0,.16)', color: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '.92rem' }}>L</span>
+                {/* Inicial REAL do usuário (fix 2026-07-08: era um literal 'L' hardcoded).
+                    No mock, `nome` = placeholder → a inicial continua 'L' (demo). */}
+                <span style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(189,255,0,.16)', color: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '.92rem' }}>{inicialDe(nome, email)}</span>
                 <svg width={14} height={14} viewBox="0 0 24 24" style={{ color: 'rgba(234,229,219,.5)' }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
               {menu && (

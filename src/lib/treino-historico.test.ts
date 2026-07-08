@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { novaSessaoDe, sessoesTreino, type SessaoHistorico } from './treino-historico';
+import { describe, expect, it, vi } from 'vitest';
+import { lerPesos, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, sessoesTreino, substituirPesos, type SessaoHistorico } from './treino-historico';
 import { diasDeTreino } from './chama';
 
 /**
@@ -38,5 +38,77 @@ describe('novaSessaoDe — a recém-gravada é a de maior n (write-through p/ o 
     ];
     expect(novaSessaoDe(hist)?.n).toBe(5);
     expect(novaSessaoDe([])).toBeNull();
+  });
+});
+
+// ── Fix bloqueador 2026-07-08 (cofre outputs/bug-persistencia-e-avatar): a hidratação
+// NUNCA destrói dado local; sessões só-locais re-sobem (retry do write-through). ──
+describe('reconciliarHistorico — hidratação não-destrutiva local × servidor', () => {
+  const s = (n: number, dataISO: string, extra: Partial<SessaoHistorico> = {}): SessaoHistorico =>
+    ({ ...base, n, dataISO, ...extra });
+
+  it('cenário do bug: servidor [] + local não-vazio → NADA é apagado; tudo vira faltante (re-sobe)', () => {
+    const locais = [s(3, '2026-07-08'), s(2, '2026-07-06'), s(1, '2026-07-05')];
+    const { uniao, faltantes } = reconciliarHistorico(locais, []);
+    expect(uniao).toHaveLength(3);
+    expect(faltantes).toHaveLength(3); // os 3 uploads de retry
+    expect(uniao.map((x) => x.n)).toEqual([3, 2, 1]); // ordem canônica preservada
+  });
+
+  it('chave compartilhada (dataISO|n|tipo): o SERVIDOR vence (payload do servidor na união)', () => {
+    const doServidor = [s(1, '2026-07-05', { dia: 'Do Servidor' })];
+    const locais = [s(1, '2026-07-05', { dia: 'Local Velho' }), s(2, '2026-07-06')];
+    const { uniao, faltantes } = reconciliarHistorico(locais, doServidor);
+    expect(uniao.find((x) => x.n === 1)?.dia).toBe('Do Servidor');
+    expect(faltantes.map((x) => x.n)).toEqual([2]); // só a sessão que faltou no servidor
+    expect(uniao).toHaveLength(2);
+  });
+
+  it('servidor completo → união = servidor, zero faltantes (2º device coerente)', () => {
+    const doServidor = [s(2, '2026-07-06'), s(1, '2026-07-05')];
+    const { uniao, faltantes } = reconciliarHistorico(doServidor, doServidor);
+    expect(faltantes).toHaveLength(0);
+    expect(uniao.map((x) => x.n)).toEqual([2, 1]);
+  });
+
+  it('tipos de evento entram na chave (calibração e sinal_fadiga não colidem com treino do mesmo dia/n)', () => {
+    const locais = [s(1, '2026-07-05'), s(1, '2026-07-05', { tipo: 'calibracao' })];
+    const { uniao, faltantes } = reconciliarHistorico(locais, [s(1, '2026-07-05')]);
+    expect(uniao).toHaveLength(2);
+    expect(faltantes.map((x) => x.tipo)).toEqual(['calibracao']);
+  });
+
+  it('ambos vazios → vazio; determinístico (dupla chamada idêntica)', () => {
+    expect(reconciliarHistorico([], [])).toEqual({ uniao: [], faltantes: [] });
+    const locais = [s(2, '2026-07-06'), s(1, '2026-07-05')];
+    const a = reconciliarHistorico(locais, [s(1, '2026-07-05')]);
+    const b = reconciliarHistorico(locais, [s(1, '2026-07-05')]);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('pesos locais (evk_pesos — fix: pesos eram só memória)', () => {
+  it('round-trip com storage stubado; corrompido/ausente → []', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    });
+    try {
+      expect(lerPesos()).toEqual([]);
+      expect(registrarPesoLocal(80)).toEqual([80]);
+      expect(registrarPesoLocal(79.5)).toEqual([80, 79.5]);
+      expect(lerPesos()).toEqual([80, 79.5]);
+      expect(substituirPesos([81, 80])).toEqual([81, 80]);
+      expect(lerPesos()).toEqual([81, 80]);
+      store.set('evk_pesos', '{corrompido');
+      expect(lerPesos()).toEqual([]);
+      store.set('evk_pesos', '[80,"x",null,79]');
+      expect(lerPesos()).toEqual([80, 79]); // filtra não-números
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
