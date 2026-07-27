@@ -4,6 +4,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 import { sessoesTreino } from '@/lib/treino-historico';
+import { semanaDoCiclo } from '@/lib/engine';
 import { exercicioEfetivo, feedbackAgregadoPorGrupo, precisaDeloadDoHistorico, progressoDosExercicios, sinaisFadigaDoHistorico } from './treino-progressao';
 import { EXERCISES } from '@/lib/data/exercises';
 
@@ -275,5 +276,53 @@ describe('feedbackAgregadoPorGrupo (v2 §6)', () => {
     const b = feedbackAgregadoPorGrupo(hist, '2026-07-08', byId);
     expect([...a.entries()]).toEqual([...b.entries()]);
     expect(a.get('peito')).toBeUndefined(); // só 1 difícil de sessão real
+  });
+});
+
+// ── Leva 1B (DF 2026-07-26): a evidência anterior à âncora não conta ──────────
+describe('sinaisFadigaDoHistorico com `desde` — impede o alívio reativo de se re-disparar', () => {
+  const fadigaEm = (dataISO: string): SessaoHistorico => ({
+    dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [], n: 900, dataISO, tipo: 'sinal_fadiga',
+  });
+
+  it('🔴 loop: o sinal que disparou o alívio NÃO re-dispara outro quando ele termina', () => {
+    // Sinal no dia 0 → alívio de 7 dias → âncora nova = dia 7 (fim do alívio).
+    const hist = [fadigaEm('2026-07-01')];
+    // Sem o corte, no dia 7 o sinal ainda está na janela de 7 dias → alívio eterno.
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-08')).toBe(true);
+    // Com a âncora do fim do alívio como corte, ele para de contar.
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-08', '2026-07-08')).toBe(false);
+  });
+
+  it('mesmo corte vale para os "difícil" da janela de 14 dias', () => {
+    const hist = [
+      sessao('2026-07-01', [{ id: 'e_sup', fb: 'dificil' }]),
+      sessao('2026-07-02', [{ id: 'e_sup', fb: 'dificil' }]),
+      sessao('2026-07-03', [{ id: 'e_sup', fb: 'dificil' }]),
+    ];
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-05')).toBe(true);
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-05', '2026-07-04')).toBe(false);
+  });
+
+  it('evidência POSTERIOR à âncora continua valendo (o gatilho não morre)', () => {
+    const hist = [fadigaEm('2026-07-10')];
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-12', '2026-07-08')).toBe(true);
+  });
+
+  it('âncora mais antiga que a janela não alarga a janela (14 d continua o teto)', () => {
+    const hist = [sessao('2026-06-01', [{ id: 'e_sup', fb: 'dificil' }]),
+      sessao('2026-06-02', [{ id: 'e_sup', fb: 'dificil' }]),
+      sessao('2026-06-03', [{ id: 'e_sup', fb: 'dificil' }])];
+    expect(sinaisFadigaDoHistorico(hist, '2026-07-05', '2026-01-01')).toBe(false);
+  });
+});
+
+describe('sessão MANUAL move o relógio igual à guiada (DF 2026-07-02)', () => {
+  it('sessoesTreino preserva manual:true → a data chega em semanaDoCiclo', () => {
+    const manual = { ...sessao('2026-01-06', [{ id: 'e_sup', fb: 'na_medida' }]), manual: true };
+    const datas = sessoesTreino([manual]).map((s) => s.dataISO);
+    expect(datas).toEqual(['2026-01-06']);
+    // âncora 2026-01-05: a sessão cai no bucket 0 → na semana seguinte o ciclo está na 2.
+    expect(semanaDoCiclo('2026-01-05', '2026-01-13', datas)).toBe(2);
   });
 });

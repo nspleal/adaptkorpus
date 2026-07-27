@@ -224,14 +224,26 @@ export function precisaDeloadDoHistorico(
  * Sinal REATIVO de fadiga (v2 §2, DF 2026-07-08): ≥ 3 "difícil" nas últimas ~2 semanas
  * (regra do v1) OU sinal explícito de fadiga (botão "estou exausto/muito dolorido") nos
  * últimos 7 dias. Alimenta `estadoDoCiclo` (deload reativo, que antecipa a semana 6).
+ *
+ * `desdeISO` (Leva 1B, 2026-07-26) descarta a evidência ANTERIOR à âncora do ciclo. Sem
+ * isso o alívio reativo entraria em LOOP: ao terminar (7 d), o próprio `sinal_fadiga` que o
+ * disparou ainda está dentro da janela de 7 dias e re-dispararia outro alívio na hora — e o
+ * mesmo valia para os "difícil" da janela de 14 d. Como a âncora nova é o FIM do alívio,
+ * toda a evidência que o causou fica atrás dela e para de contar.
  */
-export function sinaisFadigaDoHistorico(historico: readonly SessaoHistorico[], hojeISO: string): boolean {
+export function sinaisFadigaDoHistorico(
+  historico: readonly SessaoHistorico[],
+  hojeISO: string,
+  desdeISO?: string | null,
+): boolean {
   const limite = Date.parse(`${hojeISO}T00:00:00Z`) - 14 * 86_400_000;
-  const limiteISO = Number.isFinite(limite) ? new Date(limite).toISOString().slice(0, 10) : hojeISO;
-  const dificeisRecentes = historico
-    .filter((s) => !s.tipo && s.dataISO >= limiteISO)
+  const limiteBase = Number.isFinite(limite) ? new Date(limite).toISOString().slice(0, 10) : hojeISO;
+  const limiteISO = desdeISO && desdeISO > limiteBase ? desdeISO : limiteBase;
+  const recentes = historico.filter((s) => s.dataISO >= limiteISO);
+  const dificeisRecentes = recentes
+    .filter((s) => !s.tipo)
     .reduce((n, s) => n + Object.values(s.feedback ?? {}).filter((f) => f === 'dificil').length, 0);
-  return dificeisRecentes >= 3 || temSinalFadigaRecente(historico, hojeISO);
+  return dificeisRecentes >= 3 || temSinalFadigaRecente(recentes, hojeISO);
 }
 
 /**

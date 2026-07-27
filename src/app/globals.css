@@ -410,3 +410,26 @@ body {
     transition: none;
   }
 }
+
+/* ── Painel: nav de abas no celular (Leva 1B, DF 2026-07-26) ──────────────────
+   Achado da verificação 0.1: são 6 abas numa faixa `overflow-x:auto` com marca e
+   avatar em `flex-shrink:0`. A ~390 px sobravam ~125 px para a nav — só "Hoje" e
+   parte de "Treino" cabiam, e a aba **Dieta** ficava FORA da viewport, alcançável
+   só por scroll horizontal e sem nenhuma affordance (a barra é overlay no mobile).
+   Num PWA de uso majoritariamente no telefone, isso é defeito, não estética.
+
+   Correção barata (sem redesenho de navegação): a marca cede espaço (some o
+   wordmark, fica o símbolo), o respiro do topo encolhe e as abas ficam mais
+   compactas — o suficiente para "Dieta" caber SEM scroll. O que continua além dela
+   ganha uma borda esmaecida, que é a affordance de "tem mais para o lado". */
+@media (max-width: 560px) {
+  .evk-painel-topo { padding-left: 12px !important; padding-right: 12px !important; gap: 8px !important; }
+  /* o símbolo permanece; só o wordmark "evokorpus" sai (o <span> da Marca) */
+  .evk-painel-marca > span { display: none; }
+  .evk-painel-tab { padding: 9px 11px !important; font-size: .88rem !important; }
+  /* affordance: o conteúdo que passa da borda direita desbota em vez de ser cortado a seco */
+  .evk-painel-tabs {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  }
+}

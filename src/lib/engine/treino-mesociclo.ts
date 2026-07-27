@@ -30,13 +30,44 @@ export function isoMaisDias(iso: string, dias: number): string {
 }
 
 /**
- * Semana do mesociclo (1–6) derivada da âncora. Wrap automático: dia 42 → semana 1.
- * Âncora no futuro / ISO inválida → semana 1 (guard obrigatório: em JS `-1 % 6 === -1`).
+ * Semana do mesociclo (1–6) — conta as semanas em que a pessoa REALMENTE TREINOU:
+ *
+ *   semana = ((nº de semanas-calendário com ≥ 1 sessão registrada, ANTERIORES à corrente) % 6) + 1
+ *
+ * Mitigação interina aprovada (DF 2026-07-26, cofre `parametros-motor-treino` §"Fiquei
+ * doente" + `plano-pos-feedback-beta` §Leva 1B). O v2 avançava por CALENDÁRIO puro, o que
+ * violava um trilho travado desta mesma página — *"é a execução real que dispara a
+ * progressão"*: quem parava 2 semanas voltava com volume rampado e RIR mais baixo, sem ter
+ * treinado. Continua **função pura** de (âncora, hoje, datas de sessão): sem estado novo,
+ * sem migração, e **autocorrige retroativamente** quem já está em uso.
+ *
+ * A semana CORRENTE é excluída de propósito: se contasse, a prescrição saltaria no instante
+ * em que a 1ª sessão da semana fosse registrada.
+ *
+ * ⚠️ O que ela NÃO faz: quem parou 3 meses volta na MESMA semana, com o MESMO volume. Ela
+ * impede a rampa de subir sozinha (o defeito), mas **não é retomada suave** — isso é a spec
+ * 2.3 ("fiquei doente"), que depende da pesquisa de destreino.
+ *
+ * `datasSessao` = datas ISO de sessões de TREINO (o chamador filtra eventos com
+ * `sessoesTreino`; sessão manual conta igual à guiada — DF 2026-07-02).
+ * Âncora no futuro / ISO inválida → semana 1.
  */
-export function semanaDoCiclo(inicioISO: string, hojeISO: string): SemanaCiclo {
+export function semanaDoCiclo(
+  inicioISO: string,
+  hojeISO: string,
+  datasSessao: readonly string[] = [],
+): SemanaCiclo {
   const dias = diasEntreISO(inicioISO, hojeISO);
   if (!Number.isFinite(dias) || dias < 0) return 1;
-  return ((Math.floor(dias / 7) % MESOCICLO_SEMANAS) + 1) as SemanaCiclo;
+  const semanaCorrente = Math.floor(dias / 7);
+  const ativas = new Set<number>();
+  for (const data of datasSessao) {
+    const d = diasEntreISO(inicioISO, data);
+    if (!Number.isFinite(d) || d < 0) continue; // sessão anterior à âncora não conta
+    const bucket = Math.floor(d / 7);
+    if (bucket < semanaCorrente) ativas.add(bucket); // só as ANTERIORES à corrente
+  }
+  return ((ativas.size % MESOCICLO_SEMANAS) + 1) as SemanaCiclo;
 }
 
 /**
@@ -61,16 +92,27 @@ export function rirAlvoDaSemana(rir: Faixa, semana: SemanaCiclo): number {
   return Math.max(base, rir.min);
 }
 
+/** Duração da semana de alívio disparada pelo gatilho REATIVO (fadiga). */
+const DELOAD_REATIVO_DIAS = 7;
+
 export interface EstadoCiclo {
   semanaEfetiva: SemanaCiclo;
   /** true na semana 6 (agendado, TODOS os níveis — DF 2026-07-08) ou por gatilho reativo. */
   deload: boolean;
   /**
    * Quando presente, o chamador (Painel) deve PERSISTIR esta âncora no perfil:
-   * 1º uso → hoje (todo mundo começa o v2 na semana 1); deload reativo → hoje − 35 d
-   * (a derivação cai na semana 6 agora e na semana 1 em exatamente 7 dias).
+   * 1º uso → hoje; deload REATIVO → o FIM do alívio (hoje + 7 d), para que o ciclo novo
+   * comece do piso quando o alívio terminar — inclusive se a pessoa treinar durante ele
+   * (senão aquele bucket contaria como semana de rampa).
    */
   novaAncoraISO?: string;
+  /**
+   * Marca explícita do deload REATIVO (persistir junto): enquanto `hoje < deloadAte`, a
+   * semana é 6 e o alívio vale. Substitui o truque do `hoje − 35 d`, que só funcionava com
+   * derivação por calendário — com contagem por atividade ele não derivaria mais semana 6.
+   * Semântica melhor: "fadiga → alívio agora → ciclo novo".
+   */
+  novoDeloadAteISO?: string;
 }
 
 /**
@@ -83,17 +125,32 @@ export function estadoDoCiclo(args: {
   mesocicloInicioISO: string | null | undefined;
   hojeISO: string;
   sinaisFadiga: boolean;
+  /** Datas ISO das sessões de TREINO (já sem eventos) — o relógio agora as conta. */
+  datasSessao?: readonly string[];
+  /** Marca do deload reativo em curso (persistida); expira sozinha quando hoje a alcança. */
+  deloadAteISO?: string | null;
 }): EstadoCiclo {
-  const { mesocicloInicioISO, hojeISO, sinaisFadiga } = args;
+  const { mesocicloInicioISO, hojeISO, sinaisFadiga, datasSessao = [], deloadAteISO } = args;
+
+  // 1) Alívio REATIVO em curso: a marca manda enquanto vale, e nada é reancorado de novo
+  //    (a âncora do fim do alívio já foi gravada quando ele começou).
+  if (deloadAteISO && hojeISO < deloadAteISO) {
+    return { semanaEfetiva: 6, deload: true };
+  }
+
+  /** Dispara o alívio reativo: 7 dias de semana 6 e o ciclo novo começa do piso depois. */
+  const reativo = (): EstadoCiclo => {
+    const fim = isoMaisDias(hojeISO, DELOAD_REATIVO_DIAS);
+    return { semanaEfetiva: 6, deload: true, novaAncoraISO: fim, novoDeloadAteISO: fim };
+  };
+
+  // 2) 1º uso / conta migrada do v1: ancora HOJE (semana 1); fadiga já ativa antecipa.
   if (!mesocicloInicioISO) {
-    // 1º uso / conta migrada do v1: ancora HOJE (semana 1); fadiga já ativa antecipa.
-    return sinaisFadiga
-      ? { semanaEfetiva: 6, deload: true, novaAncoraISO: isoMaisDias(hojeISO, -35) }
-      : { semanaEfetiva: 1, deload: false, novaAncoraISO: hojeISO };
+    return sinaisFadiga ? reativo() : { semanaEfetiva: 1, deload: false, novaAncoraISO: hojeISO };
   }
-  const semana = semanaDoCiclo(mesocicloInicioISO, hojeISO);
-  if (sinaisFadiga && semana !== 6) {
-    return { semanaEfetiva: 6, deload: true, novaAncoraISO: isoMaisDias(hojeISO, -35) };
-  }
+
+  // 3) Derivação normal, agora por semanas TREINADAS.
+  const semana = semanaDoCiclo(mesocicloInicioISO, hojeISO, datasSessao);
+  if (sinaisFadiga && semana !== 6) return reativo();
   return { semanaEfetiva: semana, deload: semana === 6 };
 }

@@ -27,6 +27,7 @@ export interface PreferenciasPerfil {
   pratosCansados: PerfilResumo['pratosCansados'];
   mesocicloInicio?: PerfilResumo['mesocicloInicio'];
   mesocicloSemana?: PerfilResumo['mesocicloSemana'];
+  deloadAte?: PerfilResumo['deloadAte'];
   modoForca?: PerfilResumo['modoForca'];
 }
 
@@ -76,6 +77,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       pratosCansados: p.pratosCansados,
       ...(p.mesocicloInicio != null ? { mesocicloInicio: p.mesocicloInicio } : {}),
       ...(p.mesocicloSemana != null ? { mesocicloSemana: p.mesocicloSemana } : {}),
+      ...(p.deloadAte != null ? { deloadAte: p.deloadAte } : {}),
       ...(p.modoForca != null ? { modoForca: p.modoForca } : {}),
     },
   };
@@ -128,6 +130,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     pratosCansados: pref.pratosCansados,
     ...(pref.mesocicloInicio != null ? { mesocicloInicio: pref.mesocicloInicio } : {}),
     ...(pref.mesocicloSemana != null ? { mesocicloSemana: pref.mesocicloSemana } : {}),
+    ...(pref.deloadAte != null ? { deloadAte: pref.deloadAte } : {}),
     ...(pref.modoForca != null ? { modoForca: pref.modoForca } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,

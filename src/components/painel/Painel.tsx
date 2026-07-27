@@ -68,8 +68,12 @@ export interface PerfilResumo {
    *  reancora (hoje − 35 d). Ausente = conta ainda não ancorada (v1). */
   mesocicloInicio?: string;
   /** Espelho DERIVADO da semana do ciclo (1–6) gravado a cada save p/ observabilidade
-   *  (spec §7 pede os dois); a fonte é sempre `mesocicloInicio` + hoje. */
+   *  (spec §7 pede os dois); a fonte é sempre `mesocicloInicio` + hoje + sessões. */
   mesocicloSemana?: number;
+  /** Fim (ISO, exclusivo) do alívio disparado pelo botão de fadiga / ≥3 "difícil" — marca
+   *  explícita do deload REATIVO (Leva 1B, DF 2026-07-26). Único estado que a mitigação do
+   *  relógio introduz; expira sozinho quando `hoje` o alcança. */
+  deloadAte?: string;
   /** Modo força (preset opt-in v2 §4): compostos travados em 6 reps → 6RM. O motor
    *  IGNORA o flag p/ iniciante (o toggle nem aparece). */
   modoForca?: boolean;
@@ -418,11 +422,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
 
-  // --- Mesociclo v2 (DF 2026-07-08) ------------------------------------------------------
-  // Semana do ciclo derivada da âncora persistida no perfil (`mesocicloInicio`); o gatilho
-  // REATIVO (≥3 "difícil"/14d OU botão de fadiga ≤7d) antecipa a semana 6 e pede re-âncora.
-  const sinaisFadiga = sinaisFadigaDoHistorico(sessoes, hojeISO());
-  const ciclo = estadoDoCiclo({ mesocicloInicioISO: perfil.mesocicloInicio ?? null, hojeISO: hojeISO(), sinaisFadiga });
+  // --- Mesociclo v2 (DF 2026-07-08) + relógio por ATIVIDADE (Leva 1B, DF 2026-07-26) ------
+  // A semana avança pelas semanas em que houve sessão REGISTRADA (guiada ou manual), não
+  // pelo calendário — o v2 rampava volume/RIR de quem não treinou, violando o trilho
+  // "é a execução real que dispara a progressão". O gatilho REATIVO (≥3 "difícil"/14d OU
+  // botão de fadiga ≤7d) antecipa a semana 6 e grava a marca `deloadAte`.
+  // `desdeISO = mesocicloInicio` impede o alívio reativo de re-disparar a si mesmo ao acabar.
+  const datasSessao = sessoesTreino(sessoes).map((s) => s.dataISO);
+  const sinaisFadiga = sinaisFadigaDoHistorico(sessoes, hojeISO(), perfil.mesocicloInicio ?? null);
+  const ciclo = estadoDoCiclo({
+    mesocicloInicioISO: perfil.mesocicloInicio ?? null,
+    hojeISO: hojeISO(),
+    sinaisFadiga,
+    datasSessao,
+    deloadAteISO: perfil.deloadAte ?? null,
+  });
   const deloadAtivo = prescricao ? ciclo.deload : false;
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
@@ -436,12 +450,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   useEffect(() => {
     const ancora = ciclo.novaAncoraISO ?? perfil.mesocicloInicio;
     if (!ancora) return;
-    if (ancora === perfil.mesocicloInicio && ciclo.semanaEfetiva === perfil.mesocicloSemana) return;
-    const novo = { ...perfil, mesocicloInicio: ancora, mesocicloSemana: ciclo.semanaEfetiva };
+    const deloadAte = ciclo.novoDeloadAteISO ?? perfil.deloadAte;
+    const igual = ancora === perfil.mesocicloInicio
+      && ciclo.semanaEfetiva === perfil.mesocicloSemana
+      && deloadAte === perfil.deloadAte;
+    if (igual) return;
+    const novo = {
+      ...perfil,
+      mesocicloInicio: ancora,
+      mesocicloSemana: ciclo.semanaEfetiva,
+      ...(deloadAte ? { deloadAte } : {}),
+    };
     setPerfil(novo);
     onPerfilChange?.(novo);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gravação idempotente da âncora
-  }, [ciclo.novaAncoraISO, ciclo.semanaEfetiva]);
+  }, [ciclo.novaAncoraISO, ciclo.novoDeloadAteISO, ciclo.semanaEfetiva]);
   // Rampa de volume da semana (v2 §1): re-monta a rotina com as séries por slot da semana
   // corrente + feedback agregado por grupo. Roda no mount e quando a semana muda (não em
   // cada registro — troca manual de exercício não é clobrada no meio do uso).
@@ -523,11 +546,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       <Backdrop />
       {/* header */}
       <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
-          <nav style={{ flex: 1, display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 4px' }}>
+        <div className="evk-painel-topo" style={{ maxWidth: 1080, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="evk-painel-marca" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
+          <nav className="evk-painel-tabs" style={{ flex: 1, minWidth: 0, display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 4px' }}>
             {tabs.map((t) => (
-              <div key={t.id} onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', border: '1px solid transparent', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)' }) }}>{t.label}</div>
+              <div key={t.id} className="evk-painel-tab" onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', border: '1px solid transparent', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)' }) }}>{t.label}</div>
             ))}
           </nav>
           <div style={{ position: 'relative', flexShrink: 0 }}>
