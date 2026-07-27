@@ -152,3 +152,11 @@ export function gerarTreino(
 
   return { gate, prescricao, rotina };
 }
+
+// --- Rampa de retomada (Leva 2 · Bloco 3, DF 2026-07-27) ---
+export {
+  estadoRetomada, faixaDaPausa, volumeDaRetomada, irvComCarga, irvRespeitaTeto,
+  seriesMaxComCarga, seriesMaxSemCarga, tetoSeriesDaRetomada, freqMaxPorGrupo,
+  descansoMinimoSeg, naJanelaFit, rirAlvoDaRetomada, aplicarRetomada, metaCardioDaRetomada,
+  type EstadoRetomada, type FaixaRetomada,
+} from './treino-retomada';

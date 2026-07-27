@@ -7,12 +7,12 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
-import { exercicioEfetivo, feedbackAgregadoPorGrupo, progressoDosExercicios, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
-import { estadoDoCiclo, rirAlvoDaSemana } from '@/lib/engine';
+import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
+import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
@@ -428,8 +428,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // "é a execução real que dispara a progressão". O gatilho REATIVO (≥3 "difícil"/14d OU
   // botão de fadiga ≤7d) antecipa a semana 6 e grava a marca `deloadAte`.
   // `desdeISO = mesocicloInicio` impede o alívio reativo de re-disparar a si mesmo ao acabar.
-  const datasSessao = sessoesTreino(sessoes).map((s) => s.dataISO);
+  // 🔒 O relógio do mesociclo e a rampa leem só TREINO RESISTIDO — cardio fora (armadilha 2
+  // do handoff da Leva 2: uma pedalada não pode subir a rampa de volume da musculação).
+  const datasSessao = sessoesResistidas(sessoes).map((s) => s.dataISO);
   const sinaisFadiga = sinaisFadigaDoHistorico(sessoes, hojeISO(), perfil.mesocicloInicio ?? null);
+  // Rampa de RETOMADA (Leva 2 · Bloco 3) — derivada, sem estado novo.
+  const retomada = retomadaDoHistorico(sessoes, hojeISO());
   const ciclo = estadoDoCiclo({
     mesocicloInicioISO: perfil.mesocicloInicio ?? null,
     hojeISO: hojeISO(),
@@ -437,12 +441,31 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     datasSessao,
     deloadAteISO: perfil.deloadAte ?? null,
   });
-  const deloadAtivo = prescricao ? ciclo.deload : false;
+  // 🔒 A rampa SUPERSEDE o deload reativo enquanto ativa (ela já é um deload — somar os
+  // dois daria 0,25 × piso, estímulo trivial; lacuna 6 da spec).
+  const deloadAtivo = prescricao && !retomada ? ciclo.deload : false;
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
-    return {
+    const base = {
       semana: ciclo.semanaEfetiva,
       feedbackGrupos: feedbackAgregadoPorGrupo(lerHistorico(), hojeISO(), (id) => EXERCISES_SEED.find((e) => e.id === id)),
+    };
+    if (!retomada || !prescricao) return base;
+    // Volume de REFERÊNCIA = alvo da última semana efetivamente treinada (o corpo se
+    // adaptou ao último estímulo real, não ao de dois anos atrás).
+    const datas = sessoesResistidas(sessoes).map((s) => s.dataISO).sort();
+    const ultima = datas[datas.length - 1];
+    const semanaRef = ultima && perfil.mesocicloInicio
+      ? semanaDoCiclo(perfil.mesocicloInicio, ultima, datas)
+      : 1;
+    return {
+      ...base,
+      retomada: {
+        semana: retomada.semana,
+        fator: retomada.fator,
+        volumeReferencia: alvoDaSemana(prescricao.volumePorGrupoSemana, semanaRef),
+        exerciciosRecentes: exerciciosRecentes(sessoes),
+      },
     };
   }
   // Persiste a âncora nova (1º uso / deload reativo) + o espelho da semana (spec §7) —
@@ -472,17 +495,25 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana() });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-monta só quando a semana do ciclo muda
-  }, [ciclo.semanaEfetiva]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-monta quando a semana do
+    // ciclo OU a rampa de retomada muda. A rampa entra nas deps porque ela nasce depois da
+    // hidratação do histórico e pode coincidir com a MESMA semana de ciclo — sem isto, a
+    // rotina ficaria com o volume cheio enquanto o chip já diz "Retomada".
+  }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator]);
   // Prescrição EFETIVA da semana p/ a sessão (RIR-alvo da rampa 3→1 + descanso do composto
   // até ~180 s quando o tempo permite — o montador decide e devolve em rotina.semana).
-  const prescricaoEfetiva = prescricao
+  const prescricaoBase = prescricao
     ? {
         ...prescricao,
         rirAlvoSemana: rirAlvoDaSemana(prescricao.rir, ciclo.semanaEfetiva),
         descansoCompostoSeg: treino.rotina?.semana?.descansoCompostoSeg ?? prescricao.descansoCompostoSeg,
       }
     : null;
+  // 🔴 Na rampa o RIR-alvo é 3 (piso da escada), NUNCA o RIR da semana em que a pessoa
+  // parou — e o descanso mínimo sobe (120 s / 90 s), elevando inclusive o do isolado.
+  const prescricaoEfetiva = prescricaoBase && retomada
+    ? aplicarRetomada(prescricaoBase, retomada.semana)
+    : prescricaoBase;
   // Botão de fadiga (v2 §6): grava o evento (não conta dia de treino) → o deload reativo
   // dispara na hora (sinaisFadiga → estadoDoCiclo antecipa a semana 6 e reancora).
   function sinalizarFadiga() {
@@ -590,7 +621,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -619,9 +650,42 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   );
 }
 
+/* ════════════════════ Retomada ════════════════════ */
+
+/**
+ * Cartão da rampa de retomada (Leva 2 · Bloco 3). A rampa DERRUBA o volume do plano, e
+ * volume que cai em silêncio é lido como "o app quebrou" — pior ainda em quem está
+ * voltando. Tom: sem culpa, sem vermelho, sem mencionar a ausência nem contar dias.
+ *
+ * 🔴 A copy VARIA POR FAIXA: a frase do volume plasmático é verdadeira nos primeiros
+ * ~12–21 dias e FALSA depois de meses parado — tranquilizar ali seria errar por otimismo,
+ * o mesmo erro da indústria que a marca rejeita, com o sinal trocado.
+ * 🔒 "o PESO em cada série continua o mesmo" (nunca "o esforço"): com o RIR-alvo em 3 o
+ * esforço por série CAI — o que não muda é a carga, e é ela que a pessoa teme perder.
+ */
+function CartaoRetomada({ estado }: { estado: EstadoRetomada }) {
+  const curta = estado.faixa === 'curta';
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'linear-gradient(165deg, rgba(22,163,74,.12), rgba(15,15,14,.5))', border: '1px solid rgba(189,255,0,.28)', borderRadius: 16, padding: '14px 16px', marginBottom: 18 }}>
+      <span style={{ width: 34, height: 34, minWidth: 34, borderRadius: 10, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3z" stroke="#BDFF00" strokeWidth={1.7} strokeLinejoin="round" /></svg>
+      </span>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: '.95rem', color: '#BDFF00', marginBottom: 2 }}>Voltando com calma</div>
+        <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.5 }}>
+          Esta fase entra com menos séries — <strong style={{ color: 'rgba(234,229,219,.9)', fontWeight: 600 }}>o peso em cada série continua o mesmo</strong>. Só o volume caiu nesta fase.
+          {curta
+            ? ' Boa parte do que parece perdido no primeiro mês é volume de sangue, glicogênio e água, e volta rápido.'
+            : ' O plano sobe de novo a cada semana, até voltar ao ciclo normal.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
   onRegistrarTreino: () => void; deload: boolean;
@@ -629,6 +693,8 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
   semanaCiclo?: number;
   /** Botão de fadiga (v2 §6): dispara o deload reativo (antecipa a semana de alívio). */
   onSinalFadiga?: () => void;
+  /** Rampa de retomada ativa (Leva 2 · Bloco 3) — substitui o contador do mesociclo. */
+  retomada?: EstadoRetomada | null;
 }) {
   const plano = dieta.plano!;
   const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
@@ -650,13 +716,17 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
               <span style={kicker}>Treino de hoje</span>
               <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {/* Contador de mesociclo (v2 §6): a semana do ciclo de 6 (5 rampa + 1 alívio). */}
-                {semanaCiclo != null && <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'rgba(234,229,219,.7)', background: 'rgba(234,229,219,.07)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 999, padding: '3px 10px' }}>Semana {semanaCiclo}/6 do ciclo</span>}
-                {deload && <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Semana de alívio</span>}
+                {/* Durante a RETOMADA o "Semana X/6" não tem valor válido (o ciclo só recomeça
+                    depois dela) — estado próprio, minúscula em "semana" (forma padrão). */}
+                {retomada
+                  ? <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Retomada · semana {retomada.semana} de {retomada.totalSemanas}</span>
+                  : semanaCiclo != null && <span style={{ fontSize: '.72rem', fontWeight: 600, color: 'rgba(234,229,219,.7)', background: 'rgba(234,229,219,.07)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 999, padding: '3px 10px' }}>Semana {semanaCiclo}/6 do ciclo</span>}
+                {deload && !retomada && <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '3px 10px' }}>Semana de alívio</span>}
               </span>
             </div>
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
-            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload ? ' · séries reduzidas esta semana' : ''}</div>
+            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload && !retomada ? ' · séries reduzidas esta semana' : ''}</div>
+            {retomada && <CartaoRetomada estado={retomada} />}
             {/* Entrada A1 do registro manual (handoff): botão ao lado de "Começar treino". */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button onClick={onComecar} className="hov-btn" style={{ flex: 2, minWidth: 150, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Começar treino</button>

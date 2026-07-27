@@ -20,21 +20,38 @@ export interface SessaoHistorico extends ResumoSessao {
   hora?: string;    // 'HH:MM' opcional (só registro manual)
   obs?: string;     // observação opcional (só registro manual)
   /**
-   * Entradas de EVENTO (não são treino; ausente = sessão de treino normal, legado ok):
+   * Classificação da entrada (ausente = sessão de treino RESISTIDO, o caso legado):
    *  - 'calibracao' = calibração manual ("Muito fácil" / "Assumir este degrau" — cofre
    *    DF #13/B2, 2026-07-04);
-   *  - 'sinal_fadiga' = botão "estou exausto/muito dolorido" (v2 §2/§6, DF 2026-07-08):
-   *    dispara o deload REATIVO; NÃO conta como dia de treino (fora da Chama/Cargas).
+   *  - 'sinal_fadiga' = botão "estou exausto/muito dolorido" (v2 §2/§6, DF 2026-07-08);
+   *  - 'cardio' = sessão de CARDIO (Leva 2 · Bloco 1). É treino para a Chama, mas **não**
+   *    para o relógio do mesociclo nem para a rampa de retomada.
    */
-  tipo?: 'calibracao' | 'sinal_fadiga';
+  tipo?: 'calibracao' | 'sinal_fadiga' | 'cardio';
+  /** Payload do cardio (só em `tipo: 'cardio'`) — ver `lib/engine/cardio`. */
+  cardio?: { modalidade: string; intensidade: string; minutos: number; met: number; kcal: number };
+}
+
+/** Entradas que NÃO são treino nenhum (não contam dia, não entram em progressão). */
+const EVENTOS = new Set(['calibracao', 'sinal_fadiga']);
+
+/**
+ * Sessões que contam como DIA DE TREINO — para a Chama e o histórico. Inclui o CARDIO
+ * (🔒 "cardio conta para a Chama, sem piso de duração": a DF "dia de treino = qualquer
+ * treino registrado" nasceu inclusiva, e excluir cardio faria a Chama dizer "isso não foi
+ * treino"). Exclui só as entradas de evento (calibração, sinal de fadiga).
+ */
+export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHistorico[] {
+  return historico.filter((s) => !s.tipo || !EVENTOS.has(s.tipo));
 }
 
 /**
- * Só as sessões de TREINO (exclui entradas de evento — calibração, sinal de fadiga):
- * salvaguarda travada do B2/v2 — evento não conta dia de treino (Chama/marcos) nem
- * alimenta o gráfico de Cargas.
+ * Sessões de treino RESISTIDO — o balde que move o **relógio do mesociclo** e a **rampa de
+ * retomada**. 🔒 Cardio fica de fora de propósito (armadilha 2 do handoff da Leva 2): se
+ * caísse no mesmo balde, uma pedalada subiria a rampa de volume da musculação e desfaria o
+ * fix `9ebf1bd` que está em produção. Cardio também **não encerra a pausa** da retomada.
  */
-export function sessoesTreino(historico: readonly SessaoHistorico[]): SessaoHistorico[] {
+export function sessoesResistidas(historico: readonly SessaoHistorico[]): SessaoHistorico[] {
   return historico.filter((s) => !s.tipo);
 }
 

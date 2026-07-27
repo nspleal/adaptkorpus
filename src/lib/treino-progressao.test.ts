@@ -3,9 +3,9 @@ import { avaliarGateTreino, prescreverTreino } from '@/lib/engine';
 import type { Exercise } from '@/lib/data/types';
 import type { PerfilTreino } from '@/lib/engine';
 import type { SessaoHistorico } from '@/lib/treino-historico';
-import { sessoesTreino } from '@/lib/treino-historico';
+import { sessoesResistidas, sessoesTreino } from '@/lib/treino-historico';
 import { semanaDoCiclo } from '@/lib/engine';
-import { exercicioEfetivo, feedbackAgregadoPorGrupo, precisaDeloadDoHistorico, progressoDosExercicios, sinaisFadigaDoHistorico } from './treino-progressao';
+import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, precisaDeloadDoHistorico, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico } from './treino-progressao';
 import { EXERCISES } from '@/lib/data/exercises';
 
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
@@ -324,5 +324,44 @@ describe('sessão MANUAL move o relógio igual à guiada (DF 2026-07-02)', () =>
     expect(datas).toEqual(['2026-01-06']);
     // âncora 2026-01-05: a sessão cai no bucket 0 → na semana seguinte o ciclo está na 2.
     expect(semanaDoCiclo('2026-01-05', '2026-01-13', datas)).toBe(2);
+  });
+});
+
+// ── Leva 2 · Bloco 3: rampa derivada + cardio não move o relógio ─────────────
+describe('retomadaDoHistorico — derivada, e o CARDIO não encerra a pausa', () => {
+  const treino = (dataISO: string): SessaoHistorico => sessao(dataISO, [{ id: 'e_sup', fb: 'na_medida' }]);
+  const cardioEm = (dataISO: string): SessaoHistorico => ({
+    dia: 'Cardio', series: 0, volumeKg: 0, feedback: {}, exercicios: [], n: 800, dataISO, tipo: 'cardio',
+  });
+
+  it('pausa de 30 dias → rampa curta; ≤ 14 dias → nada', () => {
+    expect(retomadaDoHistorico([treino('2026-06-27')], '2026-07-27')?.faixa).toBe('curta');
+    expect(retomadaDoHistorico([treino('2026-07-20')], '2026-07-27')).toBeNull();
+  });
+
+  it('🔴 quem passou 3 semanas SÓ pedalando ainda entra na rampa', () => {
+    const hist = [treino('2026-06-27'), cardioEm('2026-07-10'), cardioEm('2026-07-20')];
+    const r = retomadaDoHistorico(hist, '2026-07-27');
+    expect(r?.ativa).toBe(true);
+    expect(r?.faixa).toBe('curta'); // o cardio não zerou a contagem
+  });
+
+  it('🔴 cardio NÃO entra no balde do relógio do mesociclo (protege o fix 9ebf1bd)', () => {
+    const hist = [treino('2026-01-05'), cardioEm('2026-01-06'), cardioEm('2026-01-08')];
+    // resistidas = só o treino → a semana do ciclo não anda com pedalada
+    expect(sessoesResistidas(hist).map((s) => s.dataISO)).toEqual(['2026-01-05']);
+    const semCardio = semanaDoCiclo('2026-01-05', '2026-01-13', ['2026-01-05']);
+    const comCardio = semanaDoCiclo('2026-01-05', '2026-01-13', sessoesResistidas(hist).map((s) => s.dataISO));
+    expect(comCardio).toBe(semCardio);
+  });
+
+  it('mas o cardio CONTA como dia de treino (Chama) — sessoesTreino o inclui', () => {
+    const hist = [treino('2026-01-05'), cardioEm('2026-01-06')];
+    expect(sessoesTreino(hist)).toHaveLength(2);
+  });
+
+  it('exerciciosRecentes alimenta a suspensão da B5 com o que a pessoa já fazia', () => {
+    const hist = [treino('2026-06-20'), treino('2026-06-22')];
+    expect([...exerciciosRecentes(hist)]).toEqual(['e_sup']);
   });
 });

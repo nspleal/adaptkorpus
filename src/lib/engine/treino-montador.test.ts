@@ -284,3 +284,89 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
         }
   });
 });
+
+// ── Leva 2 · Bloco 3: rampa de RETOMADA no montador (DF 2026-07-27) ──────────
+describe('rampa de retomada no montador — volume ABAIXO do piso da banda', () => {
+  const perfilBase: Partial<PerfilTreino> = { nivelExperiencia: 'intermediario', objetivo: 'massa', diasDisponiveis: 4, tempoPorSessaoMin: 60 };
+  function montar(retomada?: { semana: number; fator: number; volumeReferencia: number; exerciciosRecentes?: ReadonlySet<string> }) {
+    const p = perfil(perfilBase);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    return montarRotina(presc, p, EXERCISES, new Set(), { semana: 3, ...(retomada ? { retomada } : {}) });
+  }
+  const totalPorGrupo = (r: ReturnType<typeof montar>) => {
+    const m = new Map<string, number>();
+    for (const d of r.dias) for (const s of d.slots) m.set(s.exercicio.grupoPrimario, (m.get(s.exercicio.grupoPrimario) ?? 0) + (s.series ?? 0));
+    return m;
+  };
+
+  it('🔴 a rampa entrega MENOS séries que a semana 1 do mesociclo (não é "recuar para a semana 1")', () => {
+    const p = perfil(perfilBase);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const piso = presc.volumePorGrupoSemana.min; // 13 — o que o recuo entregaria
+    const comRampa = totalPorGrupo(montar({ semana: 1, fator: 0.5, volumeReferencia: presc.volumePorGrupoSemana.max }));
+    // grupo com mais slots: mesmo ele fica abaixo do piso da banda
+    const maior = Math.max(...comRampa.values());
+    expect(maior).toBeLessThan(piso);
+  });
+
+  it('séries por slot podem cair ABAIXO de seriesPorExercicio.min (estado novo do motor)', () => {
+    // Referência baixa: o alvo do grupo fica menor que o nº de slots → cada um cai a 1,
+    // abaixo do piso por exercício (2 no intermediário). É o estado que o motor não tinha:
+    // antes, `series` nunca descia de `seriesPorExercicio.min`.
+    const p = perfil(perfilBase);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    expect(presc.seriesPorExercicio.min).toBe(2);
+    const r = montar({ semana: 1, fator: 0.5, volumeReferencia: 6 }); // alvo = 3
+    const todas = r.dias.flatMap((d) => d.slots.map((s) => s.series ?? 0));
+    expect(Math.min(...todas)).toBeLessThan(presc.seriesPorExercicio.min);
+    expect(Math.min(...todas)).toBeGreaterThanOrEqual(1); // nunca zera a sessão
+  });
+
+  it('sem carga: nenhum slot passa de 3 séries (IRV incomputável → teto fixo)', () => {
+    const p = perfil({ ...perfilBase, equipamento: 'casa', equipamentosCasa: [] });
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const r = montarRotina(presc, p, EXERCISES, new Set(), {
+      semana: 3, retomada: { semana: 2, fator: 0.7, volumeReferencia: 40 },
+    });
+    for (const d of r.dias) for (const s of d.slots) {
+      if ((s.exercicio.equipamentoDetalhe ?? '') === 'Peso corporal') expect(s.series ?? 0).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('frequência por grupo limitada (3 na semana 1) — os slots excedentes saem da rotina', () => {
+    const p = perfil({ ...perfilBase, diasDisponiveis: 6, nivelExperiencia: 'avancado' });
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const r = montarRotina(presc, p, EXERCISES, new Set(), {
+      semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: presc.volumePorGrupoSemana.max },
+    });
+    const vezes = new Map<string, number>();
+    for (const d of r.dias) for (const s of d.slots) vezes.set(s.exercicio.grupoPrimario, (vezes.get(s.exercicio.grupoPrimario) ?? 0) + 1);
+    for (const [g, n] of vezes) expect(n, `grupo ${g}`).toBeLessThanOrEqual(3);
+  });
+
+  it('B5 SUSPENSA: os exercícios já executados são preferidos na volta (não rotaciona)', () => {
+    const p = perfil(perfilBase);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const semRecentes = montarRotina(presc, p, EXERCISES, new Set(), { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 16 } });
+    const idsSem = new Set(semRecentes.dias.flatMap((d) => d.slots.map((s) => s.exercicio.id)));
+    // escolhe um exercício de empurrar que NÃO entrou por rotação e o marca como recente
+    const candidato = EXERCISES.find((e) => e.padraoMovimento === 'empurrar' && e.nivel !== 'avancado' && !idsSem.has(e.id) && e.local !== 'academia');
+    expect(candidato).toBeDefined();
+    const comRecentes = montarRotina(presc, p, EXERCISES, new Set(), {
+      semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 16, exerciciosRecentes: new Set([candidato!.id]) },
+    });
+    const idsCom = comRecentes.dias.flatMap((d) => d.slots.map((s) => s.exercicio.id));
+    expect(idsCom).toContain(candidato!.id);
+  });
+
+  it('sem retomada nada muda: a rampa do mesociclo continua valendo (não regride a Leva 1B)', () => {
+    const a = JSON.stringify(montar());
+    const b = JSON.stringify(montar());
+    expect(a).toBe(b);
+    const p = perfil(perfilBase);
+    const presc = prescreverTreino(p, avaliarGateTreino(p));
+    const semanaNormal = totalPorGrupo(montar());
+    const alvoSem3 = presc.volumePorGrupoSemana.min + 2;
+    expect(Math.max(...semanaNormal.values())).toBeLessThanOrEqual(alvoSem3);
+  });
+});

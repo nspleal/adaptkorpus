@@ -192,6 +192,10 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
+  // Faixa REAL de séries desta sessão — na retomada ela cai abaixo do piso da prescrição,
+  // então a linha do intro não pode anunciar a banda genérica do nível.
+  const seriesMin = exs.length ? Math.min(...exs.map((e) => e.nSetsEx)) : nSets;
+  const seriesMax = exs.length ? Math.max(...exs.map((e) => e.nSetsEx)) : prescricao.seriesPorExercicio.max;
 
   const [fase, setFase] = useState<'intro' | 'exec' | 'summary'>('intro');
   const [cur, setCur] = useState(0);
@@ -290,7 +294,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
           <div style={{ animation: `evkStepIn .45s ${EASE}` }}>
             <div style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Treino de hoje</div>
             <h1 style={{ margin: '0 0 6px', fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-.02em' }}>{dia.nome}</h1>
-            <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.6)', fontSize: '.98rem' }}>{total} exercícios · {nSets}–{prescricao.seriesPorExercicio.max} séries por exercício · RIR {prescricao.rir.min}–{prescricao.rir.max}</p>
+            <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.6)', fontSize: '.98rem' }}>{total} exercícios · {seriesMin}–{seriesMax} séries por exercício · {prescricao.rirAlvoSemana != null ? `RIR alvo ${prescricao.rirAlvoSemana}` : `RIR ${prescricao.rir.min}–${prescricao.rir.max}`}</p>
             {deload && <AvisoAlivio />}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '10px 20px', marginBottom: 24 }}>
               {exs.map((e, i) => (

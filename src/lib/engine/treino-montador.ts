@@ -12,6 +12,7 @@
 import { dificuldadesLiberadas } from './treino';
 import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
+import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -74,6 +75,24 @@ export interface OpcoesSemana {
   semana: SemanaCiclo;
   /** Feedback agregado por grupo muscular (v2 §6): 'segura' congela o incremento do grupo. */
   feedbackGrupos?: ReadonlyMap<GrupoPrimario, FeedbackGrupo>;
+  /**
+   * Rampa de RETOMADA ativa (Leva 2, Bloco 3). Quando presente, ela SUPERSEDE a rampa do
+   * mesociclo: o volume por grupo passa a ser `volumeReferencia × fator`, que pode (e deve)
+   * cair ABAIXO do piso da banda — o estado que o motor não tinha.
+   */
+  retomada?: {
+    /** Semana da rampa (1-based). */
+    semana: number;
+    fator: number;
+    /** Volume-alvo da última semana efetivamente treinada. */
+    volumeReferencia: number;
+    /**
+     * B5 SUSPENSA (§9 das lacunas): exercícios que a pessoa já executava. O efeito protetor
+     * da sessão repetida é específico do exercício — rotacionar na volta remove justamente
+     * a proteção. Reusa o trilho de isenção dos favoritos.
+     */
+    exerciciosRecentes?: ReadonlySet<string>;
+  };
 }
 
 /**
@@ -93,6 +112,12 @@ export function montarRotina(
   semanaCiclo?: OpcoesSemana,
 ): RotinaSemanal {
   const avisos: string[] = [];
+  // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
+  // dos favoritos (mecanismo existente), para o montador preferi-los em vez de rotacionar.
+  const recentes = semanaCiclo?.retomada?.exerciciosRecentes;
+  const favoritosEfetivos = recentes && recentes.size > 0
+    ? new Set<string>([...favoritos, ...recentes])
+    : favoritos;
   const dias = Math.max(0, Math.floor(perfil.diasDisponiveis));
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
@@ -116,7 +141,7 @@ export function montarRotina(
   const porPadrao = new Map<PadraoMovimento, Exercise[]>();       // não-favoritos (rotacionam)
   const favsPorPadrao = new Map<PadraoMovimento, Exercise[]>();   // favoritos (fixos)
   for (const e of pool) {
-    const alvo = favoritos.has(e.id) ? favsPorPadrao : porPadrao;
+    const alvo = favoritosEfetivos.has(e.id) ? favsPorPadrao : porPadrao;
     const arr = alvo.get(e.padraoMovimento) ?? [];
     arr.push(e);
     alvo.set(e.padraoMovimento, arr);
@@ -229,7 +254,8 @@ export function montarRotina(
   // pelos slots de cada grupoPrimario, em round-robin determinístico na ordem (dia, slot),
   // clampado a seriesPorExercicio {min..max}. Semana 6 NÃO anota séries: o deload usa o
   // mecanismo existente (aplicarDeload + corte de séries na sessão) — evita corte duplo.
-  if (semanaCiclo && semanaCiclo.semana !== 6) {
+  const ret = semanaCiclo?.retomada;
+  if (semanaCiclo && (ret || semanaCiclo.semana !== 6)) {
     const { semana, feedbackGrupos } = semanaCiclo;
     const sMin = prescricao.seriesPorExercicio.min;
     const sMax = prescricao.seriesPorExercicio.max;
@@ -242,6 +268,45 @@ export function montarRotina(
         porGrupo.set(s.exercicio.grupoPrimario, arr);
       }
     }
+
+    // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
+    // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
+    // Além dele valem os dois guarda-corpos da regra FIT: frequência máxima por GRUPO na
+    // semana e teto de séries por slot (IRV ≤ 30 com carga · 3 séries sem carga).
+    if (ret) {
+      const fMax = freqMaxPorGrupo(ret.semana);
+      const alvoGrupo = volumeDaRetomada(ret.volumeReferencia, ret.fator);
+      const descartar = new Set<SlotExercicio>();
+      for (const grupo of [...porGrupo.keys()].sort()) {
+        const todos = porGrupo.get(grupo)!;
+        // Frequência por grupo/padrão: o excedente sai (os últimos dias cedem primeiro).
+        const slots = todos.slice(0, Number.isFinite(fMax) ? fMax : todos.length);
+        for (const s of todos.slice(slots.length)) descartar.add(s);
+        const n = slots.length;
+        if (n === 0) continue;
+        const tetoSlot = slots.map((s) => {
+          const comCarga = (s.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+          const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
+          // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
+          // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).
+          return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
+        });
+        const series = slots.map(() => 1); // piso operacional: 1 série por exercício
+        let restante = Math.max(0, alvoGrupo - n);
+        let i = 0;
+        let travas = 0;
+        while (restante > 0 && travas < n) {
+          if (series[i]! < tetoSlot[i]!) { series[i]!++; restante--; travas = 0; } else { travas++; }
+          i = (i + 1) % n;
+        }
+        slots.forEach((s, k) => { s.series = series[k]!; });
+      }
+      if (descartar.size > 0) {
+        for (const d of diasTreino) d.slots = d.slots.filter((s) => !descartar.has(s));
+        avisos.push(`Retomada: frequência por grupo limitada a ${fMax}×/semana nesta fase.`);
+      }
+      avisos.push('Retomada: volume reduzido nesta semana — o peso de cada série continua o mesmo.');
+    } else
     for (const grupo of [...porGrupo.keys()].sort()) {
       const slots = porGrupo.get(grupo)!;
       const alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');

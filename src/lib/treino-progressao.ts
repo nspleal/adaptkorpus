@@ -14,9 +14,10 @@ import {
   type FeedbackGrupo,
   type PrescricaoFITT,
 } from '@/lib/engine';
+import { estadoRetomada, type EstadoRetomada } from '@/lib/engine';
 import { DELOAD_SEMANAS_DEFAULT } from '@/lib/engine/treino-constants';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario } from '@/lib/data/types';
-import { temSinalFadigaRecente, type SessaoHistorico } from '@/lib/treino-historico';
+import { sessoesResistidas, temSinalFadigaRecente, type SessaoHistorico } from '@/lib/treino-historico';
 
 /**
  * Adaptador client da progressão (Passo 2 / Bloco B). Deriva o alvo ATUAL de cada exercício
@@ -244,6 +245,39 @@ export function sinaisFadigaDoHistorico(
     .filter((s) => !s.tipo)
     .reduce((n, s) => n + Object.values(s.feedback ?? {}).filter((f) => f === 'dificil').length, 0);
   return dificeisRecentes >= 3 || temSinalFadigaRecente(recentes, hojeISO);
+}
+
+/**
+ * Rampa de RETOMADA derivada do histórico (Leva 2 · Bloco 3, DF 2026-07-27).
+ * 🔒 Só conta sessão de treino RESISTIDO: cardio **não encerra a pausa** (quem passou 3
+ * semanas só pedalando ainda entra na rampa) — coerente com "cardio não alimenta o relógio
+ * do mesociclo". Eventos (calibração, sinal de fadiga) também ficam de fora.
+ */
+export function retomadaDoHistorico(
+  historico: readonly SessaoHistorico[],
+  hojeISO: string,
+): EstadoRetomada | null {
+  const datas = sessoesResistidas(historico).map((s) => s.dataISO).filter(Boolean);
+  return estadoRetomada({ datasSessaoResistida: datas, hojeISO });
+}
+
+/**
+ * Exercícios que a pessoa JÁ EXECUTAVA (últimas sessões resistidas) — insumo da suspensão
+ * da B5 na volta: o efeito protetor da sessão repetida é específico do exercício, então
+ * rotacionar na retomada removeria justamente a proteção (§9 das lacunas da spec).
+ */
+export function exerciciosRecentes(
+  historico: readonly SessaoHistorico[],
+  quantasSessoes = 6,
+): Set<string> {
+  const asc = sessoesResistidas(historico)
+    .slice()
+    .sort((a, b) => (a.dataISO < b.dataISO ? 1 : a.dataISO > b.dataISO ? -1 : b.n - a.n));
+  const ids = new Set<string>();
+  for (const s of asc.slice(0, quantasSessoes)) {
+    for (const ex of s.exercicios) if (ex.id) ids.add(ex.id);
+  }
+  return ids;
 }
 
 /**

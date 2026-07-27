@@ -112,6 +112,28 @@ export const DESCANSO_COMPOSTO_TETO_SEG = 180;
 /** Modo força: alvo fixo de reps nos compostos (nunca < 6 nem > 6; → 6RM). */
 export const MODO_FORCA_REPS = 6;
 
+/** Leva 2 — Rampa de retomada (cofre §"Rampa de retomada", DF 2026-07-27; diretriz
+ *  CSCCa/NSCA 2019). Feature de SEGURANÇA: o risco é rabdomiólise por esforço. */
+/** ≤ 14 dias: nada muda — e o app não diz nada ("ausência não fala"). */
+export const RETOMADA_DIAS_GATILHO = 14;
+/** > 56 dias vira rampa longa. ⚠️ 56 é CONVENÇÃO DO CAMPO, não medida de diretriz. */
+export const RETOMADA_DIAS_LONGA = 56;
+/** Fatores sobre o volume de REFERÊNCIA (última semana efetivamente treinada). NÃO compostos. */
+export const RETOMADA_FATORES_CURTA = [0.5, 0.7] as const;
+export const RETOMADA_FATORES_LONGA = [0.5, 0.7, 0.8, 0.9] as const;
+/** Janela da regra FIT (frequência/IRV/descanso) e da suspensão da B5. */
+export const RETOMADA_SEMANAS_FIT = 2;
+/** IRV = séries × reps × %1RM (decimal) por grupo/sessão — guarda-corpo DURO. */
+export const RETOMADA_IRV_TETO = 30;
+/** Sem carga o IRV é incomputável (não há %1RM) → teto fixo de séries por grupo/sessão. */
+export const RETOMADA_SERIES_MAX_SEM_CARGA = 3;
+/** Frequência máx. por GRUPO/PADRÃO por semana (não por dias de treino). */
+export const RETOMADA_FREQ_MAX_POR_GRUPO = [3, 4] as const;
+/** Descanso mínimo (razão 1:4 → 1:3 com série ≈ 30 s). Eleva o mínimo do isolado (v1 60–90 s). */
+export const RETOMADA_DESCANSO_MIN_SEG = [120, 90] as const;
+/** RIR-alvo na rampa = piso da escada. NUNCA o RIR da semana em que a pessoa parou. */
+export const RETOMADA_RIR_ALVO = 3;
+
 /** Nível de experiência → dificuldades de exercício liberadas (escada da biblioteca A1). */
 export const DIFICULDADE_LIBERADA: Record<NivelExperiencia, NivelExercicio[]> = {
   iniciante: ['iniciante'],
