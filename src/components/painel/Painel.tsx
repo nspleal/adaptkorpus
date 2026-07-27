@@ -7,13 +7,16 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
+import { metaCardioComRetomada, metaCardioSemanal, type MetaCardio } from '@/lib/engine/cardio';
+import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
+import RegistrarCardio, { CardioSemana } from './Cardio';
 import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
@@ -304,6 +307,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     window.scrollTo(0, 0);
   }
 
+  // Cardio (Leva 2 · Bloco 1) — entrada PRÓPRIA do histórico (`tipo: 'cardio'`), o que a
+  // mantém fora do relógio do mesociclo e dentro da Chama. 🟢 A kcal estimada NÃO toca o
+  // plano de dieta: `salvarCardio` não chama `recomputarPlano` nem mexe em `dieta`.
+  const [registrandoCardio, setRegistrandoCardio] = useState(false);
+  function salvarCardio(payload: NonNullable<SessaoHistorico['cardio']>) {
+    aplicarNovoHistorico(registrarCardio(payload));
+  }
+
   // "Registrar treino feito" (formulário pós-fato) — grava na DATA REAL escolhida, no mesmo
   // formato da sessão guiada + origem manual (design_handoff_registro_e_contador_treino).
   const [registrando, setRegistrando] = useState(false);
@@ -479,6 +490,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // 🔒 Precedência DURA do "fiquei doente" (Bloco 4): rampa ativa → só o chip/cartão de
   // retomada · reconhecido → só o aviso · senão → nada. Nunca duas mensagens empilhadas.
   const avisoPausa = avisoPausaVisivel({ reconhecidoEm: perfil.reconhecidoEm, rampaAtiva: retomada != null, sessoes });
+  // --- Cardio (Leva 2 · Bloco 1) -------------------------------------------------------
+  // 🔒 A meta cai pelo MESMO fator da rampa, na mesma semana: deixar 150 min intactos para
+  // quem volta de 60 dias com o treino cortado pela metade seria pedir de cardio o que se
+  // acabou de tirar do treino. 🔒 Gate ROTEAR → sem meta (registra, mas não é orientado).
+  const registrosCardioSemana = registrosDaSemana(sessoes, hojeISO());
+  const metaCardio: MetaCardio | null = metaCardioComRetomada(
+    metaCardioSemanal(perfil.objetivo, treino.gate.comportamento === 'ROTEAR'),
+    retomada?.fator ?? null,
+  );
+  const propsCardio = {
+    registros: registrosCardioSemana, meta: metaCardio, retomada, hojeISO: hojeISO(),
+    acumuladoMin: minutosAcumulados(sessoes), objetivo: perfil.objetivo,
+    onRegistrar: () => { setRegistrandoCardio(true); window.scrollTo(0, 0); },
+  };
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
     const base = {
@@ -598,6 +623,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     );
   }
 
+  // Registrar CARDIO (Leva 2 · Bloco 1) — tela cheia, mesmo padrão do registro manual.
+  if (registrandoCardio) {
+    return (
+      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', padding: '32px 20px 60px' }}>
+        <Backdrop />
+        <RegistrarCardio pesoKg={perfil.pesoKg} onSalvar={salvarCardio} onCancelar={() => setRegistrandoCardio(false)} />
+      </div>
+    );
+  }
+
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
   if (sessaoDia !== null && prescricaoEfetiva && rotinaDias[sessaoDia]) {
     return (
@@ -660,7 +695,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} />}
+        {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não
+            recebe meta". Sem este ramo, o usuário em ROTEAR veria a aba Treino VAZIA e não
+            teria onde registrar — o oposto do que a spec pede. */}
+        {!vista && aba === 'treino' && (prescricao
+          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
+          : <div style={sec}><CardioSemana {...propsCardio} /></div>)}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -815,7 +855,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -823,6 +863,12 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
   /** "Fiquei doente" (Bloco 4): aviso "Pausa reconhecida" — já resolvido pela precedência. */
   avisoPausa: boolean; onReconhecerPausa: () => void;
+  /** Cardio (Bloco 1): a seção da semana mora na aba Treino, como o design desenhou. */
+  cardio: {
+    registros: readonly RegistroCardioDatado[]; meta: MetaCardio | null;
+    retomada?: { semana: number; totalSemanas: number } | null;
+    hojeISO: string; acumuladoMin: number; objetivo: PerfilResumo['objetivo']; onRegistrar: () => void;
+  };
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   return (
@@ -900,6 +946,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
         </div>
       ))}
       <p style={{ margin: '4px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Seu retorno ajusta o próximo treino. Iniciante não treina até a falha — a carga sobe por dupla progressão guiada pelo seu feedback.</p>
+      {/* Cardio (Bloco 1): o motor já prescrevia cardio na tabela 1.1 — o app é que não
+          deixava registrar. A seção mora aqui, na aba Treino, como o design desenhou. */}
+      <CardioSemana {...cardio} />
       {/* Entrada do "Fiquei doente" no PÉ da aba, abaixo da nota do RIR: é o único controle
           de NÍVEL DE ABA, e reusa o vocabulário do "Trocar" (que segue por exercício, dentro
           do cartão — nada foi duplicado nem movido). Continua aqui nos cinco estados. */}

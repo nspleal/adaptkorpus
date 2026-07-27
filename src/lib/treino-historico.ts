@@ -103,7 +103,8 @@ export function lerHistorico(): SessaoHistorico[] {
  * primeiro. Retorna o histórico atualizado.
  */
 export function registrarSessaoEm(
-  resumo: ResumoSessao, dataISO: string, extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo'] },
+  resumo: ResumoSessao, dataISO: string,
+  extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo']; cardio?: SessaoHistorico['cardio'] },
 ): SessaoHistorico[] {
   const hist = lerHistorico();
   // n único = maior n existente + 1 (length+1 duplicaria após qualquer entrada descartada).
@@ -216,6 +217,31 @@ export function salvarCalibracao(
 export function registrarSinalFadiga(agora: Date = new Date()): SessaoHistorico[] {
   const resumo: ResumoSessao = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [] };
   return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'sinal_fadiga' });
+}
+
+/**
+ * Grava uma sessão de CARDIO (Leva 2 · Bloco 1, DF 2026-07-27) como entrada própria do
+ * histórico. 🔒 `tipo: 'cardio'` é o que a mantém FORA do balde do relógio do mesociclo
+ * (`sessoesResistidas`) e DENTRO da Chama (`sessoesTreino`) — as duas travas da spec.
+ * `series: 0` / `volumeKg: 0` deixam o gráfico de Cargas intacto.
+ */
+export function registrarCardioEm(
+  payload: NonNullable<SessaoHistorico['cardio']>,
+  dataISO: string,
+  hora?: string,
+): SessaoHistorico[] {
+  const resumo: ResumoSessao = { dia: 'Cardio', series: 0, volumeKg: 0, feedback: {}, exercicios: [] };
+  return registrarSessaoEm(resumo, dataISO, { tipo: 'cardio', ...(hora ? { hora } : {}), cardio: payload });
+}
+
+/** Cardio de hoje (carimba dia local + hora — o relógio fica aqui, na UI). */
+export function registrarCardio(
+  payload: NonNullable<SessaoHistorico['cardio']>,
+  agora: Date = new Date(),
+): SessaoHistorico[] {
+  const hh = String(agora.getHours()).padStart(2, '0');
+  const mm = String(agora.getMinutes()).padStart(2, '0');
+  return registrarCardioEm(payload, hojeISO(agora), `${hh}:${mm}`);
 }
 
 /**
