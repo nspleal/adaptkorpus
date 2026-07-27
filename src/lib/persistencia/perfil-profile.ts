@@ -13,8 +13,9 @@ import type { PerfilResumo } from '@/components/painel/Painel';
  */
 
 /** Bloco `preferencias` (jsonb) — os campos do perfil que não têm coluna própria
- *  (9 do v1 + 3 do mesociclo/modo força — v2 §7, DF 2026-07-08; o jsonb do 0005
- *  absorve as chaves novas sem migração). */
+ *  (9 do v1 + 3 do mesociclo/modo força — v2 §7, DF 2026-07-08; + o carimbo do "fiquei
+ *  doente" — Leva 2 · Bloco 4, DF 2026-07-27; o jsonb do 0005 absorve as chaves novas sem
+ *  migração SQL). */
 export interface PreferenciasPerfil {
   nivelExperiencia: PerfilResumo['nivelExperiencia'];
   equipamento: PerfilResumo['equipamento'];
@@ -29,6 +30,7 @@ export interface PreferenciasPerfil {
   mesocicloSemana?: PerfilResumo['mesocicloSemana'];
   deloadAte?: PerfilResumo['deloadAte'];
   modoForca?: PerfilResumo['modoForca'];
+  reconhecidoEm?: PerfilResumo['reconhecidoEm'];
 }
 
 /** Subconjunto de colunas de `public.profile` derivado do `PerfilResumo`. */
@@ -79,6 +81,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       ...(p.mesocicloSemana != null ? { mesocicloSemana: p.mesocicloSemana } : {}),
       ...(p.deloadAte != null ? { deloadAte: p.deloadAte } : {}),
       ...(p.modoForca != null ? { modoForca: p.modoForca } : {}),
+      ...(p.reconhecidoEm != null ? { reconhecidoEm: p.reconhecidoEm } : {}),
     },
   };
 }
@@ -132,6 +135,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     ...(pref.mesocicloSemana != null ? { mesocicloSemana: pref.mesocicloSemana } : {}),
     ...(pref.deloadAte != null ? { deloadAte: pref.deloadAte } : {}),
     ...(pref.modoForca != null ? { modoForca: pref.modoForca } : {}),
+    ...(pref.reconhecidoEm != null ? { reconhecidoEm: pref.reconhecidoEm } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,
       renal: row.renal,

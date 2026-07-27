@@ -13,6 +13,8 @@ import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
+import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
+import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
@@ -77,6 +79,11 @@ export interface PerfilResumo {
   /** Modo força (preset opt-in v2 §4): compostos travados em 6 reps → 6RM. O motor
    *  IGNORA o flag p/ iniciante (o toggle nem aparece). */
   modoForca?: boolean;
+  /** Carimbo ISO 8601 do "Fiquei doente" (Leva 2 · Bloco 4, DF 2026-07-27) — o RECONHECIMENTO
+   *  da pausa, e nada mais. 🔴 O MOTOR NUNCA LÊ ESTE CAMPO (`engine-sem-reconhecido.test.ts`):
+   *  quem avisa e quem some têm o mesmo comportamento. 🔴 Motive-free por LGPD — sem motivo,
+   *  sintoma, data de volta ou contagem de dias. Sai no 1º treino registrado. */
+  reconhecidoEm?: string;
 }
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -238,9 +245,34 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const antes = bandaChama(diasTreinados);
     if (bandaChama(diasDeTreino(sessoesTreino(novo).map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
     setSessoes(novo);
+    // "Fiquei doente" (Bloco 4): o reconhecimento LIMPA no primeiro treino registrado,
+    // SEM MENSAGEM NENHUMA (nada de "bem-vindo de volta" — o silêncio é decisão de projeto).
+    // Aqui está o ato do registro, que cobre inclusive o treino do MESMO dia do aviso; o
+    // guard derivado de `pausaReconhecida` cobre reload e 2º device.
+    if (perfil.reconhecidoEm != null) {
+      const novaEntrada = novaSessaoDe(novo);
+      if (novaEntrada && sessoesTreino([novaEntrada]).length > 0) limparReconhecimento();
+    }
     // Write-through p/ o servidor (um gancho cobre guiada/manual/calibração): a sessão
     // recém-gravada é a de maior n. Fire-and-forget — o local já está persistido.
     void enviarSessaoTreino(novaSessaoDe(novo));
+  }
+
+  // --- "Fiquei doente" — o RECONHECIMENTO (Leva 2 · Bloco 4, DF 2026-07-27) --------------
+  // 🔴 "Entendi" grava o carimbo e NADA MAIS: não toca ciclo, volume, chama, agenda nem
+  // meta de cardio. O congelamento do mesociclo já acontece sozinho desde `9ebf1bd` e a
+  // rampa entra sozinha pelo gatilho derivado — o botão é o ato de AVISAR, não um comando.
+  // O relógio fica aqui, na UI (o motor segue clock-free e nunca lê este campo).
+  function reconhecerPausa() {
+    const novo = { ...perfil, reconhecidoEm: new Date().toISOString() }; // idempotente: só atualiza o carimbo
+    setPerfil(novo);
+    onPerfilChange?.(novo);
+  }
+  function limparReconhecimento() {
+    const { reconhecidoEm: _fora, ...novo } = perfil;
+    void _fora;
+    setPerfil(novo);
+    onPerfilChange?.(novo);
   }
 
   // Calibração manual / adoção de degrau (B2/B3): grava o evento no histórico — o alvo
@@ -444,6 +476,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // 🔒 A rampa SUPERSEDE o deload reativo enquanto ativa (ela já é um deload — somar os
   // dois daria 0,25 × piso, estímulo trivial; lacuna 6 da spec).
   const deloadAtivo = prescricao && !retomada ? ciclo.deload : false;
+  // 🔒 Precedência DURA do "fiquei doente" (Bloco 4): rampa ativa → só o chip/cartão de
+  // retomada · reconhecido → só o aviso · senão → nada. Nunca duas mensagens empilhadas.
+  const avisoPausa = avisoPausaVisivel({ reconhecidoEm: perfil.reconhecidoEm, rampaAtiva: retomada != null, sessoes });
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
     const base = {
@@ -495,10 +530,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana() });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-monta quando a semana do
-    // ciclo OU a rampa de retomada muda. A rampa entra nas deps porque ela nasce depois da
-    // hidratação do histórico e pode coincidir com a MESMA semana de ciclo — sem isto, a
-    // rotina ficaria com o volume cheio enquanto o chip já diz "Retomada".
+    // Re-monta quando a semana do ciclo OU a rampa de retomada muda. A rampa entra nas deps
+    // porque ela nasce depois da hidratação do histórico e pode coincidir com a MESMA semana
+    // de ciclo — sem isto, a rotina ficaria com o volume cheio enquanto o chip já diz
+    // "Retomada" (bug real, pego no smoke do Bloco 3).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator]);
   // Prescrição EFETIVA da semana p/ a sessão (RIR-alvo da rampa 3→1 + descanso do composto
   // até ~180 s quando o tempo permite — o montador decide e devolve em rotina.semana).
@@ -624,7 +660,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
-        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} />}
+        {!vista && aba === 'treino' && prescricao && <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} />}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
@@ -779,12 +815,14 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
   onTrocar: (d: number, s: number) => void; onFb: (k: string, f: Feedback) => void;
   onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
+  /** "Fiquei doente" (Bloco 4): aviso "Pausa reconhecida" — já resolvido pela precedência. */
+  avisoPausa: boolean; onReconhecerPausa: () => void;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   return (
@@ -797,6 +835,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
           <button onClick={onRegistrarTreino} className="evk-registrar" style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
         </div>
       </div>
+      {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
+          mesma de quem não avisou (nada avançou, nada foi remarcado). */}
+      {avisoPausa && <AvisoPausaReconhecida />}
       {dias.map((dia, d) => (
         <div key={`${dia.nome}-${d}`} style={{ marginBottom: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
@@ -859,6 +900,10 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
         </div>
       ))}
       <p style={{ margin: '4px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Seu retorno ajusta o próximo treino. Iniciante não treina até a falha — a carga sobe por dupla progressão guiada pelo seu feedback.</p>
+      {/* Entrada do "Fiquei doente" no PÉ da aba, abaixo da nota do RIR: é o único controle
+          de NÍVEL DE ABA, e reusa o vocabulário do "Trocar" (que segue por exercício, dentro
+          do cartão — nada foi duplicado nem movido). Continua aqui nos cinco estados. */}
+      <FiqueiDoente onReconhecer={onReconhecerPausa} />
     </div>
   );
 }

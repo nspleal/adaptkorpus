@@ -31,6 +31,10 @@ export const perfilResumoSchema = z.object({
   mesocicloSemana: z.number().int().min(1).max(6).optional(),
   deloadAte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO').optional(),
   modoForca: z.boolean().optional(),
+  // "Fiquei doente" (Leva 2 · Bloco 4, DF 2026-07-27): SÓ o carimbo ISO 8601 do
+  // reconhecimento. 🔴 Motive-free por LGPD — nunca motivo, sintoma ou data de volta;
+  // um campo que gravasse "doente" seria dado de saúde (categoria sensível).
+  reconhecidoEm: z.string().datetime().optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
     renal: z.boolean(),
