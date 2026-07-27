@@ -13,6 +13,7 @@ import { lerSessao, salvarSessao } from '@/lib/session';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
+import { LinkLegal } from '@/components/auth/ui';
 
 /**
  * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
@@ -233,10 +234,13 @@ export default function Onboarding() {
 /* ════════════════════ Passos ════════════════════ */
 
 function Step0({ terms, setTerms }: { terms: [boolean, boolean, boolean]; setTerms: (t: [boolean, boolean, boolean]) => void }) {
+  // Documentos LINKADOS (LinkLegal: nova aba, não marca o checkbox). É AQUI que o aceite
+  // é persistido (`salvarPerfilServidor(..., consentimentos)`), então este é o ponto de
+  // consentimento que mais precisa do texto acessível — LGPD/CDC, cofre §Leva 1.
   const linhas = [
     <>Confirmo que tenho <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>18 anos ou mais</strong>.</>,
-    <>Li e aceito os <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Termos de Uso</strong> e o <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Aviso (disclaimer)</strong>.</>,
-    <>Autorizo o tratamento dos meus dados para gerar meu plano, conforme a <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Política de Privacidade</strong> (LGPD).</>,
+    <>Li e aceito os <LinkLegal href="/termos">Termos de Uso</LinkLegal> e o <LinkLegal href="/aviso">Aviso (disclaimer)</LinkLegal>.</>,
+    <>Autorizo o tratamento dos meus dados para gerar meu plano, conforme a <LinkLegal href="/privacidade">Política de Privacidade</LinkLegal> (LGPD).</>,
   ];
   const tog = (i: number) => { const n = [...terms] as [boolean, boolean, boolean]; n[i] = !n[i]; setTerms(n); };
   return (

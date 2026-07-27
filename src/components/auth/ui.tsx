@@ -1,6 +1,7 @@
 'use client';
 
-import { type CSSProperties } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
+import Link from 'next/link';
 
 /**
  * Primitivos compartilhados das telas de conta (login/cadastro/redefinir/confirmar).
@@ -37,6 +38,30 @@ export const btnGhost: CSSProperties = {
   transition: 'border-color .25s ease, background .25s ease',
 };
 export const linkNeon: CSSProperties = { color: '#BDFF00', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 };
+
+/**
+ * Link para um documento legal DENTRO de uma linha de consentimento (cadastro/onboarding).
+ *
+ * Por que existe (cofre `operacao-legal-suporte-reembolso` + `plano-pos-feedback-beta-2026-07-26`
+ * §Leva 1): o texto de Termos/Privacidade/Aviso precisa estar acessível ANTES do aceite —
+ * consentimento sem acesso ao texto é consentimento NÃO-informado (LGPD/CDC). O 1º retorno
+ * do beta foi exatamente "não achei como ler os termos na hora de criar a conta".
+ *
+ * Duas travas que fazem o link funcionar no lugar onde ele vive — por isso é componente
+ * único, e não um `<Link>` solto repetido em cada tela:
+ *  1. `target="_blank"` (+ `rel`): a linha vive dentro de um formulário. Navegar na mesma
+ *     aba perderia o que já foi digitado — e o "Voltar" das páginas legais leva à landing,
+ *     não de volta ao cadastro.
+ *  2. `stopPropagation`: a LINHA INTEIRA é o alvo do toggle do consentimento. Sem isto,
+ *     abrir o documento para ler MARCARIA o aceite sozinho — o oposto do que a correção quer.
+ */
+export function LinkLegal({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={linkNeon}>
+      {children}
+    </Link>
+  );
+}
 
 /** Força de senha (medidor) — cores do token V2. */
 export function forcaSenha(pw: string): { pct: string; cor: string; rotulo: string } {
