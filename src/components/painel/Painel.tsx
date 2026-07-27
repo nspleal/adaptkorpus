@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
@@ -17,6 +17,7 @@ import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { metaCardioComRetomada, metaCardioSemanal, type MetaCardio } from '@/lib/engine/cardio';
 import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
+import FrequenciaGrupos from './FrequenciaGrupos';
 import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
@@ -702,7 +703,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
           : <div style={sec}><CardioSemana {...propsCardio} /></div>)}
         {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
-        {!vista && aba === 'progresso' && <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} />}
+        {!vista && aba === 'progresso' && (
+          <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso}>
+            {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
+                `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
+            <FrequenciaGrupos
+              sessoes={sessoes}
+              exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
+              hojeISO={hojeISO()}
+              diasForca={rotinaDias.length || perfil.treinoDias.length}
+              objetivo={perfil.objetivo}
+              retomadaAtiva={retomada != null}
+            />
+          </Progresso>
+        )}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
       </div>
@@ -1048,7 +1062,7 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void }) {
+function Progresso({ pesos, treinos, onRegistrar, children }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -1066,6 +1080,7 @@ function Progresso({ pesos, treinos, onRegistrar }: { pesos: number[]; treinos: 
         {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
       </div>
       <RegistrarPesoRow onRegistrar={onRegistrar} />
+      {children}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.4))', border: '1px solid rgba(189,255,0,.2)', borderRadius: 18, padding: '22px 24px', marginTop: 18 }}>
         <span style={{ width: 42, height: 42, minWidth: 42, borderRadius: 12, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={22} height={22} viewBox="0 0 24 24" fill="none"><path d="M3 17 Q8 14 12 9 T21 4" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={9} r={2.2} fill="#BDFF00" /><circle cx={21} cy={4} r={2.6} fill="#BDFF00" /></svg></span>
         <div><h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', fontWeight: 700 }}>Como seu plano evolui</h3><p style={{ margin: 0, color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.95rem' }}>A cada avanço seu, o treino e a dieta se <strong style={{ color: '#BDFF00', fontWeight: 600 }}>recalculam</strong> pelas regras adaptativas. Sem promessa de prazo — só o ajuste fino que a sua constância merece.</p></div>
