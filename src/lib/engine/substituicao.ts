@@ -208,8 +208,10 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
 
   /** Rank de preservação (menor = melhor): 0 grupo+padrão · 1 grupo · 2 padrão · 3 nada (FORA). */
   const rankPreservacao = (y: typeof atual): number => {
-    // 🔒 `grupoPrimario` nullable: dois `null` (cardio/corpo-inteiro) NÃO são "mesmo grupo"
-    // — sem isto, qualquer item sem anatomia preservaria qualquer outro.
+    // 🔒 `grupoPrimario` nullable (DF 2026-07-27): dois `null` NÃO são "mesmo grupo". Sem
+    // esta guarda, `null === null` faria os 12 exercícios sem anatomia virarem um pool
+    // mutuamente substituível (esteira ↔ burpee ↔ caminhada do fazendeiro) — exatamente a
+    // troca que o filtro duro existe para impedir. Cofre: `logica-de-substituicao`.
     const g = y.grupoPrimario != null && y.grupoPrimario === atual.grupoPrimario;
     const pd = y.padraoMovimento === atual.padraoMovimento;
     return g && pd ? 0 : g ? 1 : pd ? 2 : 3;

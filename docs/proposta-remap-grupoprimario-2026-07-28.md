@@ -1,8 +1,12 @@
 # Proposta — remapeamento de `grupoPrimario` para 12 valores (Leva 2.1 · Bloco B)
 
-> ✅ **RATIFICADO E APLICADO em 2026-07-28.** `e97 → costas` · `e129 → gluteos` · `pernas`
-> dissolvido. **Uma re-ratificação durante a aplicação:** `e151` (Patinador) foi de `gluteos`
-> para **`quadriceps`** — ver §7. O resto saiu exatamente como proposto.
+> ✅ **RATIFICADO PELO COFRE E APLICADO em 2026-07-28.** `e97 → costas` · `e129 → gluteos` ·
+> `pernas` dissolvido — tudo como proposto.
+> ⚠️ **Uma exceção decidida NA SESSÃO DE CÓDIGO, não pelo cofre:** `e151` (Patinador) saiu de
+> `gluteos` para **`quadriceps`** (§7). A ratificação do cofre dizia "pernas dissolvido como
+> proposto", o que o manteria em `gluteos`; a troca é **DF da sessão de código**, arquivada
+> pelo cofre depois. O fluxo está correto (a sessão decide com o catálogo na mão, o cofre
+> arquiva) — mas não é decisão do cofre, e o registro precisa dizer isso.
 > A DF de 2026-07-27 manda que `trapezio` e `adutores` sejam "absorvidos pelo vizinho", com a
 > escolha **exercício a exercício voltando para ratificação**. Este documento é essa volta —
 > e traz o diff completo dos 26 exercícios afetados, para o cofre arquivar e atualizar a
@@ -185,9 +189,25 @@ skater era preservado **pelo grupo**. Mandando-o para `gluteos` e os outros dois
 equipamentos). No iniciante continuava funcionando, porque ali o nível degrada para o mesmo
 padrão (`cardio`), que existe.
 
-**Decisão (sua, consultada):** `e151` → **`quadriceps`**. Salto unilateral lateral — o
-quadríceps faz propulsão e aterrissagem junto com o glúteo médio; e os três pliométricos
-voltam a se preservar entre si. Varredura de volta em **3 vazios**.
+**Decisão: DF DA SESSÃO DE CÓDIGO (2026-07-28).** `e151` → **`quadriceps`**: os três
+pliométricos voltam a se preservar entre si e a varredura volta a **3 vazios**.
+
+🔴 **Custo anatômico, registrado para não se perder:** o patinador é salto **lateral** e o
+**glúteo médio é o motor** — pela anatomia, `gluteos` era o certo. Ele perdeu para a
+conectividade do grafo, não para um argumento anatômico melhor.
+
+### 🔒 A regra que o cofre travou por causa deste caso (DF 2026-07-28)
+
+> **`grupoPrimario` é anatomia, exceto quando a escolha anatômica desconecta o exercício do
+> grafo de substituição — aí manda a conectividade.**
+
+A razão da ordem: o campo serve a **dois consumidores** — a **tela** (que o usuário lê) e o
+**filtro duro da substituição** (mecânica). Quando brigam, ganha o que **quebra o produto**,
+não o que fica impreciso. Exercício sem substituto é falha que alguém encontra; "patinador
+contado em quadríceps" ninguém percebe.
+
+Sem a exceção escrita, a decisão seguinte citaria "anatomia manda" (a razão do `e97`) e
+quebraria o grafo de novo.
 
 **Efeito na distribuição:** `quadriceps` 23 → **24** · `gluteos` 12 → **11**. O resto da
 tabela do §4 fica igual.
@@ -196,3 +216,24 @@ tabela do §4 fica igual.
 assert de paridade que existe justamente para não perder trocas; e relaxar o filtro duro
 — por exemplo, preservar por TIPO quando não há grupo nem padrão — mexe num trilho travado
 e pediria DF própria.)*
+
+---
+
+## 8. ⚠️ Lacuna do cofre que este episódio expôs
+
+A invariante que ditou o destino do `e151` — **"exatamente 3 conjuntos de substituição
+vazios"** (o furo do e116) — **não existe no cofre**. Ela vive só como assert em
+`src/lib/engine/substituicao.test.ts`. Uma regra de catálogo foi decidida por um número que
+o cofre não conhecia.
+
+O que falta descrever em `logica-de-substituicao.md` (registrado pelo autor):
+
+1. **Quais são os 3** e por que são aceitáveis (hoje: `e116·iniciante|intermediario|avancado
+   · nenhum` — Remada invertida sem equipamento algum; o piso "nenhum" mantém 1 puxar por
+   decisão, e a troca fecha sozinha quando `barra_fixa` é marcada).
+2. **O que o filtro duro considera "grupo ou padrão em comum"** — o rank de preservação
+   (`0` grupo+padrão · `1` grupo · `2` padrão · `3` FORA).
+3. 🆕 **Dois `null` NÃO são o mesmo grupo** — achado desta implementação. Sem a guarda,
+   `null === null` faria os **12 exercícios sem anatomia** virarem um pool mutuamente
+   substituível (esteira ↔ burpee ↔ caminhada do fazendeiro), que é exatamente o tipo de
+   troca que o filtro duro existe para impedir.

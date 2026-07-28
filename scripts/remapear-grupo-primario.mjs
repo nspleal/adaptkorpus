@@ -1,7 +1,14 @@
 /**
  * Remapeia `grupoPrimario` para o vocabulário de 12 valores ANATÔMICOS
  * (cofre `parametros-motor-treino-evokorpus` §Frequência por grupo — DF 2026-07-27,
- * destinos de `trapezio`/`adutores` RATIFICADOS em 2026-07-28).
+ * destinos de `trapezio`/`adutores` RATIFICADOS pelo cofre em 2026-07-28).
+ *
+ * 🔒 REGRA DO CAMPO (cofre, DF 2026-07-28): **`grupoPrimario` é anatomia, EXCETO quando a
+ * escolha anatômica desconecta o exercício do grafo de substituição — aí manda a
+ * conectividade.** O campo serve a dois consumidores: a TELA (que o usuário lê) e o FILTRO
+ * DURO da substituição (mecânica). Quando brigam, ganha o que quebra o produto, não o que
+ * fica impreciso: exercício sem substituto é falha que alguém encontra; um grupo levemente
+ * torto ninguém percebe. A exceção tem exatamente um caso hoje — o `e151`, abaixo.
  *
  * O campo vira NULLABLE: `cardio` (5) e `corpo-inteiro` (7) saem da anatomia — são **tipo**,
  * que já existe como campo próprio — e passam a contar só pelo padrão de movimento.
@@ -36,12 +43,15 @@ const POR_ID = {
   e129: 'gluteos',     // Cadeira adutora — a máquina isola em adução, não em extensão
   e143: 'quadriceps',  // Avanço com salto — padrão agachar, quadríceps-dominante
   e163: 'quadriceps',  // Agachamento com salto — idem
-  // e151 Patinador: proposto `gluteos` (glúteo médio é o motor do plano frontal) e
-  // RE-RATIFICADO em `quadriceps` (2026-07-28) quando o catálogo mostrou o custo — ele é o
-  // ÚNICO pliométrico com padrão `cardio`, e separá-lo do Avanço/Agachamento com salto o
-  // deixava sem grupo NEM padrão em comum: 6 vazios novos na substituição, contra a
-  // invariante travada de "EXATAMENTE 3 (o furo do e116), igual ao motor standalone".
-  // Salto unilateral lateral: o quadríceps faz propulsão e aterrissagem junto com o glúteo.
+  // 🔴 e151 Patinador — ÚNICO caso da exceção acima. DF DA SESSÃO DE CÓDIGO (2026-07-28),
+  // arquivada no cofre: o cofre ratificou `pernas` dissolvido "como proposto", o que o
+  // deixaria em `gluteos`; a troca para `quadriceps` foi decidida aqui, com o catálogo na
+  // mão, e NÃO é decisão do cofre.
+  // Motivo: ele é o único pliométrico com padrão `cardio` — separado do Avanço (e143) e do
+  // Agachamento com salto (e163), ficava sem grupo NEM padrão em comum e o filtro duro
+  // abria 6 vazios novos, contra a invariante de "EXATAMENTE 3 (o furo do e116)".
+  // 💡 Custo anatômico, escrito para não se perder: o patinador é salto LATERAL e o glúteo
+  // médio é o motor — pela anatomia, `gluteos` era o certo. Perdeu para a conectividade.
   e151: 'quadriceps',
 };
 
