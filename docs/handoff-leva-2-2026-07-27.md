@@ -158,3 +158,112 @@ frequência existem só como arquivo solto na raiz
 Todas as demais pastas de design (dieta, banner, chama, escada, estados, favoritos,
 institucional, calibração, recursos do painel, reembolso/FAQ/changelog, registrar refeição,
 registro e contador) seguem **intocadas**. Nada foi promovido para `main`.
+
+---
+
+# Adendo (2026-07-28) — 3 pedidos de fechamento
+
+## A. O pacote de frequência estava no cofre (`4f99032`)
+
+`raw/design-handoff-frequencia-por-grupo-2026-07-27.md` traz o `CLAUDE_CODE.md` da pasta
+`design_handoff_frequencia` na íntegra. **Regra guardada:** todo pacote de design tem cópia
+dos seus documentos no `raw/` do cofre; pacote quebrado ou incompleto se recupera de lá,
+sem pedir reenvio.
+
+O que faltava e entrou: linha de grupo como `<button>` real com nome acessível completo ·
+tela de detalhe do grupo · padrões como `<ul>/<li>` em grid `minmax(0,1fr)` com os 2 pips ·
+`role="tabpanel"` + navegação por ← → com foco · semana parcial · estado vazio completo ·
+cartão "Como ler" · nota da Chama · `evkFill` com `prefers-reduced-motion`.
+
+**Onde o pacote e o cofre discordaram, o cofre mandou** (cada ponto anotado no cabeçalho de
+`FrequenciaGrupos.tsx`):
+
+| §  do pacote | O que ele pedia | O que ficou |
+|---|---|---|
+| 7.3 | grupo **secundário** também conta | só `grupoPrimario` — não existe campo secundário no catálogo |
+| 7.4 | 4 semanas = 4 fechadas **+ a corrente** | correção 3: **sem** a corrente (28 dias, 4 baldes) |
+| 6.3 / 10.2 | marcador **sempre** em 50% | correção 1: com < 2 dias de força **não há marcador** |
+| 6.3 | rótulo "2× de referência" | correção 4: **"2× — referência dos padrões"** |
+| 7.6 | ler a contagem de padrões **do motor** | o motor não expõe essa contagem; é agregada do mesmo histórico, com a mesma régua |
+
+## B. O caminho ROTEAR — o que o código faz hoje (não corrigido, como pedido)
+
+**Não é um loop de redirecionamento. É um beco sem saída na porta.** Verificado no código e
+no navegador.
+
+1. **Onboarding, ao declarar condição** (`src/app/onboarding/page.tsx:161`): gate ROTEAR →
+   `setFase('resultado')` → tela `GateB` ("Vamos com cuidado aqui"). **`salvarSessao` nunca é
+   chamado** — não nasce sessão, não sobe perfil. As duas saídas são *"Revisar respostas"*
+   (volta ao wizard no passo 0) e *"Ver conteúdos gerais"* (`/aviso`). **A pessoa nunca entra
+   no app.**
+2. **`/app` com sessão que ROTEIA** (`src/app/app/page.tsx:37`): `limparSessao()` +
+   `router.replace('/onboarding')`. Confirmado no navegador: `evk_sessao` vira `null` e a tela
+   final é o wizard, **estável** — recarregar `/app` leva ao wizard de novo, sem piscar.
+3. **Como se chega ao caso 2 hoje:** praticamente não se chega. `EditarPerfil` **preserva
+   `flagsSaude`** (`EditarPerfil.tsx:108`) e não reabre as condições; `registrarPeso` **não
+   altera** `perfil.pesoKg`; e `Painel.recalcular` (`Painel.tsx:310`) já trata a edição que cai
+   em ROTEAR mostrando o encaminhamento **sem persistir** e **sem derrubar o plano atual**. O
+   ramo do `/app` é defesa contra dado corrompido — mas, se disparar, **apaga a sessão local**
+   (o perfil no servidor sobrevive) e a pessoa cai no wizard do zero.
+
+**Para os 6 testadores:** quem declarou condição no onboarding **nunca chegou ao painel** — não
+ficou preso lá dentro. O sintoma que essa pessoa relataria é *"não consegui gerar meu plano"*,
+não *"o app me expulsa"*. Quem já está usando o app não corre risco de ser expulso pelas ações
+normais (editar perfil, registrar peso, registrar treino).
+
+⚠️ **A decisão de produto que falta** (não tomada, não implementada): *o que o app entrega a
+quem declara condição de saúde*. Hoje a resposta é "nada, e nem entra". A spec de cardio já
+pressupõe o contrário — *"usuário roteado registra, mas não recebe meta"* — e a Leva 2 deixou
+esse estado **pronto e inalcançável**: `metaCardioSemanal(objetivo, true) === null` e a seção de
+cardio já renderiza sem prescrição (`Painel.tsx`, ramo `prescricao ? … : <CardioSemana/>`).
+Quando a decisão sair, o que falta é só deixar a conta existir.
+
+## C. Os 18 `grupoPrimario` do catálogo — lista verdadeira
+
+De `src/lib/data/exercises.ts` (163 exercícios), valores **exatos** como estão no código, com
+quantos exercícios cada um tem:
+
+| # | valor no código | exercícios | rótulo na tela | região |
+|---|---|---|---|---|
+| 1 | `quadriceps` | 21 | Quadríceps | Inferior |
+| 2 | `peito` | 18 | Peito | Superior |
+| 3 | `ombros` | 17 | Ombros | Superior |
+| 4 | `costas` | 15 | Costas | Superior |
+| 5 | `posterior` | 12 | Posterior | Inferior |
+| 6 | `biceps` | 11 | Bíceps | Superior |
+| 7 | `core` | 10 | Core | Tronco |
+| 8 | `gluteos` | 10 | Glúteos | Inferior |
+| 9 | `triceps` | 10 | Tríceps | Superior |
+| 10 | `abdomen` | 9 | Abdômen | Tronco |
+| 11 | `corpo-inteiro` | 7 | Corpo inteiro | Outros |
+| 12 | `antebraco` | 6 | Antebraço | Superior |
+| 13 | `cardio` | 5 | Cardio | Outros |
+| 14 | `panturrilha` | 5 | Panturrilhas | Inferior |
+| 15 | `pernas` | 3 | Pernas | Inferior |
+| 16 | `lombar` | 2 | Lombar | Tronco |
+| 17 | `trapezio` | 1 | Trapézio | Superior |
+| 18 | `adutores` | 1 | Adutores | Inferior |
+
+Soma = 163 ✅ · 18 valores distintos ✅
+
+**Divergência com a tabela do cofre.** O cofre lista `obliquos · abdutores · pescoco ·
+serratil`; **nenhum dos quatro existe no catálogo**. Em troca, o catálogo tem quatro que o
+cofre não registra: `core · corpo-inteiro · cardio · pernas`. Os outros 14 batem.
+
+**Sobre a qualidade do vocabulário — a pergunta que o cofre fez:**
+
+- **Não são grupos musculares:** `cardio` (5) e `corpo-inteiro` (7) — são *tipos de exercício*
+  ocupando um campo de anatomia. Ficam na região "Outros" na tela.
+- **Grosso demais:** `pernas` (3) — coexiste com `quadriceps`, `posterior`, `gluteos`,
+  `panturrilha` e `adutores`, que são o mesmo território mais fino. É um balde de sobra.
+- **Fino demais para o tamanho do catálogo:** `trapezio` (1) e `adutores` (1) — uma linha na
+  tela para **um** exercício cada. Vão exibir 0× na maioria das semanas, por construção.
+- **`core` × `abdomen`** (10 e 9) é uma divisão real, mas a fronteira entre os dois não está
+  documentada em lugar nenhum — dois nomes para uma região que o usuário lê como uma só.
+
+**A tela renderiza os 18**, todos, sempre, com "0×" para quem não apareceu (é critério de
+aceite §10.5). Ou seja: **4 das 18 linhas são estruturalmente questionáveis** (2 não-musculares
++ `pernas` redundante + a dupla `core`/`abdomen`), e **2 outras** (`trapezio`, `adutores`) vão
+viver perto de zero por só terem 1 exercício cada. Somando com os acessórios que o próprio
+cofre já aceitou ver apagados, a lista é mais longa do que informativa — mas o conserto é no
+**catálogo**, num lugar só, e não na tela. Fica registrado para o autor decidir.
