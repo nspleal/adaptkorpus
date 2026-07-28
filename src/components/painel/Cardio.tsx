@@ -266,12 +266,19 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
 
 const ATALHOS_MIN = [15, 30, 45, 60] as const;
 
-export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar }: {
+export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalidadeInicial, embutido, nomeDoItem }: {
   pesoKg: number;
   onSalvar: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
   onCancelar: () => void;
+  /** 🔒 Registro UNIFICADO: o item de cardio da rotina pré-preenche a modalidade. */
+  modalidadeInicial?: ModalidadeCardio;
+  /** Aberto de DENTRO da sessão guiada: salva e devolve o controle, sem tela de confirmação
+   *  (a confirmação é da tela avulsa; aqui a sessão continua). */
+  embutido?: boolean;
+  /** Nome do item da rotina que abriu este registro (só no modo embutido). */
+  nomeDoItem?: string;
 }) {
-  const [modalidade, setModalidade] = useState<ModalidadeCardio>('caminhada');
+  const [modalidade, setModalidade] = useState<ModalidadeCardio>(modalidadeInicial ?? 'caminhada');
   const opcoes = intensidadesDe(modalidade);
   const [intensidade, setIntensidade] = useState<IntensidadeCardio>('moderado');
   const [minutos, setMinutos] = useState(30);
@@ -284,7 +291,10 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar }: {
 
   function salvar() {
     const kcal = kcalLiquida(met, pesoKg, minutos);
+    // 🔒 CAMINHO ÚNICO: tanto a tela avulsa quanto o item da rotina saem por aqui. Quem
+    // grava é sempre o chamador, com `registrarCardio` — não há segunda fonte para divergir.
     onSalvar({ modalidade, intensidade: intensidadeEfetiva, minutos, met, kcal });
+    if (embutido) return;   // a sessão guiada segue; a confirmação é da tela avulsa
     setSalvo({ minutos, met, kcal, naMeta: minutosNaMeta(met, minutos), intensidade: intensidadeEfetiva, modalidade });
   }
 
@@ -341,6 +351,7 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar }: {
         <div>
           <div style={{ ...kicker, color: NEON, marginBottom: 6 }}>Cardio</div>
           <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 800, letterSpacing: '-.02em' }}>Registrar cardio</h1>
+          {nomeDoItem && <p style={{ ...apoio, margin: '6px 0 0' }}>{nomeDoItem} — confira e ajuste o que mudou.</p>}
         </div>
         <button type="button" onClick={onCancelar} className="evk-voltar" style={{ flexShrink: 0, background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.75)', fontWeight: 600, fontSize: '.85rem', padding: '11px 16px', borderRadius: 10, cursor: 'pointer', minHeight: 44 }}>Cancelar</button>
       </div>
@@ -405,7 +416,7 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar }: {
         ))}
       </div>
 
-      <button type="button" onClick={salvar} className="hov-btn" style={{ width: '100%', background: NEON, color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer', minHeight: 44 }}>Salvar registro</button>
+      <button type="button" onClick={salvar} className="hov-btn" style={{ width: '100%', background: NEON, color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer', minHeight: 44 }}>{embutido ? 'Salvar e continuar' : 'Salvar registro'}</button>
     </div>
   );
 }

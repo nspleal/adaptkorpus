@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
+import { modalidadeDoExercicio, ROTULO_MODALIDADE, type IntensidadeCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
+import RegistrarCardio from './Cardio';
 import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { HintVariacao } from './EscadaDegraus';
 import { DetalheExercicio } from './DetalheModais';
@@ -66,6 +68,9 @@ interface ExView {
   recalibrado: boolean;
   /** RIR-alvo da semana do mesociclo (v2 §3: rampa 3→1); null = prescrição fora do ciclo. */
   rirAlvoSemana: number | null;
+  /** 🔒 Item de CARDIO da rotina (DF 2026-07-27 — registro unificado): concluí-lo abre o
+   *  MESMO registro de cardio, com a modalidade pré-preenchida. */
+  cardio: { modalidade: ModalidadeCardio } | null;
 }
 
 /** Estimativa de %1RM a partir da faixa de reps (Epley invertido), piso de 6 reps. */
@@ -108,7 +113,7 @@ export interface ResumoSessao {
   }[];
 }
 
-export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir }: {
+export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir, onRegistrarCardio, pesoKg }: {
   dia: DiaTreino;
   prescricao: PrescricaoFITT;
   /** Alvo progredido por exercício (Bloco B), derivado do histórico; ausente na 1ª sessão. */
@@ -121,6 +126,11 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   onCalibrar?: (itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) => void;
   onSair: () => void;
   onConcluir: (resumo: ResumoSessao) => void;
+  /** 🔒 CAMINHO ÚNICO de registro de cardio (DF 2026-07-27): o item da rotina sai pelo
+   *  MESMO `registrarCardio` da tela avulsa. Ausente = a sessão não oferece o registro. */
+  onRegistrarCardio?: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
+  /** Peso do usuário — entra só na estimativa de kcal do registro de cardio. */
+  pesoKg?: number;
 }) {
   // "Ver variação": detalhe em LEITURA do degrau-alvo (nunca troca nada — V8.3).
   const [verVariacao, setVerVariacao] = useState<Exercise | null>(null);
@@ -189,6 +199,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       hintAlvo,
       recalibrado,
       rirAlvoSemana: prescricao.rirAlvoSemana ?? null,
+      // 🔒 O padrão do SLOT decide (é ele que o montador alocou como cardio), não o nome.
+      cardio: sl.padrao === 'cardio' ? { modalidade: modalidadeDoExercicio(sl.exercicio.id) } : null,
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -198,6 +210,9 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   const seriesMax = exs.length ? Math.max(...exs.map((e) => e.nSetsEx)) : prescricao.seriesPorExercicio.max;
 
   const [fase, setFase] = useState<'intro' | 'exec' | 'summary'>('intro');
+  // 🔒 Registro de cardio UNIFICADO (DF 2026-07-27): índice do item de cardio cujo registro
+  // está aberto. Ele é o MESMO componente da tela avulsa — não existe segunda fonte.
+  const [cardioAberto, setCardioAberto] = useState<number | null>(null);
   const [cur, setCur] = useState(0);
   const [showRM, setShowRM] = useState(false);
   const [dorOpen, setDorOpen] = useState(false);
@@ -274,6 +289,24 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       ...(estados[ei]!.paused ? { pausado: true } : {}),
     }));
     onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios, ...(prescricao.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}) });
+  }
+
+  // 🔒 Registro de cardio aberto DE DENTRO da sessão: mesma peça, mesmo `onSalvar`. Sai
+  // pelo `registrarCardio` do Painel, exatamente como a tela avulsa.
+  if (cardioAberto != null && onRegistrarCardio) {
+    const item = exs[cardioAberto]!;
+    return (
+      <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', padding: '32px 20px 60px', animation: `evkScreenIn .4s ${EASE}` }}>
+        <RegistrarCardio
+          pesoKg={pesoKg ?? 70}
+          modalidadeInicial={item.cardio?.modalidade}
+          nomeDoItem={item.nome}
+          embutido
+          onSalvar={(payload) => { onRegistrarCardio(payload); setCardioAberto(null); avancar(); }}
+          onCancelar={() => setCardioAberto(null)}
+        />
+      </div>
+    );
   }
 
   return (
@@ -466,10 +499,27 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
               <button onClick={() => setDorOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', color: 'rgba(229,72,77,.85)', fontWeight: 600, fontSize: '.86rem', padding: 8, cursor: 'pointer', textDecoration: 'underline' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Senti dor neste exercício</button>
             </div>
 
+            {/* 🔒 Item de CARDIO: concluí-lo abre o MESMO registro de cardio da tela avulsa
+                (DF 2026-07-27). PULAR não registra nada — o avanço é uma ação separada,
+                para não inventar sessão que não houve. */}
+            {ex.cardio && onRegistrarCardio && (
+              <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(189,255,0,.28)', borderRadius: 16, padding: '16px 18px', marginTop: 16 }}>
+                <div style={{ fontSize: '.9rem', fontWeight: 700, marginBottom: 4 }}>Este é o seu cardio de hoje</div>
+                <p style={{ margin: '0 0 12px', fontSize: '.84rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.55 }}>
+                  Ao concluir, você registra {ROTULO_MODALIDADE[ex.cardio.modalidade].toLowerCase()} com a duração e a intensidade reais — é o mesmo registro da aba Treino, e ele conta uma vez só.
+                </p>
+                <button onClick={() => setCardioAberto(cur)} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 20px', border: 'none', borderRadius: 12, cursor: 'pointer', minHeight: 44 }}>Registrar e concluir</button>
+              </div>
+            )}
+
             {/* nav */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 22 }}>
               {cur > 0 && <button onClick={voltar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: '14px 22px', borderRadius: 13, cursor: 'pointer' }}>Anterior</button>}
-              <button onClick={avancar} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>{ehUltimo ? 'Concluir treino' : 'Próximo exercício'}</button>
+              <button onClick={avancar} className={ex.cardio && onRegistrarCardio ? 'evk-voltar' : 'hov-btn'} style={ex.cardio && onRegistrarCardio
+                ? { flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }
+                : { flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>
+                {ex.cardio && onRegistrarCardio ? (ehUltimo ? 'Pular e concluir treino' : 'Pular este cardio') : (ehUltimo ? 'Concluir treino' : 'Próximo exercício')}
+              </button>
             </div>
           </div>
         )}

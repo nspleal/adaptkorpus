@@ -55,6 +55,29 @@ export const MET_CARDIO: Record<ModalidadeCardio, Partial<Record<IntensidadeCard
   outro: { leve: 2.3, moderado: 4.3, vigoroso: 5.8 },
 };
 
+/**
+ * 🔒 REGISTRO DE CARDIO UNIFICADO (DF 2026-07-27): o item de cardio da ROTINA, ao ser
+ * concluído na sessão guiada, abre ESTE mesmo registro — e este mapa é o "pré-preenchendo o
+ * que der". Existe UM único caminho de registro, alcançado de dois lugares: contar duas
+ * vezes deixa de ser algo evitado por regra e passa a ser impossível por construção.
+ *
+ * Só entram os pares em que a modalidade é inequívoca. O resto cai em `outro` de propósito:
+ * "Caminhada do fazendeiro" é carregamento com carga, não caminhada (MET 4,3 seria mentira);
+ * burpee, polichinelo, escalador e thruster são trabalho intervalado de peso corporal, sem
+ * entrada própria na tabela travada. Errar a modalidade é errar o MET, e o MET é a conta.
+ */
+export const MODALIDADE_POR_EXERCICIO: Readonly<Record<string, ModalidadeCardio>> = {
+  e24: 'corrida',      // Corrida na esteira
+  e150: 'corrida',     // Corrida no lugar (joelho alto)
+  e29: 'bike',         // Bicicleta ergométrica
+  e92: 'pular_corda',  // Pular corda
+};
+
+/** Modalidade sugerida para um exercício de cardio da rotina (default: `outro`). */
+export function modalidadeDoExercicio(exercicioId: string): ModalidadeCardio {
+  return MODALIDADE_POR_EXERCICIO[exercicioId] ?? 'outro';
+}
+
 /** Intensidades oferecidas por modalidade — "leve" SOME em pular corda, sem erro. */
 export function intensidadesDe(modalidade: ModalidadeCardio): IntensidadeCardio[] {
   const tabela = MET_CARDIO[modalidade];
