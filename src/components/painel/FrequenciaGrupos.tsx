@@ -213,7 +213,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
     return (
       <DetalheGrupoTela
         grupo={grupoAberto} janela={janela} sessoes={sessoes} exercicioPorId={exercicioPorId}
-        marca={grupoAberto === 'cardio' ? marcaDe('cardio') : marcaForca}
+        marca={marcaForca}
         onVoltar={() => setGrupoAberto(null)}
       />
     );
@@ -354,7 +354,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
                   {r.grupos.map((g) => (
                     <LinhaGrupo
                       key={g} nome={ROTULO_GRUPO[g]!} valor={valor(c.porGrupo[g] ?? 0)}
-                      marca={g === 'cardio' ? marcaDe('cardio') : marcaForca}
+                      marca={marcaForca}
                       periodo={periodo} onAbrir={() => setGrupoAberto(g)}
                     />
                   ))}

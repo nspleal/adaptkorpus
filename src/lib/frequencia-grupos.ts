@@ -28,25 +28,25 @@ export interface SessaoParaFrequencia {
 
 /**
  * 🔒 Ordem ANATÔMICA e FIXA — nunca por contagem (ordenar por contagem é o caminho curto
- * para virar ranking). Os 18 valores vêm do CATÁLOGO REAL (`data/exercises.ts`), não da
- * tabela do pacote de design: o cofre registra a procedência e manda que, havendo
- * divergência, **o catálogo mande**. (A tabela do cofre lista obliquos/abdutores/pescoco/
- * serratil, que o catálogo não usa; ele usa core/pernas/corpo-inteiro/cardio.)
+ * para virar ranking). São os **12 valores anatômicos** do vocabulário limpo
+ * (DF 2026-07-27; destinos de `trapezio`/`adutores` ratificados em 2026-07-28).
+ *
+ * A região "Outros" deixou de existir: `cardio` e `corpo-inteiro` saíram da anatomia (são
+ * **tipo**, campo que já existe) e agora contam **só pelo padrão de movimento** — por isso
+ * o `grupoPrimario` do catálogo é nullable, e o `null` não tem linha aqui.
  */
 export const REGIOES: readonly { titulo: string; grupos: readonly GrupoPrimario[] }[] = [
-  { titulo: 'Superior', grupos: ['peito', 'costas', 'ombros', 'trapezio', 'biceps', 'triceps', 'antebraco'] },
-  { titulo: 'Tronco', grupos: ['abdomen', 'core', 'lombar'] },
-  { titulo: 'Inferior', grupos: ['gluteos', 'quadriceps', 'posterior', 'adutores', 'panturrilha', 'pernas'] },
-  { titulo: 'Outros', grupos: ['corpo-inteiro', 'cardio'] },
+  { titulo: 'Superior', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'antebraco'] },
+  { titulo: 'Tronco', grupos: ['core', 'lombar'] },
+  { titulo: 'Inferior', grupos: ['gluteos', 'quadriceps', 'posterior', 'panturrilha'] },
 ];
 
 export const GRUPOS_ORDEM: readonly GrupoPrimario[] = REGIOES.flatMap((r) => r.grupos);
 
 export const ROTULO_GRUPO: Record<string, string> = {
-  peito: 'Peito', costas: 'Costas', ombros: 'Ombros', trapezio: 'Trapézio', biceps: 'Bíceps',
-  triceps: 'Tríceps', antebraco: 'Antebraço', abdomen: 'Abdômen', core: 'Core', lombar: 'Lombar',
-  gluteos: 'Glúteos', quadriceps: 'Quadríceps', posterior: 'Posterior', adutores: 'Adutores',
-  panturrilha: 'Panturrilhas', pernas: 'Pernas', 'corpo-inteiro': 'Corpo inteiro', cardio: 'Cardio',
+  peito: 'Peito', costas: 'Costas', ombros: 'Ombros', biceps: 'Bíceps', triceps: 'Tríceps',
+  antebraco: 'Antebraço', core: 'Core', lombar: 'Lombar', gluteos: 'Glúteos',
+  quadriceps: 'Quadríceps', posterior: 'Posterior', panturrilha: 'Panturrilhas',
 };
 
 export const PADROES: readonly PadraoMovimento[] = [
@@ -129,19 +129,23 @@ export function contarFrequencia(
 
     const grupos = new Set<string>();
     const padroes = new Set<string>();
+    let mapeou = false;   // reconheceu pelo menos um exercício (mesmo que sem grupo)
     if (s.tipo === 'cardio') {
-      // A sessão de cardio não tem exercícios do catálogo — ela É o padrão cardio.
-      grupos.add('cardio');
+      // 🔒 A sessão de cardio não tem grupo muscular: ela É o padrão cardio, e só isso
+      // (DF 2026-07-27 — `cardio` saiu da anatomia).
       padroes.add('cardio');
+      mapeou = true;
     } else {
       for (const e of s.exercicios) {
         const ex = exercicioPorId(e.id);
         if (!ex) continue;
-        grupos.add(ex.grupoPrimario);
+        mapeou = true;
+        // `grupoPrimario` nullable: cardio/corpo-inteiro contam SÓ pelo padrão.
+        if (ex.grupoPrimario != null) grupos.add(ex.grupoPrimario);
         padroes.add(ex.padraoMovimento);
       }
     }
-    if (grupos.size === 0) { semGrupo += 1; continue; }
+    if (!mapeou) { semGrupo += 1; continue; }
     for (const g of grupos) porGrupo[g] = (porGrupo[g] ?? 0) + 1;
     for (const p of padroes) porPadrao[p] = (porPadrao[p] ?? 0) + 1;
   }
@@ -261,9 +265,7 @@ export function detalheDoGrupo(
 
     const nomes: string[] = [];
     if (s.tipo === 'cardio') {
-      if (grupo !== 'cardio') continue;
-      padroes.add('cardio');
-      nomes.push('Cardio');
+      continue;   // sessão de cardio não pertence a grupo muscular nenhum
     } else {
       for (const e of s.exercicios) {
         const ex = exercicioPorId(e.id);

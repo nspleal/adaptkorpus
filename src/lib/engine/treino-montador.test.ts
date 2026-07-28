@@ -163,10 +163,12 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     const tot = new Map<string, { series: number; slots: number }>();
     for (const d of r.dias)
       for (const s of d.slots) {
-        const g = tot.get(s.exercicio.grupoPrimario) ?? { series: 0, slots: 0 };
+        const grupo = s.exercicio.grupoPrimario;
+        if (grupo == null) continue;   // cardio/corpo-inteiro não têm volume por grupo
+        const g = tot.get(grupo) ?? { series: 0, slots: 0 };
         g.series += s.series ?? 0;
         g.slots += 1;
-        tot.set(s.exercicio.grupoPrimario, g);
+        tot.set(grupo, g);
       }
     return tot;
   }
@@ -295,7 +297,7 @@ describe('rampa de retomada no montador — volume ABAIXO do piso da banda', () 
   }
   const totalPorGrupo = (r: ReturnType<typeof montar>) => {
     const m = new Map<string, number>();
-    for (const d of r.dias) for (const s of d.slots) m.set(s.exercicio.grupoPrimario, (m.get(s.exercicio.grupoPrimario) ?? 0) + (s.series ?? 0));
+    for (const d of r.dias) for (const s of d.slots) { const g = s.exercicio.grupoPrimario; if (g == null) continue; m.set(g, (m.get(g) ?? 0) + (s.series ?? 0)); }
     return m;
   };
 
@@ -340,7 +342,7 @@ describe('rampa de retomada no montador — volume ABAIXO do piso da banda', () 
       semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: presc.volumePorGrupoSemana.max },
     });
     const vezes = new Map<string, number>();
-    for (const d of r.dias) for (const s of d.slots) vezes.set(s.exercicio.grupoPrimario, (vezes.get(s.exercicio.grupoPrimario) ?? 0) + 1);
+    for (const d of r.dias) for (const s of d.slots) { const g = s.exercicio.grupoPrimario; if (g == null) continue; vezes.set(g, (vezes.get(g) ?? 0) + 1); }
     for (const [g, n] of vezes) expect(n, `grupo ${g}`).toBeLessThanOrEqual(3);
   });
 

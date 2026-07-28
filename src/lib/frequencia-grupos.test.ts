@@ -24,18 +24,29 @@ const sessao = (dataISO: string, ids: string[], tipo?: string): SessaoParaFreque
   ({ dataISO, ...(tipo ? { tipo } : {}), exercicios: ids.map((id) => ({ id })) });
 
 describe('vocabulário e ordem', () => {
-  it('os 18 grupos, em ordem ANATÔMICA e fixa (nunca por contagem)', () => {
-    expect(GRUPOS_ORDEM).toHaveLength(18);
-    expect(REGIOES.map((r) => r.titulo)).toEqual(['Superior', 'Tronco', 'Inferior', 'Outros']);
+  it('os 12 grupos ANATÔMICOS, em ordem fixa (nunca por contagem)', () => {
+    expect(GRUPOS_ORDEM).toHaveLength(12);
+    // A região "Outros" deixou de existir: cardio/corpo-inteiro saíram da anatomia.
+    expect(REGIOES.map((r) => r.titulo)).toEqual(['Superior', 'Tronco', 'Inferior']);
     expect(GRUPOS_ORDEM[0]).toBe('peito');
     expect(GRUPOS_ORDEM.indexOf('costas')).toBeLessThan(GRUPOS_ORDEM.indexOf('gluteos'));
+    for (const fora of ['cardio', 'corpo-inteiro', 'pernas', 'abdomen', 'trapezio', 'adutores']) {
+      expect(GRUPOS_ORDEM, `${fora} não é mais grupo`).not.toContain(fora);
+    }
   });
 
   it('🔒 a lista sai do CATÁLOGO REAL — nenhum grupo do catálogo fica de fora', () => {
-    const noCatalogo = new Set(EXERCISES.map((e) => e.grupoPrimario));
+    const noCatalogo = new Set(EXERCISES.map((e) => e.grupoPrimario).filter((g) => g != null));
+    expect(noCatalogo.size).toBe(12);
     for (const g of noCatalogo) expect(GRUPOS_ORDEM, `grupo ${g} sumiu da tela`).toContain(g);
     // e nada de inventado: todo grupo exibido existe no catálogo
     for (const g of GRUPOS_ORDEM) expect(noCatalogo, `grupo ${g} não existe no catálogo`).toContain(g);
+  });
+
+  it('🔒 os 12 sem grupo são exatamente os de padrão cardio — contam só pelo padrão', () => {
+    const semGrupo = EXERCISES.filter((e) => e.grupoPrimario == null);
+    expect(semGrupo).toHaveLength(12);
+    for (const e of semGrupo) expect(e.padraoMovimento, e.nomePt).toBe('cardio');
   });
 
   it('os 7 padrões de movimento do catálogo', () => {
@@ -149,10 +160,21 @@ describe('agregação: 1× por SESSÃO, sobre grupoPrimario', () => {
     expect(c.porGrupo.peito).toBeUndefined();
   });
 
-  it('a sessão de cardio conta no grupo e no padrão `cardio`', () => {
+  it('🔒 a sessão de cardio conta SÓ no padrão — cardio não é grupo muscular', () => {
     const c = contarFrequencia([{ dataISO: '2026-07-28', tipo: 'cardio', exercicios: [] }], j, porId);
-    expect(c.porGrupo.cardio).toBe(1);
     expect(c.porPadrao.cardio).toBe(1);
+    expect(c.porGrupo.cardio).toBeUndefined();
+    expect(Object.keys(c.porGrupo)).toHaveLength(0);
+    expect(c.semGrupo, 'a sessão foi reconhecida, não é registro solto').toBe(0);
+  });
+
+  it('🔒 exercício sem grupo (burpee) conta só no padrão, sem virar "sem grupo"', () => {
+    const burpee = EXERCISES.find((e) => e.id === 'e30')!;
+    expect(burpee.grupoPrimario).toBeNull();
+    const c = contarFrequencia([sessao('2026-07-28', [burpee.id])], j, porId);
+    expect(c.porPadrao.cardio).toBe(1);
+    expect(Object.keys(c.porGrupo)).toHaveLength(0);
+    expect(c.semGrupo).toBe(0);
   });
 
   it('🟡 treino manual sem grupo mapeado não entra na contagem — mas fica contabilizado', () => {
@@ -301,10 +323,11 @@ describe('detalhe do grupo', () => {
     expect(d).toMatchObject({ vezes: 0, dias: [], padroes: [] });
   });
 
-  it('a sessão de cardio aparece no detalhe do grupo cardio', () => {
-    const d = detalheDoGrupo([{ dataISO: '2026-07-28', tipo: 'cardio', exercicios: [] }], j, 'cardio', porId);
-    expect(d.vezes).toBe(1);
-    expect(d.dias[0]!.treino).toBe('Cardio');
+  it('🔒 a sessão de cardio não entra no detalhe de grupo nenhum', () => {
+    const sessoes = [{ dataISO: '2026-07-28', tipo: 'cardio', exercicios: [] }];
+    for (const g of ['quadriceps', 'core', 'peito']) {
+      expect(detalheDoGrupo(sessoes, j, g, porId).vezes, `grupo ${g}`).toBe(0);
+    }
   });
 
   it('o rótulo acessível traz nome, número e referência', () => {

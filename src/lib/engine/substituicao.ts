@@ -208,7 +208,9 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
 
   /** Rank de preservação (menor = melhor): 0 grupo+padrão · 1 grupo · 2 padrão · 3 nada (FORA). */
   const rankPreservacao = (y: typeof atual): number => {
-    const g = y.grupoPrimario === atual.grupoPrimario;
+    // 🔒 `grupoPrimario` nullable: dois `null` (cardio/corpo-inteiro) NÃO são "mesmo grupo"
+    // — sem isto, qualquer item sem anatomia preservaria qualquer outro.
+    const g = y.grupoPrimario != null && y.grupoPrimario === atual.grupoPrimario;
     const pd = y.padraoMovimento === atual.padraoMovimento;
     return g && pd ? 0 : g ? 1 : pd ? 2 : 3;
   };

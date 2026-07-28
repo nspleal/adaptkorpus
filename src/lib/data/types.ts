@@ -125,9 +125,8 @@ export type EquipamentoCasa =
  * (DF 2026-07-04). É a chave da PRESERVAÇÃO como filtro duro na troca (F.2).
  */
 export type GrupoPrimario =
-  | 'abdomen' | 'adutores' | 'antebraco' | 'biceps' | 'cardio' | 'core'
-  | 'corpo-inteiro' | 'costas' | 'gluteos' | 'lombar' | 'ombros' | 'panturrilha'
-  | 'peito' | 'pernas' | 'posterior' | 'quadriceps' | 'trapezio' | 'triceps';
+  | 'antebraco' | 'biceps' | 'core' | 'costas' | 'gluteos' | 'lombar'
+  | 'ombros' | 'panturrilha' | 'peito' | 'posterior' | 'quadriceps' | 'triceps';
 
 export interface Exercise {
   id: string;
@@ -135,7 +134,13 @@ export interface Exercise {
   nomeEn?: string;
   grupoMuscular: string;
   /** Grupo primário normalizado (cofre F.2 §2) — governa a preservação da troca. */
-  grupoPrimario: GrupoPrimario;
+  /**
+   * Grupo muscular primário — 🔒 12 valores ANATÔMICOS (DF 2026-07-27, destinos ratificados
+   * em 2026-07-28). `null` nos 12 exercícios de `cardio`/`corpo-inteiro`: não são grupos
+   * musculares, são **tipo** (campo que já existe), e contam só pelo padrão de movimento.
+   * Aplicado por `scripts/remapear-grupo-primario.mjs` (idempotente).
+   */
+  grupoPrimario: GrupoPrimario | null;
   padraoMovimento: PadraoMovimento;
   nivel: NivelExercicio;
   tipo: TipoExercicio;

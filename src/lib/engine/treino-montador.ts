@@ -263,9 +263,13 @@ export function montarRotina(
     const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
     for (const d of diasTreino) {
       for (const s of d.slots) {
-        const arr = porGrupo.get(s.exercicio.grupoPrimario) ?? [];
+        // 🔒 `grupoPrimario` é NULLABLE (DF 2026-07-27): cardio/corpo-inteiro não são grupo
+        // muscular e não têm volume-alvo por grupo — ficam fora da rampa, por definição.
+        const g = s.exercicio.grupoPrimario;
+        if (g == null) continue;
+        const arr = porGrupo.get(g) ?? [];
         arr.push(s);
-        porGrupo.set(s.exercicio.grupoPrimario, arr);
+        porGrupo.set(g, arr);
       }
     }
 

@@ -35,15 +35,22 @@ describe('integridade da base curada', () => {
   // 1ª entrada da coluna de grupo muscular da A1, vocabulário normalizado de 18 valores).
   it('grupoPrimario: 163/163 preenchidos com vocabulário fechado (18 valores)', () => {
     const VOCAB = new Set([
-      'abdomen', 'adutores', 'antebraco', 'biceps', 'cardio', 'core', 'corpo-inteiro',
-      'costas', 'gluteos', 'lombar', 'ombros', 'panturrilha', 'peito', 'pernas',
-      'posterior', 'quadriceps', 'trapezio', 'triceps',
+      'antebraco', 'biceps', 'core', 'costas', 'gluteos', 'lombar',
+      'ombros', 'panturrilha', 'peito', 'posterior', 'quadriceps', 'triceps',
     ]);
+    // 🔒 12 valores ANATÔMICOS + `null` (DF 2026-07-27; destinos ratificados 2026-07-28):
+    // `cardio` e `corpo-inteiro` saíram da anatomia e contam só pelo padrão de movimento.
     for (const e of EXERCISES) {
-      expect(e.grupoPrimario, `${e.id} sem grupoPrimario`).toBeTruthy();
+      if (e.grupoPrimario == null) {
+        expect(e.padraoMovimento, `${e.id} sem grupo mas fora do cardio`).toBe('cardio');
+        continue;
+      }
       expect(VOCAB.has(e.grupoPrimario), `${e.id}: "${e.grupoPrimario}" fora do vocabulário`).toBe(true);
     }
-    expect(new Set(EXERCISES.map((e) => e.grupoPrimario)).size).toBe(18);
+    const comGrupo = EXERCISES.filter((e) => e.grupoPrimario != null);
+    expect(new Set(comGrupo.map((e) => e.grupoPrimario)).size).toBe(12);
+    expect(comGrupo).toHaveLength(151);
+    expect(EXERCISES.filter((e) => e.grupoPrimario == null)).toHaveLength(12);
   });
 
   it('grupoPrimario: spot-anchors da curadoria do autor', () => {
@@ -52,8 +59,16 @@ describe('integridade da base curada', () => {
     expect(g('e9')).toBe('peito'); // Supino reto
     expect(g('e3')).toBe('quadriceps'); // Agachamento livre
     expect(g('e116')).toBe('costas'); // Remada invertida
-    expect(g('e24')).toBe('cardio'); // Esteira
     expect(g('e7')).toBe('core'); // Prancha
+    // 🔒 Remap de 2026-07-27/28 — os destinos ratificados, ancorados um a um.
+    expect(g('e24')).toBeNull();          // Esteira: cardio saiu da anatomia (é tipo)
+    expect(g('e30')).toBeNull();          // Burpee: idem, por `corpo-inteiro`
+    expect(g('e4')).toBe('core');         // Abdominal: `core` absorveu `abdomen`
+    expect(g('e97')).toBe('costas');      // Encolhimento: o campo é anatomia, não split
+    expect(g('e129')).toBe('gluteos');    // Cadeira adutora: adução é quadril
+    expect(g('e143')).toBe('quadriceps'); // Avanço com salto
+    expect(g('e163')).toBe('quadriceps'); // Agachamento com salto
+    expect(g('e151')).toBe('quadriceps'); // Patinador (re-ratificado: mantém a troca viva)
   });
 
   it('rótulo amigável (vocabulário do cofre): 100% preenchido e único', () => {

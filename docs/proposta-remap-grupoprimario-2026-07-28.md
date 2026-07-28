@@ -1,6 +1,8 @@
 # Proposta — remapeamento de `grupoPrimario` para 12 valores (Leva 2.1 · Bloco B)
 
-> **PARA RATIFICAÇÃO NO COFRE. NADA FOI COMMITADO NO CATÁLOGO.**
+> ✅ **RATIFICADO E APLICADO em 2026-07-28.** `e97 → costas` · `e129 → gluteos` · `pernas`
+> dissolvido. **Uma re-ratificação durante a aplicação:** `e151` (Patinador) foi de `gluteos`
+> para **`quadriceps`** — ver §7. O resto saiu exatamente como proposto.
 > A DF de 2026-07-27 manda que `trapezio` e `adutores` sejam "absorvidos pelo vizinho", com a
 > escolha **exercício a exercício voltando para ratificação**. Este documento é essa volta —
 > e traz o diff completo dos 26 exercícios afetados, para o cofre arquivar e atualizar a
@@ -57,7 +59,7 @@ raciocínio de cada um.
 |---|---|---|---|---|
 | `e143` | Avanço com salto | `agachar` | **`quadriceps`** | avanço é padrão de agachamento, quadríceps-dominante |
 | `e163` | Agachamento com salto | `agachar` | **`quadriceps`** | idem — agachamento, com a mesma dominância |
-| `e151` | Patinador (skater) | `cardio` | **`gluteos`** | deslocamento **lateral**: glúteo médio é o motor primário (plano frontal) |
+| `e151` | Patinador (skater) | `cardio` | **`quadriceps`** ③ | proposto `gluteos` (glúteo médio, plano frontal) e **re-ratificado** na aplicação — ver §7 |
 
 ⚠️ `e151` tem **padrão `cardio`** mas **grupo `pernas`** — pela regra, quem vira `null` é quem
 está nos **grupos** `cardio`/`corpo-inteiro`, não quem tem padrão cardio. Então ele ganha grupo
@@ -112,7 +114,7 @@ está correto que apareça nos dois.
 | `e129` | Cadeira adutora | `adutores` | **`gluteos`** ② | `isolado` |
 | `e143` | Avanço com salto | `pernas` | **`quadriceps`** | `agachar` |
 | `e163` | Agachamento com salto | `pernas` | **`quadriceps`** | `agachar` |
-| `e151` | Patinador (skater) | `pernas` | **`gluteos`** | `cardio` |
+| `e151` | Patinador (skater) | `pernas` | **`quadriceps`** ③ | `cardio` |
 
 ---
 
@@ -130,8 +132,8 @@ está correto que apareça nos dois.
 | `antebraco` | 6 | 6 |
 | `core` | 10 | **19** |
 | `lombar` | 2 | 2 |
-| `gluteos` | 10 | **12** |
-| `quadriceps` | 21 | **23** |
+| `gluteos` | 10 | **11** |
+| `quadriceps` | 21 | **24** |
 | `posterior` | 12 | 12 |
 | `panturrilha` | 5 | 5 |
 | ~~`abdomen`~~ | 9 | — (→ `core`) |
@@ -163,10 +165,34 @@ existe para um exercício só. Nenhum valor fica vazio.
 
 ---
 
-## 6. O que aguarda sua palavra
+## 6. Ratificação
 
-- [ ] **`e97` Encolhimento → `costas`** (alternativa: `ombros`)
-- [ ] **`e129` Cadeira adutora → `gluteos`** (alternativa: `posterior`)
+- [x] **`e97` Encolhimento → `costas`** — *"o campo é anatomia, não colocação de split"*
+- [x] **`e129` Cadeira adutora → `gluteos`** — *"a máquina isola em adução, não em extensão"*
+- [x] `pernas` dissolvido nos 3
 
-Os outros 24 seguem a regra da DF sem escolha minha. Ratificado o ①②, aplico o diff inteiro
-num commit só, com o teste de distribuição ancorado nesta tabela.
+## 7. ⚠️ A re-ratificação do `e151` (Patinador), durante a aplicação
+
+Aplicado o diff, a varredura da substituição saltou de **3 vazios para 9**. A invariante é
+travada e testada contra o motor standalone: *"EXATAMENTE 3 (o furo conhecido do e116)"*.
+
+**Causa.** O `e151` é o **único pliométrico com padrão `cardio`** — os outros dois
+(`e143` Avanço com salto, `e163` Agachamento com salto) têm padrão `agachar`. O filtro duro
+da substituição exige preservar **grupo OU padrão**. Enquanto os três dividiam `pernas`, o
+skater era preservado **pelo grupo**. Mandando-o para `gluteos` e os outros dois para
+`quadriceps`, ele ficou sem grupo **nem** padrão em comum com ninguém do mesmo tipo →
+`rank 3` → fora do filtro. Resultado: **6 vazios novos** (intermediário e avançado × os 3
+equipamentos). No iniciante continuava funcionando, porque ali o nível degrada para o mesmo
+padrão (`cardio`), que existe.
+
+**Decisão (sua, consultada):** `e151` → **`quadriceps`**. Salto unilateral lateral — o
+quadríceps faz propulsão e aterrissagem junto com o glúteo médio; e os três pliométricos
+voltam a se preservar entre si. Varredura de volta em **3 vazios**.
+
+**Efeito na distribuição:** `quadriceps` 23 → **24** · `gluteos` 12 → **11**. O resto da
+tabela do §4 fica igual.
+
+*(As duas alternativas recusadas, para o registro: aceitar os 6 furos exigiria afrouxar um
+assert de paridade que existe justamente para não perder trocas; e relaxar o filtro duro
+— por exemplo, preservar por TIPO quando não há grupo nem padrão — mexe num trilho travado
+e pediria DF própria.)*
