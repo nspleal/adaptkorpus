@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import {
   contarFrequencia, ESCALA_MAX, GRUPOS_ORDEM, janelaSemana, janelaSemanasFechadas,
   LEGENDA_UM_DIA, mediaPorSemana, PADROES, REFERENCIA_PADRAO, REGIOES, reguaDoPadrao,
-  ROTULO_REGUA, rotuloContagem, type SessaoParaFrequencia,
+  ROTULO_REGUA, rotuloContagem, detalheDoGrupo, diasPassadosNaSemana, rotuloAcessivelLinha,
+  type SessaoParaFrequencia,
 } from './frequencia-grupos';
 import { EXERCISES } from './data/exercises';
 import type { Exercise } from './data/types';
@@ -206,7 +207,117 @@ describe('a tela é espelho, não nota (guard-rail da peça)', () => {
     expect(CODIGO).toMatch(/aria-selected=\{on\}/);
   });
 
-  it('as linhas-fantasma do estado vazio são decorativas (aria-hidden)', () => {
-    expect(CODIGO).toMatch(/<div aria-hidden style=\{\{ opacity: 0\.35 \}\}>/);
+  it('as linhas-fantasma do estado vazio são decorativas e não tocáveis', () => {
+    expect(CODIGO).toMatch(/aria-hidden="true" style=\{\{ opacity: 0\.5, pointerEvents: 'none'/);
+  });
+
+  // ── recuperado de `raw/design-handoff-frequencia-por-grupo-2026-07-27.md` (§9 e §10) ──
+
+  it('§10.9 — nenhum texto diz "IA", "você deveria" ou equivalente', () => {
+    expect(CODIGO).not.toMatch(/\bIA\b|você deveria|treine mais|adicione um dia/i);
+    expect(CODIGO).toContain('regras adaptativas');
+  });
+
+  it('§9 — toda linha de grupo é um <button> real com rótulo acessível completo', () => {
+    expect(CODIGO).toMatch(/<button\s+type="button"\s+onClick=\{onAbrir\}\s+aria-label=\{rotuloAcessivelLinha/);
+    expect(CODIGO).toMatch(/minHeight: 44/);
+  });
+
+  it('§9 — barra e marcador são decorativos (aria-hidden), o número está no rótulo', () => {
+    expect(CODIGO).toMatch(/\{\/\* .*\*\/\}|aria-hidden="true" style=\{\{ position: 'relative'/s);
+  });
+
+  it('§9 — o seletor é tablist com tabpanel e navegação por seta', () => {
+    expect(CODIGO).toMatch(/role="tabpanel"/);
+    expect(CODIGO).toMatch(/aria-controls="evk-freq-painel"/);
+    expect(CODIGO).toMatch(/ArrowRight|ArrowLeft/);
+  });
+
+  it('§9 — os 7 padrões são <li> dentro de <ul>, não divs', () => {
+    expect(CODIGO).toMatch(/<ul style=\{\{ display: 'grid'/);
+    expect(CODIGO).toMatch(/<li style=/);
+  });
+
+  it('§9 — o subtítulo de região é um heading, não um div solto', () => {
+    expect(CODIGO).toMatch(/<h4 style=/);
+  });
+
+  it('§10.7 — o grid dos padrões usa minmax(0,1fr), nunca 1fr puro', () => {
+    expect(CODIGO).toMatch(/repeat\(4, minmax\(0,1fr\)\)/);
+  });
+
+  it('§8 — o detalhe é tela própria com botão Voltar rotulado', () => {
+    expect(CODIGO).toMatch(/aria-label="Voltar"/);
+    expect(CODIGO).toContain('Sem registro neste período.');
+  });
+
+  it('§10.11 — a animação da barra respeita prefers-reduced-motion', () => {
+    const css = readFileSync(join(process.cwd(), 'src', 'app', 'globals.css'), 'utf8');
+    expect(css).toContain('@keyframes evkFill');
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{ \.evk-freq-barra \{ animation: none/);
+  });
+});
+
+/**
+ * §10.4 — a ordem renderizada é a taxonomia, independentemente das contagens.
+ * O teste que o critério nomeia: contagens invertidas → mesma ordem.
+ */
+describe('§10.4 — ordem estável com contagens invertidas', () => {
+  it('inverter as contagens não muda a ordem da lista', () => {
+    const j = janelaSemana('2026-07-29');
+    const peito = ex('peito', 'empurrar').id;
+    const pant = EXERCISES.find((e) => e.grupoPrimario === 'panturrilha')!.id;
+
+    const muitoPeito = contarFrequencia(
+      [sessao('2026-07-28', [peito]), sessao('2026-07-29', [peito]), sessao('2026-07-30', [peito, pant])], j, porId,
+    );
+    const muitaPanturrilha = contarFrequencia(
+      [sessao('2026-07-28', [pant]), sessao('2026-07-29', [pant]), sessao('2026-07-30', [pant, peito])], j, porId,
+    );
+    expect(muitoPeito.porGrupo.peito).toBeGreaterThan(muitoPeito.porGrupo.panturrilha!);
+    expect(muitaPanturrilha.porGrupo.panturrilha).toBeGreaterThan(muitaPanturrilha.porGrupo.peito!);
+    // A ordem é uma CONSTANTE — não sai da contagem. Peito antes de panturrilha, sempre.
+    expect(GRUPOS_ORDEM.indexOf('peito')).toBeLessThan(GRUPOS_ORDEM.indexOf('panturrilha'));
+  });
+});
+
+/** §6.10/§7 — o detalhe do grupo: dias, exercícios e padrão. */
+describe('detalhe do grupo', () => {
+  const j = janelaSemana('2026-07-29');
+
+  it('lista os dias em que o grupo entrou, com os exercícios daquele dia', () => {
+    const sup = ex('peito', 'empurrar');
+    const d = detalheDoGrupo(
+      [{ dataISO: '2026-07-28', dia: 'Upper A', exercicios: [{ id: sup.id }] }], j, 'peito', porId,
+    );
+    expect(d.vezes).toBe(1);
+    expect(d.dias[0]).toMatchObject({ dataISO: '2026-07-28', treino: 'Upper A' });
+    expect(d.dias[0]!.exercicios).toContain(sup.nomePt);
+    expect(d.padroes).toContain('empurrar');
+  });
+
+  it('grupo sem registro devolve zero — e a linha ainda abre', () => {
+    const d = detalheDoGrupo([], j, 'panturrilha', porId);
+    expect(d).toMatchObject({ vezes: 0, dias: [], padroes: [] });
+  });
+
+  it('a sessão de cardio aparece no detalhe do grupo cardio', () => {
+    const d = detalheDoGrupo([{ dataISO: '2026-07-28', tipo: 'cardio', exercicios: [] }], j, 'cardio', porId);
+    expect(d.vezes).toBe(1);
+    expect(d.dias[0]!.treino).toBe('Cardio');
+  });
+
+  it('o rótulo acessível traz nome, número e referência', () => {
+    expect(rotuloAcessivelLinha({ nome: 'Peito', valor: 3, periodo: 'semana', marca: 2 }))
+      .toBe('Peito, 3 vezes nesta semana, referência 2 vezes');
+    // sem régua (1 dia de força) o rótulo não inventa referência nenhuma
+    expect(rotuloAcessivelLinha({ nome: 'Peito', valor: 1, periodo: 'semana', marca: null }))
+      .toBe('Peito, 1 vez nesta semana');
+  });
+
+  it('dias passados na semana: segunda = 1, domingo = 7', () => {
+    expect(diasPassadosNaSemana('2026-07-27')).toBe(1);
+    expect(diasPassadosNaSemana('2026-07-29')).toBe(3);
+    expect(diasPassadosNaSemana('2026-08-02')).toBe(7);
   });
 });

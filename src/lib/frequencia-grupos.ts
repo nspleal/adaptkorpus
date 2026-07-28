@@ -21,6 +21,8 @@ import { semanaDe } from '@/lib/cardio-semana';
 export interface SessaoParaFrequencia {
   dataISO: string;
   tipo?: string;
+  /** Nome do treino do dia (o detalhe do grupo o exibe). */
+  dia?: string;
   exercicios: readonly { id: string }[];
 }
 
@@ -191,7 +193,95 @@ export function mediaPorSemana(total: number, semanas: number): number {
   return Math.round((total / semanas) * 10) / 10;
 }
 
-/** "3×" / "2,5×" — a contagem como a tela escreve (vírgula decimal em pt-BR). */
+/** "3×" / "2,5×" — a contagem como a tela escreve (vírgula decimal em pt-BR; inteiro sem
+ *  decimal: "2×", nunca "2,0×"). */
 export function rotuloContagem(valor: number): string {
   return `${valor.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}×`;
+}
+
+/**
+ * Rótulo acessível da linha de grupo (§9 do handoff de design): a cor NUNCA é o único
+ * sinal — o número e a referência vão no nome acessível do `button`.
+ * "Peito, 3 vezes nesta semana, referência 2 vezes"
+ */
+export function rotuloAcessivelLinha(args: {
+  nome: string; valor: number; periodo: 'semana' | 'quatro'; marca: number | null;
+}): string {
+  const quando = args.periodo === 'quatro' ? 'por semana, na média de 4 semanas' : 'nesta semana';
+  const n = args.valor.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  const base = `${args.nome}, ${n} ${args.valor === 1 ? 'vez' : 'vezes'} ${quando}`;
+  return args.marca == null ? base : `${base}, referência ${args.marca} vezes`;
+}
+
+/** Região de cada grupo (o `<h3>` de seção e o modelo do §7 do handoff). */
+export const REGIAO_DE: Record<string, string> = Object.fromEntries(
+  REGIOES.flatMap((r) => r.grupos.map((g) => [g, r.titulo.toLowerCase()])),
+);
+
+const SIGLA_DOW = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'] as const;
+
+/** Quantos dias da semana corrente já passaram (1 = segunda … 7 = domingo). */
+export function diasPassadosNaSemana(hojeISO: string): number {
+  const t = Date.parse(`${hojeISO}T00:00:00Z`);
+  if (!Number.isFinite(t)) return 7;
+  return ((new Date(t).getUTCDay() + 6) % 7) + 1;
+}
+
+export interface DiaDoGrupo {
+  dataISO: string;
+  sigla: string;
+  dia: string;
+  treino: string;
+  exercicios: string[];
+}
+
+export interface DetalheGrupo {
+  vezes: number;
+  dias: DiaDoGrupo[];
+  /** Padrões de movimento em que o grupo entrou no período (para o chip do detalhe). */
+  padroes: string[];
+}
+
+/**
+ * Detalhe de um grupo: em que dias ele entrou e com quais exercícios (§6.10).
+ * 🔒 Nenhum gráfico novo, nenhuma série/carga/tonelagem — isso é outra peça.
+ */
+export function detalheDoGrupo(
+  sessoes: readonly SessaoParaFrequencia[],
+  janela: Janela,
+  grupo: string,
+  exercicioPorId: (id: string) => Exercise | undefined,
+): DetalheGrupo {
+  const dias: DiaDoGrupo[] = [];
+  const padroes = new Set<string>();
+
+  for (const s of sessoes) {
+    if (s.tipo && EVENTOS.has(s.tipo)) continue;
+    if (!naJanela(s.dataISO, janela)) continue;
+
+    const nomes: string[] = [];
+    if (s.tipo === 'cardio') {
+      if (grupo !== 'cardio') continue;
+      padroes.add('cardio');
+      nomes.push('Cardio');
+    } else {
+      for (const e of s.exercicios) {
+        const ex = exercicioPorId(e.id);
+        if (!ex || ex.grupoPrimario !== grupo) continue;
+        padroes.add(ex.padraoMovimento);
+        if (!nomes.includes(ex.nomePt)) nomes.push(ex.nomePt);
+      }
+      if (nomes.length === 0) continue;
+    }
+    const t = Date.parse(`${s.dataISO}T00:00:00Z`);
+    dias.push({
+      dataISO: s.dataISO,
+      sigla: Number.isFinite(t) ? SIGLA_DOW[new Date(t).getUTCDay()]! : '',
+      dia: s.dataISO.slice(8, 10),
+      treino: s.tipo === 'cardio' ? 'Cardio' : (s.dia ?? 'Treino'),
+      exercicios: nomes,
+    });
+  }
+  dias.sort((a, b) => a.dataISO.localeCompare(b.dataISO));
+  return { vezes: dias.length, dias, padroes: [...padroes] };
 }

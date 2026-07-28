@@ -714,6 +714,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               diasForca={rotinaDias.length || perfil.treinoDias.length}
               objetivo={perfil.objetivo}
               retomadaAtiva={retomada != null}
+              onVerTreino={() => { setAba('treino'); window.scrollTo(0, 0); }}
             />
           </Progresso>
         )}

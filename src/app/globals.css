@@ -225,6 +225,10 @@ body {
 /* Favoritos (V8.2): confirmação da estrela (só na transição) + entrada do toast. */
 @keyframes evkStarPop { 0% { transform: scale(.55); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
 @keyframes evkToastIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* Frequência por grupo (Leva 2 · Bloco 2): a barra anima de 0 até o valor, uma vez. */
+@keyframes evkFill { from { width: 0 !important; } }
+.evk-freq-barra { animation: evkFill .9s cubic-bezier(.22,.61,.36,1); }
+@media (prefers-reduced-motion: reduce) { .evk-freq-barra { animation: none !important; } }
 /* "Fiquei doente" (Leva 2 · Bloco 4): véu + slide-up da folha de reconhecimento. */
 @keyframes evkVeil { from { opacity: 0; } to { opacity: 1; } }
 @keyframes evkSheet { from { transform: translateY(100%); } to { transform: none; } }
