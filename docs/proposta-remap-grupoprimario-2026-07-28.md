@@ -14,7 +14,7 @@
 
 ---
 
-## 1. Os dois casos que precisam da sua ratificação
+## 1. Os dois casos que foram para ratificação (e voltaram aprovados)
 
 ### `trapezio` — 1 exercício
 
@@ -63,7 +63,7 @@ raciocínio de cada um.
 |---|---|---|---|---|
 | `e143` | Avanço com salto | `agachar` | **`quadriceps`** | avanço é padrão de agachamento, quadríceps-dominante |
 | `e163` | Agachamento com salto | `agachar` | **`quadriceps`** | idem — agachamento, com a mesma dominância |
-| `e151` | Patinador (skater) | `cardio` | **`quadriceps`** ③ | proposto `gluteos` (glúteo médio, plano frontal) e **re-ratificado** na aplicação — ver §7 |
+| `e151` | Patinador (skater) | `cardio` | **`quadriceps`** ③ | proposto `gluteos` (glúteo médio, plano frontal); trocado na aplicação por **DF da sessão de código** — ver §7 |
 
 ⚠️ `e151` tem **padrão `cardio`** mas **grupo `pernas`** — pela regra, quem vira `null` é quem
 está nos **grupos** `cardio`/`corpo-inteiro`, não quem tem padrão cardio. Então ele ganha grupo
@@ -110,7 +110,7 @@ está correto que apareça nos dois.
 | `e149` | Abdominal bicicleta | `abdomen` | **`core`** | `core` |
 | `e159` | Abdominal remador | `abdomen` | **`core`** | `core` |
 
-### 3.3 Absorções e dissolução (5 exercícios — os que precisam da sua ratificação em ①②)
+### 3.3 Absorções e dissolução (5 exercícios — ①② ratificados pelo cofre, ③ DF da sessão)
 
 | id | nome | antes | depois | padrão |
 |---|---|---|---|---|
