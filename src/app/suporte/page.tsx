@@ -15,8 +15,10 @@ const TOC = [
 const FAQ = [
   { q: 'O Evokorpus substitui um nutricionista ou personal?', a: 'Não. É uma ferramenta geral e educacional, dirigida por você. Para condições de saúde ou orientação individual, procure um profissional habilitado.' },
   { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
-  { q: 'Como funciona a cobrança e o teste grátis?', a: <>São 7 dias grátis. Avisamos por e-mail antes da primeira cobrança de R$ 29/mês. Você cancela quando quiser. <AValidar>valores e ciclo</AValidar></> },
-  { q: 'Como eu cancelo?', a: 'Em Conta → Assinatura, em poucos toques. Sem letra miúda e sem pegadinha. O acesso continua até o fim do período já pago.' },
+  // 🔒 Saíram "Como funciona a cobrança e o teste grátis?" e "Como eu cancelo?" (DF
+  // 2026-07-29): não há cobrança, e a segunda mandava o usuário a "Conta → Assinatura",
+  // uma seção que deixou de existir — instrução para uma tela inexistente.
+  { q: 'Quanto custa?', a: 'Nada. O beta é gratuito e as vagas são por convite: não existe cobrança nem assinatura hoje.' },
   { q: 'Quero exercer meus direitos de dados. Como faço?', a: <>Em Conta → Privacidade você pode baixar ou excluir seus dados. Também pode falar com nosso Encarregado (DPO): <AValidar>e-mail do DPO</AValidar></> },
 ];
 

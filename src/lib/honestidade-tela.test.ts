@@ -184,3 +184,90 @@ describe('/conta — o e-mail não se edita por autoatendimento', () => {
     expect(fonte).toMatch(/allowlist/i);
   });
 });
+
+/* ══════════════════ LANDING E SUPERFÍCIES PÚBLICAS ══════════════════ */
+
+/**
+ * 🔒 A landing não anuncia mecanismo que o app não tem (DF 2026-07-29).
+ *
+ * O defeito: "Testar 7 dias grátis" levava a `/cadastro`, que é trancado pela allowlist do
+ * beta — o visitante clicava e não entrava. E "R$ 29/mês · Cancela quando quiser" prometia
+ * uma assinatura sem checkout, sem cobrança e (depois deste lote) sem nenhum botão de
+ * cancelar em lugar nenhum do app.
+ *
+ * 📌 Os TERMOS ficam de fora desta varredura de propósito: descrever um plano futuro num
+ * documento jurídico é defensável — o problema era o mecanismo apresentado como operante nas
+ * telas de produto. A revisão dos Termos é jurídica, não de código.
+ */
+const PUBLICAS = ['src/app/page.tsx', 'src/app/faq/page.tsx', 'src/app/suporte/page.tsx'] as const;
+
+const semComentarios = (src: string) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+
+describe('landing — sem preço, sem trial, sem cancelamento fantasma', () => {
+  const FALSAS: readonly [RegExp, string][] = [
+    [/R\$\s*29(?!\s*7)/, 'preço de assinatura (não existe checkout)'],
+    [/7 dias gr[áa]tis/i, 'teste grátis (não existe trial)'],
+    [/[Cc]ancela\b[^.]{0,30}quando quiser/, 'cancelamento (não existe assinatura a cancelar)'],
+    [/Testar 7 dias/i, 'CTA de trial'],
+    [/data-checkout="kiwify"/, 'marcador de checkout de assinatura'],
+  ];
+
+  for (const arq of PUBLICAS) {
+    const codigo = semComentarios(readFileSync(join(process.cwd(), arq), 'utf8'));
+    it.each(FALSAS)(`${arq}: não contém %s (%s)`, (re, _porque) => {
+      expect(re.test(codigo)).toBe(false);
+    });
+  }
+
+  /**
+   * O que entrou no lugar — a verdade, e um CTA que abre.
+   *
+   * ⚠️ A asserção é POR SEÇÃO, não pelo arquivo: a mutação "tirar a frase da seção do beta"
+   * passava quando o teste só procurava no arquivo inteiro, porque a mesma frase está no
+   * hero. Um `toMatch` no arquivo prova que a frase existe em ALGUM lugar — nunca que ela
+   * está onde o leitor vai olhar.
+   */
+  function secaoDe(src: string, id: string): string {
+    const i = src.indexOf(`id="${id}"`);
+    if (i < 0) return '';
+    const fim = src.indexOf('</section>', i);
+    return src.slice(i, fim < 0 ? src.length : fim);
+  }
+
+  it('a landing diz que o beta é fechado e por convite — no hero E na seção do beta', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/page.tsx'), 'utf8');
+    for (const id of ['inicio', 'beta']) {
+      const sec = secaoDe(src, id);
+      expect(sec, `seção #${id} não encontrada`).not.toBe('');
+      expect(/O beta está fechado/.test(sec), `#${id} não diz que o beta está fechado`).toBe(true);
+      expect(/vagas são por convite/.test(sec), `#${id} não diz que as vagas são por convite`).toBe(true);
+    }
+  });
+
+  it('o CTA público é "Entrar" e aponta para /login (não /cadastro)', () => {
+    const codigo = semComentarios(readFileSync(join(process.cwd(), 'src/app/page.tsx'), 'utf8'));
+    expect(codigo).toMatch(/href="\/login"[^>]*>Entrar</);
+    // `/cadastro` é trancado pela allowlist: mandar visitante para lá é porta que não abre.
+    expect(/href="\/cadastro"/.test(codigo), 'CTA público voltou a apontar para /cadastro').toBe(false);
+  });
+
+  /**
+   * Nenhuma tela pode mandar o usuário a um controle que não existe mais. "Como eu cancelo?
+   * Em Conta → Assinatura" apontava para uma seção que este lote removeu.
+   */
+  it('nenhuma superfície pública instrui a cancelar assinatura', () => {
+    for (const arq of PUBLICAS) {
+      const codigo = semComentarios(readFileSync(join(process.cwd(), arq), 'utf8'));
+      expect(/Como eu cancelo/.test(codigo), `${arq} ensina a cancelar algo inexistente`).toBe(false);
+      expect(/Conta → Assinatura/.test(codigo), `${arq} aponta para uma seção removida`).toBe(false);
+    }
+  });
+
+  /** Âncora morta é defeito silencioso: o nav some do lugar sem erro nenhum. */
+  it('nenhuma âncora aponta para a seção #preco (renomeada para #beta)', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/page.tsx'), 'utf8');
+    expect(src).not.toMatch(/#preco|'preco'/);
+    expect(src).toMatch(/id="beta"/);
+  });
+});

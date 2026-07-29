@@ -5,10 +5,16 @@ export const metadata = { title: 'Perguntas frequentes · Evokorpus' };
 
 // FAQ é conteúdo informacional (NÃO jurídico) → draftMode={false} (sem selo de rascunho).
 // Conteúdo canônico VERBATIM do cofre (conceitos/faq-evokorpus, 2026-07-02) — o app porta
-// daqui, não inventa Q&A. Fatos já fixados no cofre (R$29/mês · 7 dias · 167 alimentos/96
-// pratos · reembolso 7 dias/2 dias úteis · suporte 24–48h) → sem [A validar].
+// daqui, não inventa Q&A. Fatos já fixados no cofre (167 alimentos/96 pratos · reembolso
+// 7 dias/2 dias úteis · suporte 24–48h) → sem [A validar].
+//
+// 🔒 EXCEÇÃO (DF 2026-07-29): o bloco de ASSINATURA saiu. O preço e o teste de 7 dias estão
+// arquivados no cofre como PLANO, mas aqui eram apresentados como mecanismo OPERANTE — e o
+// app não tem checkout, não tem cobrança e não tem mais botão de cancelar (a tela que a
+// resposta "em 1 clique, na sua conta" citava foi removida). Descrever plano futuro é
+// assunto dos Termos; FAQ de produto responde pelo que existe hoje.
 const TOC = [
-  { id: 's-cat-assinatura', label: 'Assinatura, preço e cancelamento' },
+  { id: 's-cat-assinatura', label: 'Preço e acesso' },
   { id: 's-cat-treino', label: 'Treino' },
   { id: 's-cat-dieta', label: 'Dieta' },
   { id: 's-cat-conta', label: 'Conta e dados' },
@@ -17,14 +23,11 @@ const TOC = [
 
 const CATEGORIAS: FaqCat[] = [
   {
-    id: 's-cat-assinatura', label: 'Assinatura, preço e cancelamento', desc: 'Preço, teste grátis, cancelamento, reembolso e formas de pagamento.',
+    id: 's-cat-assinatura', label: 'Preço e acesso', desc: 'Quanto custa hoje e como se entra no beta.',
     items: [
-      { q: 'Quanto custa?', a: 'O app custa R$ 29/mês, com 7 dias grátis pra testar antes de pagar. O ebook "A Curva" é R$ 27, compra única e separada.' },
-      { q: 'Como funciona o teste grátis de 7 dias?', a: 'Você usa o app completo por 7 dias sem pagar nada. Se não quiser continuar, não é cobrado — a cobrança só começa depois, se você seguir.' },
-      { q: 'Como eu cancelo?', a: 'Em 1 clique, na sua conta, quando quiser. Sem multa e sem precisar ligar pra ninguém. O acesso continua até o fim do período que você já pagou.' },
-      { q: 'Vou ser cobrado de surpresa?', a: 'Não. A cobrança é mensal e clara, e você cancela a hora que quiser em 1 clique. Cobrança honesta é um princípio nosso, não um favor.' },
-      { q: 'Posso pedir reembolso?', a: 'Pode. Nos primeiros 7 dias, devolvemos tudo, sem perguntas (é a garantia do Código de Defesa do Consumidor). É só pedir pelo suporte ou na sua conta; processamos em até 2 dias úteis.' },
-      { q: 'Quais as formas de pagamento?', a: 'Aceitamos Pix, boleto e cartão.' },
+      { q: 'Quanto custa?', a: 'Nada. O beta é gratuito: não existe cobrança, assinatura nem teste pago. O ebook "A Curva" é R$ 27, compra única e separada — e o checkout dele ainda não está no ar.' },
+      { q: 'Como eu entro?', a: 'O beta está fechado e as vagas são por convite. Quem já tem conta entra pela tela de login.' },
+      { q: 'Vou ser cobrado de surpresa?', a: 'Não. Não há nenhuma forma de cobrança ativa no app. Se um plano pago existir no futuro, você decide se entra — e nada é cobrado sem você contratar.' },
     ],
   },
   {

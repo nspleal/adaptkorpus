@@ -1,8 +1,8 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  CHAVES_LOCAIS, CHAVES_SESSAO, chaveLocal, definirEscopoLocal, escopoLocal,
+  CHAVES_APOSENTADAS, CHAVES_LOCAIS, CHAVES_SESSAO, chaveLocal, definirEscopoLocal, escopoLocal,
   limparDadoPessoalLocal,
 } from './escopo-local';
 
@@ -116,7 +116,8 @@ describe('🔴 ACEITE 1 — A → logout → B: nada de A é lido nem re-subido 
   it('o logout apaga o dado pessoal de TODOS os escopos, não só do atual', () => {
     definirEscopoLocal(A);
     ls.setItem(chaveLocal('evk_treinos'), '["A"]');
-    ls.setItem(chaveLocal('evk_notif'), '{}');
+    // Chave APOSENTADA, com escopo, gravada por uma versão antiga do app.
+    ls.setItem(`evk_notif:${A}`, '{"optIn":true}');
     definirEscopoLocal(B);
     ls.setItem(chaveLocal('evk_treinos'), '["B"]');
     ls.setItem('evk_privacy_ack_v1', '1');
@@ -153,7 +154,7 @@ describe('🔴 ACEITE 2 — a lista de chaves é fonte única', () => {
   it('nenhuma chave `evk_*` existe no código fora da lista', () => {
     // 🔴 Foi assim que a 9ª chave apareceu: `limparDadosLocais` listava 6 à mão, o app
     // usava 9. A função da EXCLUSÃO DE CONTA é a que menos pode mentir.
-    const conhecidas = new Set<string>([...CHAVES_LOCAIS, ...CHAVES_SESSAO]);
+    const conhecidas = new Set<string>([...CHAVES_LOCAIS, ...CHAVES_SESSAO, ...CHAVES_APOSENTADAS]);
     const fora = [...chavesNoCodigo()].filter((k) => !conhecidas.has(k)).sort();
     expect(fora, `chave(s) fora da fonte única: ${fora.join(', ')}`).toEqual([]);
   });
@@ -191,5 +192,85 @@ describe('os pontos de entrada resolvem o escopo ANTES de ler o local', () => {
   it('/onboarding resolve o escopo antes do `lerSessao` do boot', () => {
     const src = readFileSync('src/app/onboarding/page.tsx', 'utf8');
     expect(src).toMatch(/resolverEscopoLocal\(\)\.then\(\(\) => \{\s*\n\s*if \(lerSessao\(\)\)/);
+  });
+});
+
+describe('🔒 CHAVES APOSENTADAS — a feature sai, o dado dela não fica em repouso', () => {
+  /**
+   * A regressão que isto pega: remover uma tela e, com ela, a chave de `CHAVES_LOCAIS` —
+   * fazendo `limparDadoPessoalLocal` parar de varrer um dado que continua no navegador de
+   * quem usou a versão anterior. Aconteceu com `evk_notif` (cartão de notificações removido
+   * em 2026-07-29). Sai da lista viva, entra na lista de apagar.
+   */
+  it('nenhuma aposentada continua em CHAVES_LOCAIS (as duas listas são disjuntas)', () => {
+    const viva = new Set<string>(CHAVES_LOCAIS);
+    for (const k of CHAVES_APOSENTADAS) {
+      expect(viva.has(k), `${k} está aposentada E viva ao mesmo tempo`).toBe(false);
+    }
+  });
+
+  it('`evk_notif` está aposentada (a feature saiu)', () => {
+    expect(CHAVES_APOSENTADAS).toContain('evk_notif');
+    expect([...CHAVES_LOCAIS] as string[]).not.toContain('evk_notif');
+  });
+
+  it('o logout varre as aposentadas, em qualquer escopo e sem escopo', () => {
+    for (const k of CHAVES_APOSENTADAS) {
+      definirEscopoLocal(A);
+      ls.setItem(`${k}:${A}`, 'x');
+      ls.setItem(`${k}:${B}`, 'x');
+      ls.setItem(k, 'x'); // legado, sem sufixo
+      limparDadoPessoalLocal();
+      expect(ls.chaves().filter((c) => c.startsWith(k)), `${k} sobreviveu ao logout`).toEqual([]);
+    }
+  });
+
+  it('entrar num escopo descarta a aposentada legada (sem ler)', () => {
+    for (const k of CHAVES_APOSENTADAS) {
+      definirEscopoLocal(null);
+      ls.setItem(k, 'x');
+      definirEscopoLocal(B);
+      expect(ls.getItem(k), `${k} legada sobreviveu ao definirEscopoLocal`).toBeNull();
+    }
+  });
+
+  /**
+   * O outro lado do aceite: aposentada é chave que **ninguém consome**. Se voltar um
+   * `getItem`/`setItem` dela, ou um módulo que a leia, ela não está aposentada — está viva e
+   * fora da fonte única. `escopo-local.ts` é o único lugar onde o literal pode aparecer.
+   */
+  it('nenhuma aposentada é lida ou escrita em src/ (só a lista a menciona)', () => {
+    const menciona: string[] = [];
+    const anda = (dir: string) => {
+      for (const nome of readdirSync(dir)) {
+        const p = join(dir, nome);
+        if (statSync(p).isDirectory()) { anda(p); continue; }
+        if (!/\.tsx?$/.test(p) || /\.test\.tsx?$/.test(p)) continue;
+        if (p.endsWith(join('lib', 'escopo-local.ts'))) continue; // a própria lista
+        const src = readFileSync(p, 'utf8');
+        for (const k of CHAVES_APOSENTADAS) if (src.includes(k)) menciona.push(`${p} → ${k}`);
+      }
+    };
+    anda('src');
+    expect(menciona, `aposentada com consumidor: ${menciona.join(', ')}`).toEqual([]);
+  });
+
+  /** E o módulo que servia a chave não pode voltar sem passar por aqui. */
+  it('os módulos da fachada de notificações não existem mais', () => {
+    for (const f of ['src/lib/notificacoes.ts', 'src/components/painel/Notificacoes.tsx']) {
+      expect(existsSync(f), `${f} voltou — web push tem de ser construído, não simulado`).toBe(false);
+    }
+  });
+
+  /**
+   * 🔴 O defeito que a remoção fecha, escrito para não voltar: `ativarNotif()` descartava o
+   * retorno de `requestPermission()` (`void` + `catch {}`) e gravava `optIn: true`
+   * incondicionalmente — o badge "ATIVADAS" acendia mesmo com a permissão NEGADA. E nada
+   * entregava aviso nenhum: `public/sw.js` não tem handler `push`.
+   */
+  it('ninguém pede permissão de notificação sem consumir a resposta', () => {
+    const src = readFileSync('src/components/painel/Painel.tsx', 'utf8');
+    expect(src).not.toMatch(/Notification\.requestPermission/);
+    expect(src).not.toMatch(/NotificacoesCard|ModalNotificacoes|ativarNotif/);
   });
 });

@@ -33,7 +33,6 @@ export const CHAVES_LOCAIS = [
   'evk_treinos',
   'evk_pesos',
   'evk_aderencia',
-  'evk_notif',
   'evk_aba',
   'evk_freq_periodo',
   'evk_privacy_ack_v1',
@@ -44,14 +43,36 @@ export type ChaveLocal = (typeof CHAVES_LOCAIS)[number];
 export const CHAVES_SESSAO = ['evk_email'] as const;
 
 /**
+ * 🔒 CHAVES APOSENTADAS — a feature saiu do app, mas o dado **continua no navegador de quem
+ * já usou**. Elas nunca são lidas nem escritas: só **apagadas**.
+ *
+ * `evk_notif` (aposentada em 2026-07-29): o cartão de notificações era fachada — nada
+ * consumia a preferência —, então saiu inteiro. Sem esta lista a chave sairia de
+ * `CHAVES_LOCAIS` e `limparDadoPessoalLocal` **pararia de varrê-la**: a preferência de quem
+ * clicou "Ativar" ficaria em repouso no navegador para sempre, inclusive depois do logout e
+ * da exclusão de conta. Minimização (LGPD) não admite dado órfão que a gente esqueceu de
+ * apagar porque removeu a tela.
+ *
+ * ⚠️ Nunca reintroduza uma chave daqui em `CHAVES_LOCAIS` sem antes conferir se o formato
+ * antigo do valor ainda é legível — na dúvida, use um nome novo.
+ */
+export const CHAVES_APOSENTADAS = ['evk_notif'] as const;
+
+/**
  * Chaves que NÃO recebem escopo: são do dispositivo, não da pessoa, e re-perguntar o aviso
  * de privacidade a cada troca de conta no mesmo navegador seria ruído sem ganho de
  * privacidade (o valor é um `'1'`, não contém dado nenhum).
  */
 const SEM_ESCOPO: ReadonlySet<string> = new Set<ChaveLocal>(['evk_privacy_ack_v1']);
 
-/** Chaves com DADO PESSOAL — as que o logout precisa apagar e o escopo precisa isolar. */
-const COM_DADO_PESSOAL: readonly ChaveLocal[] = CHAVES_LOCAIS.filter((k) => !SEM_ESCOPO.has(k));
+/**
+ * Chaves com DADO PESSOAL — as que o logout precisa apagar e o escopo precisa isolar.
+ * As aposentadas entram: não se lê nenhuma delas, mas todas se apagam.
+ */
+const COM_DADO_PESSOAL: readonly string[] = [
+  ...CHAVES_LOCAIS.filter((k) => !SEM_ESCOPO.has(k)),
+  ...CHAVES_APOSENTADAS,
+];
 
 let escopo: string | null = null;
 

@@ -24,7 +24,6 @@ import DiaDaDieta from './DiaDaDieta';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
-import { lerNotif, salvarNotif, type NotifPrefs } from '@/lib/notificacoes';
 import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
@@ -32,7 +31,6 @@ import GraficoLinha from './GraficoLinha';
 import { ContadorTreinos } from './ChamaContador';
 import RegistrarTreino from './RegistrarTreino';
 import CargasHistorico from './CargasHistorico';
-import { NotificacoesCard, ModalNotificacoes } from './Notificacoes';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
@@ -228,10 +226,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     });
     return () => { vivo = false; };
   }, []);
-  // Notificações (opt-in explícito, persistido em evk_notif).
-  const [notif, setNotif] = useState<NotifPrefs>({ optIn: null, treino: true, refeicao: true });
-  const [notifModal, setNotifModal] = useState(false);
-  useEffect(() => { setNotif(lerNotif()); }, []);
   // Edição que cai em zona clínica (ROTEAR) → tela de encaminhamento, sem aplicar o plano.
   const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
@@ -341,15 +335,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     }
   }, [celebrarPendente, chamaVisivel]);
 
-  function atualizarNotif(patch: Partial<NotifPrefs>) {
-    setNotif((prev) => { const n = { ...prev, ...patch }; salvarNotif(n); return n; });
-  }
-  function ativarNotif() {
-    // Opt-in real do navegador (best-effort); a entrega/agendamento via push é fase de backend.
-    if (typeof window !== 'undefined' && 'Notification' in window) { try { void Notification.requestPermission(); } catch { /* noop */ } }
-    atualizarNotif({ optIn: true, treino: true, refeicao: true });
-    setNotifModal(false);
-  }
 
   // Editar perfil → recalcular: roda o motor determinístico real com o novo perfil
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
@@ -768,7 +753,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           </Progresso>
         )}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
-        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} modoDiario={modoDiario} />}
+        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
@@ -785,7 +770,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
-      {notifModal && <ModalNotificacoes modoDiario={modoDiario} onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
     </div>
   );
 }
@@ -1213,9 +1197,8 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
 /* ════════════════════ Perfil ════════════════════ */
 
-function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTreino, onToggleRefeicao, onDesativarTudo, modoDiario }: {
+function Perfil({ perfil, onConta, onEditar, modoDiario }: {
   perfil: PerfilResumo; onConta: () => void; onEditar: () => void; modoDiario?: boolean;
-  notif: NotifPrefs; onAtivarNotif: () => void; onToggleTreino: () => void; onToggleRefeicao: () => void; onDesativarTudo: () => void;
 }) {
   const linha = (k: string, v: string, last = false) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 0', ...(last ? {} : { borderBottom: '1px solid rgba(234,229,219,.07)' }) }}><span style={{ color: 'rgba(234,229,219,.55)', fontSize: '.94rem' }}>{k}</span><span style={{ fontWeight: 600, fontSize: '.94rem', textAlign: 'right' }}>{v}</span></div>;
   return (
@@ -1257,7 +1240,6 @@ function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTrein
           <p style={{ margin: '0 0 18px', fontSize: '.92rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.6 }}>Não existe assinatura ativa nem cobrança. Quando houver plano pago, você decide se entra.</p>
           <button onClick={onConta} style={{ width: '100%', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Conta e meus dados</button>
         </div>
-        <NotificacoesCard prefs={notif} onAtivar={onAtivarNotif} onToggleTreino={onToggleTreino} onToggleRefeicao={onToggleRefeicao} onDesativarTudo={onDesativarTudo} modoDiario={modoDiario} />
         <div style={{ ...cardSoft, padding: 8 }}>
           {([['Termos de Uso', '/termos'], ['Política de Privacidade', '/privacidade'], ['Aviso (disclaimer)', '/aviso'], ['Suporte', '/suporte']] as const).map(([t, href]) => (
             <Link key={t} href={href} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, fontSize: '.95rem', color: 'rgba(234,229,219,.8)', textDecoration: 'none' }}>{t} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></Link>

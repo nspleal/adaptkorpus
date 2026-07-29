@@ -19,7 +19,7 @@ export default function Home() {
   const router = useRouter();
   const logado = useTemSessao(); // já onboardou → CTA do topo vira "Abrir o app"
   // Robustez ao 1º quadro: useTemSessao só resolve após o efeito, então se a sessão existir
-  // no clique, vamos pro /app mesmo que o rótulo ainda esteja em "Testar 7 dias grátis".
+  // no clique, vamos pro /app mesmo que o rótulo ainda esteja em "Entrar".
   const irAppSeLogado = (e: React.MouseEvent) => { if (temSessao()) { e.preventDefault(); router.push('/app'); } };
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function Home() {
 
     const setActive = (id: string) => root.querySelectorAll('.evk-navlink').forEach((a) => a.classList.toggle('is-active', a.getAttribute('data-nav') === id));
     const spy = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) setActive(e.target.id); }), { threshold: 0.5, rootMargin: '-20% 0px -55% 0px' });
-    ['inicio', 'como', 'app', 'preco', 'faq'].forEach((id) => { const el = document.getElementById(id); if (el) spy.observe(el); });
+    ['inicio', 'como', 'app', 'beta', 'faq'].forEach((id) => { const el = document.getElementById(id); if (el) spy.observe(el); });
 
     return () => { io.disconnect(); cio.disconnect(); spy.disconnect(); window.removeEventListener('scroll', onScroll); clearTimeout(t); };
   }, []);
@@ -74,11 +74,14 @@ export default function Home() {
         <div style={{ maxWidth: 1180, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
           <a href="#inicio" style={{ display: 'flex', alignItems: 'center', gap: 11 }}><LogoSvg size={30} /><Marca size="1.32rem" /></a>
           <div style={{ display: 'flex', alignItems: 'center', gap: 30, fontSize: '.94rem', fontWeight: 500 }} className="evk-navlinks">
-            {[['inicio', 'Início'], ['como', 'Como funciona'], ['app', 'O app'], ['preco', 'Preço'], ['faq', 'FAQ']].map(([id, txt]) => (
+            {[['inicio', 'Início'], ['como', 'Como funciona'], ['app', 'O app'], ['faq', 'FAQ']].map(([id, txt]) => (
               <a key={id} href={`#${id}`} data-nav={id} className="evk-navlink">{txt}</a>
             ))}
           </div>
-          <Link href={logado ? '/app' : '/cadastro'} {...(logado ? {} : { 'data-checkout': 'kiwify' })} onClick={irAppSeLogado} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>{logado ? 'Abrir o app' : 'Testar 7 dias grátis'}</Link>
+          {/* 🔒 CTA ÚNICO "Entrar" (DF 2026-07-29). Era "Testar 7 dias grátis" → /cadastro,
+              e o cadastro é trancado pela allowlist do beta: o visitante clicava e NÃO
+              entrava. Sem checkout no app, um CTA de teste grátis é porta que não abre. */}
+          <Link href={logado ? '/app' : '/login'} onClick={irAppSeLogado} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.92rem', padding: '11px 20px', borderRadius: 12 }}>{logado ? 'Abrir o app' : 'Entrar'}</Link>
         </div>
       </nav>
 
@@ -98,10 +101,10 @@ export default function Home() {
             <h1 className="rv" style={{ ...rev(80), margin: '0 0 22px', fontWeight: 800, fontSize: 'clamp(2.6rem, 5.6vw, 5rem)', lineHeight: 1.02, letterSpacing: '-.03em' }}>O corpo que não para de <span style={{ color: '#BDFF00' }}>evoluir.</span></h1>
             <p className="rv" style={{ ...rev(160), margin: '0 0 36px', fontSize: 'clamp(1.05rem,1.5vw,1.28rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.7)', maxWidth: 520, fontWeight: 500 }}>Treino e dieta que se adaptam a cada avanço seu. Sem planilha, sem achismo — um plano construído com você, dia após dia.</p>
             <div className="rv" style={{ ...rev(240), display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 30 }}>
-              <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
+              <Link href="/login" className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Entrar</Link>
               <a href="#como" className="hov-btn" style={{ border: '1px solid rgba(234,229,219,.35)', color: '#EAE5DB', fontWeight: 600, fontSize: '1.02rem', padding: '16px 28px', borderRadius: 14 }}>Ver como funciona</a>
             </div>
-            <p className="rv" style={{ ...rev(320), margin: 0, fontSize: '.92rem', color: 'rgba(234,229,219,.5)', fontWeight: 500 }}>R$ 29/mês &nbsp;•&nbsp; Cancela quando quiser &nbsp;•&nbsp; 18+</p>
+            <p className="rv" style={{ ...rev(320), margin: 0, fontSize: '.92rem', color: 'rgba(234,229,219,.5)', fontWeight: 500 }}>O beta está fechado. As vagas são por convite. &nbsp;•&nbsp; 18+</p>
           </div>
           <div className="rv" style={{ ...rev(220), justifySelf: 'center' }}>
             <div style={{ animation: 'evkFloat 7s ease-in-out infinite' }}><PhonePlano /></div>
@@ -115,7 +118,10 @@ export default function Home() {
           <h2 className="rv" style={{ margin: '0 0 64px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.6vw,3.1rem)', lineHeight: 1.12, letterSpacing: '-.02em', maxWidth: 960 }}>Sem milagre, sem pegadinha, sem dieta de rico. <span style={{ color: 'rgba(234,229,219,.5)' }}>Só o que cabe na sua rotina — e você no comando.</span></h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 22 }}>
             {[
-              { ic: <path d="M12 2v20M7 6h7.5a3 3 0 010 6H8a3 3 0 000 6h9" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />, t: 'Cobrança honesta', d: 'Preço claro, cancela fácil, sem letra miúda. Você sempre sabe o que está pagando.' },
+              /* 🔒 Era "Cobrança honesta — preço claro, cancela fácil… você sempre sabe o que
+                 está pagando": não há cobrança, não há cancelamento e ninguém paga nada. A
+                 copy abaixo é a MESMA já aprovada para /conta e para o Perfil. */
+              { ic: <path d="M12 2v20M7 6h7.5a3 3 0 010 6H8a3 3 0 000 6h9" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />, t: 'Beta gratuito', d: 'Não existe assinatura ativa nem cobrança. Quando houver plano pago, você decide se entra.' },
               { ic: <path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5L12 3z" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />, t: 'Sem promessa mágica', d: `Método e controle no seu ritmo. Nada de 'transformação em 2 semanas'.` },
               { ic: <><path d="M4 18 Q9 16 12 11 T20 5" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={11} r={2} fill="#BDFF00" /><circle cx={20} cy={5} r={2.4} fill="#BDFF00" /></>, t: 'Constância, não perfeição', d: 'O plano que cabe na sua rotina real — do jeito que ela é.' },
             ].map((c, i) => (
@@ -216,20 +222,22 @@ export default function Home() {
       <section id="transparencia" style={sec()}>
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 56, alignItems: 'center' }}>
           <div className="rv">
-            <h2 style={{ margin: '0 0 18px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', lineHeight: 1.12, letterSpacing: '-.02em' }}>Honestidade não é slogan. <span style={{ color: '#BDFF00' }}>É como a gente cobra.</span></h2>
+            {/* 🔒 Saiu "É como a gente cobra." — não há cobrança nenhuma. */}
+            <h2 style={{ margin: '0 0 18px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', lineHeight: 1.12, letterSpacing: '-.02em' }}>Honestidade não é slogan.</h2>
             <p style={{ margin: 0, color: 'rgba(234,229,219,.6)', lineHeight: 1.6, fontSize: '1.02rem' }}>Tudo o que entra na sua conta, você vê antes. E o que a gente não faz, a gente diz na cara.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 28 }}>
-              {['Sem cobrança-surpresa', 'Sem pegadinha no cancelamento', 'Sem letra miúda'].map((n) => (
+              {/* 🔒 Saiu "Sem pegadinha no cancelamento": pressupõe assinatura a cancelar. */}
+              {['Sem cobrança-surpresa', 'Sem letra miúda'].map((n) => (
                 <span key={n} style={{ background: 'rgba(229,72,77,.14)', color: '#E5484D', border: '1px solid rgba(229,72,77,.4)', borderRadius: 999, padding: '9px 16px', fontWeight: 600, fontSize: '.88rem' }}>{n}</span>
               ))}
-              {/* Selo de garantia — ACENTO DE MARCA (Pulso), não vermelho: é boa notícia, não erro. */}
-              <Link href="/reembolso" className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(189,255,0,.1)', color: '#BDFF00', border: '1px solid rgba(189,255,0,.4)', borderRadius: 999, padding: '9px 16px', fontWeight: 600, fontSize: '.88rem', textDecoration: 'none' }}>
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3z" stroke="#BDFF00" strokeWidth={1.8} strokeLinejoin="round" /><path d="M9.5 12l1.8 1.8 3.4-3.6" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>7 dias de garantia
-              </Link>
+              {/* 🔒 Saiu o selo "7 dias de garantia": garantia é sobre uma compra, e não há
+                  compra. A página /reembolso continua no ar, linkada no rodapé. */}
             </div>
           </div>
           <div className="rv" style={{ ...rev(120), display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {['Preço fixo de R$ 29/mês, sempre claro', '7 dias grátis pra testar de verdade', 'Cancela em poucos toques, quando quiser', 'Aviso antes de qualquer renovação', 'Seus dados protegidos (LGPD)'].map((s) => (
+            {/* 🔒 Saíram os quatro itens de cobrança (preço fixo, 7 dias grátis, cancelamento
+                em poucos toques, aviso de renovação): nenhum tem mecanismo por trás. */}
+            {['Beta gratuito, sem cobrança', 'Seus dados protegidos (LGPD)', 'Ferramenta educacional, 18+'].map((s) => (
               <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.09)', borderRadius: 14, padding: '16px 18px' }}>
                 <span style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', background: 'rgba(189,255,0,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check14 /></span>
                 <span style={{ fontSize: '1rem', fontWeight: 500 }}>{s}</span>
@@ -239,21 +247,23 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PREÇO */}
-      <section id="preco" style={sec('#0F0F0E')}>
+      {/* BETA (era a seção PREÇO) */}
+      <section id="beta" style={sec('#0F0F0E')}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <div className="rv" style={{ position: 'relative', background: 'linear-gradient(165deg,#10301d,#0a1c11)', border: '1px solid rgba(189,255,0,.32)', borderRadius: 28, padding: '44px 40px', boxShadow: '0 30px 80px -36px rgba(189,255,0,.4), inset 0 1px 0 rgba(189,255,0,.1)' }}>
             <svg aria-hidden viewBox="0 0 200 60" style={{ position: 'absolute', top: 24, right: 28, width: 120, opacity: 0.5 }}><path d="M10 50 Q70 44 110 28 T190 8" stroke="rgba(189,255,0,.5)" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={110} cy={28} r={3} fill="#BDFF00" /><circle cx={190} cy={8} r={4} fill="#BDFF00" /></svg>
-            <Kicker mb={16}>Assinatura Evokorpus</Kicker>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}><span style={{ fontSize: 'clamp(3rem,7vw,4.2rem)', fontWeight: 800, letterSpacing: '-.03em' }}>R$ 29</span><span style={{ fontSize: '1.2rem', color: 'rgba(234,229,219,.55)', fontWeight: 500 }}>/mês</span></div>
-            <p style={{ margin: '0 0 28px', color: 'rgba(234,229,219,.62)', fontSize: '1rem' }}>7 dias grátis. Cancela quando quiser.</p>
+            <Kicker mb={16}>Beta gratuito</Kicker>
+            {/* 🔒 Saíram o preço "R$ 29 /mês" e "7 dias grátis. Cancela quando quiser.": não
+                existe checkout, não existe teste e não existe assinatura a cancelar. */}
+            <div style={{ fontSize: 'clamp(1.9rem,4.4vw,2.6rem)', fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1.15, marginBottom: 10 }}>O beta está fechado.</div>
+            <p style={{ margin: '0 0 28px', color: 'rgba(234,229,219,.62)', fontSize: '1rem' }}>As vagas são por convite.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 30 }}>
               {['Treino adaptativo', 'Dieta que se recalcula', 'Substituições de exercício e alimento', 'Tudo editável', 'Casa ou academia', 'Cardápios para todo perfil'].map((i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, fontSize: '.98rem' }}><Check16 /> {i}</div>
               ))}
             </div>
-            <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ display: 'block', textAlign: 'center', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.08rem', padding: 17, borderRadius: 14 }}>Testar 7 dias grátis</Link>
-            <p style={{ margin: '16px 0 0', textAlign: 'center', fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>R$ 29/mês após o teste • Cancela quando quiser • 18+</p>
+            <Link href="/login" className="hov-btn" style={{ display: 'block', textAlign: 'center', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.08rem', padding: 17, borderRadius: 14 }}>Entrar</Link>
+            <p style={{ margin: '16px 0 0', textAlign: 'center', fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>Para quem já tem conta • 18+</p>
           </div>
         </div>
       </section>
@@ -268,7 +278,9 @@ export default function Home() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 22 }}>
             {[
               { i: 'M', n: 'Marina', t: 'O que me prende é a constância. O plano cabe na minha semana de verdade, sem me cobrar perfeição.' },
-              { i: 'R', n: 'Rafael', t: 'Saber exatamente o que pago, e poder cancelar fácil, fez eu confiar. Sem pegadinha mesmo.' },
+              /* 🔒 Era "Saber exatamente o que pago, e poder cancelar fácil…" — fala de uma
+                 relação de cobrança que não existe, mesmo rotulado como ilustrativo. */
+              { i: 'R', n: 'Rafael', t: 'O app não promete milagre e diz o que não faz. Foi isso que me fez confiar.' },
               { i: 'C', n: 'Camila', t: 'Poder trocar exercício e alimento sem quebrar o plano mudou tudo. Ele se adapta ao meu dia.' },
             ].map((d, k) => (
               <div key={d.n} className="rv" style={{ ...rev(k * 120), background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.09)', borderRadius: 22, padding: 28 }}>
@@ -292,7 +304,7 @@ export default function Home() {
               { q: 'Isso substitui um nutricionista ou personal?', a: 'Não. O Evokorpus é uma ferramenta geral e educacional, dirigida por você. Para condições de saúde, procure um profissional habilitado.' },
               { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
               { q: 'Vou perder quantos quilos?', a: 'Não prometemos número nem prazo. Entregamos um método que se adapta à sua rotina — o resto é constância.' },
-              { q: 'Como funciona a cobrança?', a: 'Assinatura de R$ 29/mês, com 7 dias grátis. Você cancela quando quiser, sem letra miúda. Avisamos antes de qualquer renovação.' },
+              { q: 'Quanto custa?', a: 'Nada. O beta é gratuito e as vagas são por convite — não existe cobrança nem assinatura hoje. Se um plano pago existir no futuro, você decide se entra.' },
               { q: 'Preciso ter quantos anos?', a: 'É um produto para maiores de 18 anos.' },
             ].map((it, i) => <FAQItem key={it.q} q={it.q} a={it.a} delay={i * 60} />)}
           </div>
@@ -312,8 +324,8 @@ export default function Home() {
         <svg aria-hidden viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: 0, margin: 'auto', width: '90%', maxWidth: 800, opacity: 0.4, zIndex: 0 }}><path data-draw d="M60 250 Q280 230 420 150 T740 50" stroke="rgba(189,255,0,.35)" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeDasharray={1000} strokeDashoffset={1000} style={{ transition: 'stroke-dashoffset 2.4s cubic-bezier(.16,.84,.3,1)' }} /><circle cx={420} cy={150} r={6} fill="rgba(189,255,0,.6)" style={{ animation: 'evkPulse 3.2s ease-in-out infinite' }} /><circle cx={740} cy={50} r={9} fill="#BDFF00" style={{ animation: 'evkPulse 3.2s ease-in-out infinite .6s', filter: 'drop-shadow(0 0 10px rgba(189,255,0,.7))' }} /></svg>
         <div className="rv" style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
           <h2 style={{ margin: '0 0 30px', fontWeight: 800, fontSize: 'clamp(2.2rem,5vw,4rem)', lineHeight: 1.05, letterSpacing: '-.03em' }}>Dê o próximo passo hoje.</h2>
-          <Link href="/cadastro" data-checkout="kiwify" className="hov-btn" style={{ display: 'inline-block', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.1rem', padding: '18px 36px', borderRadius: 14 }}>Testar 7 dias grátis</Link>
-          <p style={{ margin: '18px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.5)' }}>R$ 29/mês • Cancela quando quiser • 18+</p>
+          <Link href="/login" className="hov-btn" style={{ display: 'inline-block', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.1rem', padding: '18px 36px', borderRadius: 14 }}>Entrar</Link>
+          <p style={{ margin: '18px 0 0', fontSize: '.9rem', color: 'rgba(234,229,219,.5)' }}>O beta está fechado. As vagas são por convite. • 18+</p>
         </div>
       </section>
 
@@ -327,7 +339,7 @@ export default function Home() {
               <span style={{ display: 'inline-block', marginTop: 16, border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.6)', borderRadius: 8, padding: '4px 10px', fontSize: '.8rem', fontWeight: 700 }}>18+</span>
             </div>
             {[
-              { t: 'Produto', l: [['#como', 'Como funciona'], ['#app', 'O app'], ['#preco', 'Preço'], ['#faq', 'FAQ']] },
+              { t: 'Produto', l: [['#como', 'Como funciona'], ['#app', 'O app'], ['#beta', 'O beta'], ['#faq', 'FAQ']] },
               { t: 'Recursos', l: [['/ebook', 'Ebook']] },
               { t: 'Legal', l: [['/privacidade', 'Política de privacidade'], ['/termos', 'Termos de uso'], ['/reembolso', 'Reembolso'], ['/aviso', 'Aviso (disclaimer)'], ['/suporte', 'Contato']] },
             ].map((col) => (
