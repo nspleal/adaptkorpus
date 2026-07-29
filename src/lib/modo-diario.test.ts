@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  DISPONIBILIDADE, FALA_NO_FUTURO, SUBSTANTIVOS_DE_PRESCRICAO, disponibilidade, emModoDiario, falaNoFuturo, pressupoePrescricao,
+  DISPONIBILIDADE, FALA_NO_FUTURO, SUBSTANTIVOS_DE_PRESCRICAO, afirmaDenominador, disponibilidade, emModoDiario, falaNoFuturo, pressupoePrescricao,
   recursoLiberado, RECURSOS_AUSENTES, RECURSOS_DISPONIVEIS, RECURSOS_SEM_ALVO, type Recurso,
 } from './modo-diario';
 import { gerarDieta, gerarTreino } from './engine';
@@ -475,5 +475,93 @@ describe('🔒 CLASSE 2 — prova estrutural de cada vazamento consertado', () =
     for (const site of sites) expect(site, site).toMatch(/modoDiario/);
     // E o recorte precisa ter recortado algo — senão o teste vira vácuo.
     expect(src.slice(i, j)).toMatch(/<RegistrarPesoRow/);
+  });
+});
+
+describe('🔒 REDE 3 — o DENOMINADOR (alvo sem verbo e sem substantivo)', () => {
+  /**
+   * A terceira forma. Nenhuma das duas redes anteriores a pegava: o léxico procura futuro,
+   * o guard procura substantivo, o detector procura desenho. `1 de 4` é só um par de
+   * números — e já afirma um total esperado.
+   */
+
+  it('pega o denominador em todas as formas que apareceram', () => {
+    for (const frase of [
+      '1 de 4 refeições', '1 de 4 registradas', '0 de 1 a 2 sessões',
+      '3 de 7 dias', '2/4 registradas', '0 de 4',
+    ]) {
+      expect(afirmaDenominador(frase), frase).toBe(true);
+    }
+  });
+
+  it('e NÃO pega datas, faixas de data nem contagem pura — a outra direção', () => {
+    for (const frase of [
+      // datas e intervalos: o falso-positivo óbvio
+      '27/07 a 02/08', 'Semana de 27/07 a 02/08', '29 de julho',
+      // o caso real do DOM: innerText junta linhas, e o `\s` atravessava o `\n`
+      '27/07 a 02/08\nSemana de 27/07 a 02/08', '02/08\nSem meta semanal por aqui',
+      'Quarta-feira, 29 de julho', '29/07/2026', '12/2026',
+      // contagem pura (a forma correta, que este lote instituiu)
+      '1 refeição registrada', '3 refeições registradas', '2 treinos',
+      '30 min de cardio', 'Você já completou 14 dias de treino.',
+      'Peito, 2 vezes nesta semana', '1×', '61.4 kg', '2 registros',
+      'Sem registro no período', 'Nada ainda. O que você registrar hoje aparece aqui.',
+    ]) {
+      expect(afirmaDenominador(frase), frase).toBe(false);
+    }
+  });
+
+  it('a tela exclusiva do modo diário não afirma denominador em lugar nenhum', () => {
+    // ModoDiario.tsx é 100% copy nossa: regra absoluta, sem exceção declarada.
+    //
+    // ⚠️ A extração precisa incluir TEMPLATE LITERALS. A primeira versão deste teste olhava
+    // só o texto JSX entre `>` e `<` e excluía `{}` — e o denominador morava exatamente
+    // dentro de `${...}`. A mutação pegou: o guard não era load-bearing.
+    const src = semComentarios('src/components/painel/ModoDiario.tsx');
+    const literais = [
+      ...(src.match(/`[^`]*`/g) ?? []),   // templates (onde o "1 de 4" estava)
+      ...(src.match(/'[^']*'/g) ?? []),   // strings simples
+      ...(src.match(/>[^<>{}]{4,}</g) ?? []), // texto JSX solto
+    ]
+      // `${expr}` vira um número: é o que ele será em tela, e é o que torna o par visível.
+      .map((t) => t.replace(/\$\{[^}]*\}/g, '9'))
+      .join(' | ');
+    const culpados = literais.split(' | ').filter((t) => afirmaDenominador(t));
+    expect(culpados, `denominador em: ${culpados.join(' ; ').slice(0, 300)}`).toEqual([]);
+  });
+});
+
+describe('🔒 a LEGENDA da frequência é guarda-corpo, não decoração', () => {
+  /**
+   * A barra 0–4× FICA (decisão do autor), mas a medição mostrou que o trilho é **sulco
+   * visível** (`rgba(234,229,219,.075)`, 7px, raio 4) — pelo critério literal, o pip em
+   * forma contínua. **O que a salva é a legenda**: "Com registro no período / Sem registro
+   * no período" converte o vazio em AUSÊNCIA DE REGISTRO, não em alvo não atingido.
+   *
+   * ⚠️ Logo a legenda não é decoração. Se uma limpeza de copy futura a remover, o F vira
+   * vazamento em silêncio. Este teste existe para que isso não seja silencioso.
+   */
+  const src = semComentarios('src/components/painel/FrequenciaGrupos.tsx');
+
+  it('a legenda de contagem pura existe, com as duas linhas', () => {
+    expect(src).toContain("texto: 'Com registro no período'");
+    expect(src).toContain("texto: 'Sem registro no período'");
+  });
+
+  it('ela é a variante de MODO DIÁRIO da legenda, não um texto solto', () => {
+    // O par tem de estar no ramo `modoDiario` do seletor da legenda — se virar texto
+    // incondicional, o ramo do plano perde as bandas e o teste do espelho cai junto.
+    expect(src).toMatch(/\(modoDiario\s*\?[\s\S]{0,400}Com registro no período/);
+  });
+
+  it('as barras e a legenda vivem no MESMO bloco — uma não sobrevive sem a outra', () => {
+    // `LinhaGrupo` (as barras) e a legenda "Como ler" estão ambas sob o painel do período.
+    const iBarras = src.indexOf('<LinhaGrupo');
+    const iLegenda = src.indexOf('Como ler');
+    expect(iBarras).toBeGreaterThan(-1);
+    expect(iLegenda).toBeGreaterThan(iBarras);
+    // E a legenda não está atrás de `!modoDiario` (senão sumiria justo onde é guarda-corpo).
+    const trecho = src.slice(iLegenda - 400, iLegenda);
+    expect(trecho).not.toMatch(/\{!modoDiario && \($/);
   });
 });

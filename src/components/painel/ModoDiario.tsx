@@ -64,8 +64,13 @@ export function CartaoEncaminhamento() {
 export interface RegistroDeHoje {
   treinos: number;
   cardioMin: number;
+  /**
+   * 🔒 CONTAGEM PURA, sem denominador (DF 2026-07-29). "1 de 4 refeições" herdava o
+   * denominador da estrutura do CARDÁPIO — que ela não tem —, e é a forma exata do controle
+   * positivo do plano ("0 de 1 a 2 sessões"). A prova estava no mesmo cartão: "2 treinos" e
+   * "30 min de cardio" nunca tiveram denominador. Alvo sem verbo e sem substantivo.
+   */
   refeicoesRegistradas: number;
-  refeicoesTotal: number;
 }
 
 /**
@@ -107,7 +112,7 @@ export function HojeDiario({ registrado, onRegistrarTreino, onRegistrarCardio, o
           <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             {registrado.treinos > 0 && <LinhaRegistrado texto={`${registrado.treinos} treino${registrado.treinos === 1 ? '' : 's'}`} />}
             {registrado.cardioMin > 0 && <LinhaRegistrado texto={`${registrado.cardioMin} min de cardio`} />}
-            {registrado.refeicoesRegistradas > 0 && <LinhaRegistrado texto={`${registrado.refeicoesRegistradas} de ${registrado.refeicoesTotal} refeições`} />}
+            {registrado.refeicoesRegistradas > 0 && <LinhaRegistrado texto={`${registrado.refeicoesRegistradas} ${registrado.refeicoesRegistradas === 1 ? 'refeição registrada' : 'refeições registradas'}`} />}
           </div>
         )}
       </div>
@@ -181,7 +186,9 @@ export function DietaDiario({ logs, notes, onStatus, onNote }: {
       <div style={{ marginBottom: 22 }}>
         <h2 style={{ margin: '0 0 6px', fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-.02em' }}>Suas refeições de hoje</h2>
         <p style={{ margin: 0, fontSize: '.94rem', lineHeight: 1.6, color: 'rgba(234,229,219,.6)' }}>
-          {feitas} de {REFEICOES_DIARIO.length} registradas. Marque o que você comeu — o histórico fica guardado para você.
+          {feitas === 0
+            ? 'Marque o que você comeu — o histórico fica guardado para você.'
+            : `${feitas} ${feitas === 1 ? 'refeição registrada' : 'refeições registradas'}. O histórico fica guardado para você.`}
         </p>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

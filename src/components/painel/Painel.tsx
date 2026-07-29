@@ -14,7 +14,7 @@ import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
-import { metaCardioComRetomada, metaCardioSemanal, type MetaCardio } from '@/lib/engine/cardio';
+import { metaCardioComRetomada, metaCardioSemanal, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
@@ -379,7 +379,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     window.scrollTo(0, 0);
   }
 
-  useEffect(() => { setDataHoje(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })); }, []);
+  // ⑥ `textTransform: capitalize` maiusculizava CADA palavra ("Quarta-Feira, 29 De
+  // Julho"). Em pt-BR só a primeira letra sobe — a capitalização passa para cá e o CSS sai.
+  useEffect(() => {
+    const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    setDataHoje(d.charAt(0).toUpperCase() + d.slice(1));
+  }, []);
   const marcar = (k: string) => setTrocados((prev) => new Set(prev).add(k));
 
   // "Cansei deste prato" (cofre, parametros-motor-substituicao-evokorpus §Variedade): pratos em
@@ -597,7 +602,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // Minutos CRUS do dia (o que ela fez), não os "minutos na meta" — não há meta aqui.
     cardioMin: registrosCardioSemana.filter((r) => r.dataISO === hojeISO()).reduce((m, r) => m + r.minutos, 0),
     refeicoesRegistradas: refeicoesDia.filter((r) => registro.logs[r]).length,
-    refeicoesTotal: refeicoesDia.length,
   };
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
@@ -699,7 +703,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} modoDiario={modoDiario} />}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Bom treino 👊</h1>
-          <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem', textTransform: 'capitalize' }}>{dataHoje || 'Seu dia'}</p>
+          <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem' }}>{dataHoje || 'Seu dia'}</p>
         </div>
 
         {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
@@ -780,7 +784,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
-      {notifModal && <ModalNotificacoes onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
+      {notifModal && <ModalNotificacoes modoDiario={modoDiario} onAtivar={ativarNotif} onAgoraNao={() => { atualizarNotif({ optIn: false }); setNotifModal(false); }} onFechar={() => setNotifModal(false)} />}
     </div>
   );
 }
@@ -1140,6 +1144,24 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
         {sessoes.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {sessoes.map((w) => {
+              // 🔒 CARDIO tem card PRÓPRIO (DF 2026-07-29). Antes caía no card genérico de
+              // musculação e saía "Cardio · Sessão 2 · 0 séries · 0 kg": "Sessão N" é
+              // vocabulário de SLOT DO PLANO, e séries/kg zerados fazem um registro válido
+              // parecer quebrado. Mostra o que a sessão de cardio realmente tem.
+              if (w.tipo === 'cardio' && w.cardio) {
+                const c = w.cardio;
+                return (
+                  <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: '50%', background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.5-5 4 10 2.5-5h5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{ROTULO_MODALIDADE[c.modalidade as ModalidadeCardio] ?? 'Cardio'}</div>
+                        <div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 2 }}>{fmtDataCurta(w.dataISO)} · {c.minutos} min · {ROTULO_INTENSIDADE[c.intensidade as IntensidadeCardio] ?? c.intensidade}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
               // Registro rápido legado (V6.3, sem exercícios) — linha informativa, não clicável.
               if (w.manual && w.exercicios.length === 0) {
                 return (
@@ -1234,7 +1256,7 @@ function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTrein
           </div>
           <p style={{ margin: '14px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Cancelar é fácil, em poucos toques — sem letra miúda.</p>
         </div>
-        <NotificacoesCard prefs={notif} onAtivar={onAtivarNotif} onToggleTreino={onToggleTreino} onToggleRefeicao={onToggleRefeicao} onDesativarTudo={onDesativarTudo} />
+        <NotificacoesCard prefs={notif} onAtivar={onAtivarNotif} onToggleTreino={onToggleTreino} onToggleRefeicao={onToggleRefeicao} onDesativarTudo={onDesativarTudo} modoDiario={modoDiario} />
         <div style={{ ...cardSoft, padding: 8 }}>
           {([['Termos de Uso', '/termos'], ['Política de Privacidade', '/privacidade'], ['Aviso (disclaimer)', '/aviso'], ['Suporte', '/suporte']] as const).map(([t, href]) => (
             <Link key={t} href={href} className="evk-perfil-link" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, fontSize: '.95rem', color: 'rgba(234,229,219,.8)', textDecoration: 'none' }}>{t} <span style={{ color: 'rgba(234,229,219,.35)' }}>→</span></Link>

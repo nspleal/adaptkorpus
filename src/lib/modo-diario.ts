@@ -175,3 +175,45 @@ export const SUBSTANTIVOS_DE_PRESCRICAO: readonly RegExp[] = [
 export function pressupoePrescricao(texto: string): boolean {
   return SUBSTANTIVOS_DE_PRESCRICAO.some((re) => re.test(texto));
 }
+
+/**
+ * 🔒 A TERCEIRA FORMA (DF 2026-07-29) — **o DENOMINADOR**.
+ *
+ * "1 de 4 refeições" não foi pego por nenhuma das duas redes anteriores, e o motivo é
+ * estrutural: o léxico procura **futuro**, o guard procura **substantivo**, o detector
+ * procura **desenho**. `1 de 4` é **alvo sem verbo e sem substantivo** — o denominador
+ * sozinho já afirma um total esperado. É a forma exata do controle positivo do plano
+ * ("0 de 1 a 2 sessões").
+ *
+ * A prova de que é alvo estava no mesmo cartão: "2 treinos" e "30 min de cardio" são
+ * contagem pura. Só a refeição carregava denominador, herdado da estrutura do cardápio.
+ *
+ *   **Teste: a string afirma um total do qual a pessoa cumpriu uma parte?**
+ */
+const DENOMINADOR_DE = /\b\d+\s+de\s+\d+\b/i;
+/**
+ * ⚠️ A forma com barra é AMBÍGUA por estrutura: `2/4` (dois de quatro) e `2/4` (2 de abril)
+ * são a mesma string. Lista de exceções não fecha — data é classe infinita. O que separa as
+ * duas na prática é o SUBSTANTIVO CONTÁVEL depois: "2/4 registradas" é denominador,
+ * "27/07 a 02/08" e "12/2026" não têm substantivo depois da barra.
+ */
+// ⚠️ `[ \t]+`, não `\s+`: em texto renderizado o `\s` atravessa quebra de linha, e
+// "27/07 a 02/08\nSemana de..." virava falso positivo. O substantivo tem de estar na
+// MESMA LINHA da barra para contar como denominador.
+const DENOMINADOR_BARRA = /\b\d+\s*\/\s*\d+[ \t]+\p{L}{3,}/u;
+
+/**
+ * Datas por extenso são o falso-positivo óbvio de `N de M` ("29 de julho"). São podadas
+ * ANTES do teste — data não é numerador sobre total. As numéricas (`27/07`) não precisam de
+ * poda: elas caem fora por não terem substantivo contável depois.
+ */
+const FORMAS_DE_DATA: readonly RegExp[] = [
+  /\b\d{1,2}\s+de\s+(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/gi,
+];
+
+/** A string afirma um total do qual só uma parte foi cumprida? (Datas não contam.) */
+export function afirmaDenominador(texto: string): boolean {
+  let t = texto;
+  for (const re of FORMAS_DE_DATA) t = t.replace(re, ' ');
+  return DENOMINADOR_DE.test(t) || DENOMINADOR_BARRA.test(t);
+}

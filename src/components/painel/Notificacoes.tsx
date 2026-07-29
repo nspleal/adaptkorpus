@@ -38,13 +38,19 @@ function MockNotif({ titulo, corpo }: { titulo: string; corpo: string }) {
   );
 }
 
-export function NotificacoesCard({ prefs, onAtivar, onToggleTreino, onToggleRefeicao, onDesativarTudo }: {
+export function NotificacoesCard({ prefs, onAtivar, onToggleTreino, onToggleRefeicao, onDesativarTudo, modoDiario }: {
   prefs: NotifPrefs; onAtivar: () => void; onToggleTreino: () => void; onToggleRefeicao: () => void; onDesativarTudo: () => void;
+  /** 🔒 Modo diário: o lembrete é de REGISTRAR — não há treino nem refeição agendados. */
+  modoDiario?: boolean;
 }) {
   const ativo = prefs.optIn === true;
   const promptCopy = prefs.optIn === false
     ? 'Sem problema — você pode ativar quando quiser.'
-    : 'Quer lembretes do seu treino e refeições? Você escolhe quando ativar — e pode desligar quando quiser.';
+    : modoDiario
+      // 🔒 CLASSE 2 — "lembretes do seu treino e refeições" pressupõe treino e refeições
+      // AGENDADOS. Em modo diário não há agenda; o que existe é o ato de registrar.
+      ? 'Quer lembretes para registrar o que você fez? Você escolhe quando ativar — e pode desligar quando quiser.'
+      : 'Quer lembretes do seu treino e refeições? Você escolhe quando ativar — e pode desligar quando quiser.';
   return (
     <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
@@ -85,12 +91,12 @@ export function NotificacoesCard({ prefs, onAtivar, onToggleTreino, onToggleRefe
   );
 }
 
-export function ModalNotificacoes({ onAtivar, onAgoraNao, onFechar }: { onAtivar: () => void; onAgoraNao: () => void; onFechar: () => void }) {
+export function ModalNotificacoes({ onAtivar, onAgoraNao, onFechar, modoDiario }: { onAtivar: () => void; onAgoraNao: () => void; onFechar: () => void; modoDiario?: boolean }) {
   return (
     <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 214, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(189,255,0,.3)', borderRadius: 22, padding: 26, boxShadow: '0 40px 90px -30px rgba(0,0,0,.8)', animation: `evkPop .3s ${EASE}` }}>
         <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><Sino size={23} /></div>
-        <h2 style={{ margin: '0 0 10px', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-.01em' }}>Quer lembretes do seu treino e refeições?</h2>
+        <h2 style={{ margin: '0 0 10px', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-.01em' }}>{modoDiario ? 'Quer lembretes para registrar o que você fez?' : 'Quer lembretes do seu treino e refeições?'}</h2>
         <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>Ativamos avisos simples pra te ajudar a manter o ritmo — <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>um toque, depois silêncio</strong>. Sem sequência de mensagens, sem cobrança. Desligue por tipo ou tudo de uma vez, quando quiser.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button onClick={onAtivar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Ativar</button>
