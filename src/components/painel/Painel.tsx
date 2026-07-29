@@ -696,7 +696,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1080, margin: '0 auto', padding: '36px 22px 90px' }}>
         {/* Contador de treinos (chama dos 4 marcos) — PRIMEIRO elemento da Hoje, acima da
             saudação (handoff §Posição). Substitui o indicador de marco 7/30 que ficava abaixo. */}
-        {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} />}
+        {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} modoDiario={modoDiario} />}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Bom treino 👊</h1>
           <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem', textTransform: 'capitalize' }}>{dataHoje || 'Seu dia'}</p>
@@ -1366,7 +1366,7 @@ function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void })
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
         <span style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={20} height={20} viewBox="0 0 24 24" fill="none"><path d="M4 18 Q9 16 12 11 T20 5" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={11} r={2} fill="#BDFF00" /><circle cx={20} cy={5} r={2.4} fill="#BDFF00" /></svg></span>
-        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Um registro rápido mantém seu plano calibrado.</div></div>
+        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Um registro rápido guarda a sua variação.</div></div>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />

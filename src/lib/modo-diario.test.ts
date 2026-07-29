@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  emModoDiario, recursoLiberado, RECURSOS_AUSENTES, RECURSOS_DISPONIVEIS, type Recurso,
+  DISPONIBILIDADE, FALA_NO_FUTURO, disponibilidade, emModoDiario, falaNoFuturo,
+  recursoLiberado, RECURSOS_AUSENTES, RECURSOS_DISPONIVEIS, RECURSOS_SEM_ALVO, type Recurso,
 } from './modo-diario';
 import { gerarDieta, gerarTreino } from './engine';
 import { metaCardioSemanal } from './engine/cardio';
@@ -40,13 +41,27 @@ describe('modo diário — a classificação dos recursos', () => {
     for (const g of ['PERMITIR', 'PISAR', 'RESTRINGIR'] as const) expect(emModoDiario(g)).toBe(false);
   });
 
-  it('as duas listas do cofre não se sobrepõem e cobrem todo recurso classificado', () => {
-    const cruz = RECURSOS_DISPONIVEIS.filter((r) => (RECURSOS_AUSENTES as readonly Recurso[]).includes(r));
-    expect(cruz).toEqual([]);
-    // Um recurso novo tem de ser classificado por alguém: se cair fora das duas listas,
-    // `recursoLiberado` o esconderia em silêncio — este teste força a decisão.
+  it('os TRÊS estados particionam o universo — nenhum recurso sem classe, nenhum em duas', () => {
     const todos = [...RECURSOS_DISPONIVEIS, ...RECURSOS_AUSENTES];
     expect(new Set(todos).size).toBe(todos.length);
+    expect(new Set(todos)).toEqual(new Set(Object.keys(DISPONIBILIDADE)));
+    // `sem_alvo` é subconjunto dos que APARECEM (some a camada de alvo, não a tela).
+    for (const r of RECURSOS_SEM_ALVO) expect(RECURSOS_DISPONIVEIS).toContain(r);
+  });
+
+  it('a classificação inicial ratificada pelo autor (DF 2026-07-29)', () => {
+    expect([...RECURSOS_SEM_ALVO].sort()).toEqual(['chama', 'frequencia_grupos', 'registro_cardio']);
+    expect(Object.keys(DISPONIBILIDADE).filter((r) => DISPONIBILIDADE[r as Recurso] === 'completo').sort())
+      .toEqual(['historico', 'registro_peso', 'registro_refeicao', 'registro_treino_manual']);
+  });
+
+  it('`sem_alvo` continua liberado — o que some é o alvo, não a tela', () => {
+    for (const r of RECURSOS_SEM_ALVO) {
+      expect(disponibilidade(r, true)).toBe('sem_alvo');
+      expect(recursoLiberado(r, true), r).toBe(true);
+      // Fora do modo diário nada é podado.
+      expect(disponibilidade(r, false)).toBe('completo');
+    }
   });
 
   it('DISPONÍVEL em modo diário — a lista verbatim da DF', () => {
@@ -181,38 +196,110 @@ describe('o registro do modo diário é inerte', () => {
   });
 });
 
-describe('nenhum ALVO embutido nas features disponíveis', () => {
+describe('🔒 EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA', () => {
   /**
-   * 🔒 DF 2026-07-29 — a lição de dois vazamentos nesta leva: a lista "disponível" do cofre
-   * libera a FEATURE, mas features carregam alvo por dentro. Quem foi excluído do alvo
-   * (gate `ROTEAR`) não pode reencontrá-lo por uma porta lateral.
+   * A regra generalizável (DF 2026-07-29) que saiu de CINCO vazamentos numa leva só:
+   * a copy da meta no cardio · a régua da frequência · os pips · a legenda "abaixo da
+   * referência" · os "Próximos marcos" da Chama.
    *
-   * 1º vazamento: a copy "não entra nos minutos da meta" na tela de cardio SEM meta.
-   * 2º vazamento: a régua de "2×/semana" na frequência por grupo.
+   * Teste de uma linha: **a frase fala do FUTURO da atividade dela? Se sim, é alvo, e sai.**
+   * Passa contagem do que ocorreu ("14 dias de chama", "hoje você registrou", "Variação").
    */
-  const src = semComentarios('src/components/painel/FrequenciaGrupos.tsx');
 
-  it('a frequência vira CONTAGEM PURA em modo diário — sem régua', () => {
-    // O curto-circuito vem ANTES de `reguaDoPadrao`: nenhuma marca é calculada.
-    expect(src).toMatch(/if \(modoDiario\) return null;[\s\S]{0,120}reguaDoPadrao/);
+  it('o léxico pega os cinco vazamentos desta leva', () => {
+    for (const frase of [
+      'faltam 7 dias', 'falta 1 dia', 'Próximos marcos',
+      'cada padrão ao menos 2× por semana', 'Abaixo da referência — não é erro',
+      'distribuem os padrões ao longo do ciclo', 'não entra nos minutos da meta',
+      'com 1 dia por semana, 1× por padrão é o esperado',
+      'o que está em 1× hoje pode fechar em 2× ou mais',
+      'Um registro rápido mantém seu plano calibrado.',
+    ]) {
+      expect(falaNoFuturo(frase), frase).toBe(true);
+    }
   });
 
-  it('sem esmaecimento: o neutro é o estado normal, não o apagado', () => {
-    // Com `marca == null` todo `emDia` seria false e a tela inteira nasceria apagada —
-    // "abaixo" de uma referência que não existe. `semReferencia` corrige isso.
-    expect(src).toMatch(/const forte = semReferencia \|\| emDia;/);
-    expect(src).toMatch(/const barra = semReferencia \?/);
+  it('e NÃO pega nada do que deve ficar', () => {
+    for (const frase of [
+      'Você já completou 14 dias de treino.', 'Hoje você registrou', '3 treinos',
+      '25 min de cardio', 'Variação', '2 de 4 registradas', 'Peito, 2 vezes nesta semana',
+      'Com registro no período', 'Sem registro no período',
+      'É um espelho do que aconteceu, não uma nota.',
+      'Um registro rápido guarda a sua variação.',
+      'Um período sem registro não é um problema — é só um período sem registro.',
+      'Constância, não perfeição.', 'Sua sequência começa hoje',
+      'Treinos registrados à mão, com exercícios fora da biblioteca, contam na sua chama '
+        + 'mas não têm grupo para somar aqui.',
+    ]) {
+      expect(falaNoFuturo(frase), frase).toBe(false);
+    }
   });
 
-  it('sem legenda de expectativa — "esperado" também é alvo', () => {
-    // ⚠️ `diasForca: 0` NÃO resolveria: dispararia a LEGENDA_UM_DIA ("com 1 dia por semana,
-    // 1× por padrão é o esperado"). O parágrafo inteiro é suprimido.
-    expect(src).toMatch(/\{!modoDiario && \(\s*<p style=\{\{ \.\.\.apoio/);
-    // E os pips, que SÃO a régua desenhada, não aparecem vazios.
-    expect(src).toMatch(/\{!semReferencia && \(/);
+  it('o léxico não está vazio nem virou catch-all', () => {
+    expect(FALA_NO_FUTURO.length).toBeGreaterThanOrEqual(10);
+    expect(falaNoFuturo('')).toBe(false);
+    expect(falaNoFuturo('registro')).toBe(false);
   });
 
-  it('o Painel passa o modo diário para a tela de frequência', () => {
-    expect(semComentarios('src/components/painel/Painel.tsx')).toMatch(/modoDiario=\{modoDiario\}/);
+  /**
+   * O guard que o terceiro estado existe para destravar: **TODO recurso `sem_alvo` precisa
+   * de prova estática de que a camada de alvo some.** Foi a ausência dele que deixou os
+   * cinco passarem. Um `sem_alvo` novo sem entrada aqui quebra a suíte.
+   */
+  const PROVAS: Record<string, { arquivo: string; provas: RegExp[] }> = {
+    // A régua nem chega a ser calculada; o neutro substitui o esmaecimento; legenda e pips somem.
+    frequencia_grupos: {
+      arquivo: 'src/components/painel/FrequenciaGrupos.tsx',
+      provas: [
+        /if \(modoDiario\) return null;[\s\S]{0,120}reguaDoPadrao/,
+        /const forte = semReferencia \|\| emDia;/,
+        /const barra = semReferencia \?/,
+        /\{!modoDiario && \(\s*<p style=\{\{ \.\.\.apoio/,
+        /\{!semReferencia && \(/,
+      ],
+    },
+    // Toda a meta vive sob `meta == null ? … : …`; a copy do leve não cita meta sem meta.
+    registro_cardio: {
+      arquivo: 'src/components/painel/Cardio.tsx',
+      provas: [
+        /\{meta == null \? \(/,
+        /meta == null \? 'Movimento registrado — fica guardado no seu histórico\.'/,
+      ],
+    },
+    // O bloco "Próximos marcos" inteiro fica atrás de `!modoDiario`.
+    chama: {
+      arquivo: 'src/components/painel/ChamaContador.tsx',
+      provas: [/\{!modoDiario && \([\s\S]{0,400}Próximos marcos/],
+    },
+  };
+
+  it('todo recurso `sem_alvo` tem guard estático declarado', () => {
+    expect(Object.keys(PROVAS).sort()).toEqual([...RECURSOS_SEM_ALVO].sort());
+  });
+
+  for (const [recurso, { arquivo, provas }] of Object.entries(PROVAS)) {
+    it(`\`${recurso}\` — a camada de alvo some, provado no fonte`, () => {
+      const src = semComentarios(arquivo);
+      for (const re of provas) expect(re.test(src), `${arquivo} :: ${re}`).toBe(true);
+    });
+  }
+
+  it('o Painel passa o modo diário para as três telas podadas', () => {
+    const src = semComentarios('src/components/painel/Painel.tsx');
+    expect(src).toMatch(/<ContadorTreinos[^>]*modoDiario=\{modoDiario\}/);
+    expect(src).toMatch(/modoDiario=\{modoDiario\}/);
+    // O cardio recebe a poda pelo motor (meta null), não por prop — checado acima.
+  });
+
+  it('as telas EXCLUSIVAS do modo diário não falam no futuro (copy 100% nossa)', () => {
+    // Onde controlamos toda a copy, a regra é absoluta — sem exceção guardada.
+    const src = semComentarios('src/components/painel/ModoDiario.tsx');
+    expect(falaNoFuturo(src), 'ModoDiario.tsx fala no futuro da atividade').toBe(false);
+  });
+
+  it('o subtítulo do registro de peso não pendura mais referência a plano', () => {
+    const src = semComentarios('src/components/painel/Painel.tsx');
+    expect(src).not.toMatch(/mant[ée]m seu plano calibrado/);
+    expect(src).toContain('Um registro rápido guarda a sua variação.');
   });
 });

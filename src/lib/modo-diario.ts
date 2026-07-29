@@ -40,44 +40,98 @@ export type Recurso =
   | 'meta_cardio'
   | 'progressao';
 
-/** Verbatim da DF: "Disponível: registro manual de treino · registro de refeição · registro de
- *  cardio · registro de peso · Chama · histórico · a visão de frequência por grupo". */
-const DISPONIVEL_NO_DIARIO: ReadonlySet<Recurso> = new Set<Recurso>([
-  'registro_treino_manual',
-  'registro_refeicao',
-  'registro_cardio',
-  'registro_peso',
-  'chama',
-  'historico',
-  'frequencia_grupos',
-]);
+/**
+ * Os TRÊS estados (DF 2026-07-29). Os dois primeiros vinham colapsados num só, e foi
+ * exatamente aí que cinco vazamentos passaram: a lista do cofre libera a **feature**, mas
+ * feature carrega alvo **por dentro** — a régua na frequência, a copy da meta no cardio, os
+ * "Próximos marcos" na Chama. Liberar a feature nunca quis dizer liberar o alvo dela.
+ *
+ * - `completo` — aparece inteira; não tem camada de alvo.
+ * - `sem_alvo` — aparece, **menos** a camada prescritiva (régua, meta, marco futuro).
+ * - `ausente`  — não aparece, sem tela vazia e sem "desbloqueie".
+ */
+export type Disponibilidade = 'completo' | 'sem_alvo' | 'ausente';
 
-/** Verbatim da DF: "Ausente, sem tela vazia e sem 'desbloqueie': plano de treino gerado ·
- *  sessão guiada · cardápio · 'o dia da dieta' com prescrição · meta de cardio · progressão/
- *  mesociclo/rampa". */
-const AUSENTE_NO_DIARIO: ReadonlySet<Recurso> = new Set<Recurso>([
-  'plano_treino',
-  'sessao_guiada',
-  'cardapio',
-  'dia_da_dieta',
-  'meta_cardio',
-  'progressao',
-]);
+/**
+ * A classificação. `completo` + `sem_alvo` = a lista "Disponível" verbatim da DF de
+ * 2026-07-27; `ausente` = a lista "Ausente" da mesma DF.
+ */
+export const DISPONIBILIDADE: Readonly<Record<Recurso, Disponibilidade>> = {
+  // Disponíveis e sem nada de alvo dentro.
+  registro_treino_manual: 'completo',
+  registro_refeicao: 'completo',
+  registro_peso: 'completo',
+  historico: 'completo',
+  // Disponíveis, mas com camada prescritiva que precisa sumir — cada um destes tem um
+  // guard estático provando que ela some (ver `modo-diario.test.ts`).
+  frequencia_grupos: 'sem_alvo', // a régua de 2×/semana
+  registro_cardio: 'sem_alvo',   // a meta semanal de minutos
+  chama: 'sem_alvo',             // o bloco "Próximos marcos" ("faltam 7 dias")
+  // Ausentes: são prescrição inteira.
+  plano_treino: 'ausente',
+  sessao_guiada: 'ausente',
+  cardapio: 'ausente',
+  dia_da_dieta: 'ausente',
+  meta_cardio: 'ausente',
+  progressao: 'ausente',
+};
 
 /** O gate roteou → o app roda em modo diário. Única porta de entrada da decisão. */
 export function emModoDiario(comportamento: ComportamentoGate): boolean {
   return comportamento === 'ROTEAR';
 }
 
-/**
- * O recurso aparece? Fora do modo diário, tudo aparece (o app normal não é afetado).
- * Dentro dele, só o que a DF listou como disponível.
- */
-export function recursoLiberado(recurso: Recurso, modoDiario: boolean): boolean {
-  return modoDiario ? DISPONIVEL_NO_DIARIO.has(recurso) : true;
+/** Como o recurso entra na tela em modo diário. Fora dele, tudo é `completo`. */
+export function disponibilidade(recurso: Recurso, modoDiario: boolean): Disponibilidade {
+  return modoDiario ? DISPONIBILIDADE[recurso] : 'completo';
 }
 
-/** As duas listas cobrem o universo de recursos e não se sobrepõem — o teste ancora nisto
- *  para que um recurso novo não entre no app sem ser classificado por alguém. */
-export const RECURSOS_DISPONIVEIS: readonly Recurso[] = [...DISPONIVEL_NO_DIARIO];
-export const RECURSOS_AUSENTES: readonly Recurso[] = [...AUSENTE_NO_DIARIO];
+/**
+ * O recurso APARECE? `sem_alvo` conta como disponível — o que some ali é a camada de alvo,
+ * não a tela. (Assinatura preservada: é o que a UI já chamava.)
+ */
+export function recursoLiberado(recurso: Recurso, modoDiario: boolean): boolean {
+  return disponibilidade(recurso, modoDiario) !== 'ausente';
+}
+
+const daClasse = (d: Disponibilidade): Recurso[] =>
+  (Object.keys(DISPONIBILIDADE) as Recurso[]).filter((r) => DISPONIBILIDADE[r] === d);
+
+/** Recursos que aparecem em modo diário (`completo` + `sem_alvo`). */
+export const RECURSOS_DISPONIVEIS: readonly Recurso[] = [...daClasse('completo'), ...daClasse('sem_alvo')];
+/** Os que aparecem PODADOS — cada um exige guard estático no teste. */
+export const RECURSOS_SEM_ALVO: readonly Recurso[] = daClasse('sem_alvo');
+export const RECURSOS_AUSENTES: readonly Recurso[] = daClasse('ausente');
+
+/**
+ * 🔒 A REGRA GENERALIZÁVEL (DF 2026-07-29), destilada dos cinco vazamentos desta leva:
+ *
+ *   **EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA.**
+ *
+ * Passa: "14 dias de chama" · "hoje você registrou" · "Variação" · qualquer contagem do que
+ * ocorreu. Não passa: "faltam 7 dias" · "2× por semana" · "abaixo da referência" · "ao longo
+ * do ciclo" · "não entra nos minutos da meta" · barra/pip/marcador esperando ser preenchido.
+ *
+ * Teste de uma linha: **a frase fala do FUTURO da atividade dela? Se sim, é alvo, e sai.**
+ *
+ * O léxico abaixo é a forma executável disso. Cada entrada saiu de um vazamento real, e o
+ * conjunto pega os cinco sem pegar nada do que deve ficar.
+ */
+export const FALA_NO_FUTURO: readonly RegExp[] = [
+  /falta[m]?\s+\d+\s+dias?/i,          // "faltam 7 dias" — Chama
+  /falta\s+1\s+dia/i,
+  /pr[óo]ximos?\s+marcos?/i,            // o bloco inteiro
+  /\d+×?\s*(vezes?\s*)?por semana/i,   // "2× por semana" — régua
+  /ao menos\s+\d+/i,
+  /abaixo da refer[êe]ncia/i,           // legenda "Como ler"
+  /ao longo do ciclo/i,                 // rodapé da frequência
+  /minutos da meta/i,                   // copy do cardio leve
+  /[ée] o esperado/i,                   // LEGENDA_UM_DIA
+  /pode fechar em/i,                    // leitura de meio de semana
+  /mant[ée]m seu plano/i,               // subtítulo do registro de peso
+];
+
+/** A frase fala do futuro da atividade da pessoa? (Aplicação direta da regra acima.) */
+export function falaNoFuturo(texto: string): boolean {
+  return FALA_NO_FUTURO.some((re) => re.test(texto));
+}

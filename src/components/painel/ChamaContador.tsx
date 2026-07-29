@@ -107,8 +107,16 @@ export function Chama({ cor, estado = 'atual', enfase = true, size = 88, celebra
  * Cartão do contador na aba Hoje (layout do "Evokorpus Chama — 4 Marcos.dc.html", cartão
  * "em contexto") + linha "próximos marcos". Primeiro elemento da aba, acima da saudação.
  * Substitui por completo o sistema de marcos 7/30 (indicador do Hoje + cartão do Progresso).
+ *
+ * 🔒 MODO DIÁRIO (`sem_alvo`, DF 2026-07-29): a Chama FICA — ela conta o que aconteceu, e
+ * contar o que aconteceu é leitura. Some o bloco **"Próximos marcos"**: "faltam 7 dias" é
+ * quantidade de treino apresentada como pendência, com chamas vazias esperando ser
+ * preenchidas. O app disse a essa pessoa que não vai dizer quanto ela deve treinar — e isso
+ * diz exatamente isso, de lado. **Anunciar o que falta é alvo.**
+ * Custo aceito: ela perde um elemento motivacional; é o mesmo custo que o modo diário
+ * inteiro já aceita.
  */
-export function ContadorTreinos({ dias, celebrarToken }: { dias: number; celebrarToken: number }) {
+export function ContadorTreinos({ dias, celebrarToken, modoDiario }: { dias: number; celebrarToken: number; modoDiario?: boolean }) {
   const a = chamaAtual(dias);
   const b = bandaChama(dias);
   const hex = CHAMA_COR_HEX[a.cor];
@@ -124,6 +132,7 @@ export function ContadorTreinos({ dias, celebrarToken }: { dias: number; celebra
           <div style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', marginTop: 7, lineHeight: 1.55 }}>{APOIO_CHAMA[b]}</div>
         </div>
       </div>
+      {!modoDiario && (
       <div style={{ background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.09)', borderRadius: 18, padding: '20px 24px' }}>
         <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', marginBottom: 16 }}>Próximos marcos</div>
         {proximos.length === 0 ? (
@@ -145,6 +154,7 @@ export function ContadorTreinos({ dias, celebrarToken }: { dias: number; celebra
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
