@@ -233,7 +233,9 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
           {/* 🔒 Atividade leve com DIGNIDADE: seção própria, mesmo tratamento de cartão,
               sem cinza-punição, sem "não contou", sem vermelho. */}
           <div style={{ ...kicker, marginBottom: 4 }}>Movimento registrado</div>
-          <p style={{ ...apoio, margin: '0 0 10px' }}>Movimento registrado — não entra nos minutos da meta.</p>
+          {/* 🔒 Sem meta (gate ROTEAR) não há "minutos da meta" a mencionar: a frase viraria
+              a única aparição da meta na tela de quem o gate excluiu dela. */}
+          <p style={{ ...apoio, margin: '0 0 10px' }}>{meta == null ? 'Movimento registrado — fica guardado no seu histórico.' : 'Movimento registrado — não entra nos minutos da meta.'}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
             {resumo.leves.map((r, i) => <LinhaSessao key={`l${i}`} r={r as RegistroCardioDatado} leve />)}
           </div>

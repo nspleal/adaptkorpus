@@ -8,6 +8,7 @@ import { lerSessao, limparSessao, recomputarPlano, salvarSessao } from '@/lib/se
 import { sairDaConta } from '@/lib/auth/sair';
 import { carregarPerfilServidor, consultarAcesso, salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { emModoDiario } from '@/lib/modo-diario';
 import VigiaSessao from '@/components/auth/VigiaSessao';
 
 /**
@@ -32,9 +33,10 @@ export default function AppPage() {
     function montar(perfil: PerfilResumo) {
       if (!vivo) return;
       const { dieta, treino } = recomputarPlano(perfil);
-      // Defesa: se o perfil salvo não gera plano (gate ROTEAR) — não deveria acontecer, só
-      // salvamos sessão em desfecho com plano — recomeça o onboarding em vez de quebrar.
-      if (dieta.gate.comportamento === 'ROTEAR' || !dieta.plano || !treino.rotina) {
+      // 🔒 Cofre, DF 2026-07-27: gate ROTEAR NÃO é mais um beco sem saída. O painel monta em
+      // MODO DIÁRIO (registra, não recebe prescrição). Antes daqui o ROTEAR caía no
+      // `limparSessao()` abaixo e era chutado de volta ao onboarding — o defeito vivo.
+      if (!emModoDiario(dieta.gate.comportamento) && (!dieta.plano || !treino.rotina)) {
         limparSessao(); router.replace('/onboarding'); return;
       }
       setEstado({ perfil, dieta, treino });
@@ -87,6 +89,7 @@ export default function AppPage() {
         dieta={estado.dieta}
         treino={estado.treino}
         desfechoC={estado.dieta.gate.comportamento === 'RESTRINGIR' || estado.dieta.gate.comportamento === 'PISAR'}
+        modoDiario={emModoDiario(estado.dieta.gate.comportamento)}
         onPerfilChange={(p) => { salvarSessao(p); void salvarPerfilServidor(p); }}
         onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
       />

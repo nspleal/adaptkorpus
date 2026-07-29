@@ -19,6 +19,7 @@ import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from 
 import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
 import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
+import { DietaDiario, HojeDiario, TreinoDiario, REFEICOES_DIARIO } from './ModoDiario';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
@@ -128,10 +129,16 @@ type Modal =
   | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
-export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, onPerfilChange, desfechoC }: {
+export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, onPerfilChange, desfechoC, modoDiario = false }: {
   perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void;
   /** Persistência da sessão: chamado quando o perfil muda (Editar perfil) para manter o reload coerente. */
   onPerfilChange?: (p: PerfilResumo) => void; desfechoC?: boolean;
+  /**
+   * 🔒 MODO DIÁRIO (cofre, DF 2026-07-27 — gate `ROTEAR`): a pessoa registra e lê o próprio
+   * histórico, mas NÃO recebe prescrição. Some plano, sessão guiada, cardápio, meta de cardio
+   * e progressão — sem tela vazia e sem "desbloqueie". Ver `lib/modo-diario.ts`.
+   */
+  modoDiario?: boolean;
 }) {
   const router = useRouter();
   // Plano e perfil viram estado para suportar "Editar perfil → recalcular" em runtime.
@@ -231,8 +238,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
   const registro = useRegistro();
-  // Refeições do dia = slots distintos do cardápio, na ordem em que aparecem.
-  const refeicoesDia = cardItens.map((it) => it.refeicao).filter((r, i, a) => a.indexOf(r) === i);
+  // Refeições do dia = slots distintos do cardápio, na ordem em que aparecem. Em MODO DIÁRIO
+  // não há cardápio: os slots vêm da lista fixa do diário (é vocabulário, não prescrição).
+  const refeicoesDia = modoDiario
+    ? [...REFEICOES_DIARIO]
+    : cardItens.map((it) => it.refeicao).filter((r, i, a) => a.indexOf(r) === i);
 
   // Contador de treinos (cofre registro-de-aderencia §Contador): dias DISTINTOS, guiado ou
   // manual — só sobe, nunca zera. A comemoração da chama dispara SÓ na transição real de
@@ -582,6 +592,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     aplicarNovoHistorico(registrarSinalFadiga());
   }
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
+  // 🔒 As 6 abas ficam em MODO DIÁRIO: todas continuam com conteúdo real (registro ou leitura
+  // do registro). Sumir com abas seria o "cadeado" que a DF proíbe — o que some é o conteúdo
+  // de prescrição dentro delas, não a navegação.
+  const registradoHoje = {
+    treinos: sessoesTreino(sessoes).filter((s) => s.dataISO === hojeISO()).length,
+    // Minutos CRUS do dia (o que ela fez), não os "minutos na meta" — não há meta aqui.
+    cardioMin: registrosCardioSemana.filter((r) => r.dataISO === hojeISO()).reduce((m, r) => m + r.minutos, 0),
+    refeicoesRegistradas: refeicoesDia.filter((r) => registro.logs[r]).length,
+    refeicoesTotal: refeicoesDia.length,
+  };
   const irAba = (id: Aba) => { setVista(null); setAba(id); };
 
   // Edição entrou em zona clínica (ROTEAR) → encaminhamento (tela cheia, fail-safe).
@@ -666,7 +686,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                 <button onClick={() => { irAba('perfil'); setMenu(false); }} style={menuBtn(false)}>Meu perfil</button>
                 <button onClick={() => { setEditando(true); setMenu(false); }} style={menuBtn(false)}>Editar perfil</button>
                 <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e assinatura</button>
-                <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>
+                {/* Lista de compras é parte do CARDÁPIO — some em modo diário (sem cadeado,
+                    sem item desabilitado: o item simplesmente não existe). */}
+                {!modoDiario && <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>}
                 <button onClick={onSair} style={menuBtn(true)}>Sair</button>
               </div>
             )}
@@ -684,7 +706,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         </div>
 
         {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
-        {!vista && aba === 'hoje' && (
+        {/* 🔒 MODO DIÁRIO — a Hoje é a porta do DIÁRIO, não o plano do dia (que não existe).
+            Decisão da sessão de código: o cofre não especificou esta tela. Ver ModoDiario.tsx. */}
+        {!vista && aba === 'hoje' && modoDiario && (
+          <HojeDiario
+            registrado={registradoHoje}
+            onRegistrarTreino={() => setRegistrando(true)}
+            onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
+            onRegistrarRefeicao={() => irAba('dieta')}
+            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} />}
+          />
+        )}
+        {!vista && aba === 'hoje' && !modoDiario && (
           <div style={sec}>
             <SuaSemana
               treinoDias={perfil.treinoDias}
@@ -701,8 +734,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             teria onde registrar — o oposto do que a spec pede. */}
         {!vista && aba === 'treino' && (prescricao
           ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
-          : <div style={sec}><CardioSemana {...propsCardio} /></div>)}
-        {!vista && aba === 'dieta' && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
+          : (
+            <div style={sec}>
+              {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
+                  mora dentro da TreinoTab, então em modo diário ele precisa existir aqui.
+                  Sem isto, o roteado ficaria sem onde registrar treino: o oposto da DF. */}
+              <TreinoDiario onRegistrarTreino={() => setRegistrando(true)} />
+              <CardioSemana {...propsCardio} />
+            </div>
+          ))}
+        {/* 🔒 MODO DIÁRIO: a aba Dieta é só o registro das 4 refeições — sem cardápio, sem
+            prato, sem `~X kcal`, sem macro, sem troca e sem lista de compras (tudo plano). */}
+        {!vista && aba === 'dieta' && modoDiario && (
+          <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
+        )}
+        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && (
           <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
@@ -718,7 +764,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
       </div>
 
@@ -1092,9 +1138,12 @@ function Progresso({ pesos, treinos, onRegistrar, children }: { pesos: number[];
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino }: {
+function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino, modoDiario }: {
   sessoes: SessaoLog[]; pesos: number[]; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
   onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void; onRegistrarTreino: () => void;
+  /** Modo diário: o histórico é leitura do registro (liberada), mas sem enquadrar nada
+   *  como "% do plano" — não existe plano contra o qual comparar. */
+  modoDiario?: boolean;
 }) {
   type Sub = 'treinos' | 'dieta' | 'cargas' | 'peso';
   const [sub, setSub] = useState<Sub>('treinos');
@@ -1106,7 +1155,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
     <div style={sec}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 22, overflowX: 'auto', paddingBottom: 2 }}>{subTab('treinos', 'Treinos')}{subTab('dieta', 'Dieta')}{subTab('cargas', 'Cargas')}{subTab('peso', 'Peso')}</div>
 
-      {sub === 'dieta' && <HistoricoDieta refeicoes={refeicoes} hojeLogs={logs} hojeNotes={notes} onVerDieta={onVerDieta} />}
+      {sub === 'dieta' && <HistoricoDieta refeicoes={refeicoes} hojeLogs={logs} hojeNotes={notes} onVerDieta={onVerDieta} modoDiario={modoDiario} />}
 
       {/* Salvaguarda B2: calibrações ficam FORA do gráfico de Cargas (sessoesTreino). */}
       {sub === 'cargas' && <CargasHistorico historico={sessoesTreino(sessoes)} />}
@@ -1151,7 +1200,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
             titulo="Nenhum treino registrado ainda."
             apoio="Quando você concluir um treino, ele aparece aqui."
           >
-            <button onClick={onComecarTreino} className="hov-btn" style={estiloBotaoPrimario}>Começar treino de hoje</button>
+            <button onClick={onComecarTreino} className="hov-btn" style={estiloBotaoPrimario}>{modoDiario ? 'Registrar treino feito' : 'Começar treino de hoje'}</button>
           </EmptyCard>
         )}
       </>)}

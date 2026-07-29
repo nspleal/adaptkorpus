@@ -156,17 +156,19 @@ export default function Onboarding() {
       if (pct >= 100) {
         if (giRef.current) clearInterval(giRef.current);
         setTimeout(() => {
-          // Gate B (ROTEAR) → encaminhamento (não gera plano, não cria sessão).
-          // Desfecho A/C → salva a sessão e abre a área logada estável (/app).
-          if (d.gate.comportamento === 'ROTEAR') { setFase('resultado'); }
-          else {
-            salvarSessao(resumo);
-            // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
-            // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
-            // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
-            void salvarPerfilServidor(resumo, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
-            router.replace('/app');
-          }
+          // 🔒 Cofre, DF 2026-07-27 ("`ROTEAR` = MODO DIÁRIO"): TODO desfecho cria sessão e
+          // perfil — inclusive o Gate B. Antes o ROTEAR não criava nada, e a pessoa ficava
+          // presa na porta: era por isso que ela não entrava. O que o roteado não recebe é
+          // PRESCRIÇÃO, e quem tira o plano da tela é o `modoDiario` do painel — não a
+          // ausência de conta.
+          salvarSessao(resumo);
+          // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
+          // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
+          // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
+          void salvarPerfilServidor(resumo, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+          // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
+          if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
+          else router.replace('/app');
         }, 450);
       }
     }, 150);
@@ -226,7 +228,7 @@ export default function Onboarding() {
 
       {fase === 'gerando' && <Gerando pct={genPct} />}
 
-      {fase === 'resultado' && dieta?.gate.comportamento === 'ROTEAR' && <GateB motivos={dieta.gate.motivos} onRevisar={recomecar} />}
+      {fase === 'resultado' && dieta?.gate.comportamento === 'ROTEAR' && <GateB motivos={dieta.gate.motivos} onRevisar={recomecar} onEntrar={() => router.replace('/app')} />}
     </div>
   );
 }
@@ -411,7 +413,14 @@ function Gerando({ pct }: { pct: number }) {
   );
 }
 
-function GateB({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => void }) {
+/**
+ * Gate B — encaminhamento ao profissional. 🔒 Desde a DF 2026-07-27 ele **não é mais uma
+ * porta fechada**: a conta já foi criada e a pessoa entra no MODO DIÁRIO (registra o que fez,
+ * sem receber plano). O encaminhamento continua sendo a mensagem principal da tela; o que
+ * mudou é que existe um caminho para dentro. Os motivos aparecem AQUI, uma vez — no app eles
+ * não se repetem (o cartão permanente não rotula a condição todo dia).
+ */
+function GateB({ motivos, onRevisar, onEntrar }: { motivos: string[]; onRevisar: () => void; onEntrar: () => void }) {
   return (
     <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', animation: `evkScreenIn .5s ${EASE}` }}>
       <div style={{ width: '100%', maxWidth: 500, textAlign: 'center' }}>
@@ -421,9 +430,11 @@ function GateB({ motivos, onRevisar }: { motivos: string[]; onRevisar: () => voi
         <h1 style={{ margin: '0 0 16px', fontSize: '1.9rem', fontWeight: 700, letterSpacing: '-.02em' }}>Vamos com cuidado aqui</h1>
         <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.7)', lineHeight: 1.65, fontSize: '1.02rem' }}>Pelo que você respondeu, seu caso pede o <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>acompanhamento de um profissional de saúde</strong>. Por segurança, não vamos gerar um plano automático agora.</p>
         {motivos.length > 0 && <p style={{ margin: '0 0 14px', color: 'rgba(234,229,219,.55)', fontSize: '.9rem' }}>{motivos.join(' · ')}</p>}
-        <p style={{ margin: '0 0 32px', color: 'rgba(234,229,219,.6)', lineHeight: 1.65, fontSize: '.98rem' }}>Procure um médico, nutricionista ou educador físico — quando fizer sentido, a gente está aqui.</p>
+        <p style={{ margin: '0 0 20px', color: 'rgba(234,229,219,.6)', lineHeight: 1.65, fontSize: '.98rem' }}>Procure um médico, nutricionista ou educador físico — quando fizer sentido, a gente está aqui.</p>
+        <p style={{ margin: '0 0 32px', color: 'rgba(234,229,219,.72)', lineHeight: 1.65, fontSize: '.98rem' }}>Você pode usar o app como um <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>diário</strong>: registrar seus treinos, refeições, cardio e peso, e levar esse histórico para a consulta.</p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onRevisar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Revisar respostas</button>
+          <button onClick={onEntrar} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 26px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>Entrar no app</button>
+          <button onClick={onRevisar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.22)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.98rem', padding: '13px 24px', borderRadius: 12, cursor: 'pointer' }}>Revisar respostas</button>
           <Link href="/aviso" className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.22)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.98rem', padding: '13px 24px', borderRadius: 12, textDecoration: 'none' }}>Ver conteúdos gerais</Link>
         </div>
       </div>

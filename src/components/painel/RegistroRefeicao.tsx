@@ -15,7 +15,15 @@ import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from
  * — nada é fabricado. A sincronização entre dispositivos é a fase de backend (Ownership-1).
  */
 
-export type StatusRefeicao = 'seguiu' | 'fora' | null;
+/**
+ * `seguiu`/`fora` = o binário do plano (cofre `registro-de-aderencia-evokorpus`).
+ * `comi` = o registro do MODO DIÁRIO (`ROTEAR`): sem plano não existe "seguiu o plano" nem
+ * "comi outra coisa" — as duas frases só significam algo contra uma prescrição, e quem o gate
+ * roteou não tem nenhuma. Registrar continua inerte; o que sumiu foi o eixo de comparação.
+ * As telas do plano tratam `comi` como "a registrar" (cai no `else` de todos os ternários),
+ * e as contas de aderência só somam `seguiu` — nenhuma delas roda em modo diário.
+ */
+export type StatusRefeicao = 'seguiu' | 'fora' | 'comi' | null;
 export const MEAL_LABEL: Record<string, string> = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche da tarde', jantar: 'Jantar' };
 const KEY = 'evk_aderencia';
 
@@ -162,8 +170,15 @@ function BotaoAlterar({ onClick }: { onClick: () => void }) {
 function fmtData(d: Date): string { return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }); }
 const DOWS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
+export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta, modoDiario = false }: {
   refeicoes: string[]; hojeLogs: Record<string, StatusRefeicao>; hojeNotes: Record<string, string>; onVerDieta: () => void;
+  /**
+   * 🔒 MODO DIÁRIO (gate `ROTEAR`): o histórico continua disponível — é leitura do que a
+   * própria pessoa registrou —, mas TODA moldura relativa ao plano sai. "~X% do plano",
+   * "dias seguidos no plano" e "N/4 no plano" não têm referente sem prescrição; a mesma
+   * tela passa a contar **dias com registro**.
+   */
+  modoDiario?: boolean;
 }) {
   const [periodo, setPeriodo] = useState<'semana' | 'mes'>('semana');
   const [aberto, setAberto] = useState<string | null>(null);
@@ -185,8 +200,11 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
   // Mescla o dia de hoje ao vivo (props) sobre o que está no storage.
   const merged: Historico = { ...hist, [hoje]: { logs: hojeLogs, notes: hojeNotes } };
   const total = refeicoes.length || 4;
-  const seguiuDoDia = (d?: DiaLog) => refeicoes.filter((r) => d?.logs?.[r] === 'seguiu').length;
+  // A "conta do dia": com plano é ADERÊNCIA (quantas seguiram); em modo diário é REGISTRO
+  // (quantas foram marcadas) — sem plano, "seguiu" não tem referente.
+  const seguiuDoDia = (d?: DiaLog) => refeicoes.filter((r) => (modoDiario ? !!d?.logs?.[r] : d?.logs?.[r] === 'seguiu')).length;
   const temRegistro = (d?: DiaLog) => !!d && refeicoes.some((r) => d.logs?.[r]);
+  const noPlano = modoDiario ? 'registradas' : 'no plano';
 
   const diasComRegistro = Object.values(merged).filter(temRegistro).length;
   if (diasComRegistro === 0) {
@@ -198,7 +216,7 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
         </div>
         <h2 style={{ margin: '0 0 10px', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-.02em', position: 'relative', zIndex: 1 }}>Você ainda não registrou refeições.</h2>
         <p style={{ margin: '0 auto 28px', maxWidth: 430, color: 'rgba(234,229,219,.62)', lineHeight: 1.6, fontSize: '1rem', position: 'relative', zIndex: 1 }}>Quando você marcar suas refeições, elas aparecem aqui.</p>
-        <button onClick={onVerDieta} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 28px', border: 'none', borderRadius: 13, cursor: 'pointer', position: 'relative', zIndex: 1 }}>Ver dieta de hoje</button>
+        <button onClick={onVerDieta} className="hov-btn" style={{ background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: '14px 28px', border: 'none', borderRadius: 13, cursor: 'pointer', position: 'relative', zIndex: 1 }}>{modoDiario ? 'Registrar refeição' : 'Ver dieta de hoje'}</button>
       </div>
     );
   }
@@ -216,7 +234,8 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
   const limiar = limiarAderencia(total);
   const streak = streakAderencia(hoje, (dia) => { const dl = merged[dia]; return temRegistro(dl) ? seguiuDoDia(dl) : null; }, total);
 
-  const segMini = (st: StatusRefeicao): CSSProperties => ({ flex: 1, height: 8, borderRadius: 99, ...(st === 'seguiu' ? { background: '#BDFF00' } : st === 'fora' ? { background: 'rgba(234,229,219,.32)' } : { background: 'rgba(234,229,219,.09)', border: '1px solid rgba(234,229,219,.2)' }) });
+  // `comi` (modo diário) pinta como registrada — é o único estado "marcado" que existe lá.
+  const segMini = (st: StatusRefeicao): CSSProperties => ({ flex: 1, height: 8, borderRadius: 99, ...(st === 'seguiu' || st === 'comi' ? { background: '#BDFF00' } : st === 'fora' ? { background: 'rgba(234,229,219,.32)' } : { background: 'rgba(234,229,219,.09)', border: '1px solid rgba(234,229,219,.2)' }) });
   const rotuloDia = (d: Date) => { const dd = Math.round((agora.setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000); return dd === 0 ? 'Hoje' : dd === 1 ? 'Ontem' : DOWS[d.getDay()]!; };
 
   return (
@@ -226,14 +245,19 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 18 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Resumo · {periodo === 'semana' ? 'Esta semana' : 'Este mês'}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}><span style={{ fontSize: '2.6rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00' }}>~{pctPeriodo}%</span><span style={{ fontSize: '1rem', color: 'rgba(234,229,219,.7)' }}>do plano {periodo === 'semana' ? 'nesta semana' : 'neste mês'} · dos dias com registro</span></div>
-            <p style={{ margin: 0, maxWidth: 440, fontSize: '.92rem', color: 'rgba(234,229,219,.62)', lineHeight: 1.55 }}>Constância, não perfeição — você está num bom ritmo. Cada refeição marcada conta.</p>
+            {/* Em modo diário o número é DIAS COM REGISTRO — "% do plano" não tem referente. */}
+            {modoDiario ? (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}><span style={{ fontSize: '2.6rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00' }}>{comDados.length}</span><span style={{ fontSize: '1rem', color: 'rgba(234,229,219,.7)' }}>{comDados.length === 1 ? 'dia registrado' : 'dias registrados'} {periodo === 'semana' ? 'nesta semana' : 'neste mês'}</span></div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}><span style={{ fontSize: '2.6rem', fontWeight: 800, letterSpacing: '-.03em', color: '#BDFF00' }}>~{pctPeriodo}%</span><span style={{ fontSize: '1rem', color: 'rgba(234,229,219,.7)' }}>do plano {periodo === 'semana' ? 'nesta semana' : 'neste mês'} · dos dias com registro</span></div>
+            )}
+            <p style={{ margin: 0, maxWidth: 440, fontSize: '.92rem', color: 'rgba(234,229,219,.62)', lineHeight: 1.55 }}>{modoDiario ? 'Constância, não perfeição. Cada refeição marcada fica no seu histórico.' : 'Constância, não perfeição — você está num bom ritmo. Cada refeição marcada conta.'}</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
             <div style={{ display: 'flex', gap: 7 }}>
               {(['semana', 'mes'] as const).map((p) => { const on = periodo === p; return <div key={p} onClick={() => { setPeriodo(p); setAberto(null); }} style={{ padding: '9px 16px', borderRadius: 9, fontSize: '.86rem', fontWeight: 600, cursor: 'pointer', ...(on ? { background: '#BDFF00', color: '#0D2818' } : { background: 'rgba(234,229,219,.04)', color: 'rgba(234,229,219,.6)', border: '1px solid rgba(234,229,219,.12)' }) }}>{p === 'semana' ? 'Semana' : 'Mês'}</div>; })}
             </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '8px 14px' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 3c1.5 3 4 4.2 4 7.5a4 4 0 0 1-8 0c0-1 .4-1.8 1-2.5-.2 1.4.6 2.2 1.3 2.4-.5-2 .7-3.8 1.7-4.4z" stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round" fill="none" /></svg>{streak > 0 ? `${streak} ${streak === 1 ? 'dia' : 'dias'} seguidos no plano` : 'Sua sequência começa hoje'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 700, color: '#BDFF00', background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '8px 14px' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 3c1.5 3 4 4.2 4 7.5a4 4 0 0 1-8 0c0-1 .4-1.8 1-2.5-.2 1.4.6 2.2 1.3 2.4-.5-2 .7-3.8 1.7-4.4z" stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round" fill="none" /></svg>{streak > 0 ? `${streak} ${streak === 1 ? 'dia' : 'dias'} seguidos ${modoDiario ? 'com registro' : 'no plano'}` : 'Sua sequência começa hoje'}</span>
           </div>
         </div>
       </div>
@@ -251,22 +275,22 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta }: {
                 <div onClick={() => setAberto(open ? null : k)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '15px 18px', cursor: 'pointer' }}>
                   <div style={{ minWidth: 96 }}><div style={{ fontWeight: 700, fontSize: '.98rem' }}>{rotuloDia(d)}</div><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>{fmtData(d)}</div></div>
                   <div style={{ flex: 1, display: 'flex', gap: 6, minWidth: 0 }}>{refeicoes.map((r) => <div key={r} style={segMini(dl?.logs?.[r] ?? null)} />)}</div>
-                  <span style={{ fontSize: '.86rem', fontWeight: 600, color: reg && cnt >= limiar ? '#BDFF00' : 'rgba(234,229,219,.6)', whiteSpace: 'nowrap' }}>{reg ? `${cnt}/${total}` : '—'} no plano</span>
+                  <span style={{ fontSize: '.86rem', fontWeight: 600, color: reg && cnt >= limiar ? '#BDFF00' : 'rgba(234,229,219,.6)', whiteSpace: 'nowrap' }}>{reg ? `${cnt}/${total}` : '—'} {noPlano}</span>
                   <span aria-hidden style={{ color: 'rgba(234,229,219,.4)', fontSize: '1.1rem', flexShrink: 0, transition: 'transform .2s ease', transform: open ? 'rotate(180deg)' : 'none' }}>⌄</span>
                 </div>
                 {open && <DetalheDia dl={dl} refeicoes={refeicoes} />}
               </div>
             );
           })}
-          <p style={{ margin: '8px 2px 0', fontSize: '.84rem', color: 'rgba(234,229,219,.5)' }}>Toque num dia para ver as refeições — seguiu, comeu fora e as anotações, se houver.</p>
+          <p style={{ margin: '8px 2px 0', fontSize: '.84rem', color: 'rgba(234,229,219,.5)' }}>{modoDiario ? 'Toque num dia para ver as refeições registradas e as anotações, se houver.' : 'Toque num dia para ver as refeições — seguiu, comeu fora e as anotações, se houver.'}</p>
         </div>
       ) : (
-        <Mes merged={merged} refeicoes={refeicoes} total={total} aberto={aberto} setAberto={setAberto} />
+        <Mes merged={merged} refeicoes={refeicoes} total={total} aberto={aberto} setAberto={setAberto} modoDiario={modoDiario} />
       )}
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: '15px 17px', marginTop: 18 }}>
         <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><circle cx={12} cy={12} r={9} stroke="rgba(189,255,0,.5)" strokeWidth={1.7} /><path d="M12 11v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /><circle cx={12} cy={7.8} r={1.05} fill="#BDFF00" /></svg>
-        <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.55 }}>Aderência mede sua <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>constância</strong> — quantas refeições seguiram o plano. Não é um diário de calorias, e comer fora nunca conta como falha.</p>
+        <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.55 }}>{modoDiario ? <>Este histórico é seu registro de <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>constância</strong> — quantas refeições você marcou. Não é um diário de calorias, e nenhum dia conta como falha.</> : <>Aderência mede sua <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>constância</strong> — quantas refeições seguiram o plano. Não é um diário de calorias, e comer fora nunca conta como falha.</>}</p>
       </div>
     </div>
   );
@@ -278,12 +302,12 @@ function DetalheDia({ dl, refeicoes }: { dl?: DiaLog; refeicoes: string[] }) {
       {refeicoes.map((r, i) => {
         const st = dl?.logs?.[r] ?? null;
         const note = dl?.notes?.[r];
-        const statusTxt = st === 'seguiu' ? 'Seguiu o plano' : st === 'fora' ? 'Comeu fora' : 'A registrar';
-        const statusCor = st === 'seguiu' ? '#BDFF00' : 'rgba(234,229,219,.55)';
+        const statusTxt = st === 'seguiu' ? 'Seguiu o plano' : st === 'fora' ? 'Comeu fora' : st === 'comi' ? 'Registrada' : 'A registrar';
+        const statusCor = st === 'seguiu' || st === 'comi' ? '#BDFF00' : 'rgba(234,229,219,.55)';
         return (
           <div key={r} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 0', borderBottom: i === refeicoes.length - 1 ? 'none' : '1px solid rgba(234,229,219,.05)' }}>
-            <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: 9, background: st === 'seguiu' ? 'rgba(22,163,74,.22)' : 'rgba(234,229,219,.06)', border: `1px solid ${st === 'seguiu' ? 'rgba(22,163,74,.5)' : 'rgba(234,229,219,.16)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-              {st === 'seguiu' ? <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 6.5" stroke="#BDFF00" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: 9, background: st === 'seguiu' || st === 'comi' ? 'rgba(22,163,74,.22)' : 'rgba(234,229,219,.06)', border: `1px solid ${st === 'seguiu' || st === 'comi' ? 'rgba(22,163,74,.5)' : 'rgba(234,229,219,.16)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+              {st === 'seguiu' || st === 'comi' ? <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 6.5" stroke="#BDFF00" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
                 : st === 'fora' ? <span style={{ width: 10, height: 2, background: 'rgba(234,229,219,.7)', borderRadius: 2 }} />
                 : <span style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.4)' }} />}
             </span>
@@ -298,13 +322,14 @@ function DetalheDia({ dl, refeicoes }: { dl?: DiaLog; refeicoes: string[] }) {
   );
 }
 
-function Mes({ merged, refeicoes, total, aberto, setAberto }: { merged: Historico; refeicoes: string[]; total: number; aberto: string | null; setAberto: (k: string | null) => void }) {
+function Mes({ merged, refeicoes, total, aberto, setAberto, modoDiario = false }: { merged: Historico; refeicoes: string[]; total: number; aberto: string | null; setAberto: (k: string | null) => void; modoDiario?: boolean }) {
   const agora = new Date();
   const ano = agora.getFullYear(), mes = agora.getMonth();
   const primeiroDow = new Date(ano, mes, 1).getDay();
   const diasNoMes = new Date(ano, mes + 1, 0).getDate();
   const hojeISOv = hojeISO();
-  const seguiuDoDia = (d?: DiaLog) => refeicoes.filter((r) => d?.logs?.[r] === 'seguiu').length;
+  // Mesma troca de eixo do resto da tela: com plano conta ADERÊNCIA, em modo diário conta REGISTRO.
+  const seguiuDoDia = (d?: DiaLog) => refeicoes.filter((r) => (modoDiario ? !!d?.logs?.[r] : d?.logs?.[r] === 'seguiu')).length;
   const temRegistro = (d?: DiaLog) => !!d && refeicoes.some((r) => d.logs?.[r]);
   // Calor PROPORCIONAL ao plano (faixaTint 0..4) — antes travado em `cnt>=4`, o que impedia
   // um plano de 3 refeições de atingir o tier neon num dia perfeito.
@@ -330,7 +355,7 @@ function Mes({ merged, refeicoes, total, aberto, setAberto }: { merged: Historic
           })}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(234,229,219,.07)' }}>
-          <span style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)' }}>Mais no plano</span>
+          <span style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)' }}>{modoDiario ? 'Mais registradas' : 'Mais no plano'}</span>
           <div style={{ display: 'flex', gap: 4 }}>{['rgba(234,229,219,.07)', 'rgba(22,163,74,.2)', 'rgba(22,163,74,.34)', 'rgba(22,163,74,.5)', 'rgba(189,255,0,.55)'].map((c) => <span key={c} style={{ width: 16, height: 16, borderRadius: 5, background: c }} />)}</div>
           <span style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)' }}>menos · sem cor de falha</span>
         </div>
@@ -338,7 +363,7 @@ function Mes({ merged, refeicoes, total, aberto, setAberto }: { merged: Historic
       {det && aberto && (
         <div style={{ marginTop: 16, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(189,255,0,.22)', borderRadius: 16, padding: '18px 20px', animation: `evkPop .3s ease` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{fmtData(new Date(aberto))}</span><span style={{ fontSize: '.82rem', fontWeight: 600, color: '#BDFF00' }}>{seguiuDoDia(det)}/{total} no plano</span></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{fmtData(new Date(aberto))}</span><span style={{ fontSize: '.82rem', fontWeight: 600, color: '#BDFF00' }}>{seguiuDoDia(det)}/{total} {modoDiario ? 'registradas' : 'no plano'}</span></div>
             <button onClick={() => setAberto(null)} style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(234,229,219,.55)', fontSize: '1.1rem', cursor: 'pointer', border: '1px solid rgba(234,229,219,.12)', background: 'none' }}>×</button>
           </div>
           <DetalheDia dl={det} refeicoes={refeicoes} />
