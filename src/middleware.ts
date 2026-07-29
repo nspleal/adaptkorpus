@@ -64,6 +64,9 @@ export async function middleware(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
+        // 🔒 Mesmo `Secure` condicional do server client — é AQUI que a renovação da sessão
+        // regrava o cookie na maioria das requisições, então os dois têm de concordar.
+        cookieOptions: { secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' },
         cookies: {
           getAll() {
             return request.cookies.getAll();

@@ -11,30 +11,37 @@ import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 
 /**
- * Conta e assinatura — porte fiel do protótipo V2 (.dc.html): status da assinatura
- * (teste/ativa/cancelada), forma de pagamento, histórico de cobrança, dados da conta,
- * privacidade/LGPD e os modais (cancelar, atualizar cartão, excluir conta).
- * UI apenas — o status real virá do webhook Kiwify + Supabase (Fase 2).
+ * Conta e meus dados: dados da conta (nome, e-mail, senha) e os direitos LGPD —
+ * portabilidade (baixar) e eliminação (excluir). **Só o que tem backend de verdade.**
  *
- * Mantém os princípios do cofre: 18+, sem promessa, direitos LGPD (baixar/excluir),
- * aviso de cobrança ANTES da 1ª cobrança (transparência travada).
+ * A seção de assinatura saiu inteira (ver o bloco 🔒 abaixo): não há cobrança no beta, e
+ * o que existia era estado de `useState` fingindo status, cartão e fatura.
+ *
+ * Mantém os princípios do cofre: 18+, sem promessa de resultado, direitos LGPD atendidos.
  */
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
-type Sub = 'trial' | 'active' | 'cancelled';
 
-// Datas ilustrativas (mock de UI). No backend virão do provedor de pagamento.
-const TRIAL_END = '7 de julho de 2026';
-const PROX_COBRANCA = '7 de julho de 2026';
+/**
+ * 🔒 SEM SUCESSO SIMULADO (DF 2026-07-29). Esta tela tinha um estado de assinatura em
+ * `useState` — "Confirmar cancelamento" fazia `setSub('cancelled')` e nada mais. O usuário
+ * via "Cancelada", acreditava ter cancelado, e um F5 devolvia "trial". Havia também um
+ * cartão de crédito fabricado (•••• 4242), uma fatura "R$ 29,00 · Pago" e datas de cobrança
+ * **no passado** ("7 de julho de 2026").
+ *
+ * Nada disso existe no backend: `subscription` tem 0 linhas e nunca era lida. Como o beta é
+ * gratuito e a decisão *cortesia × pago* está aberta, a tela passa a dizer só a verdade —
+ * sem preço, sem data, sem controle que finge agir.
+ *
+ * ⚠️ Enquanto não houver cobrança real, NÃO reintroduza botão de estado aqui: o guard de
+ * `honestidade-tela.test.ts` falha se um controle confirmar sucesso sem uma chamada que
+ * possa falhar.
+ */
 
 export default function ContaPage() {
   const router = useRouter();
-  const [sub, setSub] = useState<Sub>('trial');
   const [menu, setMenu] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cardOpen, setCardOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [motivo, setMotivo] = useState<string | null>(null);
   // Placeholder só no modo MOCK; com backend, os dados reais chegam do getUser() abaixo.
   const [nome, setNome] = useState(supabaseConfigurado() ? '' : 'Lucas Almeida');
   const [email, setEmail] = useState(supabaseConfigurado() ? '' : 'lucas@email.com');
@@ -58,13 +65,44 @@ export default function ContaPage() {
     })();
     return () => { vivo = false; };
   }, []);
-  const [editar, setEditar] = useState<null | { campo: 'nome' | 'email'; valor: string }>(null);
+  /**
+   * 🔒 Só `'nome'`. O tipo tinha `'email'` e o modal tinha as duas metades da copy, mas
+   * `salvarEdicao` só grava `nome` — se algum caminho abrisse o modal em `'email'`, a tela
+   * diria "Alterar e-mail", aceitaria o novo valor e gravaria o e-mail digitado no campo
+   * NOME. Fechado pelo tipo, não por disciplina. (Por que o e-mail não se edita: ver o
+   * comentário na linha do e-mail.)
+   */
+  const [editar, setEditar] = useState<null | { campo: 'nome'; valor: string }>(null);
 
-  function salvarEdicao() {
+  const [salvandoNome, setSalvandoNome] = useState(false);
+  const [erroNome, setErroNome] = useState<string | null>(null);
+  /**
+   * 🔒 Salva DE VERDADE (DF 2026-07-29). Antes só fazia `setNome(v)` — estado local: a tela
+   * mostrava o nome novo e um F5 devolvia o antigo. Mesmo sucesso simulado dos botões de
+   * assinatura. Agora é `updateUser({ data: { nome } })`, uma chamada que pode falhar, e o
+   * estado só muda quando ela volta ok. (O `nome` vive em `user_metadata`, gravado no signUp
+   * e lido por `inicialDe` — não há coluna própria a migrar.)
+   *
+   * ⚠️ Só o NOME. O e-mail não passa por aqui — ver o comentário na linha do e-mail.
+   */
+  async function salvarEdicao() {
     if (!editar) return;
     const v = editar.valor.trim();
-    if (v) { if (editar.campo === 'nome') setNome(v); else setEmail(v); }
-    setEditar(null);
+    if (!v) { setEditar(null); return; }
+    if (!supabaseConfigurado()) { setNome(v); setEditar(null); return; } // demo local
+    setErroNome(null);
+    setSalvandoNome(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const { error } = await createClient().auth.updateUser({ data: { nome: v } });
+      if (error) { setErroNome('Não foi possível salvar o nome. Tente de novo.'); return; }
+      setNome(v);
+      setEditar(null);
+    } catch {
+      setErroNome('Não foi possível salvar o nome agora. Tente de novo.');
+    } finally {
+      setSalvandoNome(false);
+    }
   }
 
   async function baixarMeusDados() {
@@ -82,7 +120,7 @@ export default function ContaPage() {
     const dados = {
       exportadoEm: new Date().toISOString(),
       aviso: 'Exportação parcial (dados da conta nesta tela). A exportação completa de perfil, plano e histórico depende do backend (LGPD / Ownership-4).',
-      conta: { nome, email, assinatura: { plano: 'Evokorpus', valorMensal: 'R$ 29', status: sub } },
+      conta: { nome, email, assinatura: { status: 'beta_gratuito' } },
     };
     baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(dados, null, 2));
   }
@@ -124,13 +162,6 @@ export default function ContaPage() {
     }
   }
 
-  const status = {
-    trial: { t: 'Em teste grátis', c: '#BDFF00', bg: 'rgba(189,255,0,.12)', bd: 'rgba(189,255,0,.3)' },
-    active: { t: 'Assinatura ativa', c: '#16A34A', bg: 'rgba(22,163,74,.14)', bd: 'rgba(22,163,74,.4)' },
-    cancelled: { t: 'Cancelada', c: '#E5C04D', bg: 'rgba(229,192,77,.12)', bd: 'rgba(229,192,77,.35)' },
-  }[sub];
-  const subLive = sub === 'trial' || sub === 'active';
-
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
       <Backdrop />
@@ -150,7 +181,7 @@ export default function ContaPage() {
               {menu && (
                 <div style={{ position: 'absolute', top: 48, right: 0, width: 190, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
                   <button onClick={() => router.push('/app')} style={menuItem(false)}>Meu perfil</button>
-                  <button onClick={() => setMenu(false)} aria-current="page" style={{ ...menuItem(false), background: 'rgba(189,255,0,.08)', color: '#BDFF00', fontWeight: 600 }}>Conta e assinatura</button>
+                  <button onClick={() => setMenu(false)} aria-current="page" style={{ ...menuItem(false), background: 'rgba(189,255,0,.08)', color: '#BDFF00', fontWeight: 600 }}>Conta e meus dados</button>
                   <button onClick={() => { void sairDaConta().finally(() => router.replace('/')); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
                 </div>
               )}
@@ -160,78 +191,40 @@ export default function ContaPage() {
 
         <div style={{ maxWidth: 880, margin: '0 auto', padding: '36px 22px 80px' }}>
           <div style={{ marginBottom: 26 }}>
-            <h1 style={{ margin: '0 0 5px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Conta e assinatura</h1>
-            <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem' }}>Gerencie seu plano, pagamento e dados — tudo num lugar só.</p>
+            <h1 style={{ margin: '0 0 5px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Conta e meus dados</h1>
+            <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem' }}>Seus dados e seus direitos — tudo num lugar só.</p>
           </div>
 
-          {/* STATUS HERO */}
-          <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.5))', border: `1px solid ${status.bd}`, borderRadius: 20, padding: 26, marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
-              <div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: status.bg, border: `1px solid ${status.bd}`, color: status.c, borderRadius: 999, padding: '5px 13px', fontSize: '.74rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: status.c }} />{status.t}</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 4 }}>Evokorpus — R$ 29<span style={{ fontSize: '.95rem', fontWeight: 500, color: 'rgba(234,229,219,.55)' }}>/mês</span></div>
-                {sub === 'trial' && <div style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.62)' }}>Seu teste grátis termina em <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{TRIAL_END}</strong>.</div>}
-                {sub === 'active' && <div style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.62)' }}>Próxima cobrança em <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{PROX_COBRANCA}</strong>.</div>}
-                {sub === 'cancelled' && <div style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.62)' }}>Assinatura cancelada. Seu acesso continua até <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{TRIAL_END}</strong> e não há nova cobrança.</div>}
-              </div>
+          {/* 🔒 A VERDADE, sem prometer mecânica nova (copy do autor, DF 2026-07-29). */}
+          <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.5))', border: '1px solid rgba(189,255,0,.28)', borderRadius: 20, padding: 26, marginBottom: 18 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(189,255,0,.12)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', borderRadius: 999, padding: '5px 13px', fontSize: '.74rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#BDFF00' }} />Beta gratuito
             </div>
-
-            {sub === 'trial' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(189,255,0,.07)', border: '1px solid rgba(189,255,0,.22)', borderRadius: 13, padding: '12px 15px', margin: '18px 0' }}>
-                <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><rect x={3} y={5} width={18} height={14} rx={2.5} stroke="#BDFF00" strokeWidth={1.6} /><path d="M4 7l8 5 8-5" stroke="#BDFF00" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.8)', lineHeight: 1.45 }}>Avisamos por e-mail <strong style={{ color: '#BDFF00', fontWeight: 600 }}>antes</strong> da 1ª cobrança. Cobrança prevista: {PROX_COBRANCA}.</span>
-              </div>
-            )}
-
-            {subLive && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                <button onClick={() => setCardOpen(true)} className="evk-troca" style={{ background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.18)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 11, cursor: 'pointer' }}>Gerenciar assinatura</button>
-                <button onClick={() => setCancelOpen(true)} style={{ background: 'none', border: '1px solid rgba(229,72,77,.4)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 11, cursor: 'pointer' }}>Cancelar assinatura</button>
-              </div>
-            )}
-            {sub === 'cancelled' && (
-              <button onClick={() => setSub('active')} className="hov-btn" style={{ marginTop: 18, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '12px 22px', border: 'none', borderRadius: 11, cursor: 'pointer' }}>Reativar assinatura</button>
-            )}
+            {/* Só a pílula diz "Beta gratuito". O slot da linha grande era o PREÇO ("R$
+                29/mês"); repetir a pílula ali dizia a mesma palavra duas vezes empilhadas.
+                Sem preço para exibir, o slot sai — o lugar dele não vira eco. */}
+            <p style={{ margin: 0, fontSize: '.98rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6, maxWidth: 520 }}>
+              Não existe assinatura ativa nem cobrança. Quando houver plano pago, você decide se entra.
+            </p>
           </div>
 
+          {/* 🔒 Saíram "Forma de pagamento" (cartão •••• 4242 FABRICADO) e "Histórico de
+              cobrança" (fatura "R$ 29,00 · Pago" FABRICADA). Não havia cartão, não houve
+              cobrança. Voltam quando existir provedor de pagamento de verdade. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 18, marginBottom: 18 }}>
-            {/* LEFT: pagamento + histórico */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div style={card}>
-                <h3 style={cardH}>Forma de pagamento</h3>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.08)', borderRadius: 13, padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-                    <span style={{ width: 42, height: 28, borderRadius: 6, background: 'linear-gradient(135deg,#1a3a24,#0f0f0e)', border: '1px solid rgba(234,229,219,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={22} height={14} viewBox="0 0 24 16"><rect x={1} y={1} width={22} height={14} rx={2} fill="none" stroke="rgba(234,229,219,.3)" strokeWidth={1} /><rect x={1} y={4} width={22} height={3} fill="rgba(189,255,0,.5)" /></svg></span>
-                    <div><div style={{ fontWeight: 600, fontSize: '.96rem', letterSpacing: '.04em' }}>•••• •••• •••• 4242</div><div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Expira 08/29</div></div>
-                  </div>
-                  <button onClick={() => setCardOpen(true)} className="evk-troca" style={{ background: 'none', border: '1px solid rgba(234,229,219,.18)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '.85rem', padding: '9px 16px', borderRadius: 10, cursor: 'pointer' }}>Atualizar cartão</button>
-                </div>
-              </div>
-              <div style={card}>
-                <h3 style={cardH}>Histórico de cobrança</h3>
-                {sub === 'trial' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(234,229,219,.03)', border: '1px dashed rgba(234,229,219,.14)', borderRadius: 13, padding: 18 }}>
-                    <span style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="#BDFF00" strokeWidth={1.7} /><path d="M12 7v5l3 2" stroke="#BDFF00" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-                    <div><div style={{ fontWeight: 600, fontSize: '.92rem' }}>Nenhuma cobrança ainda</div><div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.55)' }}>Você está no período de teste grátis.</div></div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 0', borderBottom: '1px solid rgba(234,229,219,.07)' }}>
-                      <div><div style={{ fontWeight: 600, fontSize: '.92rem' }}>Evokorpus — mensal</div><div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)' }}>{PROX_COBRANCA}</div></div>
-                      <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 700, fontSize: '.92rem' }}>R$ 29,00</div><div style={{ fontSize: '.76rem', color: '#16A34A' }}>Pago</div></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* RIGHT: dados da conta + privacidade */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div style={card}>
                 <h3 style={cardH}>Dados da conta</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <LinhaDado rotulo="Nome" valor={nome} botao="Alterar" onClick={() => setEditar({ campo: 'nome', valor: nome })} />
-                  <LinhaDado rotulo="E-mail" valor={email} botao="Alterar e-mail" onClick={() => setEditar({ campo: 'email', valor: email })} />
+                  {/* 🔒 O E-MAIL NÃO É EDITÁVEL AQUI, e não é limitação de UI: a allowlist do
+                      beta casa por e-mail (`beta_liberado()` → `lower(a.email) =
+                      lower(auth.email())`, migration 0006). Trocar o e-mail derrubaria o
+                      usuário da allowlist EM SILÊNCIO — ele perderia o acervo curado e o app
+                      pararia de gerar plano, sem nenhuma mensagem. Enquanto o gate for por
+                      e-mail, a troca é operação de suporte, não de autoatendimento. */}
+                  <LinhaDado rotulo="E-mail" valor={email} />
                   <LinhaDado rotulo="Senha" valor="••••••••" botao="Alterar senha" onClick={() => router.push('/redefinir')} ultima />
                 </div>
               </div>
@@ -259,55 +252,17 @@ export default function ContaPage() {
       </div>
 
       {/* MODAL · CANCELAR ASSINATURA */}
-      {cancelOpen && (
-        <Modal onClose={() => setCancelOpen(false)} maxW={460}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-            <h2 style={modalH}>Cancelar assinatura</h2>
-            <BotaoX onClick={() => setCancelOpen(false)} />
-          </div>
-          <p style={{ margin: '0 0 20px', fontSize: '.96rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Você pode cancelar agora. Seu acesso continua até <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{TRIAL_END}</strong> e <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>não há nova cobrança</strong>.</p>
-          <div style={{ fontSize: '.74rem', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', marginBottom: 10 }}>Quer contar o motivo? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>(opcional)</span></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
-            {['Está caro para mim', 'Não usei o suficiente', 'Não era o que eu esperava', 'Vou usar outra ferramenta', 'Outro motivo'].map((r) => {
-              const on = motivo === r;
-              return <button key={r} onClick={() => setMotivo(r)} style={{ textAlign: 'left', padding: '12px 15px', borderRadius: 11, fontWeight: 500, fontSize: '.92rem', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.03)', color: on ? '#BDFF00' : 'rgba(234,229,219,.8)' }}>{r}</button>;
-            })}
-          </div>
-          <button onClick={() => { setSub('cancelled'); setCancelOpen(false); }} style={{ width: '100%', background: 'rgba(229,72,77,.14)', border: '1px solid rgba(229,72,77,.5)', color: '#E5484D', fontWeight: 700, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer', marginBottom: 10 }}>Confirmar cancelamento</button>
-          <button onClick={() => setCancelOpen(false)} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Manter assinatura</button>
-        </Modal>
-      )}
-
-      {/* MODAL · ATUALIZAR CARTÃO */}
-      {cardOpen && (
-        <Modal onClose={() => setCardOpen(false)} maxW={440}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-            <h2 style={modalH}>Atualizar cartão</h2>
-            <BotaoX onClick={() => setCardOpen(false)} />
-          </div>
-          <p style={{ margin: '0 0 20px', fontSize: '.88rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Seus dados são protegidos. Trocar o cartão não altera sua data de cobrança.</p>
-          <label style={labelCap}>Número do cartão</label>
-          <input inputMode="numeric" placeholder="0000 0000 0000 0000" style={{ ...inp, marginBottom: 14 }} />
-          <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
-            <div style={{ flex: 1 }}><label style={labelCap}>Validade</label><input inputMode="numeric" placeholder="MM/AA" style={inp} /></div>
-            <div style={{ flex: 1 }}><label style={labelCap}>CVV</label><input inputMode="numeric" placeholder="123" style={inp} /></div>
-          </div>
-          <label style={labelCap}>Nome no cartão</label>
-          <input placeholder="Como impresso no cartão" style={{ ...inp, marginBottom: 22 }} />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setCardOpen(false)} className="evk-voltar" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.96rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={() => setCardOpen(false)} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Salvar cartão</button>
-          </div>
-        </Modal>
-      )}
-
-      {/* MODAL · EXCLUIR CONTA */}
+      {/* 🔒 Saíram os modais "Cancelar assinatura" e "Atualizar cartão": os dois
+          confirmavam sucesso sem NENHUMA chamada — `setSub('cancelled')` e um form de
+          cartão que não enviava nada. Ver o guard em `honestidade-tela.test.ts`. */}
       {deleteOpen && (
         <Modal onClose={() => setDeleteOpen(false)} maxW={440} perigo>
           <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(229,72,77,.14)', border: '1px solid rgba(229,72,77,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="#E5484D" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg></div>
           <h2 style={{ ...modalH, marginBottom: 10 }}>Excluir minha conta</h2>
           <p style={{ margin: '0 0 16px', fontSize: '.94rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Isso apaga <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>permanentemente</strong> sua conta, seu plano e todo o seu histórico. Esta ação não pode ser desfeita.</p>
-          <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes. Cancelar a assinatura não exige excluir a conta.</p>
+          {/* 🔒 Saiu "Cancelar a assinatura não exige excluir a conta.": não existe
+              assinatura para cancelar, e a frase apontava para um controle que não existe. */}
+          <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes.</p>
           {erroExclusao && <p style={{ margin: '0 0 14px', fontSize: '.88rem', color: '#E5C04D', lineHeight: 1.5 }}>{erroExclusao}</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {supabaseConfigurado() && (
@@ -334,22 +289,26 @@ export default function ContaPage() {
       {editar && (
         <Modal onClose={() => setEditar(null)} maxW={420}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-            <h2 style={modalH}>{editar.campo === 'nome' ? 'Alterar nome' : 'Alterar e-mail'}</h2>
+            <h2 style={modalH}>Alterar nome</h2>
             <BotaoX onClick={() => setEditar(null)} />
           </div>
-          <p style={{ margin: '0 0 20px', fontSize: '.88rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>{editar.campo === 'nome' ? 'Como devemos te chamar.' : 'Usamos seu e-mail para login e avisos importantes.'}</p>
-          <label style={labelCap}>{editar.campo === 'nome' ? 'Nome' : 'E-mail'}</label>
+          <p style={{ margin: '0 0 20px', fontSize: '.88rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Como devemos te chamar.</p>
+          <label style={labelCap}>Nome</label>
           <input
-            type={editar.campo === 'email' ? 'email' : 'text'}
+            type="text"
             value={editar.valor}
             onChange={(e) => setEditar({ campo: editar.campo, valor: e.target.value })}
-            onKeyDown={(e) => { if (e.key === 'Enter') salvarEdicao(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') void salvarEdicao(); }}
             autoFocus
             style={{ ...inp, marginBottom: 22 }}
           />
+          {/* O erro fica ACIMA da linha de botões: dentro do `display:flex` ele virava uma
+              terceira coluna e empurrava "Salvar" para fora — quem falhava não conseguia
+              tentar de novo. */}
+          {erroNome && <p style={{ margin: '0 0 12px', fontSize: '.86rem', color: '#E5484D' }}>{erroNome}</p>}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setEditar(null)} className="evk-voltar" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.82)', fontWeight: 600, fontSize: '.96rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={salvarEdicao} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Salvar</button>
+            <button onClick={() => void salvarEdicao()} disabled={salvandoNome} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 13, border: 'none', borderRadius: 12, cursor: salvandoNome ? 'wait' : 'pointer', opacity: salvandoNome ? 0.6 : 1 }}>{salvandoNome ? 'Salvando…' : 'Salvar'}</button>
           </div>
         </Modal>
       )}
@@ -364,11 +323,12 @@ const inp: CSSProperties = { width: '100%', boxSizing: 'border-box', background:
 const labelCap: CSSProperties = { display: 'block', fontSize: '.74rem', fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 7 };
 const menuItem = (active: boolean): CSSProperties => ({ width: '100%', textAlign: 'left', background: 'none', border: 'none', color: active ? '#BDFF00' : '#EAE5DB', fontSize: '.94rem', fontWeight: 500, padding: '11px 13px', borderRadius: 9, cursor: 'pointer' });
 
-function LinhaDado({ rotulo, valor, botao, onClick, ultima }: { rotulo: string; valor: string; botao: string; onClick?: () => void; ultima?: boolean }) {
+function LinhaDado({ rotulo, valor, botao, onClick, ultima }: { rotulo: string; valor: string; botao?: string; onClick?: () => void; ultima?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', borderBottom: ultima ? 'none' : '1px solid rgba(234,229,219,.07)' }}>
       <div><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>{rotulo}</div><div style={{ fontWeight: 600, fontSize: '.94rem', letterSpacing: rotulo === 'Senha' ? '.1em' : undefined }}>{valor}</div></div>
-      <button onClick={onClick} className="evk-troca" style={{ background: 'none', border: '1px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.78)', fontWeight: 600, fontSize: '.8rem', padding: '7px 13px', borderRadius: 9, cursor: 'pointer' }}>{botao}</button>
+      {/* Sem `botao` a linha é só leitura — nada de <button> vazio e clicável. */}
+      {botao && <button onClick={onClick} className="evk-troca" style={{ background: 'none', border: '1px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.78)', fontWeight: 600, fontSize: '.8rem', padding: '7px 13px', borderRadius: 9, cursor: 'pointer' }}>{botao}</button>}
     </div>
   );
 }

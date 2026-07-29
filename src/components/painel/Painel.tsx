@@ -687,7 +687,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               <div style={{ position: 'absolute', top: 48, right: 0, width: 180, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
                 <button onClick={() => { irAba('perfil'); setMenu(false); }} style={menuBtn(false)}>Meu perfil</button>
                 <button onClick={() => { setEditando(true); setMenu(false); }} style={menuBtn(false)}>Editar perfil</button>
-                <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e assinatura</button>
+                <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e meus dados</button>
                 {/* Lista de compras é parte do CARDÁPIO — some em modo diário (sem cadeado,
                     sem item desabilitado: o item simplesmente não existe). */}
                 {!modoDiario && <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>}
@@ -1247,15 +1247,15 @@ function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTrein
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* 🔒 SEM PREÇO E SEM CONTROLE FANTASMA (DF 2026-07-29). Este cartão dizia
+            "R$ 29/mês" com botões "Gerenciar assinatura" e "Cancelar" — e a decisão
+            *cortesia × pago para os testadores* está ABERTA: a tela antecipava uma decisão
+            que o autor não tomou. O "Cancelar" levava a /conta, onde a confirmação era só
+            estado local. Fica a verdade, e um caminho para os dados/direitos. */}
         <div style={{ background: 'linear-gradient(165deg, rgba(189,255,0,.07), rgba(15,15,14,.5))', border: '1px solid rgba(189,255,0,.25)', borderRadius: 18, padding: 24 }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: '1.15rem', fontWeight: 700 }}>Assinatura Evokorpus</h3>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 6 }}><span style={{ fontSize: '1.7rem', fontWeight: 800, color: '#BDFF00' }}>R$ 29</span><span style={{ color: 'rgba(234,229,219,.55)' }}>/mês</span></div>
-          <p style={{ margin: '0 0 20px', fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>Demo — sem cobrança ativa. Avisamos antes de qualquer renovação, sem cobrança-surpresa.</p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={onConta} style={{ flex: 1, minWidth: 140, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Gerenciar assinatura</button>
-            <button onClick={onConta} style={{ flex: 1, minWidth: 140, background: 'none', border: '1px solid rgba(229,72,77,.4)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Cancelar</button>
-          </div>
-          <p style={{ margin: '14px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Cancelar é fácil, em poucos toques — sem letra miúda.</p>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: 700 }}>Beta gratuito</h3>
+          <p style={{ margin: '0 0 18px', fontSize: '.92rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.6 }}>Não existe assinatura ativa nem cobrança. Quando houver plano pago, você decide se entra.</p>
+          <button onClick={onConta} style={{ width: '100%', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Conta e meus dados</button>
         </div>
         <NotificacoesCard prefs={notif} onAtivar={onAtivarNotif} onToggleTreino={onToggleTreino} onToggleRefeicao={onToggleRefeicao} onDesativarTudo={onDesativarTudo} modoDiario={modoDiario} />
         <div style={{ ...cardSoft, padding: 8 }}>
