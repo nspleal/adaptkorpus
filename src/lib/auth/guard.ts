@@ -52,3 +52,22 @@ export async function barreiraCompute(
   }
   return null;
 }
+
+
+/**
+ * 🔒 Rate limit das rotas de DADOS e LGPD (auditoria 2026-07-29). Só as rotas de compute e
+ * o formulário de suporte tinham limitador; `dados/*` e `lgpd/*` ficavam abertas a um laço
+ * de escrita/leitura por conta autenticada. A chave é o USUÁRIO (não o IP): aqui todo mundo
+ * está logado, e o IP puniria quem compartilha rede.
+ *
+ * Chamar DEPOIS do `contextoUsuario()` — ele já resolveu o 401/503, então este só limita.
+ */
+export function barreiraDados(
+  userId: string,
+  limitador: { permitir(chave: string): boolean },
+): NextResponse | null {
+  if (!limitador.permitir(userId)) {
+    return NextResponse.json({ error: 'muitas_tentativas' }, { status: 429 });
+  }
+  return null;
+}

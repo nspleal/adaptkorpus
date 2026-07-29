@@ -10,6 +10,7 @@ import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
+import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
@@ -78,8 +79,12 @@ export default function Onboarding() {
   // (edições posteriores são só pela aba "Editar perfil"). Evita reabrir o wizard no reload/voltar.
   const [checando, setChecando] = useState(true);
   useEffect(() => {
-    if (lerSessao()) router.replace('/app');
-    else setChecando(false);
+    // 🔒 Escopo primeiro (ver `escopo-local.ts`): sem ele, `lerSessao` leria a chave sem
+    // sufixo — que pode ser de outra conta que usou este navegador.
+    void resolverEscopoLocal().then(() => {
+      if (lerSessao()) router.replace('/app');
+      else setChecando(false);
+    });
   }, [router]);
 
   const [terms, setTerms] = useState<[boolean, boolean, boolean]>([false, false, false]);

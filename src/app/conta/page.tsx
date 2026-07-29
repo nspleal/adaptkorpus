@@ -89,13 +89,20 @@ export default function ContaPage() {
 
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  // 🔒 Re-autenticação (auditoria 2026-07-29): exclusão é irreversível e cascateia; o
+  // servidor exige a senha. Sessão aberta em navegador compartilhado não basta.
+  const [senhaExclusao, setSenhaExclusao] = useState('');
   async function excluirConta() {
     setErroExclusao(null);
     // Sem backend (mock): comportamento demo de sempre — limpa o local e sai.
     if (!supabaseConfigurado()) { setDeleteOpen(false); limparSessao(); router.replace('/'); return; }
     setExcluindo(true);
     try {
-      const r = await fetch('/api/lgpd/excluir', { method: 'POST' });
+      const r = await fetch('/api/lgpd/excluir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senha: senhaExclusao }),
+      });
       if (r.ok) {
         // Conta excluída no servidor (cascata FK) → encerra sessão e limpa TODO o local.
         await sairDaConta();
@@ -104,8 +111,11 @@ export default function ContaPage() {
         return;
       }
       // 503 = service_role ausente neste ambiente — honestidade: NÃO fingir exclusão.
-      setErroExclusao(r.status === 503
-        ? 'A exclusão está temporariamente indisponível. Tente de novo mais tarde ou fale com o suporte.'
+      setErroExclusao(
+        r.status === 401 ? 'Senha incorreta. Tente de novo.'
+        : r.status === 400 ? 'Digite sua senha para confirmar.'
+        : r.status === 429 ? 'Muitas tentativas. Espere um pouco e tente de novo.'
+        : r.status === 503 ? 'A exclusão está temporariamente indisponível. Tente de novo mais tarde ou fale com o suporte.'
         : 'Não foi possível excluir agora. Tente de novo.');
     } catch {
       setErroExclusao('Não foi possível excluir agora. Tente de novo.');
@@ -300,7 +310,21 @@ export default function ContaPage() {
           <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes. Cancelar a assinatura não exige excluir a conta.</p>
           {erroExclusao && <p style={{ margin: '0 0 14px', fontSize: '.88rem', color: '#E5C04D', lineHeight: 1.5 }}>{erroExclusao}</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button onClick={excluirConta} disabled={excluindo} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: excluindo ? 'wait' : 'pointer', opacity: excluindo ? 0.6 : 1 }}>{excluindo ? 'Excluindo…' : 'Excluir definitivamente'}</button>
+            {supabaseConfigurado() && (
+              <div style={{ marginBottom: 12 }}>
+                <label htmlFor="evk-senha-exclusao" style={{ display: 'block', fontSize: '.86rem', fontWeight: 600, color: 'rgba(234,229,219,.72)', marginBottom: 8 }}>Confirme sua senha</label>
+                <input
+                  id="evk-senha-exclusao"
+                  type="password"
+                  autoComplete="current-password"
+                  value={senhaExclusao}
+                  onChange={(e) => setSenhaExclusao(e.target.value)}
+                  className="input-foco"
+                  style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.16)', borderRadius: 12, padding: '13px 14px', color: '#EAE5DB', fontSize: '1rem', outline: 'none' }}
+                />
+              </div>
+            )}
+            <button onClick={excluirConta} disabled={excluindo || (supabaseConfigurado() && senhaExclusao.length === 0)} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: excluindo ? 'wait' : 'pointer', opacity: excluindo || (supabaseConfigurado() && senhaExclusao.length === 0) ? 0.6 : 1 }}>{excluindo ? 'Excluindo…' : 'Excluir definitivamente'}</button>
             <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Manter minha conta</button>
           </div>
         </Modal>

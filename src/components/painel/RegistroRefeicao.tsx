@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { faixaTint, limiarAderencia, streakAderencia } from '@/lib/aderencia';
 import { diaLocalISO } from '@/lib/dia-local';
 import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from '@/lib/persistencia/sync';
+import { chaveLocal } from '@/lib/escopo-local';
 
 /**
  * Registrar refeição + histórico de aderência — porte fiel do V5.
@@ -25,7 +26,7 @@ import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from
  */
 export type StatusRefeicao = 'seguiu' | 'fora' | 'comi' | null;
 export const MEAL_LABEL: Record<string, string> = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche da tarde', jantar: 'Jantar' };
-const KEY = 'evk_aderencia';
+const KEY = 'evk_aderencia' as const;
 
 type DiaLog = { logs: Record<string, StatusRefeicao>; notes: Record<string, string> };
 type Historico = Record<string, DiaLog>;
@@ -35,7 +36,7 @@ type Historico = Record<string, DiaLog>;
 function hojeISO(): string { return diaLocalISO(new Date()); }
 function lerTudo(): Historico {
   if (typeof window === 'undefined') return {};
-  try { return JSON.parse(localStorage.getItem(KEY) || '{}') as Historico; } catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(chaveLocal(KEY)) || '{}') as Historico; } catch { return {}; }
 }
 
 /** Estado de registro do DIA atual (persistido). Compartilhe uma instância no Painel. */
@@ -74,7 +75,7 @@ export function useRegistro() {
     if (!hidratado.current) return;
     const all = lerTudo();
     all[hojeISO()] = { logs, notes };
-    try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* quota */ }
+    try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(all)); } catch { /* quota */ }
     // Write-through p/ o servidor (no-op sem backend); o local já está gravado.
     void salvarAderenciaDia(hojeISO(), logs, notes);
   }, [logs, notes]);
@@ -156,7 +157,7 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta, mod
     void carregarAderenciaServidor().then((dias: Record<string, DiaAderencia> | null) => {
       if (!vivo || !dias) return;
       const merged: Historico = { ...lerTudo(), ...(dias as unknown as Historico) };
-      try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch { /* quota */ }
+      try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(merged)); } catch { /* quota */ }
       setHist(merged);
     });
     return () => { vivo = false; };

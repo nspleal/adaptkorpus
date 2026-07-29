@@ -2,6 +2,7 @@
 
 import type { ResumoSessao } from '@/components/painel/SessaoTreino';
 import { diaLocalISO } from '@/lib/dia-local';
+import { chaveLocal } from '@/lib/escopo-local';
 
 /**
  * Histórico de treinos concluídos — persistido em localStorage (transitório, mesmo padrão de
@@ -66,7 +67,7 @@ export function novaSessaoDe(historico: readonly SessaoHistorico[]): SessaoHisto
   return max;
 }
 
-const KEY = 'evk_treinos';
+const KEY = 'evk_treinos' as const;
 
 /** Dia atual em ISO (só na UI) — dia LOCAL do usuário, não UTC (às 21h de Brasília,
  *  toISOString() já viraria "amanhã" e inflaria o dedupe do contador). Reusa `diaLocalISO`. */
@@ -79,7 +80,7 @@ export function hojeISO(agora: Date = new Date()): string {
 export function lerHistorico(): SessaoHistorico[] {
   if (typeof window === 'undefined') return [];
   try {
-    const arr = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const arr = JSON.parse(localStorage.getItem(chaveLocal(KEY)) || '[]');
     if (!Array.isArray(arr)) return [];
     return (arr as SessaoHistorico[])
       .filter((s) => s && typeof s.dataISO === 'string')
@@ -111,7 +112,7 @@ export function registrarSessaoEm(
   const nova: SessaoHistorico = { ...resumo, ...extra, n: hist.reduce((m, s) => Math.max(m, s.n), 0) + 1, dataISO };
   const i = hist.findIndex((s) => s.dataISO <= dataISO);
   const todo = i === -1 ? [...hist, nova] : [...hist.slice(0, i), nova, ...hist.slice(i)];
-  try { localStorage.setItem(KEY, JSON.stringify(todo)); } catch { /* storage indisponível */ }
+  try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(todo)); } catch { /* storage indisponível */ }
   return todo;
 }
 
@@ -127,7 +128,7 @@ export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date()):
  */
 export function substituirHistorico(sessoes: readonly SessaoHistorico[]): SessaoHistorico[] {
   const ordenado = [...sessoes].sort((a, b) => b.dataISO.localeCompare(a.dataISO) || b.n - a.n);
-  try { localStorage.setItem(KEY, JSON.stringify(ordenado)); } catch { /* storage indisponível */ }
+  try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(ordenado)); } catch { /* storage indisponível */ }
   return ordenado;
 }
 
@@ -161,13 +162,13 @@ export function reconciliarHistorico(
 // Fix 2026-07-08: pesos eram SÓ memória (resetavam a cada reload se o write-through
 // falhasse). Passam a ter cópia local, mesmo padrão offline-first dos demais dados.
 
-const KEY_PESOS = 'evk_pesos';
+const KEY_PESOS = 'evk_pesos' as const;
 
 /** Lê os pesos registrados (ordem de registro). Robusto a storage ausente/corrompido. */
 export function lerPesos(): number[] {
   if (typeof window === 'undefined') return [];
   try {
-    const arr = JSON.parse(localStorage.getItem(KEY_PESOS) || '[]');
+    const arr = JSON.parse(localStorage.getItem(chaveLocal(KEY_PESOS)) || '[]');
     return Array.isArray(arr) ? arr.filter((v): v is number => Number.isFinite(v)) : [];
   } catch {
     return [];
@@ -177,14 +178,14 @@ export function lerPesos(): number[] {
 /** Acrescenta um peso à cópia local (write-through: o servidor recebe em paralelo). */
 export function registrarPesoLocal(pesoKg: number): number[] {
   const todos = [...lerPesos(), pesoKg];
-  try { localStorage.setItem(KEY_PESOS, JSON.stringify(todos)); } catch { /* storage indisponível */ }
+  try { localStorage.setItem(chaveLocal(KEY_PESOS), JSON.stringify(todos)); } catch { /* storage indisponível */ }
   return todos;
 }
 
 /** Substitui a cópia local pelos pesos do SERVIDOR (hidratação com servidor não-vazio). */
 export function substituirPesos(pesos: readonly number[]): number[] {
   const arr = [...pesos];
-  try { localStorage.setItem(KEY_PESOS, JSON.stringify(arr)); } catch { /* storage indisponível */ }
+  try { localStorage.setItem(chaveLocal(KEY_PESOS), JSON.stringify(arr)); } catch { /* storage indisponível */ }
   return arr;
 }
 

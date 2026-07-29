@@ -58,7 +58,9 @@ export async function POST(req: NextRequest) {
         from: process.env.SUPORTE_EMAIL_REMETENTE ?? 'Evokorpus <onboarding@resend.dev>',
         to: [destino],
         reply_to: email,
-        subject: `[Suporte] ${ASSUNTO_LABEL[assunto]} — ${nome}`,
+        // 🔒 `nome` é interpolado no ASSUNTO: CR/LF viram separador de header em SMTP.
+        // A API JSON da Resend já neutraliza na prática, mas a defesa é do nosso lado.
+        subject: `[Suporte] ${ASSUNTO_LABEL[assunto]} — ${nome.replace(/[\r\n]/g, ' ')}`,
         text: mensagem, // texto puro, nunca HTML
       }),
       signal: AbortSignal.timeout(10_000),

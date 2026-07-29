@@ -20,17 +20,18 @@ import { EQUIPAMENTOS_CASA } from '@/lib/engine';
 import { diasPadrao } from '@/lib/semana';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
+import { chaveLocal, limparDadoPessoalLocal } from '@/lib/escopo-local';
 
 // Mapeamento PerfilResumo → motor extraído p/ módulo PURO (o servidor também recomputa
 // o plano no PUT do perfil — snapshot auditável em `plans`). Re-export mantém a API.
 export { recomputarPlano } from '@/lib/plano';
 
-const KEY = 'evk_sessao';
+const KEY = 'evk_sessao' as const;
 const VERSAO = 1;
 
 /** Grava o perfil da sessão (após gerar o plano, ou ao editar o perfil). */
 export function salvarSessao(perfil: PerfilResumo): void {
-  try { localStorage.setItem(KEY, JSON.stringify({ v: VERSAO, perfil })); } catch { /* storage indisponível */ }
+  try { localStorage.setItem(chaveLocal(KEY), JSON.stringify({ v: VERSAO, perfil })); } catch { /* storage indisponível */ }
 }
 
 /**
@@ -62,7 +63,7 @@ export function migrarSessao(
  *  (sem descartar) e re-carimba o storage para a VERSAO atual. */
 export function lerSessao(): PerfilResumo | null {
   try {
-    const res = migrarSessao(localStorage.getItem(KEY));
+    const res = migrarSessao(localStorage.getItem(chaveLocal(KEY)));
     if (!res) return null;
     if (res.migrou) salvarSessao(res.perfil); // upgrade persistido — não perde o perfil
     return res.perfil;
@@ -93,16 +94,21 @@ function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   return { ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
 }
 
-/** Encerra a sessão local (logout). */
+/** Encerra a sessão local (logout). Só o perfil — o resto sai por `limparDadosLocais`. */
 export function limparSessao(): void {
-  try { localStorage.removeItem(KEY); } catch { /* storage indisponível */ }
+  try { localStorage.removeItem(chaveLocal(KEY)); } catch { /* storage indisponível */ }
 }
 
-/** Exclusão de conta (LGPD): limpa TODOS os dados locais do app, não só a sessão. */
+/**
+ * Limpa TODO dado pessoal local. Usado na EXCLUSÃO DE CONTA (LGPD) e, desde a auditoria de
+ * 2026-07-29, também no LOGOUT — por minimização de dado em repouso.
+ *
+ * 🔒 A lista NÃO é redigitada aqui: vem de `CHAVES_LOCAIS` (fonte única). A versão manual
+ * anterior prometia "todos os dados locais" e esquecia três — `evk_email`, `evk_freq_periodo`
+ * e `evk_privacy_ack_v1`. A função da exclusão de conta é a que menos pode mentir.
+ */
 export function limparDadosLocais(): void {
-  for (const k of [KEY, 'evk_treinos', 'evk_pesos', 'evk_aderencia', 'evk_notif', 'evk_aba']) {
-    try { localStorage.removeItem(k); } catch { /* storage indisponível */ }
-  }
+  limparDadoPessoalLocal();
 }
 
 /** True se há uma sessão salva (uso síncrono em event handlers no cliente). */

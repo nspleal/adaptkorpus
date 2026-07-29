@@ -6,6 +6,13 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
+import { payloadCabe, sessaoHistoricoSchema } from '@/lib/validation/api';
+import { barreiraDados } from '@/lib/auth/guard';
+import { criarRateLimit } from '@/lib/rate-limit';
+
+// 60 sessões / 5 min por usuário — a reconciliação sobe em lote no boot, então o teto
+// precisa caber num histórico inteiro re-subido de uma vez.
+const limitador = criarRateLimit({ limite: 60, janelaMs: 5 * 60_000 });
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
 export const runtime = 'nodejs';
@@ -22,11 +29,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const ctx = await contextoUsuario();
   if (ctx instanceof NextResponse) return ctx;
-  const body = (await req.json().catch(() => null)) as { sessao?: SessaoHistorico } | null;
-  const s = body?.sessao;
-  if (!s || typeof s.dataISO !== 'string' || !Number.isFinite(s.n) || !Array.isArray(s.exercicios)) {
-    return NextResponse.json({ error: 'entrada inválida' }, { status: 400 });
-  }
+  const barra = barreiraDados(ctx.user.id, limitador);
+  if (barra) return barra;
+  const body = (await req.json().catch(() => null)) as { sessao?: unknown } | null;
+  const parsed = sessaoHistoricoSchema.safeParse(body?.sessao);
+  if (!parsed.success) return NextResponse.json({ error: 'entrada inválida' }, { status: 400 });
+  const s = parsed.data as unknown as SessaoHistorico;
+  if (!payloadCabe(s)) return NextResponse.json({ error: 'payload_grande' }, { status: 413 });
   const { error } = await ctx.supabase
     .from('logs').insert({ user_id: ctx.user.id, tipo: 'treino', data: s.dataISO, payload: s });
   if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });

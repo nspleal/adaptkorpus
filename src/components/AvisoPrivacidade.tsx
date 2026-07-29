@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { chaveLocal } from '@/lib/escopo-local';
 
 /**
  * Faixa de transparência — porte fiel de `design_handoff_banner_privacidade`
@@ -11,7 +12,7 @@ import { usePathname } from 'next/navigation';
  * (cookieless) → ação ÚNICA "Entendi" + link "Saiba mais". Não é gate (o analytics roda
  * independente do reconhecimento). Sem vermelho (trava do handoff). Copy verbatim.
  */
-const ACK_KEY = 'evk_privacy_ack_v1';
+const ACK_KEY = 'evk_privacy_ack_v1' as const;
 
 export default function AvisoPrivacidade() {
   const pathname = usePathname();
@@ -20,7 +21,7 @@ export default function AvisoPrivacidade() {
   const [estado, setEstado] = useState<'hidden' | 'in' | 'leaving'>('hidden');
 
   useEffect(() => {
-    try { if (localStorage.getItem(ACK_KEY) !== '1') setEstado('in'); } catch { /* storage indisponível */ }
+    try { if (localStorage.getItem(chaveLocal(ACK_KEY)) !== '1') setEstado('in'); } catch { /* storage indisponível */ }
   }, []);
 
   // Aviso do site institucional/landing — não aparece dentro do painel logado /app.
@@ -28,7 +29,7 @@ export default function AvisoPrivacidade() {
   if (estado === 'hidden' || noApp) return null;
 
   const reconhecer = () => {
-    try { localStorage.setItem(ACK_KEY, '1'); } catch { /* storage indisponível */ }
+    try { localStorage.setItem(chaveLocal(ACK_KEY), '1'); } catch { /* storage indisponível */ }
     setEstado('leaving');            // dispara a saída (slide-down + fade via CSS)
     setTimeout(() => setEstado('hidden'), 600); // remove do DOM após a transição (fallback)
   };

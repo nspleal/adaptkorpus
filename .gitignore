@@ -15,11 +15,10 @@ next-env.d.ts
 /coverage
 
 # SEGREDOS — nunca commitar (chaves do Supabase, service_role, etc.)
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# 🔒 Catch-all (auditoria 2026-07-29): a lista nomeada deixava passar `.env.production`
+# e qualquer variante nova. `.env*` pega tudo; o `!` devolve o exemplo, que é público.
+.env*
+!.env.example
 *.pem
 
 # logs

@@ -43,6 +43,7 @@ import type {
   CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
+import { chaveLocal } from '@/lib/escopo-local';
 
 /**
  * Painel (área logada) — porte FIEL do Evokorpus App.dc.html (estilos inline exatos +
@@ -146,10 +147,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Aba ativa persistida (evk_aba): reload/voltar restauram exatamente a aba anterior.
   const [aba, setAba] = useState<Aba>(() => {
     if (typeof window === 'undefined') return 'hoje';
-    const a = window.localStorage.getItem('evk_aba') as Aba | null;
+    const a = window.localStorage.getItem(chaveLocal('evk_aba')) as Aba | null;
     return a && ABAS_VALIDAS.has(a) ? a : 'hoje';
   });
-  useEffect(() => { try { window.localStorage.setItem('evk_aba', aba); } catch { /* noop */ } }, [aba]);
+  useEffect(() => { try { window.localStorage.setItem(chaveLocal('evk_aba'), aba); } catch { /* noop */ } }, [aba]);
   const [vista, setVista] = useState<null | 'compras'>(null);
   const [editando, setEditando] = useState(false);
   const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);

@@ -9,6 +9,7 @@ import {
 } from '@/lib/frequencia-grupos';
 import type { Exercise } from '@/lib/data/types';
 import type { Objetivo } from '@/lib/engine';
+import { chaveLocal } from '@/lib/escopo-local';
 
 /**
  * Frequência por grupo muscular (Leva 2 · Bloco 2). Porte de
@@ -32,7 +33,7 @@ import type { Objetivo } from '@/lib/engine';
 
 const NEON = '#BDFF00';
 const FOLHA = '#16A34A';
-const KEY_PERIODO = 'evk_freq_periodo';
+const KEY_PERIODO = 'evk_freq_periodo' as const;
 
 const cardSoft: CSSProperties = { background: 'rgba(15,15,14,.45)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 20 };
 const rotuloCartao: CSSProperties = { fontSize: '.64rem', fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)' };
@@ -200,14 +201,14 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
   // Preferência de período lembrada (só UI local — nada de servidor nesta tela).
   useEffect(() => {
     try {
-      const v = window.localStorage.getItem(KEY_PERIODO);
+      const v = window.localStorage.getItem(chaveLocal(KEY_PERIODO));
       if (v === 'semana' || v === 'quatro') setPeriodo(v);
     } catch { /* storage indisponível */ }
   }, []);
   function trocarPeriodo(p: Periodo) {
     setPeriodo(p);
     setGrupoAberto(null);
-    try { window.localStorage.setItem(KEY_PERIODO, p); } catch { /* noop */ }
+    try { window.localStorage.setItem(chaveLocal(KEY_PERIODO), p); } catch { /* noop */ }
   }
 
   const quatro = periodo === 'quatro';

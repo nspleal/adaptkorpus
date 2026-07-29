@@ -4,12 +4,22 @@
  * SEGURANÇA (o ponto mais sensível do app):
  *   1. Valida a assinatura HMAC do corpo CRU antes de confiar em qualquer dado.
  *   2. Comparação em tempo constante (timingSafeEqual) sobre os BYTES (decodificados de hex).
- *   3. Idempotência: deduplica reentregas/replay via tabela webhook_events.
+ *   3. Idempotência: deduplica reentregas/replay via tabela webhook_events — gravada
+ *      DEPOIS do processamento (ver ⚠️ abaixo).
  *   4. Só então usa o cliente ADMIN (service_role) para atualizar a assinatura.
  *
  * ⚠️ Confirmar contra a doc atual da Kiwify: nome do header e algoritmo. Por isso o
  * algoritmo é configurável por env (KIWIFY_WEBHOOK_ALGO, default 'sha256') — não exige
  * editar código para alinhar. O header esperado é `x-kiwify-signature` (hex).
+ *
+ * ⚠️ ORDEM DA IDEMPOTÊNCIA (auditoria 2026-07-29). A dedup gravava o `event_id` ANTES de
+ * resolver o usuário — e `resolverUserId` ainda é esqueleto (retorna null). Resultado: todo
+ * evento era marcado como processado e descartado, e quando o espelho de e-mail entrasse os
+ * retries da Kiwify bateriam em `23505 → duplicado` sem NUNCA aplicar. A assinatura só
+ * apareceria como "não atualiza", meses depois, sem rastro.
+ * Agora a marca é gravada **só quando o evento foi efetivamente processado** (aplicado ou
+ * deliberadamente ignorado). O que ficou pendente NÃO entra na tabela — e o retry seguinte
+ * encontra o caminho livre. `webhook_events` está zerada: nada foi engolido, nada a migrar.
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
@@ -86,15 +96,20 @@ export async function POST(request: NextRequest) {
   //    na falta dele, um hash determinístico do corpo cru — nunca desliga a dedup.
   const eventId =
     extrairEventId(payload) ?? `body:${createHash('sha256').update(rawBody, 'utf8').digest('hex')}`;
-  const { error: dupErr } = await admin
-    .from('webhook_events')
-    .insert({ event_id: eventId, origem: 'kiwify' });
-  // 23505 = unique_violation → já processado.
-  if (dupErr && dupErr.code === '23505') {
-    return NextResponse.json({ ok: true, duplicado: true });
-  }
-  if (dupErr) {
-    return NextResponse.json({ error: 'falha ao registrar evento' }, { status: 500 });
+
+  // 3a) CHECA se já foi processado (leitura — a marca só é gravada no fim).
+  const { data: jaVisto } = await admin
+    .from('webhook_events').select('event_id').eq('event_id', eventId).maybeSingle();
+  if (jaVisto) return NextResponse.json({ ok: true, duplicado: true });
+
+  /** Grava a marca de processado. Corrida entre reentregas simultâneas → 23505, que aqui é
+   *  sucesso (o outro processou). Chamado só nos caminhos TERMINAIS. */
+  async function marcarProcessado(): Promise<void> {
+    const { error } = await admin.from('webhook_events').insert({ event_id: eventId, origem: 'kiwify' });
+    if (error && error.code !== '23505') {
+      // Não derruba a resposta: o efeito já foi aplicado. Sem log de conteúdo.
+      console.error('kiwify: falha ao marcar evento como processado');
+    }
   }
 
   // 4) Validação do e-mail (liga o evento ao usuário) + status.
@@ -102,6 +117,8 @@ export async function POST(request: NextRequest) {
   const email = typeof emailBruto === 'string' ? emailBruto.trim().toLowerCase() : '';
   const status = mapearStatus(payload);
   if (!EMAIL_RE.test(email) || !status) {
+    // Ignorado DE PROPÓSITO (evento que não nos interessa) — é terminal: marca.
+    await marcarProcessado();
     return NextResponse.json({ ok: true, ignorado: true });
   }
 
@@ -110,6 +127,8 @@ export async function POST(request: NextRequest) {
     (payload['subscription_id'] as string) ?? (payload['order_id'] as string) ?? null;
   const userId = await resolverUserId(admin, email);
   if (!userId) {
+    // 🔒 PENDENTE — NÃO marca. O evento não produziu efeito nenhum; consumir a marca aqui
+    // é o que faria o retry seguinte ser descartado sem nunca aplicar.
     return NextResponse.json({ ok: true, pendente: 'user_id não resolvido' });
   }
 
@@ -124,9 +143,11 @@ export async function POST(request: NextRequest) {
   );
 
   if (error) {
+    // Falhou a aplicação → NÃO marca: o retry da Kiwify precisa poder tentar de novo.
     return NextResponse.json({ error: 'falha ao atualizar' }, { status: 500 });
   }
 
+  await marcarProcessado();
   return NextResponse.json({ ok: true });
 }
 

@@ -5,6 +5,10 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
+import { barreiraDados } from '@/lib/auth/guard';
+import { criarRateLimit } from '@/lib/rate-limit';
+
+const limitador = criarRateLimit({ limite: 60, janelaMs: 5 * 60_000 });
 
 export const runtime = 'nodejs';
 
@@ -23,6 +27,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const ctx = await contextoUsuario();
   if (ctx instanceof NextResponse) return ctx;
+  const barra = barreiraDados(ctx.user.id, limitador);
+  if (barra) return barra;
   const body = (await req.json().catch(() => null)) as { pesoKg?: unknown } | null;
   const v = Number(body?.pesoKg);
   if (!Number.isFinite(v) || v < 30 || v > 300) {

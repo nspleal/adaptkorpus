@@ -9,6 +9,7 @@ import { sairDaConta } from '@/lib/auth/sair';
 import { carregarPerfilServidor, consultarAcesso, salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { emModoDiario } from '@/lib/modo-diario';
+import { resolverEscopoLocal } from '@/lib/escopo-local';
 import VigiaSessao from '@/components/auth/VigiaSessao';
 
 /**
@@ -44,7 +45,7 @@ export default function AppPage() {
     }
 
     if (!supabaseConfigurado()) {
-      // Modo mock: caminho local de sempre.
+      // Modo mock: caminho local de sempre (escopo `null` — chaves sem sufixo).
       const perfil = lerSessao();
       if (!perfil) { router.replace('/onboarding'); return; }
       montar(perfil);
@@ -57,6 +58,10 @@ export default function AppPage() {
     // (4) FALHA de chamada (401/rede) → monta do local SEM subir (fix 2026-07-08: subir
     //     aqui regredia o perfil do servidor com um cache velho de outro device).
     void (async () => {
+      // 🔒 PRIMEIRA coisa: de quem é a gaveta local. Antes disto, NADA de localStorage —
+      // sem escopo, `lerSessao`/`lerHistorico` leriam as chaves sem sufixo, que podem ser
+      // de outra conta que usou este navegador. Ver `escopo-local.ts`.
+      await resolverEscopoLocal();
       const acesso = await consultarAcesso();
       if (!vivo) return;
       if (acesso && !acesso.liberado) { router.replace('/acesso-restrito?motivo=assinatura'); return; }

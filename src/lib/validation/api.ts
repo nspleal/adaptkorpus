@@ -75,3 +75,41 @@ export const subExercicioSchema = z.object({
   historicoRecenteIds: z.array(z.string()).optional(),
   gostoExcluirIds: z.array(z.string()).optional(),
 });
+
+
+/**
+ * 🔒 TETO DE PAYLOAD jsonb (auditoria 2026-07-29). `PUT /api/dados/aderencia` aceitava
+ * `logs`/`notes` como object livre e `POST /api/dados/historico` persistia campos extras
+ * quaisquer: um usuário autenticado podia gravar megabytes por linha. O RLS impede ler o
+ * dado dos outros, não impede encher o próprio balde — e a conta do storage é do dono.
+ *
+ * 64 KB por linha é ~50× o maior payload real (uma sessão de treino cheia dá ~1,3 KB).
+ */
+export const LIMITE_PAYLOAD_BYTES = 64 * 1024;
+
+/** O objeto cabe no teto quando serializado? */
+export function payloadCabe(valor: unknown, limite = LIMITE_PAYLOAD_BYTES): boolean {
+  try {
+    return new TextEncoder().encode(JSON.stringify(valor)).length <= limite;
+  } catch {
+    return false; // circular/não-serializável
+  }
+}
+
+/** Aderência de um dia: mapa slot → status, e slot → nota curta. Raso de propósito. */
+export const aderenciaDiaSchema = z.object({
+  dia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO'),
+  logs: z.record(z.string().max(40), z.enum(['seguiu', 'fora', 'comi']).nullable()),
+  notes: z.record(z.string().max(40), z.string().max(2000)),
+});
+
+/** Sessão de treino: só o esqueleto estrutural — o payload varia com a leva. */
+export const sessaoHistoricoSchema = z.object({
+  dataISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO'),
+  n: z.number().int().min(0).max(100_000),
+  dia: z.string().max(120).optional(),
+  series: z.number().int().min(0).max(1000).optional(),
+  volumeKg: z.number().min(0).max(1_000_000).optional(),
+  exercicios: z.array(z.unknown()).max(60),
+  tipo: z.enum(['calibracao', 'sinal_fadiga', 'cardio']).optional(),
+}).passthrough();
