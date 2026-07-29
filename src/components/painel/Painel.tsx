@@ -20,6 +20,7 @@ import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
 import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
 import { DietaDiario, HojeDiario, TreinoDiario, REFEICOES_DIARIO } from './ModoDiario';
+import DiaDaDieta from './DiaDaDieta';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
@@ -35,10 +36,7 @@ import { NotificacoesCard, ModalNotificacoes } from './Notificacoes';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
-import {
-  useRegistro, ResumoDia, ControleRegistro, HistoricoDieta, borderRefeicao,
-  type StatusRefeicao,
-} from './RegistroRefeicao';
+import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
@@ -93,7 +91,6 @@ export interface PerfilResumo {
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const r0 = (n: number) => Math.round(n);
-const REFEICAO_LABEL: Record<string, string> = { cafe: 'Café', almoco: 'Almoço', jantar: 'Jantar', lanche: 'Lanche' };
 const PADRAO_LABEL: Record<string, string> = { empurrar: 'Empurrar', puxar: 'Puxar', agachar: 'Agachar', dobradica_quadril: 'Dobradiça', core: 'Core', cardio: 'Cardio', isolado: 'Isolado' };
 const OBJETIVO_LABEL: Record<Objetivo, string> = { emagrecimento: 'Emagrecer', massa: 'Ganhar massa', saude: 'Manter / Saúde' };
 const ATIV_LABEL: Record<NivelAtividade, string> = { sedentario: 'Sedentário', leve: 'Leve', moderado: 'Moderado', intenso: 'Intenso', muito_intenso: 'Muito intenso' };
@@ -673,7 +670,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           <div className="evk-painel-marca" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
           <nav className="evk-painel-tabs" style={{ flex: 1, minWidth: 0, display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 4px' }}>
             {tabs.map((t) => (
-              <div key={t.id} className="evk-painel-tab" onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', border: '1px solid transparent', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)' }) }}>{t.label}</div>
+              <div key={t.id} className="evk-painel-tab" onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', borderWidth: 1, borderStyle: 'solid', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)', borderColor: 'transparent' }) }}>{t.label}</div>
             ))}
           </nav>
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -748,7 +745,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'dieta' && modoDiario && (
           <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
         )}
-        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
+        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && (
           <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
@@ -1020,9 +1017,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
 
 /* ════════════════════ Dieta ════════════════════ */
 
-function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta }: {
+function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta }: {
   dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
-  refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
+  logs: Record<string, StatusRefeicao>; notes: Record<string, string>; dataHoje: string;
   onStatus: (id: string, s: StatusRefeicao) => void; onNote: (id: string, txt: string) => void;
   onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void; onDetalhe: (idx: number) => void;
   descanso: { id: string; nome: string; ate: string }[]; onTrazerDeVolta: (id: string) => void;
@@ -1030,57 +1027,26 @@ function DietaTab({ dieta, itens, totais, trocados, refeicoes, logs, notes, onSt
   const plano = dieta.plano!;
   return (
     <div style={sec}>
-      {/* F1 — resumo de aderência do dia (topo da aba Dieta) */}
-      {itens.length > 0 && <ResumoDia refeicoes={refeicoes} logs={logs} />}
-      {itens.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-          <button onClick={onCompras} className="modal-more" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 600, fontSize: '.88rem', padding: '9px 16px', borderRadius: 11, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M5 7h14l-1 12H6L5 7z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" /><path d="M8.5 7V5.5a3.5 3.5 0 017 0V7" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" /></svg>Lista de compras</button>
-        </div>
-      )}
-      <div style={{ ...gradCard, padding: '22px 24px', borderRadius: 18, marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          <div><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>Seu ponto de partida</div><div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}><span style={{ fontSize: '2rem', fontWeight: 800, color: '#BDFF00', letterSpacing: '-.02em' }}>{r0(totais?.kcal ?? plano.kcalAlvo)}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>kcal · estimativa de referência</span></div></div>
-          <div style={{ display: 'flex', gap: 20 }}>
-            {[['Prot', r0(plano.macros.proteinaG)], ['Carb', r0(plano.macros.carboidratoG)], ['Gord', r0(plano.macros.gorduraG)]].map(([l, g]) => <div key={l as string}><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>{l}</div><div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{g} g</div></div>)}
-          </div>
-        </div>
-      </div>
-      {itens.length > 0 ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-            <div style={{ ...kicker, color: '#BDFF00' }}>Seu cardápio de hoje</div>
-            <span style={{ fontSize: '.84rem', color: 'rgba(234,229,219,.5)' }}>Marque cada refeição depois de comer</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {itens.map((it, idx) => {
-              const status = logs[it.refeicao] ?? null;
-              return (
-                <div key={`${it.refeicao}-${it.prato.id}`} style={{ ...cardSoft, border: `1px solid ${borderRefeicao(status)}`, transition: 'border-color .25s ease' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: '1.1rem', fontWeight: 700 }}>{REFEICAO_LABEL[it.refeicao]}</span><span style={{ fontSize: '.85rem', color: '#BDFF00', background: 'rgba(189,255,0,.1)', padding: '4px 11px', borderRadius: 999 }}>~{r0(it.macros.kcal)} kcal</span></div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'rgba(234,229,219,.03)', borderRadius: 11, padding: '11px 14px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-                      <button onClick={() => onDetalhe(idx)} className="evk-perfil-link" style={{ background: 'none', border: 'none', padding: 0, color: '#EAE5DB', fontSize: '.95rem', textAlign: 'left', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(234,229,219,.25)', textUnderlineOffset: 3 }}>{it.prato.nome}</button>
-                      {trocados.has(`p${idx}`) && <span style={{ fontSize: '.7rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 6, padding: '2px 7px' }}>{Math.round(it.escala * 100)}% da porção</span>}
-                    </span>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => onTrocar(idx)} className="evk-troca" style={dishBtn}>Trocar</button>
-                      <button onClick={() => onPorcao(idx)} className="evk-troca" style={dishBtn}>Editar porção</button>
-                    </div>
-                  </div>
-                  <ControleRegistro
-                    status={status}
-                    note={notes[it.refeicao] ?? ''}
-                    onSeguiu={() => onStatus(it.refeicao, 'seguiu')}
-                    onFora={() => onStatus(it.refeicao, 'fora')}
-                    onAlterar={() => onStatus(it.refeicao, null)}
-                    onNote={(t) => onNote(it.refeicao, t)}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </>
-      ) : <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>{dieta.cardapio?.nota ?? 'Sem cardápio para as restrições atuais.'}</p>}
+      {/* 🔒 LEVA 2.5 — "o dia da dieta" (cofre, DF 2026-07-26). A aba deixou de ser uma
+          lista de pratos e virou a LINHA DO DIA com a próxima refeição em destaque; a
+          interação (abrir, ver itens, trocar, marcar que comeu) mora na refeição guiada. */}
+      <DiaDaDieta
+        itens={itens}
+        totais={totais}
+        plano={plano}
+        foodsById={FOODS_BY_ID_SEED}
+        logs={logs}
+        notes={notes}
+        trocados={trocados}
+        dataHoje={dataHoje}
+        onStatus={onStatus}
+        onNote={onNote}
+        onTrocar={onTrocar}
+        onPorcao={onPorcao}
+        onDetalhe={onDetalhe}
+        onCompras={onCompras}
+        notaCardapio={dieta.cardapio?.nota}
+      />
       {descanso.length > 0 && (
         <div style={{ ...cardSoft, marginTop: 22, borderStyle: 'dashed', borderColor: 'rgba(234,229,219,.16)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
@@ -1362,7 +1328,6 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
 /* ════════════════════ Primitivos ════════════════════ */
 
 const menuBtn = (muted: boolean): CSSProperties => ({ width: '100%', textAlign: 'left', background: 'none', border: 'none', color: muted ? 'rgba(234,229,219,.75)' : '#EAE5DB', fontSize: '.94rem', fontWeight: 500, padding: '11px 13px', borderRadius: 9, cursor: 'pointer' });
-const dishBtn: CSSProperties = { background: 'none', border: '1px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.75)', fontWeight: 600, fontSize: '.8rem', padding: '6px 12px', borderRadius: 9, cursor: 'pointer' };
 
 function Backdrop() {
   return (

@@ -88,41 +88,7 @@ export function useRegistro() {
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 
-/* ─── F1: Resumo do dia (topo da aba Dieta) ─── */
-export function ResumoDia({ refeicoes, logs }: { refeicoes: string[]; logs: Record<string, StatusRefeicao> }) {
-  const total = refeicoes.length;
-  const seguiu = refeicoes.filter((r) => logs[r] === 'seguiu').length;
-  const pend = refeicoes.filter((r) => !logs[r]).length;
-  const seg = (st: StatusRefeicao): CSSProperties => ({
-    flex: 1, height: 9, borderRadius: 99,
-    ...(st === 'seguiu' ? { background: '#BDFF00' } : st === 'fora' ? { background: 'rgba(234,229,219,.32)' } : { background: 'rgba(234,229,219,.09)', border: '1px solid rgba(234,229,219,.2)' }),
-  });
-  return (
-    <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.5))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '20px 22px', marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-        <div>
-          <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 6 }}>Hoje · Aderência</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}><span style={{ fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-.02em' }}>{seguiu} de {total}</span><span style={{ fontSize: '.96rem', color: 'rgba(234,229,219,.6)' }}>refeições no plano</span></div>
-        </div>
-        <span style={{ fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.6)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 999, padding: '6px 13px' }}>{pend > 0 ? `${pend} a registrar` : 'Tudo registrado'}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 7, marginBottom: 13 }}>{refeicoes.map((r) => <div key={r} style={seg(logs[r] ?? null)} />)}</div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <Legenda cor="#BDFF00" texto="Seguiu o plano" />
-        <Legenda cor="rgba(234,229,219,.32)" texto="Comeu fora" />
-        <Legenda cor="rgba(234,229,219,.09)" texto="A registrar" borda />
-      </div>
-    </div>
-  );
-}
-function Legenda({ cor, texto, borda }: { cor: string; texto: string; borda?: boolean }) {
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78rem', color: 'rgba(234,229,219,.6)' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: cor, border: borda ? '1px solid rgba(234,229,219,.2)' : undefined }} />{texto}</span>;
-}
-
 /* ─── F1: Controle de registro por refeição (abaixo dos pratos, após divisor) ─── */
-export function borderRefeicao(status: StatusRefeicao): string {
-  return status === 'seguiu' ? 'rgba(22,163,74,.4)' : status === 'fora' ? 'rgba(234,229,219,.16)' : 'rgba(234,229,219,.1)';
-}
 export function ControleRegistro({ status, note, onSeguiu, onFora, onAlterar, onNote }: {
   status: StatusRefeicao; note: string; onSeguiu: () => void; onFora: () => void; onAlterar: () => void; onNote: (t: string) => void;
 }) {
