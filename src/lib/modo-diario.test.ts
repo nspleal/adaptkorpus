@@ -180,3 +180,39 @@ describe('o registro do modo diário é inerte', () => {
     expect(src).not.toContain('Comi outra coisa');
   });
 });
+
+describe('nenhum ALVO embutido nas features disponíveis', () => {
+  /**
+   * 🔒 DF 2026-07-29 — a lição de dois vazamentos nesta leva: a lista "disponível" do cofre
+   * libera a FEATURE, mas features carregam alvo por dentro. Quem foi excluído do alvo
+   * (gate `ROTEAR`) não pode reencontrá-lo por uma porta lateral.
+   *
+   * 1º vazamento: a copy "não entra nos minutos da meta" na tela de cardio SEM meta.
+   * 2º vazamento: a régua de "2×/semana" na frequência por grupo.
+   */
+  const src = semComentarios('src/components/painel/FrequenciaGrupos.tsx');
+
+  it('a frequência vira CONTAGEM PURA em modo diário — sem régua', () => {
+    // O curto-circuito vem ANTES de `reguaDoPadrao`: nenhuma marca é calculada.
+    expect(src).toMatch(/if \(modoDiario\) return null;[\s\S]{0,120}reguaDoPadrao/);
+  });
+
+  it('sem esmaecimento: o neutro é o estado normal, não o apagado', () => {
+    // Com `marca == null` todo `emDia` seria false e a tela inteira nasceria apagada —
+    // "abaixo" de uma referência que não existe. `semReferencia` corrige isso.
+    expect(src).toMatch(/const forte = semReferencia \|\| emDia;/);
+    expect(src).toMatch(/const barra = semReferencia \?/);
+  });
+
+  it('sem legenda de expectativa — "esperado" também é alvo', () => {
+    // ⚠️ `diasForca: 0` NÃO resolveria: dispararia a LEGENDA_UM_DIA ("com 1 dia por semana,
+    // 1× por padrão é o esperado"). O parágrafo inteiro é suprimido.
+    expect(src).toMatch(/\{!modoDiario && \(\s*<p style=\{\{ \.\.\.apoio/);
+    // E os pips, que SÃO a régua desenhada, não aparecem vazios.
+    expect(src).toMatch(/\{!semReferencia && \(/);
+  });
+
+  it('o Painel passa o modo diário para a tela de frequência', () => {
+    expect(semComentarios('src/components/painel/Painel.tsx')).toMatch(/modoDiario=\{modoDiario\}/);
+  });
+});

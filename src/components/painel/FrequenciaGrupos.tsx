@@ -42,10 +42,14 @@ type Periodo = 'semana' | 'quatro';
 
 /* ── A linha de grupo: o único desenho novo da peça ───────────────────────── */
 
-function LinhaGrupo({ nome, valor, marca, periodo, onAbrir }: {
-  nome: string; valor: number; marca: number | null; periodo: Periodo; onAbrir: () => void;
+function LinhaGrupo({ nome, valor, marca, periodo, semReferencia, onAbrir }: {
+  nome: string; valor: number; marca: number | null; periodo: Periodo; semReferencia?: boolean; onAbrir: () => void;
 }) {
+  // 🔒 CONTAGEM PURA (modo diário): sem referência, "esmaecido" não significa nada — ou pior,
+  // significa "abaixo de algo" que não existe. O neutro é o estado normal, não o apagado.
   const emDia = marca != null && valor >= marca;
+  const forte = semReferencia || emDia;
+  const barra = semReferencia ? 'rgba(234,229,219,.45)' : emDia ? FOLHA : 'rgba(234,229,219,.22)';
   return (
     <button
       type="button"
@@ -57,34 +61,38 @@ function LinhaGrupo({ nome, valor, marca, periodo, onAbrir }: {
         borderBottom: '1px solid rgba(234,229,219,.055)', cursor: 'pointer', textAlign: 'left',
       }}
     >
-      <span style={{ flex: '0 0 108px', fontSize: '.84rem', fontWeight: 600, letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: emDia ? '#EAE5DB' : 'rgba(234,229,219,.5)' }}>{nome}</span>
+      <span style={{ flex: '0 0 108px', fontSize: '.84rem', fontWeight: 600, letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: forte ? '#EAE5DB' : 'rgba(234,229,219,.5)' }}>{nome}</span>
       {/* Barra e marcador são DECORATIVOS — o número já está no rótulo acessível. */}
       <span aria-hidden="true" style={{ position: 'relative', flex: 1, minWidth: 0, height: 7, borderRadius: 4, background: 'rgba(234,229,219,.075)' }}>
-        <span className="evk-freq-barra" style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, (valor / ESCALA_MAX) * 100)}%`, borderRadius: 4, background: emDia ? FOLHA : 'rgba(234,229,219,.22)' }} />
+        <span className="evk-freq-barra" style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, (valor / ESCALA_MAX) * 100)}%`, borderRadius: 4, background: barra }} />
         {/* 🔴 Correção 1: o marcador só existe quando há régua. Quando existe, ele fica
             SEMPRE em 50% (escala fixa 0–4×) — é assim que ele vira aprendível. */}
         {marca != null && (
           <span style={{ position: 'absolute', top: -4, left: `${(marca / ESCALA_MAX) * 100}%`, marginLeft: -1, width: 2, height: 15, borderRadius: 1, background: 'rgba(234,229,219,.34)' }} />
         )}
       </span>
-      <span style={{ flex: '0 0 46px', textAlign: 'right', fontSize: '.86rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: emDia ? '#EAE5DB' : 'rgba(234,229,219,.4)' }}>{rotuloContagem(valor)}</span>
+      <span style={{ flex: '0 0 46px', textAlign: 'right', fontSize: '.86rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: forte ? '#EAE5DB' : 'rgba(234,229,219,.4)' }}>{rotuloContagem(valor)}</span>
     </button>
   );
 }
 
 /* ── Os 7 padrões, compactos (não tocáveis nesta versão) ──────────────────── */
 
-function CelulaPadrao({ rotulo, valor, marca }: { rotulo: string; valor: number; marca: number | null }) {
+function CelulaPadrao({ rotulo, valor, marca, semReferencia }: { rotulo: string; valor: number; marca: number | null; semReferencia?: boolean }) {
   const emDia = marca != null && valor >= marca;
+  const forte = semReferencia || emDia;
   const cor = emDia ? FOLHA : 'rgba(234,229,219,.3)';
   const pip = (aceso: boolean): CSSProperties => ({ width: 13, height: 3, borderRadius: 2, background: aceso ? cor : 'rgba(234,229,219,.1)' });
   return (
     <li style={{ listStyle: 'none', padding: '11px 12px', borderRadius: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.08)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5, minWidth: 0 }}>
-      <span style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-.025em', color: emDia ? '#EAE5DB' : 'rgba(234,229,219,.4)' }}>{rotuloContagem(valor)}</span>
-      {/* Os dois pips SÃO a régua: dois acesos = padrão em 2× ou mais. */}
-      <span aria-hidden="true" style={{ display: 'flex', gap: 4 }}>
-        <span style={pip(marca != null && valor >= 1)} /><span style={pip(marca != null && valor >= 2)} />
-      </span>
+      <span style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-.025em', color: forte ? '#EAE5DB' : 'rgba(234,229,219,.4)' }}>{rotuloContagem(valor)}</span>
+      {/* Os dois pips SÃO a régua: dois acesos = padrão em 2× ou mais. Em contagem pura
+          eles não existem — desenhá-los apagados seria mostrar a régua vazia. */}
+      {!semReferencia && (
+        <span aria-hidden="true" style={{ display: 'flex', gap: 4 }}>
+          <span style={pip(marca != null && valor >= 1)} /><span style={pip(marca != null && valor >= 2)} />
+        </span>
+      )}
       <span style={{ fontSize: '.6rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{rotulo}</span>
     </li>
   );
@@ -92,13 +100,15 @@ function CelulaPadrao({ rotulo, valor, marca }: { rotulo: string; valor: number;
 
 /* ── Detalhe do grupo (tela própria, push — não modal) ────────────────────── */
 
-function DetalheGrupoTela({ grupo, janela, sessoes, exercicioPorId, marca, onVoltar }: {
+function DetalheGrupoTela({ grupo, janela, sessoes, exercicioPorId, marca, semReferencia, onVoltar }: {
   grupo: string; janela: Janela; sessoes: readonly SessaoParaFrequencia[];
-  exercicioPorId: (id: string) => Exercise | undefined; marca: number | null; onVoltar: () => void;
+  exercicioPorId: (id: string) => Exercise | undefined; marca: number | null;
+  semReferencia?: boolean; onVoltar: () => void;
 }) {
   const d = detalheDoGrupo(sessoes, janela, grupo, exercicioPorId);
   const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
   const emDia = marca != null && d.vezes >= marca;
+  const barraDet = semReferencia ? 'rgba(234,229,219,.45)' : emDia ? FOLHA : 'rgba(234,229,219,.22)';
   return (
     <section aria-labelledby="evk-freq-detalhe" style={{ ...cardSoft, padding: '20px 22px', marginTop: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
@@ -117,7 +127,7 @@ function DetalheGrupoTela({ grupo, janela, sessoes, exercicioPorId, marca, onVol
           <span style={{ fontSize: '.95rem', fontWeight: 600, color: 'rgba(234,229,219,.62)' }}>neste período</span>
         </div>
         <span aria-hidden="true" style={{ position: 'relative', display: 'block', height: 7, borderRadius: 4, background: 'rgba(234,229,219,.075)' }}>
-          <span className="evk-freq-barra" style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, (d.vezes / ESCALA_MAX) * 100)}%`, borderRadius: 4, background: emDia ? FOLHA : 'rgba(234,229,219,.22)' }} />
+          <span className="evk-freq-barra" style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${Math.min(100, (d.vezes / ESCALA_MAX) * 100)}%`, borderRadius: 4, background: barraDet }} />
           {marca != null && <span style={{ position: 'absolute', top: -4, left: '50%', marginLeft: -1, width: 2, height: 15, borderRadius: 1, background: 'rgba(234,229,219,.34)' }} />}
         </span>
         {marca != null && d.padroes.length > 0 && (
@@ -168,7 +178,7 @@ function DetalheGrupoTela({ grupo, janela, sessoes, exercicioPorId, marca, onVol
 
 /* ── A visão ──────────────────────────────────────────────────────────────── */
 
-export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, diasForca, objetivo, retomadaAtiva, onVerTreino }: {
+export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, diasForca, objetivo, retomadaAtiva, modoDiario, onVerTreino }: {
   sessoes: readonly SessaoParaFrequencia[];
   exercicioPorId: (id: string) => Exercise | undefined;
   hojeISO: string;
@@ -176,6 +186,13 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
   diasForca: number;
   objetivo: Objetivo;
   retomadaAtiva?: boolean;
+  /**
+   * 🔒 MODO DIÁRIO (gate `ROTEAR`, DF 2026-07-29): a tela vira **CONTAGEM PURA** — sem
+   * marcador, sem esmaecimento e sem legenda de expectativa. Régua, "referência do motor" e
+   * "com 1 dia por semana, 1× é o esperado" são todos ALVO, e alvo é exatamente o que o gate
+   * tirou dessa pessoa. Ela lê o que registrou; o app não diz quanto deveria ser.
+   */
+  modoDiario?: boolean;
   onVerTreino?: () => void;
 }) {
   const [periodo, setPeriodo] = useState<Periodo>('semana');
@@ -204,6 +221,9 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
   // 🔴 Correção 1: sem ≥ 2 dias de força não há marcador em padrão de força nenhum.
   // 🔴 Correção 2: o cardio tem régua própria, que não depende dos dias de força.
   const marcaDe = (padraoOuGrupo: string) => {
+    // 🔒 Contagem pura: nenhuma régua. Note que NÃO basta passar `diasForca: 0` — isso
+    // dispararia a LEGENDA_UM_DIA ("1× por padrão é o esperado"), e "esperado" também é alvo.
+    if (modoDiario) return null;
     const r = reguaDoPadrao({ padrao: padraoOuGrupo, diasForca, objetivo, retomadaAtiva });
     return r?.tipo === 'vezes' ? r.valor : null;
   };
@@ -214,6 +234,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
       <DetalheGrupoTela
         grupo={grupoAberto} janela={janela} sessoes={sessoes} exercicioPorId={exercicioPorId}
         marca={marcaForca}
+        semReferencia={modoDiario}
         onVoltar={() => setGrupoAberto(null)}
       />
     );
@@ -321,8 +342,11 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
               Padrões de movimento{quatro ? ' · média por semana' : parcial ? ' · até aqui' : ''}
             </div>
             <ul style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 8, margin: '0 0 10px', padding: 0 }}>
-              {PADROES.map((p) => <CelulaPadrao key={p} rotulo={ROTULO_PADRAO[p]!} valor={valor(c.porPadrao[p] ?? 0)} marca={marcaDe(p)} />)}
+              {PADROES.map((p) => <CelulaPadrao key={p} rotulo={ROTULO_PADRAO[p]!} valor={valor(c.porPadrao[p] ?? 0)} marca={marcaDe(p)} semReferencia={modoDiario} />)}
             </ul>
+            {/* 🔒 Contagem pura: o parágrafo INTEIRO some — inclusive a frase do cardio, que
+                também aponta para uma referência ("ela vive na aba Treino"). */}
+            {!modoDiario && (
             <p style={{ ...apoio, margin: '0 0 20px' }}>
               {/* 🔴 Correção 1: com 1 dia de força, 1× é o ESPERADO — não uma falta. */}
               {marcaForca == null
@@ -335,6 +359,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
               {/* 🔴 Correção 2: dito em texto, para as duas telas da leva não discordarem. */}
               {' '}O cardio tem referência própria — ela vive na aba Treino, junto do registro de cardio.
             </p>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               <span style={rotuloCartao}>Por grupo{quatro ? ' · média/semana' : ' muscular'}</span>
@@ -354,7 +379,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
                   {r.grupos.map((g) => (
                     <LinhaGrupo
                       key={g} nome={ROTULO_GRUPO[g]!} valor={valor(c.porGrupo[g] ?? 0)}
-                      marca={marcaForca}
+                      marca={marcaForca} semReferencia={modoDiario}
                       periodo={periodo} onAbrir={() => setGrupoAberto(g)}
                     />
                   ))}
@@ -364,7 +389,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
             <p style={{ ...apoio, margin: '12px 0 0' }}>
               {quatro
                 ? 'Média com uma casa decimal: 2,5× quer dizer dez vezes em quatro semanas.'
-                : parcial
+                : parcial && !modoDiario
                   ? 'Leitura de meio de semana: o que está em 1× hoje pode fechar em 2× ou mais.'
                   : 'Toque num grupo para ver em que dias ele entrou.'}
             </p>
@@ -372,11 +397,18 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
             {/* §6.11 — legenda "Como ler" (obrigatória no desktop; inofensiva no telefone). */}
             <div style={{ ...cardSoft, padding: '14px 16px', marginTop: 16 }}>
               <div style={{ ...rotuloCartao, marginBottom: 10 }}>Como ler</div>
-              {[
-                { amostra: FOLHA, texto: `Em ${marcaForca ?? 2}× ou mais na semana` },
-                { amostra: 'rgba(234,229,219,.22)', texto: 'Abaixo da referência — não é erro' },
-                { amostra: 'rgba(234,229,219,.075)', texto: 'Sem registro no período' },
-              ].map((l) => (
+              {(modoDiario
+                ? [
+                  // 🔒 Contagem pura: a legenda descreve o que a barra CONTA, não onde ela
+                  // está em relação a um alvo. Sem "abaixo de", que pressupõe referência.
+                  { amostra: 'rgba(234,229,219,.45)', texto: 'Com registro no período' },
+                  { amostra: 'rgba(234,229,219,.075)', texto: 'Sem registro no período' },
+                ]
+                : [
+                  { amostra: FOLHA, texto: `Em ${marcaForca ?? 2}× ou mais na semana` },
+                  { amostra: 'rgba(234,229,219,.22)', texto: 'Abaixo da referência — não é erro' },
+                  { amostra: 'rgba(234,229,219,.075)', texto: 'Sem registro no período' },
+                ]).map((l) => (
                 <div key={l.texto} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
                   <span aria-hidden="true" style={{ width: 34, height: 6, borderRadius: 3, background: l.amostra, flexShrink: 0 }} />
                   <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.6)' }}>{l.texto}</span>
@@ -391,12 +423,16 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
             </div>
 
             <p style={{ ...apoio, margin: '14px 0 0' }}>
-              {/* 🔴 Correção 4 (a linha que acompanha o rótulo). */}
-              A marca é a referência dos <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>padrões</strong>, não de cada músculo: grupos acessórios costumam ficar abaixo dela sem que isso seja problema.
+              {/* 🔴 Correção 4 (a linha que acompanha o rótulo). Em contagem pura ela some:
+                  não há marca a explicar. A frase do `semGrupo` FICA nos dois modos —
+                  explicar por que um treino não aparece aqui não é penalizar a ausência. */}
+              {!modoDiario && <>A marca é a referência dos <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>padrões</strong>, não de cada músculo: grupos acessórios costumam ficar abaixo dela sem que isso seja problema.</>}
               {c.semGrupo > 0 && ' Treinos registrados à mão, com exercícios fora da biblioteca, contam na sua chama mas não têm grupo para somar aqui.'}
             </p>
             <p style={{ ...apoio, margin: '10px 0 0' }}>
-              É um espelho do que aconteceu, não uma nota. As regras adaptativas distribuem os padrões ao longo do ciclo — você não precisa ajustar nada aqui.
+              {/* "As regras adaptativas distribuem os padrões ao longo do ciclo" pressupõe um
+                  ciclo — que o modo diário não tem. Sobra o espelho, que é o que a tela é. */}
+              É um espelho do que aconteceu, não uma nota.{!modoDiario && ' As regras adaptativas distribuem os padrões ao longo do ciclo — você não precisa ajustar nada aqui.'}
             </p>
           </>
         )}

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  HORARIO_REFEICAO, TOLERANCIA_MIN, diaCompleto, horaDe, linhaDoDia, registradas,
+  HORARIO_REFEICAO, TOLERANCIA_MIN, diaCompleto, linhaDoDia, registradas,
   medidaDoIngrediente,
 } from './dia-da-dieta';
 import type { StatusRefeicao } from '@/components/painel/RegistroRefeicao';
@@ -104,12 +104,35 @@ describe('linha do dia — a próxima refeição pelo relógio', () => {
   });
 });
 
-describe('horaDe', () => {
-  it('formata HH:MM com zero à esquerda', () => {
-    expect(horaDe(7 * 60 + 30)).toBe('07:30');
-    expect(horaDe(12 * 60 + 30)).toBe('12:30');
-    expect(horaDe(0)).toBe('00:00');
-    expect(horaDe(20 * 60)).toBe('20:00');
+describe('🔒 os horários de referência NÃO vão à tela (DF 2026-07-29)', () => {
+  // Horário de refeição encosta no território do nutricionista: "Almoço 12:30" lido por
+  // quem almoça às 14h vira, na prática, orientação de QUANDO comer. Os números seguem
+  // existindo — como critério INVISÍVEL de qual refeição fica em destaque.
+  it('a linha do dia não devolve horário nenhum', () => {
+    for (const l of linhaDoDia(R, L(), 12 * 60)) {
+      expect(Object.keys(l).sort()).toEqual(['estado', 'id', 'idx']);
+      expect(JSON.stringify(l)).not.toMatch(/\d{1,2}:\d{2}/);
+    }
+  });
+
+  it('o módulo não expõe formatador de hora — sem ele não há o que exibir', () => {
+    expect(semComentarios('src/lib/dia-da-dieta.ts')).not.toMatch(/export function horaDe/);
+  });
+
+  it('a tela da dieta não imprime hora em lugar nenhum', () => {
+    const tela = semComentarios('src/components/painel/DiaDaDieta.tsx');
+    expect(tela).not.toMatch(/\bhora\b/);
+    expect(tela).not.toMatch(/HORARIO_REFEICAO|horaDe/);
+    expect(tela).not.toMatch(/\d{1,2}:\d{2}/);
+    // Nem substituto: a decisão foi "o nome da refeição basta" — nada de faixa do dia.
+    expect(tela).not.toMatch(/manh[ãa]|tarde|noite|madrugada/i);
+  });
+
+  it('mas os horários continuam decidindo o destaque', () => {
+    // Se virassem decorativos, este teste cairia junto: às 12h o destaque é o Almoço
+    // porque 12:30 ainda está na janela — não porque é "o segundo da lista".
+    expect(estados(L({ cafe: 'seguiu' }), 12 * 60).almoco).toBe('proxima');
+    expect(HORARIO_REFEICAO.almoco).toBe(12 * 60 + 30);
   });
 });
 

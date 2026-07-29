@@ -87,14 +87,14 @@ export default function DiaDaDieta({
             if (l.estado === 'proxima') {
               return (
                 <CartaoProxima
-                  key={l.id} item={item} hora={l.hora} foodsById={foodsById}
+                  key={l.id} item={item} foodsById={foodsById}
                   onAbrir={() => setAberta(l.idx)} onTrocar={() => onTrocar(l.idx)}
                 />
               );
             }
             return (
               <LinhaCompacta
-                key={l.id} item={item} hora={l.hora} estado={l.estado}
+                key={l.id} item={item} estado={l.estado}
                 status={logs[l.id] ?? null} onAbrir={() => setAberta(l.idx)}
               />
             );
@@ -109,7 +109,6 @@ export default function DiaDaDieta({
       {aberta != null && itens[aberta] && (
         <RefeicaoGuiada
           item={itens[aberta]}
-          hora={linhas.find((l) => l.idx === aberta)?.hora ?? ''}
           foodsById={foodsById}
           porcentagem={trocados.has(`p${aberta}`) ? Math.round(itens[aberta].escala * 100) : null}
           status={logs[itens[aberta].refeicao] ?? null}
@@ -173,8 +172,8 @@ function BarraMacro({ nome, g, pct, cor }: { nome: string; g: number; pct: numbe
 /* ════════════════════ Linha do dia ════════════════════ */
 
 /** Peso 1 (registrada) e peso 3 (futura, recolhida) — a mesma linha compacta. */
-function LinhaCompacta({ item, hora, estado, status, onAbrir }: {
-  item: CardapioItem; hora: string; estado: 'registrada' | 'futura'; status: StatusRefeicao; onAbrir: () => void;
+function LinhaCompacta({ item, estado, status, onAbrir }: {
+  item: CardapioItem; estado: 'registrada' | 'futura'; status: StatusRefeicao; onAbrir: () => void;
 }) {
   const registrada = estado === 'registrada';
   const seguiu = status === 'seguiu';
@@ -205,7 +204,6 @@ function LinhaCompacta({ item, hora, estado, status, onAbrir }: {
       </span>
       <span style={{ minWidth: 74, fontWeight: 700, fontSize: '.94rem' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: '.88rem', color: 'rgba(234,229,219,.62)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rotulo}</span>
-      <span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)', flexShrink: 0 }}>{hora}</span>
     </button>
   );
 }
@@ -218,8 +216,8 @@ function LinhaCompacta({ item, hora, estado, status, onAbrir }: {
  * 🔴 Sem tom de cobrança quando o horário já passou: o cartão é exatamente o mesmo. O app
  * não conta atraso, não muda de cor e não diz que a pessoa perdeu a refeição.
  */
-function CartaoProxima({ item, hora, foodsById, onAbrir, onTrocar }: {
-  item: CardapioItem; hora: string; foodsById: Map<string, Food>; onAbrir: () => void; onTrocar: () => void;
+function CartaoProxima({ item, foodsById, onAbrir, onTrocar }: {
+  item: CardapioItem; foodsById: Map<string, Food>; onAbrir: () => void; onTrocar: () => void;
 }) {
   const nItens = item.prato.itens.filter((i) => foodsById.has(i.alimentoId)).length;
   return (
@@ -229,7 +227,7 @@ function CartaoProxima({ item, hora, foodsById, onAbrir, onTrocar }: {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
         <span style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', color: NEON }}>Próxima refeição</span>
-        <span style={{ fontSize: '.84rem', color: 'rgba(234,229,219,.6)' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao} · {hora}</span>
+        <span style={{ fontSize: '.84rem', color: 'rgba(234,229,219,.6)' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         <span style={{ fontSize: '1.22rem', fontWeight: 700, letterSpacing: '-.01em', minWidth: 0 }}>{item.prato.nome}</span>
@@ -283,10 +281,10 @@ function AtalhoCompras({ onCompras }: { onCompras: () => void }) {
  * ("não somos app de culinária" — e não existe slot "em breve" para isso).
  */
 export function RefeicaoGuiada({
-  item, hora, foodsById, porcentagem, status, note,
+  item, foodsById, porcentagem, status, note,
   onStatus, onNote, onTrocar, onPorcao, onDetalhe, onFechar,
 }: {
-  item: CardapioItem; hora: string; foodsById: Map<string, Food>; porcentagem: number | null;
+  item: CardapioItem; foodsById: Map<string, Food>; porcentagem: number | null;
   status: StatusRefeicao; note: string;
   onStatus: (s: StatusRefeicao) => void; onNote: (t: string) => void;
   onTrocar: () => void; onPorcao: () => void; onDetalhe: () => void; onFechar: () => void;
@@ -341,7 +339,7 @@ export function RefeicaoGuiada({
           </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)' }}>Voltar para o dia</div>
-            <div style={{ fontWeight: 700, fontSize: '1.02rem' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao} · {hora}</div>
+            <div style={{ fontWeight: 700, fontSize: '1.02rem' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao}</div>
           </div>
           <span style={{ fontSize: '.84rem', fontWeight: 600, color: NEON, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', borderRadius: 999, padding: '5px 12px', flexShrink: 0 }}>~{r0(item.macros.kcal)} kcal</span>
         </div>
