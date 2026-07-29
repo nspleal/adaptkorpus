@@ -300,12 +300,38 @@ describe('🔒 EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA', () 
     expect(falaNoFuturo(src), 'ModoDiario.tsx fala no futuro da atividade').toBe(false);
   });
 
-  it('o subtítulo do registro de peso RAMIFICA (DF 2026-07-29)', () => {
-    // Com plano a frase antiga é literalmente verdade — peso → TMB → GET → kcal-alvo — e é o
-    // incentivo que sustenta o registro cuja falta desatualiza o alvo. Em modo diário não há
-    // alvo a calibrar. As duas convivem, escolhidas pelo modo.
+  it('o subtítulo do registro de peso é UNIFICADO de propósito (DF 2026-07-29, revista)', () => {
+    // 🔴 NÃO "conserte" isto de volta para uma ramificação. A frase "mantém seu plano
+    // calibrado" PARECE verdadeira para quem tem plano e não é: `registrarPeso` não alimenta
+    // `perfil.pesoKg`, e é o perfil que a TMB lê (health-gate.ts:66-70). Registrar peso não
+    // recalibra nada — em NENHUM modo. Ver o JSDoc de `RegistrarPesoRow`.
     const src = semComentarios('src/components/painel/Painel.tsx');
-    expect(src).toMatch(/modoDiario \? 'Um registro rápido guarda a sua variação\.' : 'Um registro rápido mantém seu plano calibrado\.'/);
+    expect(src).toContain('Um registro rápido guarda a sua variação.');
+    expect(src).not.toMatch(/mant[ée]m seu plano calibrado/);
+    // E a prova de que não voltou a ramificar por outro caminho: nem a assinatura do
+    // componente nem nenhuma TAG dele mencionam o modo. (Janela restrita à própria tag —
+    // 200 chars alcançavam o `modoDiario` do `Progresso`, que é de outro cartão.)
+    expect(src).not.toMatch(/function RegistrarPesoRow[^)]*modoDiario/);
+    for (const tag of src.match(/<RegistrarPesoRow[^/]*\/>/g) ?? []) {
+      expect(tag, tag).not.toMatch(/modoDiario/);
+    }
+  });
+
+  it('o motivo da unificação está ESCRITO no código, não só no commit', () => {
+    // A trava contra o "conserto" de daqui a um mês: quem for mexer tem de topar com o
+    // caminho do código que torna a frase antiga falsa.
+    const comComentarios = readFileSync('src/components/painel/Painel.tsx', 'utf8');
+    const i = comComentarios.indexOf('function RegistrarPesoRow');
+    const jsdoc = comComentarios.slice(Math.max(0, i - 2000), i);
+    expect(jsdoc).toMatch(/UNIFICADO DE PROP[ÓO]SITO/i);
+    // (1) NOMEIA a frase proibida — sem isto o motivo técnico fica solto e ninguém liga
+    //     uma coisa à outra daqui a um mês;
+    expect(jsdoc).toMatch(/Um registro rápido mantém seu plano calibrado/);
+    // (2) diz POR QUE ela é falsa;
+    expect(jsdoc).toMatch(/N[ÃA]O alimenta `perfil\.pesoKg`/);
+    // (3) e ONDE conferir — os dois lados da cadeia.
+    expect(jsdoc).toMatch(/health-gate\.ts:66-70/);
+    expect(jsdoc).toMatch(/EditarPerfil/);
   });
 });
 
@@ -437,9 +463,9 @@ describe('🔒 CLASSE 2 — prova estrutural de cada vazamento consertado', () =
       prova: /modoDiario \? 'Aquecendo' : 'Aquecendo · antes do 1º marco'/,
     },
     {
-      achado: 'peso · subtítulo ramificado (a frase antiga é verdade COM plano)',
+      achado: 'peso · subtítulo unificado (a frase antiga era falsa nos DOIS modos)',
       arquivo: 'src/components/painel/Painel.tsx',
-      prova: /modoDiario \? 'Um registro rápido guarda a sua variação\.' : 'Um registro rápido mantém seu plano calibrado\.'/,
+      prova: /<div style=\{\{ fontSize: '\.85rem'[^}]*\}\}>Um registro rápido guarda a sua variação\.<\/div>/,
     },
   ];
 
@@ -459,22 +485,15 @@ describe('🔒 CLASSE 2 — prova estrutural de cada vazamento consertado', () =
     expect((src.match(/modoDiario=\{modoDiario\}/g) ?? []).length).toBeGreaterThanOrEqual(5);
   });
 
-  it('AMBOS os call sites do registro de peso recebem o modo', () => {
-    // 🔴 Regressão real de 2026-07-29: o componente foi ramificado, mas o `pesoSlot` da aba
-    // Hoje (modo diário) continuou chamando sem a flag — e a Hoje seguiu dizendo "mantém
-    // seu plano calibrado". Ramificar o componente não basta: TODO call site tem de passar.
+  it('o registro de peso NÃO ramifica — nenhum call site passa modo', () => {
+    // 🔴 A regressão de 2026-07-29 (um dos três call sites sem a flag, e a Hoje dizendo
+    // "mantém seu plano calibrado") deixou de ser possível: sem ramificação não há flag a
+    // esquecer. Este teste guarda a AUSÊNCIA — se alguém reintroduzir a prop, cai aqui e no
+    // teste do motivo escrito.
     const src = semComentarios('src/components/painel/Painel.tsx');
-    // O componente `Hoje` é do PLANO por construção (só monta com `!modoDiario`), então o
-    // call site lá dentro pode omitir a flag — o default já é a copy do plano. Ele é
-    // recortado antes da checagem; todos os OUTROS precisam passar o modo.
-    const i = src.indexOf('function Hoje({');
-    const j = src.indexOf('\nfunction ', i + 1);
-    const foraDoHojeDoPlano = src.slice(0, i) + src.slice(j);
-    const sites = foraDoHojeDoPlano.match(/<RegistrarPesoRow[^/]*\/>/g) ?? [];
-    expect(sites.length, 'call sites fora da Hoje do plano').toBeGreaterThanOrEqual(2);
-    for (const site of sites) expect(site, site).toMatch(/modoDiario/);
-    // E o recorte precisa ter recortado algo — senão o teste vira vácuo.
-    expect(src.slice(i, j)).toMatch(/<RegistrarPesoRow/);
+    const sites = src.match(/<RegistrarPesoRow[^/]*\/>/g) ?? [];
+    expect(sites.length, 'call sites do registro de peso').toBeGreaterThanOrEqual(3);
+    for (const site of sites) expect(site, site).not.toMatch(/modoDiario/);
   });
 });
 

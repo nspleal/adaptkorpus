@@ -715,7 +715,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             onRegistrarTreino={() => setRegistrando(true)}
             onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             onRegistrarRefeicao={() => irAba('dieta')}
-            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} modoDiario />}
+            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} />}
           />
         )}
         {!vista && aba === 'hoje' && !modoDiario && (
@@ -1097,7 +1097,7 @@ function Progresso({ pesos, treinos, onRegistrar, children, modoDiario }: { peso
         <Grafico pesos={pesos} />
         {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} modoDiario={modoDiario} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} />
       {children}
       {/* 🔒 CLASSE 2 — o cartão descreve o MOTOR ADAPTATIVO (plano que se recalcula), que o
           modo diário não tem. Não renderiza, e não ganha paráfrase: não existe equivalente
@@ -1392,19 +1392,32 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
 }
 
 /**
- * 🔒 O subtítulo RAMIFICA (DF 2026-07-29). Com plano, "mantém seu plano calibrado" é
- * literalmente verdade — o peso alimenta a TMB (Mifflin-St Jeor) → GET → kcal-alvo, e é o
- * incentivo que sustenta o registro cuja falta desatualiza o próprio alvo calórico. Em modo
- * diário não há alvo a calibrar, e a frase viraria referência a um plano inexistente
- * (CLASSE 2). A variação, essa, é verdadeira nos dois — só ela sobra do outro lado.
+ * 🔒 O subtítulo é UNIFICADO DE PROPÓSITO (DF 2026-07-29, revista). **Não ramifique.**
+ *
+ * A frase anterior — "Um registro rápido mantém seu plano calibrado." — parece verdadeira
+ * para quem tem plano, e não é: **`registrarPeso` NÃO alimenta `perfil.pesoKg`.** Ele só
+ * empilha o valor em `pesos` (memória), `evk_pesos` (local) e no servidor — tudo exibição:
+ * o stat "Peso atual", o gráfico e o histórico. Já a dieta lê `perfil.pesoKg`:
+ *
+ *     registrarPeso(v)                    → setPesos · registrarPesoLocal · registrarPesoServidor
+ *     calcularTMB(sexo, perfil.pesoKg, …) → health-gate.ts:66-70
+ *     perfil.pesoKg só muda em            → EditarPerfil (recalcular → recomputarPlano)
+ *
+ * Ou seja, registrar peso **não recalibra nada**. A cadeia peso → TMB (Mifflin-St Jeor) →
+ * GET → kcal-alvo existe, mas é alimentada pelo peso DO PERFIL, não pelo registro. Prometer
+ * calibração no ato do registro seria falso nos dois modos — não é um caso de modo diário.
+ *
+ * ⚠️ Se um dia o registro passar a alimentar `perfil.pesoKg` (decisão de PRODUTO — mexe no
+ * motor e tem efeito no gate de saúde, então vai em trabalho próprio), esta frase pode
+ * voltar a ramificar. Até lá, "guarda a sua variação" é o que o app realmente faz.
  */
-function RegistrarPesoRow({ onRegistrar, modoDiario }: { onRegistrar: (v: number) => void; modoDiario?: boolean }) {
+function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void }) {
   const [v, setV] = useState('');
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
         <span style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={20} height={20} viewBox="0 0 24 24" fill="none"><path d="M4 18 Q9 16 12 11 T20 5" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={11} r={2} fill="#BDFF00" /><circle cx={20} cy={5} r={2.4} fill="#BDFF00" /></svg></span>
-        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>{modoDiario ? 'Um registro rápido guarda a sua variação.' : 'Um registro rápido mantém seu plano calibrado.'}</div></div>
+        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Um registro rápido guarda a sua variação.</div></div>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />
