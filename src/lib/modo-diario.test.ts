@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  DISPONIBILIDADE, FALA_NO_FUTURO, disponibilidade, emModoDiario, falaNoFuturo,
+  DISPONIBILIDADE, FALA_NO_FUTURO, SUBSTANTIVOS_DE_PRESCRICAO, disponibilidade, emModoDiario, falaNoFuturo, pressupoePrescricao,
   recursoLiberado, RECURSOS_AUSENTES, RECURSOS_DISPONIVEIS, RECURSOS_SEM_ALVO, type Recurso,
 } from './modo-diario';
 import { gerarDieta, gerarTreino } from './engine';
@@ -214,6 +214,9 @@ describe('🔒 EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA', () 
       'com 1 dia por semana, 1× por padrão é o esperado',
       'o que está em 1× hoje pode fechar em 2× ou mais',
       'Um registro rápido mantém seu plano calibrado.',
+      // 12º padrão (DF 2026-07-29) — o cartão de meio de semana da frequência:
+      '3 de 7 dias desta semana já passaram. A contagem abaixo ainda vai crescer.',
+      'ainda vai crescer',
     ]) {
       expect(falaNoFuturo(frase), frase).toBe(true);
     }
@@ -297,9 +300,180 @@ describe('🔒 EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA', () 
     expect(falaNoFuturo(src), 'ModoDiario.tsx fala no futuro da atividade').toBe(false);
   });
 
-  it('o subtítulo do registro de peso não pendura mais referência a plano', () => {
+  it('o subtítulo do registro de peso RAMIFICA (DF 2026-07-29)', () => {
+    // Com plano a frase antiga é literalmente verdade — peso → TMB → GET → kcal-alvo — e é o
+    // incentivo que sustenta o registro cuja falta desatualiza o alvo. Em modo diário não há
+    // alvo a calibrar. As duas convivem, escolhidas pelo modo.
     const src = semComentarios('src/components/painel/Painel.tsx');
-    expect(src).not.toMatch(/mant[ée]m seu plano calibrado/);
-    expect(src).toContain('Um registro rápido guarda a sua variação.');
+    expect(src).toMatch(/modoDiario \? 'Um registro rápido guarda a sua variação\.' : 'Um registro rápido mantém seu plano calibrado\.'/);
+  });
+});
+
+describe('🔒 CLASSE 2 — nada pressupõe um plano que essa pessoa não tem', () => {
+  /**
+   * A segunda regra travada (DF 2026-07-29): **a frase pressupõe um plano ou prescrição que
+   * essa pessoa não tem?** Nasceu de seis achados que a regra do futuro nunca pegaria —
+   * eles falam no PRESENTE de algo que não existe.
+   */
+
+  it('o guard pega os seis vazamentos da classe 2', () => {
+    for (const frase of [
+      'Movimento registrado — não entra nos minutos da meta.',
+      'Um registro rápido mantém seu plano calibrado.',
+      'Como seu plano evolui',
+      'A cada avanço seu, o treino e a dieta se recalculam pelas regras adaptativas.',
+      'Elas ficam aqui como informação — não mudam o seu cardápio.',
+      'Plano e preferências',
+      'Modo força — Ativo — compostos a 6 reps',
+      'Sem promessa de prazo',
+    ]) {
+      expect(pressupoePrescricao(frase), frase).toBe(true);
+    }
+  });
+
+  it('e NÃO pega o que deve ficar', () => {
+    for (const frase of [
+      'Você já completou 14 dias de treino.', 'Hoje você registrou', 'Variação',
+      '30 min de cardio', '2 de 4 registradas', 'Suas preferências',
+      'Um período sem registro não é um problema — é só um período sem registro.',
+      'É um espelho do que aconteceu, não uma nota.',
+      'Um registro rápido guarda a sua variação.',
+      'Constância, não perfeição.', 'Com registro no período', 'Aquecendo',
+      'Treinos registrados à mão, com exercícios fora da biblioteca, contam na sua chama '
+        + 'mas não têm grupo para somar aqui.',
+      'Anote o que você treinou — exercícios, séries e cargas. Fica tudo no seu histórico.',
+      'Peito, 2 vezes nesta semana',
+    ]) {
+      expect(pressupoePrescricao(frase), frase).toBe(false);
+    }
+  });
+
+  it('o vocabulário é fechado e não virou catch-all', () => {
+    expect(SUBSTANTIVOS_DE_PRESCRICAO.length).toBeGreaterThanOrEqual(9);
+    expect(pressupoePrescricao('')).toBe(false);
+    expect(pressupoePrescricao('registro')).toBe(false);
+  });
+
+  /**
+   * ⚠️ EXCEÇÃO DECLARADA, com motivo. NEGAR a prescrição não é pressupô-la — e o modo
+   * diário PRECISA negá-la em voz alta. Cada exceção mora aqui, nomeada; o que não estiver
+   * nesta tabela e usar o vocabulário quebra a suíte.
+   */
+  const EXCECOES: { trecho: string; motivo: string }[] = [
+    {
+      trecho: 'o app não monta treino nem cardápio para você',
+      motivo: 'cartão permanente de encaminhamento: a frase NEGA o plano — é a mensagem '
+        + 'central do modo diário, não um pressuposto dele.',
+    },
+    {
+      trecho: 'Seu plano vem de um profissional',
+      motivo: 'título do mesmo cartão: atribui o plano a QUEM O FAZ (o profissional), '
+        + 'justamente para dizer que não vem do app.',
+    },
+    {
+      trecho: 'Sem meta semanal por aqui',
+      motivo: 'título do cartão de cardio sem meta (Cardio.tsx): a frase NEGA a meta. É a '
+        + 'forma que a DF 2026-07-27 pede — "registro SIM, meta NÃO" dito em voz alta, '
+        + 'em vez de a seção sumir sem explicação.',
+    },
+  ];
+
+  it('as exceções declaradas realmente usam o vocabulário (senão são exceção morta)', () => {
+    for (const e of EXCECOES) {
+      expect(pressupoePrescricao(e.trecho), `exceção sem vocabulário: ${e.trecho}`).toBe(true);
+      expect(e.motivo.length).toBeGreaterThan(30);
+    }
+  });
+
+  it('as telas EXCLUSIVAS do modo diário só usam o vocabulário nas exceções declaradas', () => {
+    // ModoDiario.tsx é 100% copy nossa — aqui a regra é absoluta, menos o que está na tabela.
+    let src = semComentarios('src/components/painel/ModoDiario.tsx');
+    for (const e of EXCECOES) src = src.split(e.trecho).join('«EXCECAO»');
+    // Sobrou vocabulário fora das exceções? (JSX quebra frases; checamos o fonte podado.)
+    const sobrou = SUBSTANTIVOS_DE_PRESCRICAO.filter((re) => re.test(src)).map(String);
+    expect(sobrou, `vocabulário de prescrição fora das exceções: ${sobrou.join(', ')}`).toEqual([]);
+  });
+});
+
+describe('🔒 CLASSE 2 — prova estrutural de cada vazamento consertado', () => {
+  /**
+   * ⚠️ Esta tabela existe porque a MUTAÇÃO a exigiu. A regra absoluta só roda em
+   * `ModoDiario.tsx`; os seis vazamentos da classe 2 vivem em arquivos COMPARTILHADOS
+   * (`Painel.tsx`, `Cardio.tsx`, `chama.ts`), onde a copy é legítima com plano. Sem uma
+   * prova por vazamento, remover qualquer guard passaria batido — foi o que a mutação
+   * mostrou em 5 dos 7 na primeira tentativa.
+   *
+   * Cada entrada: onde estava, e a expressão que prova que agora está atrás do modo.
+   */
+  const CONSERTOS: { achado: string; arquivo: string; prova: RegExp }[] = [
+    {
+      achado: 'B · cartão "Como seu plano evolui" (motor adaptativo que ela não tem)',
+      arquivo: 'src/components/painel/Painel.tsx',
+      prova: /\{!modoDiario && \([\s\S]{0,900}Como seu plano evolui/,
+    },
+    {
+      achado: 'C · "Modo força — Ativo — compostos a 6 reps" no Perfil',
+      arquivo: 'src/components/painel/Painel.tsx',
+      prova: /\{!modoDiario && perfil\.modoForca/,
+    },
+    {
+      achado: 'C · o CONTROLE do modo força no Editar perfil (não só o rótulo)',
+      arquivo: 'src/components/painel/EditarPerfil.tsx',
+      prova: /experiencia !== 'iniciante' && !modoDiario && \(/,
+    },
+    {
+      achado: 'D · título "Plano e preferências" do cartão do Perfil',
+      arquivo: 'src/components/painel/Painel.tsx',
+      prova: /modoDiario \? 'Suas preferências' : 'Plano e preferências'/,
+    },
+    {
+      achado: 'D · "não mudam o seu cardápio" na tela de cardio',
+      arquivo: 'src/components/painel/Cardio.tsx',
+      prova: /\{meta != null && <p[^>]*>As calorias são estimativas/,
+    },
+    {
+      achado: 'E · "· antes do 1º marco" na pílula da Chama',
+      arquivo: 'src/lib/chama.ts',
+      prova: /modoDiario \? 'Aquecendo' : 'Aquecendo · antes do 1º marco'/,
+    },
+    {
+      achado: 'peso · subtítulo ramificado (a frase antiga é verdade COM plano)',
+      arquivo: 'src/components/painel/Painel.tsx',
+      prova: /modoDiario \? 'Um registro rápido guarda a sua variação\.' : 'Um registro rápido mantém seu plano calibrado\.'/,
+    },
+  ];
+
+  for (const { achado, arquivo, prova } of CONSERTOS) {
+    it(`${achado}`, () => {
+      expect(prova.test(semComentarios(arquivo)), `${arquivo} :: ${prova}`).toBe(true);
+    });
+  }
+
+  it('o Painel passa `modoDiario` para as quatro telas que ramificam', () => {
+    const src = semComentarios('src/components/painel/Painel.tsx');
+    // `[^>]*` não serve: as props contêm `=>`. Janela não-gulosa até o modoDiario.
+    for (const alvo of [/<Progresso[\s\S]{0,300}?modoDiario=\{modoDiario\}/, /<EditarPerfil[\s\S]{0,300}?modoDiario=\{modoDiario\}/]) {
+      expect(alvo.test(src), String(alvo)).toBe(true);
+    }
+    // Perfil e ContadorTreinos recebem pelo mesmo atributo (assinaturas diferentes).
+    expect((src.match(/modoDiario=\{modoDiario\}/g) ?? []).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('AMBOS os call sites do registro de peso recebem o modo', () => {
+    // 🔴 Regressão real de 2026-07-29: o componente foi ramificado, mas o `pesoSlot` da aba
+    // Hoje (modo diário) continuou chamando sem a flag — e a Hoje seguiu dizendo "mantém
+    // seu plano calibrado". Ramificar o componente não basta: TODO call site tem de passar.
+    const src = semComentarios('src/components/painel/Painel.tsx');
+    // O componente `Hoje` é do PLANO por construção (só monta com `!modoDiario`), então o
+    // call site lá dentro pode omitir a flag — o default já é a copy do plano. Ele é
+    // recortado antes da checagem; todos os OUTROS precisam passar o modo.
+    const i = src.indexOf('function Hoje({');
+    const j = src.indexOf('\nfunction ', i + 1);
+    const foraDoHojeDoPlano = src.slice(0, i) + src.slice(j);
+    const sites = foraDoHojeDoPlano.match(/<RegistrarPesoRow[^/]*\/>/g) ?? [];
+    expect(sites.length, 'call sites fora da Hoje do plano').toBeGreaterThanOrEqual(2);
+    for (const site of sites) expect(site, site).toMatch(/modoDiario/);
+    // E o recorte precisa ter recortado algo — senão o teste vira vácuo.
+    expect(src.slice(i, j)).toMatch(/<RegistrarPesoRow/);
   });
 });

@@ -217,6 +217,11 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
   const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
   const diasPassados = diasPassadosNaSemana(hojeISO);
   const parcial = !quatro && diasPassados < 7;
+  // 🔒 PROJEÇÃO = "posso falar do que ainda vai acontecer nesta semana?". Em modo diário,
+  // NÃO. `parcial` sozinho continua valendo (o "· até aqui" dos padrões é leitura honesta do
+  // que já ocorreu); o que sai é tudo que olha para a frente. Os dois consumidores voltados
+  // ao futuro leem DESTA constante — não de dois `!modoDiario` espalhados.
+  const projecao = parcial && !modoDiario;
 
   // 🔴 Correção 1: sem ≥ 2 dias de força não há marcador em padrão de força nenhum.
   // 🔴 Correção 2: o cardio tem régua própria, que não depende dos dias de força.
@@ -323,8 +328,12 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
               <p style={{ ...apoio, margin: 0 }}>A chama conta <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>dias</strong> treinados. Aqui a conta é por <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>grupo</strong> — são duas leituras diferentes.</p>
             </div>
 
-            {/* §6.7 — meio de semana: leitura honesta, sem projeção e sem cobrança. */}
-            {parcial && (
+            {/* §6.7 — meio de semana: leitura honesta, sem projeção e sem cobrança.
+                🔒 Em modo diário o cartão inteiro sai: os 7 segmentos são 4 retângulos
+                ESPERANDO ser preenchidos (a régua em outra forma), e "ainda vai crescer"
+                fala no futuro da atividade dela. Sai o desenho E a frase — não se
+                parafraseia o que sai. */}
+            {projecao && (
               <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.5))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '14px 15px', marginBottom: 16 }}>
                 <span aria-hidden="true" style={{ display: 'flex', gap: 3, marginBottom: 10 }}>
                   {Array.from({ length: 7 }, (_, i) => (
@@ -389,7 +398,7 @@ export default function FrequenciaGrupos({ sessoes, exercicioPorId, hojeISO, dia
             <p style={{ ...apoio, margin: '12px 0 0' }}>
               {quatro
                 ? 'Média com uma casa decimal: 2,5× quer dizer dez vezes em quatro semanas.'
-                : parcial && !modoDiario
+                : projecao
                   ? 'Leitura de meio de semana: o que está em 1× hoje pode fechar em 2× ou mais.'
                   : 'Toque num grupo para ver em que dias ele entrou.'}
             </p>

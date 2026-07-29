@@ -69,9 +69,22 @@ export function chamaAtual(x: number): ChamaAtual {
 }
 
 /** Pill/eyebrow acima do texto do contador (copy final do handoff). */
-export function pillChama(x: number): string {
+/**
+ * Rótulo da pílula da chama.
+ *
+ * 🔒 MODO DIÁRIO (DF 2026-07-29): "Aquecendo" FICA — descreve o estado ATUAL, e descrever o
+ * estado atual é leitura. Sai o "· antes do 1º marco", que posiciona a pessoa em relação a
+ * um marco à frente: anunciar marco à frente é alvo, mesmo sem número.
+ *
+ * Varredura do módulo (pedida no lote): esta é a ÚNICA construção voltada ao futuro aqui.
+ * O outro ramo (`Marco N dias · Cor`) nomeia um marco JÁ ALCANÇADO, e as 5 linhas de
+ * `APOIO_CHAMA` ou descrevem o marco atingido ou a natureza do contador ("um total que só
+ * cresce" = ele nunca zera), nunca o que falta.
+ */
+export function pillChama(x: number, modoDiario = false): string {
   const a = chamaAtual(x);
-  return bandaChama(x) === 0 ? 'Aquecendo · antes do 1º marco' : `Marco ${a.marco} dias · ${a.nome}`;
+  if (bandaChama(x) !== 0) return `Marco ${a.marco} dias · ${a.nome}`;
+  return modoDiario ? 'Aquecendo' : 'Aquecendo · antes do 1º marco';
 }
 
 /** Marcos ainda não alcançados (para a linha "próximos marcos", estado futuro/apagado).

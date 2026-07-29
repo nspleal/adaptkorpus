@@ -258,7 +258,9 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
       )}
 
       {/* 🟢 A trava central: a estimativa é informação, NUNCA orçamento. */}
-      <p style={{ ...apoio, margin: 0 }}>As calorias são estimativas do gasto extra do exercício. Elas ficam aqui como informação — não mudam o seu cardápio.</p>
+      {/* 🔒 CLASSE 2 — a frase pressupõe um CARDÁPIO, que o modo diário não tem. Sai
+          inteira; não se reescreve (não existe equivalente verdadeiro sem cardápio). */}
+      {meta != null && <p style={{ ...apoio, margin: 0 }}>As calorias são estimativas do gasto extra do exercício. Elas ficam aqui como informação — não mudam o seu cardápio.</p>}
       <PorQueOAparelho />
     </section>
   );

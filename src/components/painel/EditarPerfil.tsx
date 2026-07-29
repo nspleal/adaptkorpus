@@ -50,10 +50,18 @@ const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
   { id: 'vegetariano', t: 'Vegetariano', d: 'Sem carnes.' },
   { id: 'vegano', t: 'Vegano', d: 'Sem origem animal.' },
 ];
-export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
+export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario }: {
   inicial: PerfilResumo;
   onCancelar: () => void;
   onSalvar: (novo: PerfilResumo) => void;
+  /**
+   * 🔒 MODO DIÁRIO: some o CONTROLE do modo força, não só o rótulo. Esconder o texto e
+   * deixar o toggle transferiria o vazamento para quem o ligasse. O preset é **inerte**
+   * aqui — `gerarTreino` devolve `prescricao: null` no gate ROTEAR antes de
+   * `prescreverTreino` sequer ser chamado —, então tirar o controle não tira função
+   * nenhuma: não é cadeado, é remover um botão que não faz nada.
+   */
+  modoDiario?: boolean;
 }) {
   const [sexo, setSexo] = useState<Sexo>(inicial.sexo);
   const [idade, setIdade] = useState(String(inicial.idade));
@@ -167,7 +175,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar }: {
             <CardsBloco titulo="Experiência de treino" opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} desc />
             {/* Modo força (v2 §4): visível SÓ p/ intermediário/avançado — 6 reps fixas nos
                 compostos, progressão só por carga (rumo ao 6RM). Mesmo padrão do switch %1RM. */}
-            {experiencia !== 'iniciante' && (
+            {experiencia !== 'iniciante' && !modoDiario && (
               <div style={{ marginTop: 14, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 13, padding: '13px 16px' }}>
                 <div onClick={() => setModoForca((v) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer' }}>
                   <span style={{ minWidth: 0 }}>

@@ -129,9 +129,49 @@ export const FALA_NO_FUTURO: readonly RegExp[] = [
   /[ée] o esperado/i,                   // LEGENDA_UM_DIA
   /pode fechar em/i,                    // leitura de meio de semana
   /mant[ée]m seu plano/i,               // subtítulo do registro de peso
+  /ainda vai (crescer|subir|aumentar)|vai crescer|\d+ de \d+ dias?[^.]{0,40}j[áa] passaram/i, // 12º: o cartão de meio de semana
 ];
 
 /** A frase fala do futuro da atividade da pessoa? (Aplicação direta da regra acima.) */
 export function falaNoFuturo(texto: string): boolean {
   return FALA_NO_FUTURO.some((re) => re.test(texto));
+}
+
+/**
+ * 🔒 A SEGUNDA CLASSE (DF 2026-07-29). Sete achados numa leva já varrida não era
+ * reincidência: era uma classe inteira sem rede. A regra do futuro fechava só uma.
+ *
+ *   **CLASSE 2 — a frase pressupõe um plano ou prescrição que essa pessoa NÃO TEM.**
+ *
+ * Pega: "não entra nos minutos da meta" · "mantém seu plano calibrado" · "Como seu plano
+ * evolui" · "não mudam o seu cardápio" · "Plano e preferências" · "compostos a 6 reps".
+ * Não pega: "14 dias de chama" · "hoje você registrou" · "Variação" · "Um período sem
+ * registro não é um problema" · a copy do treino fora da biblioteca.
+ *
+ * É MAIS mecanizável que a classe 1 porque o vocabulário é fechado — são substantivos do
+ * produto, não formas verbais.
+ */
+export const SUBSTANTIVOS_DE_PRESCRICAO: readonly RegExp[] = [
+  /\bplano\b/i,
+  /\bcard[áa]pio\b/i,
+  /\bmeta\b|\bmetas\b/i,
+  /\bprescri[çc][ãa]o\b/i,
+  /\bprazo\b/i,
+  /recalcul(a|am|o|ar)|rec[áa]lculo/i,
+  /adaptativ[ao]s?/i,
+  /modo for[çc]a/i,
+  /\bprogress[ãa]o\b/i,
+];
+
+/**
+ * A frase pressupõe prescrição? Aplicação direta da regra da classe 2.
+ *
+ * ⚠️ NEGAR a existência da prescrição NÃO é pressupô-la: "o app não monta treino nem
+ * cardápio para você" é justamente a mensagem que o modo diário precisa dizer. Por isso o
+ * guard trabalha com EXCEÇÕES DECLARADAS (ver a tabela no teste) e não com uma varredura
+ * cega — a mais importante delas é o cartão permanente de encaminhamento ao profissional,
+ * que legitimamente usa "plano" e "cardápio" para dizer que eles não existem.
+ */
+export function pressupoePrescricao(texto: string): boolean {
+  return SUBSTANTIVOS_DE_PRESCRICAO.some((re) => re.test(texto));
 }

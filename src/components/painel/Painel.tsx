@@ -617,7 +617,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <EditarPerfil inicial={perfil} onCancelar={() => setEditando(false)} onSalvar={recalcular} />
+        <EditarPerfil inicial={perfil} onCancelar={() => setEditando(false)} onSalvar={recalcular} modoDiario={modoDiario} />
       </div>
     );
   }
@@ -711,7 +711,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             onRegistrarTreino={() => setRegistrando(true)}
             onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             onRegistrarRefeicao={() => irAba('dieta')}
-            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} />}
+            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} modoDiario />}
           />
         )}
         {!vista && aba === 'hoje' && !modoDiario && (
@@ -747,7 +747,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && (
-          <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso}>
+          <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
                 `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
             <FrequenciaGrupos
@@ -763,7 +763,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           </Progresso>
         )}
         {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
-        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} />}
+        {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} notif={notif} onAtivarNotif={() => setNotifModal(true)} onToggleTreino={() => atualizarNotif({ treino: !notif.treino })} onToggleRefeicao={() => atualizarNotif({ refeicao: !notif.refeicao })} onDesativarTudo={() => atualizarNotif({ treino: false, refeicao: false })} modoDiario={modoDiario} />}
       </div>
 
       {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
@@ -1076,7 +1076,7 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, children }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode }) {
+function Progresso({ pesos, treinos, onRegistrar, children, modoDiario }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode; modoDiario?: boolean }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -1093,12 +1093,17 @@ function Progresso({ pesos, treinos, onRegistrar, children }: { pesos: number[];
         <Grafico pesos={pesos} />
         {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} modoDiario={modoDiario} />
       {children}
+      {/* 🔒 CLASSE 2 — o cartão descreve o MOTOR ADAPTATIVO (plano que se recalcula), que o
+          modo diário não tem. Não renderiza, e não ganha paráfrase: não existe equivalente
+          verdadeiro. Silêncio, não versão adaptada. */}
+      {!modoDiario && (
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, background: 'linear-gradient(165deg, rgba(22,163,74,.1), rgba(15,15,14,.4))', border: '1px solid rgba(189,255,0,.2)', borderRadius: 18, padding: '22px 24px', marginTop: 18 }}>
         <span style={{ width: 42, height: 42, minWidth: 42, borderRadius: 12, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={22} height={22} viewBox="0 0 24 24" fill="none"><path d="M3 17 Q8 14 12 9 T21 4" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={9} r={2.2} fill="#BDFF00" /><circle cx={21} cy={4} r={2.6} fill="#BDFF00" /></svg></span>
         <div><h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', fontWeight: 700 }}>Como seu plano evolui</h3><p style={{ margin: 0, color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.95rem' }}>A cada avanço seu, o treino e a dieta se <strong style={{ color: '#BDFF00', fontWeight: 600 }}>recalculam</strong> pelas regras adaptativas. Sem promessa de prazo — só o ajuste fino que a sua constância merece.</p></div>
       </div>
+      )}
     </div>
   );
 }
@@ -1185,8 +1190,8 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
 /* ════════════════════ Perfil ════════════════════ */
 
-function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTreino, onToggleRefeicao, onDesativarTudo }: {
-  perfil: PerfilResumo; onConta: () => void; onEditar: () => void;
+function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTreino, onToggleRefeicao, onDesativarTudo, modoDiario }: {
+  perfil: PerfilResumo; onConta: () => void; onEditar: () => void; modoDiario?: boolean;
   notif: NotifPrefs; onAtivarNotif: () => void; onToggleTreino: () => void; onToggleRefeicao: () => void; onDesativarTudo: () => void;
 }) {
   const linha = (k: string, v: string, last = false) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 0', ...(last ? {} : { borderBottom: '1px solid rgba(234,229,219,.07)' }) }}><span style={{ color: 'rgba(234,229,219,.55)', fontSize: '.94rem' }}>{k}</span><span style={{ fontWeight: 600, fontSize: '.94rem', textAlign: 'right' }}>{v}</span></div>;
@@ -1204,12 +1209,16 @@ function Perfil({ perfil, onConta, onEditar, notif, onAtivarNotif, onToggleTrein
           {linha('Peso', `${perfil.pesoKg} kg`, true)}
         </div>
         <div style={{ ...cardSoft, padding: 24 }}>
-          <h3 style={{ margin: '0 0 18px', fontSize: '1.15rem', fontWeight: 700 }}>Plano e preferências</h3>
+          {/* 🔒 CLASSE 2 — o título tinha a palavra "Plano" para quem não tem plano. */}
+          <h3 style={{ margin: '0 0 18px', fontSize: '1.15rem', fontWeight: 700 }}>{modoDiario ? 'Suas preferências' : 'Plano e preferências'}</h3>
           {linha('Objetivo', OBJETIVO_LABEL[perfil.objetivo])}
           {linha('Atividade', ATIV_LABEL[perfil.nivelAtividade])}
           {linha('Experiência', perfil.nivelExperiencia.charAt(0).toUpperCase() + perfil.nivelExperiencia.slice(1))}
-          {/* Chip do modo força (v2 §4) — só interm./avançado com o preset ativo. */}
-          {perfil.modoForca && perfil.nivelExperiencia !== 'iniciante' && linha('Modo força', 'Ativo — compostos a 6 reps')}
+          {/* Chip do modo força (v2 §4) — só interm./avançado com o preset ativo.
+              🔒 CLASSE 2 — "compostos a 6 reps" é PARÂMETRO DE PRESCRIÇÃO. Some em modo
+              diário inclusive numa conta que já tenha o preset ligado de antes (o toggle
+              some do Editar perfil, mas o dado persistido não some sozinho). */}
+          {!modoDiario && perfil.modoForca && perfil.nivelExperiencia !== 'iniciante' && linha('Modo força', 'Ativo — compostos a 6 reps')}
           {linha('Padrão alimentar', perfil.preferencia ? (perfil.preferencia === 'vegano' ? 'Vegano' : 'Vegetariano') : 'Onívoro')}
           {linha('Alergias', perfil.alergenos.length ? perfil.alergenos.join(', ') : 'nenhuma', true)}
         </div>
@@ -1360,13 +1369,20 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
   return <div style={{ ...cardSoft, padding: 20, borderRadius: 16 }}><div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>{rotulo}</div><div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', color: cor ?? '#EAE5DB' }}>{valor}{un && <span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.5)', fontWeight: 500 }}> {un}</span>}</div></div>;
 }
 
-function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void }) {
+/**
+ * 🔒 O subtítulo RAMIFICA (DF 2026-07-29). Com plano, "mantém seu plano calibrado" é
+ * literalmente verdade — o peso alimenta a TMB (Mifflin-St Jeor) → GET → kcal-alvo, e é o
+ * incentivo que sustenta o registro cuja falta desatualiza o próprio alvo calórico. Em modo
+ * diário não há alvo a calibrar, e a frase viraria referência a um plano inexistente
+ * (CLASSE 2). A variação, essa, é verdadeira nos dois — só ela sobra do outro lado.
+ */
+function RegistrarPesoRow({ onRegistrar, modoDiario }: { onRegistrar: (v: number) => void; modoDiario?: boolean }) {
   const [v, setV] = useState('');
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
         <span style={{ width: 40, height: 40, borderRadius: 11, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={20} height={20} viewBox="0 0 24 24" fill="none"><path d="M4 18 Q9 16 12 11 T20 5" stroke="#BDFF00" strokeWidth={2} fill="none" strokeLinecap="round" /><circle cx={12} cy={11} r={2} fill="#BDFF00" /><circle cx={20} cy={5} r={2.4} fill="#BDFF00" /></svg></span>
-        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Um registro rápido guarda a sua variação.</div></div>
+        <div><div style={{ fontWeight: 600, fontSize: '1rem' }}>Como está o peso hoje?</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>{modoDiario ? 'Um registro rápido guarda a sua variação.' : 'Um registro rápido mantém seu plano calibrado.'}</div></div>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />

@@ -127,7 +127,7 @@ export function ContadorTreinos({ dias, celebrarToken, modoDiario }: { dias: num
       <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.12), rgba(15,15,14,.55))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 20, padding: 26, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
         <Chama cor={a.cor} estado="atual" enfase={a.enfase} size={92} celebrarToken={celebrarToken} />
         <div style={{ flex: 1, minWidth: 250 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: '.68rem', fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', padding: '5px 11px', borderRadius: 999, color: hex, background: `rgba(${rgb},.13)`, border: `1px solid rgba(${rgb},.3)` }}>{pillChama(dias)}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: '.68rem', fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', padding: '5px 11px', borderRadius: 999, color: hex, background: `rgba(${rgb},.13)`, border: `1px solid rgba(${rgb},.3)` }}>{pillChama(dias, modoDiario)}</span>
           <div style={{ fontSize: '1.34rem', fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.3, marginTop: 12 }}>Você já completou <span style={{ fontWeight: 800, color: hex }}>{dias}</span> dias de treino.</div>
           <div style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', marginTop: 7, lineHeight: 1.55 }}>{APOIO_CHAMA[b]}</div>
         </div>
