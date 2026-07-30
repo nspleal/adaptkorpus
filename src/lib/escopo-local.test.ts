@@ -274,3 +274,36 @@ describe('🔒 CHAVES APOSENTADAS — a feature sai, o dado dela não fica em re
     expect(src).not.toMatch(/NotificacoesCard|ModalNotificacoes|ativarNotif/);
   });
 });
+
+describe('🔒 `/conta` não lê dado local com escopo (o que dispensa o resolve)', () => {
+  /**
+   * Trava o que o JSDoc de `resolverEscopoLocal` afirma. O comentário já listou `/conta` como
+   * chamador quando ela não chamava — e num arquivo que é a fonte única sobre escopo, lista
+   * errada é pior que a chamada ausente. A dispensa só vale enquanto a premissa valer: se
+   * `/conta` passar a ler uma chave com escopo, ela precisa resolver ANTES, e este teste cai.
+   *
+   * `limparDadosLocais()` (exclusão de conta) continua permitido: varre por PREFIXO em todos
+   * os escopos, então não depende de escopo resolvido.
+   */
+  /**
+   * ⚠️ SEM COMENTÁRIOS. A 1ª versão deste bloco afirmava `toMatch(/user_metadata/)` na fonte
+   * crua e **sobrevivia à mutação que apagava a leitura**: o arquivo cita `user_metadata` num
+   * JSDoc, e a asserção achava a lápide. Quarta vez na varredura que o **extrator é parte do
+   * guard** — junto do que não lia `${}`, da linha de JSDoc que saía sem derrubar nada, e do
+   * `toMatch` no arquivo que não provava a seção.
+   */
+  const src = readFileSync('src/app/conta/page.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\/.*$/gm, ' ');
+
+  it('não usa `chaveLocal` nem lê `evk_*` direto', () => {
+    expect(/chaveLocal\s*\(/.test(src), '/conta passou a usar chaveLocal — precisa resolver o escopo antes').toBe(false);
+    expect(/localStorage\.(get|set)Item/.test(src), '/conta passou a ler/escrever localStorage direto').toBe(false);
+  });
+
+  it('lê nome e e-mail do `auth`, não do storage', () => {
+    expect(src).toMatch(/auth\.getSession\(\)/);
+    expect(src).toMatch(/u\.user_metadata|\(u\.user_metadata/);
+    expect(src).toMatch(/setEmail\(u\.email/);
+  });
+});

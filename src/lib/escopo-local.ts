@@ -141,7 +141,14 @@ export function limparDadoPessoalLocal(): void {
 
 /**
  * Resolve o escopo a partir da sessão do Supabase e o define. Chamado nos pontos de ENTRADA
- * do cliente (`/app`, `/onboarding`, `/conta`) **antes** de qualquer leitura local.
+ * do cliente que LEEM dado local — hoje `/app` e `/onboarding` — **antes** de qualquer
+ * leitura. Os testes de ordem no fim de `escopo-local.test.ts` travam esses dois.
+ *
+ * ⚠️ `/conta` NÃO chama, e está correto: ela não lê nenhuma chave com escopo (nome e e-mail
+ * vêm do `auth`), e o `limparDadosLocais()` da exclusão de conta varre **por prefixo**, em
+ * todos os escopos — não depende de escopo resolvido. Este comentário já afirmou que
+ * `/conta` chamava; não chamava, e a lista errada num arquivo que é a fonte única sobre
+ * escopo é pior que a ausência da chamada.
  *
  * Sem Supabase (modo mock) o escopo fica `null` de propósito: as chaves sem sufixo seguem
  * sendo as de trabalho, e o modo mock não tem persistência de servidor — não há para onde
