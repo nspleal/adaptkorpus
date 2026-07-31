@@ -18,12 +18,15 @@ export async function GET() {
   if (ctx instanceof NextResponse) return ctx;
   const barra = barreiraDados(ctx.user.id, limitador);
   if (barra) return barra;
-  const [profile, plans, logs, feedback, subscription] = await Promise.all([
+  const [profile, plans, logs, feedback, subscription, eventos] = await Promise.all([
     ctx.supabase.from('profile').select('*').maybeSingle(),
     ctx.supabase.from('plans').select('*').order('created_at', { ascending: true }),
     ctx.supabase.from('logs').select('*').order('created_at', { ascending: true }),
     ctx.supabase.from('feedback').select('*').order('created_at', { ascending: true }),
     ctx.supabase.from('subscription').select('*').maybeSingle(),
+    // 🔒 Telemetria entra no export como SEÇÃO PRÓPRIA (Leva C2). Tabela separada de `logs`
+    // justamente para não sair misturada com o histórico da pessoa.
+    ctx.supabase.from('eventos').select('*').order('created_at', { ascending: true }),
   ]);
   return NextResponse.json({
     exportadoEm: new Date().toISOString(),
@@ -33,5 +36,6 @@ export async function GET() {
     logs: logs.data ?? [],
     feedback: feedback.data ?? [],
     subscription: subscription.data ?? null,
+    eventos: eventos.data ?? [],
   });
 }

@@ -58,7 +58,13 @@ export default function Privacidade() {
 
       <SecaoLegal id="s-finalidade" titulo="Para que usamos">
         <Paragrafo mb>Usamos seus dados para <Forte>gerar e recalcular seu plano</Forte> de treino e dieta, lembrar você de cobranças antes que aconteçam, dar suporte e manter o serviço seguro.</Paragrafo>
-        <Paragrafo>Não usamos seus dados de saúde para publicidade.</Paragrafo>
+        <Paragrafo mb>Não usamos seus dados de saúde para publicidade.</Paragrafo>
+        {/* 🔒 Leva C2 — a página passa a descrever tratamento que antes não descrevia. Ela
+            dizia só "medição anônima com o Vercel Analytics", e os eventos de uso NÃO são
+            anônimos: são da conta da pessoa. É o inverso exato do descompasso de 2026-07-27
+            (quando a página descrevia o que NÃO ocorria) e igualmente inexato. Copy do
+            cofre, `metricas-de-produto-evokorpus`. */}
+        <Paragrafo>Registramos <Forte>eventos de uso da sua conta</Forte> — quando você abre o app, gera um plano, inicia e conclui uma sessão, troca um exercício, marca uma refeição ou registra um cardio. Servem para saber se o app está ajudando de verdade. <Forte>Ficam no nosso banco, nunca são enviados a terceiros</Forte>, e saem no seu export e na exclusão de conta. <Forte>Nada de saúde entra nesses registros.</Forte></Paragrafo>
       </SecaoLegal>
 
       <SecaoLegal id="s-minimizacao" titulo="Minimização, base legal e consentimento">
@@ -79,7 +85,12 @@ export default function Privacidade() {
       </SecaoLegal>
 
       <SecaoLegal id="s-retencao" titulo="Retenção e segurança">
-        <Paragrafo mb>Mantemos seus dados enquanto a conta existir e pelo prazo necessário a obrigações legais. Depois, eliminamos ou anonimizamos. <AValidar>prazos de retenção</AValidar></Paragrafo>
+        {/* 🔒 Os DOIS prazos, com precisão — senão a página promete apagar o que não apaga,
+            ou apaga o que não devia. Aplicar "12 meses" ao histórico deletaria pesos,
+            treinos e refeições de qualquer conta com mais de um ano. */}
+        <Paragrafo mb><Forte>Seu histórico</Forte> (peso, treinos e refeições registradas) fica <Forte>enquanto a conta existir</Forte> — é o seu registro, e ele some quando você exclui a conta.</Paragrafo>
+        <Paragrafo mb><Forte>Os eventos de uso</Forte> ficam por <Forte>12 meses</Forte> e depois são <Forte>apagados</Forte> — não anonimizados. Também somem antes disso se você excluir a conta.</Paragrafo>
+        <Paragrafo mb>Fora isso, mantemos dados pelo prazo necessário a obrigações legais. <AValidar>prazos legais específicos</AValidar></Paragrafo>
         <Paragrafo>Adotamos medidas técnicas e organizacionais para proteger seus dados. Nenhum sistema é infalível, e trabalhamos para reduzir riscos continuamente.</Paragrafo>
       </SecaoLegal>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
@@ -28,6 +28,7 @@ import { bandaChama, diasDeTreino } from '@/lib/chama';
 import type { Weekday } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
+import { registrarEvento } from '@/lib/metricas/registrar';
 import GraficoLinha from './GraficoLinha';
 import { ContadorTreinos } from './ChamaContador';
 import RegistrarTreino from './RegistrarTreino';
@@ -210,6 +211,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
+  /** Carimbo de início da sessão guiada (ms). Só alimenta `duracao_real_min`. */
+  const inicioSessaoRef = useRef<number | null>(null);
   const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
   // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
   useEffect(() => {
@@ -303,7 +306,37 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
   const favoritosSet = new Set(perfil.favoritos ?? []);
 
+  /**
+   * 🔒 TELEMETRIA (Leva C2): `sessao_iniciada` é a métrica nº 1 — ATIVAÇÃO. Sai daqui, do
+   * ato de abrir a sessão guiada, não de um `useEffect` de montagem: o teste tem de provar
+   * que ela sai QUANDO a sessão inicia.
+   */
+  function iniciarSessaoGuiada(idx: number) {
+    const dia = rotinaDias[idx];
+    if (dia) {
+      // Relógio na UI, NUNCA no motor (regra do projeto). Só para a duração real.
+      inicioSessaoRef.current = Date.now();
+      registrarEvento('sessao_iniciada', {
+        sessao_id: `${dataHoje}-${idx}`,
+        data_agendada: dataHoje,
+        semana_ciclo: ciclo.semanaEfetiva,
+      });
+    }
+    setSessaoDia(idx);
+  }
+
   function concluirSessao(r: ResumoSessao) {
+    registrarEvento('sessao_concluida', {
+      sessao_id: `${dataHoje}-${sessaoDia ?? 0}`,
+      // 🔒 Duração REAL medida na UI (início → conclusão). O motor não vê relógio; este
+      // carimbo existe só para a métrica "duração planejada × real" da spec. Sem início
+      // registrado (registro manual, reload no meio) sai 0 — e 0 lê-se "não medida".
+      duracao_real_min: inicioSessaoRef.current
+        ? Math.max(0, Math.round((Date.now() - inicioSessaoRef.current) / 60_000))
+        : 0,
+      exercicios_feitos: r.exercicios?.length ?? 0,
+      exercicios_planejados: sessaoDia != null ? (rotinaDias[sessaoDia]?.slots.length ?? 0) : 0,
+    });
     aplicarNovoHistorico(registrarSessao(r)); // carimba data + persiste (evk_treinos)
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
@@ -316,6 +349,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // plano de dieta: `salvarCardio` não chama `recomputarPlano` nem mexe em `dieta`.
   const [registrandoCardio, setRegistrandoCardio] = useState(false);
   function salvarCardio(payload: NonNullable<SessaoHistorico['cardio']>) {
+    registrarEvento('cardio_registrado', {
+      modalidade: payload.modalidade, minutos: payload.minutos, origem: 'registro_manual',
+    });
     aplicarNovoHistorico(registrarCardio(payload));
   }
 
@@ -451,6 +487,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     if (n.length) setModal({ ...modal, opcoes: n, excl });
   };
   function aplicarEx(d: number, s: number, ex: Exercise) {
+    registrarEvento('exercicio_substituido', {
+      de_id: rotinaDias[d]?.slots[s]?.exercicio.id ?? '', para_id: ex.id, motivo: 'escolha_usuario',
+    });
     const novos = rotinaDias.map((dia) => ({ ...dia, slots: dia.slots.slice() })); novos[d]!.slots[s] = { ...novos[d]!.slots[s]!, exercicio: ex };
     setRotinaDias(novos); marcar(`e${d}-${s}`); setModal(null);
   }
@@ -710,18 +749,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <SuaSemana
               treinoDias={perfil.treinoDias}
               sessoesNomes={rotinaDias.map((d) => d.nome)}
-              onIrSessao={(idx) => (rotinaDias[idx] ? setSessaoDia(idx) : setAba('treino'))}
+              onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : setAba('treino'))}
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não
             recebe meta". Sem este ramo, o usuário em ROTEAR veria a aba Treino VAZIA e não
             teria onde registrar — o oposto do que a spec pede. */}
         {!vista && aba === 'treino' && (prescricao
-          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => setSessaoDia(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
+          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
@@ -753,7 +792,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? setSessaoDia(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 

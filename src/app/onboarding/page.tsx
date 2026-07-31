@@ -10,6 +10,7 @@ import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
+import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
@@ -166,6 +167,20 @@ export default function Onboarding() {
           // presa na porta: era por isso que ela não entrava. O que o roteado não recebe é
           // PRESCRIÇÃO, e quem tira o plano da tela é o `modoDiario` do painel — não a
           // ausência de conta.
+          // 🔒 `plano_gerado` sai QUANDO o plano é gerado — é o denominador do abandono
+          // (o caso do beta: 4 de 5 contas geraram plano e nunca voltaram). ⚠️ Nada de
+          // saúde no payload: sai o retrato declarado, não a resposta do gate.
+          // ⚠️ ANTES do `salvarSessao`, de propósito: colocado depois, este bloco afastava
+          // `salvarSessao(resumo)` do check de ROTEAR além da janela do guard da Leva 2 que
+          // prova que a porta do modo diário está aberta. O guard existente não se afrouxa
+          // para caber código novo — o código novo é que sai da frente.
+          registrarEvento('plano_gerado', {
+            plano_id: `${resumo.objetivo}-${resumo.nivelExperiencia}-${resumo.diasDisponiveis}`,
+            objetivo: resumo.objetivo,
+            nivel: resumo.nivelExperiencia,
+            local: resumo.equipamento,
+            dias_declarados: resumo.diasDisponiveis,
+          });
           salvarSessao(resumo);
           // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
           // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —

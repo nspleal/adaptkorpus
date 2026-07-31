@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { faixaTint, limiarAderencia, streakAderencia } from '@/lib/aderencia';
 import { diaLocalISO } from '@/lib/dia-local';
 import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from '@/lib/persistencia/sync';
+import { registrarEvento } from '@/lib/metricas/registrar';
 import { chaveLocal } from '@/lib/escopo-local';
 
 /**
@@ -82,7 +83,12 @@ export function useRegistro() {
 
   return {
     logs, notes,
-    setStatus: (id: string, s: StatusRefeicao) => setLogs((p) => ({ ...p, [id]: s })),
+    setStatus: (id: string, s: StatusRefeicao) => {
+      // 🔒 `refeicao_marcada` sai NO ATO da marcação. ⚠️ Só o slot e o booleano — nunca o
+      // CONTEÚDO da refeição (a denylist barra `prato`, `alimento`, `kcal`).
+      registrarEvento('refeicao_marcada', { refeicao: id, seguiu: s === 'seguiu' });
+      setLogs((p) => ({ ...p, [id]: s }));
+    },
     setNote: (id: string, txt: string) => setNotes((p) => ({ ...p, [id]: txt })),
   };
 }

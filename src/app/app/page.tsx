@@ -12,6 +12,7 @@ import { emModoDiario } from '@/lib/modo-diario';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import VigiaSessao from '@/components/auth/VigiaSessao';
 import ConviteInstalar from '@/components/pwa/ConviteInstalar';
+import { registrarEvento } from '@/lib/metricas/registrar';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -43,6 +44,9 @@ export default function AppPage() {
       }
       setEstado({ perfil, dieta, treino });
       setPronto(true);
+      // 🔒 `app_aberto` sai QUANDO o app abre de verdade (painel montado), não no import do
+      // módulo: retorno no dia 2 e na semana 1 se medem por abertura real.
+      registrarEvento('app_aberto', { rota: '/app' });
     }
 
     if (!supabaseConfigurado()) {
