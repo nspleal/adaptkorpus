@@ -5,6 +5,7 @@ import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-ty
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
+import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { modalidadeDoExercicio, ROTULO_MODALIDADE, type IntensidadeCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import RegistrarCardio from './Cardio';
 import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
@@ -186,7 +187,22 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       loaded,
       reps,
       rir: prescricao.rir,
-      restSeg: Math.round((desc.min + desc.max) / 2),
+      /**
+       * 🔒 O descanso vem do MOTOR, por exercício (cofre §🕐, DF 2026-07-31).
+       *
+       * 🔻 SAIU: `Math.round((desc.min + desc.max) / 2)` — a média da faixa. Ela fixava um
+       * ponto no meio e **matava o deslocamento por RIR em silêncio**: o motor podia emitir
+       * 120/150/180 ao longo do mesociclo e a tela mostrava sempre 150. A tela EXIBE, não
+       * recalcula.
+       *
+       * O fallback à média só serve à chamada v1 (sem `semanaCiclo`), em que o motor não
+       * emite `descansoSeg`.
+       */
+      restSeg: sl.descansoSeg ?? descansoDoExercicio({
+        exercicio: sl.exercicio,
+        rirAlvo: prescricao.rirAlvoSemana ?? prescricao.rir.min,
+        modoForca: prescricao.modoForca === true,
+      }) ?? desc.min,
       comoFazer: efetivo.comoFazer,
       repUnit,
       faixaSeg,
@@ -391,7 +407,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
               {ex.cargaHint && <span style={{ fontSize: '.85rem', fontWeight: 600, color: '#BDFF00', background: 'rgba(189,255,0,.1)', borderRadius: 9, padding: '7px 12px' }}>{ex.cargaHint}</span>}
               {/* RIR não se aplica a holds (cofre §Isométricos) — só o feedback fácil/na medida/difícil. */}
               {ex.repUnit !== 'segundos' && <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>{ex.rirAlvoSemana != null ? `RIR alvo: ${ex.rirAlvoSemana}` : `RIR: ${ex.rir.min}–${ex.rir.max}`}</span>}
-              <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {ex.restSeg}s</span>
+              <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 9, padding: '7px 12px' }}>Descanso {rotuloDescanso(ex.restSeg)}</span>
             </div>
             {/* Hint de evolução (subiu de meta / carga / degrau) — só quando houve progressão real. */}
             {ex.evoluiuHint && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{ex.evoluiuHint}</p>}
@@ -469,6 +485,11 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
                 <div style={{ height: 6, background: 'rgba(234,229,219,.12)', borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}><div style={{ height: '100%', width: `${(rest.left / rest.total) * 100}%`, background: '#BDFF00', borderRadius: 99, transition: 'width 1s linear' }} /></div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setRest((r) => (r ? { left: r.left + 15, total: r.total + 15 } : r))} className="evk-voltar" style={{ flex: 1, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.9rem', padding: 10, borderRadius: 11, cursor: 'pointer' }}>+15 s</button>
+                  {/* 🔒 "Preciso de mais tempo" (§5.7 pede explicitamente). Descansar MAIS
+                      nunca é falha: sem vermelho, sem aviso, sem "você descansou demais" —
+                      é a forma geral de "ausência não fala". "Pular descanso" fica: encurtar
+                      por escolha própria é o usuário dirigindo, e o motor não julga. */}
+                  <button onClick={() => setRest((r) => (r ? { left: r.left + 30, total: r.total + 30 } : r))} className="evk-troca" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.85)', fontWeight: 600, fontSize: '.9rem', padding: 10, borderRadius: 11, cursor: 'pointer' }}>Mais um pouco</button>
                   <button onClick={pararDescanso} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.9rem', padding: 10, border: 'none', borderRadius: 11, cursor: 'pointer' }}>Pular descanso</button>
                 </div>
               </div>

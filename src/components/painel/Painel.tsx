@@ -14,6 +14,7 @@ import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
+import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { metaCardioComRetomada, metaCardioSemanal, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
@@ -942,7 +943,14 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
             {dia.slots.map((sl, s) => {
               const comp = sl.padrao !== 'isolado';
               const reps = comp ? prescricao.repsComposto : prescricao.repsIsolado;
+              // 🔒 Prévia do plano: mesmo número que a sessão guiada vai mostrar. Vem do
+              // motor (`descansoSeg`); a faixa da prescrição é só fallback da chamada v1.
               const desc = comp ? prescricao.descansoCompostoSeg : prescricao.descansoIsoladoSeg;
+              const restSeg = sl.descansoSeg ?? descansoDoExercicio({
+                exercicio: sl.exercicio,
+                rirAlvo: prescricao.rirAlvoSemana ?? prescricao.rir.min,
+                modoForca: prescricao.modoForca === true,
+              }) ?? desc.min;
               const k = `${d}-${s}`;
               // Overlay B3: degrau assumido → o cartão exibe o exercício EFETIVO (a rotina
               // e as chaves de feedback/troca continuam no id original do slot).
@@ -973,7 +981,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                         <span style={pill}>{prescricao.seriesPorExercicio.min}–{prescricao.seriesPorExercicio.max} × {reps.min}–{reps.max} reps</span>
                         <span style={pill}>RIR {prescricao.rir.min}–{prescricao.rir.max}</span>
-                        <span style={pill}>Descanso {desc.min}–{desc.max}s</span>
+                        <span style={pill}>Descanso {rotuloDescanso(restSeg)}</span>
                       </div>
                       <button onClick={() => onDetalhe(d, s)} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 14, background: 'none', border: '1px solid rgba(234,229,219,.18)', cursor: 'pointer', fontSize: '.86rem', fontWeight: 600, color: 'rgba(234,229,219,.8)', padding: '8px 13px', borderRadius: 10 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>Como fazer</button>
                       <div style={{ borderTop: '1px solid rgba(234,229,219,.08)', paddingTop: 13 }}>
