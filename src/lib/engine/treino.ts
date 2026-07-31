@@ -30,6 +30,7 @@ import type {
 import type { Exercise, NivelExercicio } from '../data/types';
 import { DECREMENTO_SEG, INCREMENTO_SEG, PISO_HOLD_SEG, faixaSegundos, repUnitDe } from './isometricos';
 import { indiceBase } from './modificacoes-isometricos';
+import { temCargaProgressivel } from './equipamento';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -246,7 +247,7 @@ export function estadoInicial(exercicio: Exercise, prescricao: PrescricaoFITT): 
   const esSeg = repUnitDe(exercicio.id) === 'segundos';
   const faixa = esSeg ? (faixaSegundos(exercicio.id, prescricao.nivel) ?? faixaReps(exercicio, prescricao)) : faixaReps(exercicio, prescricao);
   // Holds são time-only (peso corporal); com carga = academia/casa-com; senão peso corporal.
-  const modo: EstadoExercicio['modo'] = !esSeg && (exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal' ? 'carga' : 'peso_corporal';
+  const modo: EstadoExercicio['modo'] = temCargaProgressivel(exercicio) ? 'carga' : 'peso_corporal';
   return {
     exercicioId: exercicio.id,
     modo,

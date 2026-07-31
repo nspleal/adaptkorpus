@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
+import { temCargaProgressivel } from '@/lib/engine/equipamento';
 import { modalidadeDoExercicio, ROTULO_MODALIDADE, type IntensidadeCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import RegistrarCardio from './Cardio';
 import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
@@ -143,7 +144,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     // Isométricos (cofre): registram SEGUNDOS pela faixa do nível; tratados como time-only.
     const repUnit = repUnitDe(sl.exercicio.id);
     const faixaSeg = repUnit === 'segundos' ? faixaSegundos(sl.exercicio.id, prescricao.nivel) : null;
-    const loaded = repUnit === 'segundos' ? false : (sl.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+    const loaded = temCargaProgressivel(sl.exercicio);
 
     // --- Progressão viva (Bloco B) ---------------------------------------------------------
     const estado = progresso?.[sl.exercicio.id]?.estado;

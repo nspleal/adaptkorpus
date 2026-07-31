@@ -9,6 +9,7 @@ import { hojeISO } from '@/lib/treino-historico';
 import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progressao';
 import CalibracaoModal, { type PayloadCalibracao } from './CalibracaoModal';
 import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
+import { temCargaProgressivel } from '@/lib/engine/equipamento';
 
 /**
  * Registrar treino feito — porte FIEL do formulário do design
@@ -87,11 +88,11 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
     // Isométricos registram SEGUNDOS e são time-only (sem carga); o resto segue a regra do
     // player: peso corporal não tem coluna de carga.
     const repUnit = repUnitDe(ex.id);
-    const temCarga = repUnit === 'segundos' ? false : (ex.equipamentoDetalhe ?? '') !== 'Peso corporal';
+    const comCarga = temCargaProgressivel(ex);
     const nSets = prefill && prescricao ? prescricao.seriesPorExercicio.min : 3;
     const repsDefault = prefill && prescricao && repUnit === 'reps' ? String(prescricao.repsComposto.max) : '';
     return {
-      uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga, repUnit,
+      uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga: comCarga, repUnit,
       dica: ex.comoFazer, variacao: '',
       sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '', rir: '' })),
       chip: null,

@@ -13,6 +13,7 @@ import { dificuldadesLiberadas } from './treino';
 import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
+import { temCarga } from './equipamento';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -289,7 +290,7 @@ export function montarRotina(
         const n = slots.length;
         if (n === 0) continue;
         const tetoSlot = slots.map((s) => {
-          const comCarga = (s.exercicio.equipamentoDetalhe ?? '') !== 'Peso corporal';
+          const comCarga = temCarga(s.exercicio);
           const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
           // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
           // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).

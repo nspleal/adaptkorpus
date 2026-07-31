@@ -13,6 +13,7 @@
  * Filtro DURO: nunca relaxado (F.2 §2 #1). Puro e determinístico.
  */
 import type { EquipamentoCasa, EquipamentoDisp, Exercise } from '../data/types';
+import { repUnitDe } from './isometricos';
 
 /** Os 7 do vocabulário (ordem estável p/ UI). Barbell fora de propósito (≈ academia). */
 export const EQUIPAMENTOS_CASA: readonly EquipamentoCasa[] = [
@@ -51,4 +52,35 @@ export function exercicioDisponivel(
   const eOk = !exigido || exigido.every((eq) => equipamentosCasa.includes(eq));
   const ouOk = !qualquerUm || qualquerUm.length === 0 || qualquerUm.some((eq) => equipamentosCasa.includes(eq));
   return eOk && ouOk;
+}
+
+/* ════════════════════ Predicado de CARGA ════════════════════ */
+
+/**
+ * 🔒 FONTE ÚNICA do "esse exercício tem carga externa?" (Leva A, DF 2026-07-31).
+ *
+ * Estava em **4 cópias inline**, em **2 variantes**: `treino-montador.ts` (retomada),
+ * `treino.ts` (progressão), `SessaoTreino.tsx` e `RegistrarTreino.tsx`. Quatro lugares que
+ * decidem a mesma coisa é quatro lugares para divergir — foi assim que a 9ª chave de
+ * `localStorage` apareceu, e a lição vale igual aqui.
+ *
+ * ⚠️ **As duas variantes NÃO se colapsam.** A diferença é real: um isométrico com carga
+ * (prancha com anilha) **tem** carga, mas não tem carga **progressível** — a progressão dele
+ * é em SEGUNDOS (±5 s), não em quilos. Unificar mudaria o comportamento de exatamente um dos
+ * quatro pontos (`treino-montador.ts:292`, que computa o IRV da retomada e precisa da
+ * leitura crua), **em silêncio**. Por isso são duas funções, a segunda derivada da primeira.
+ */
+
+/** Tem carga externa? A leitura crua do equipamento — sem olhar a unidade de repetição. */
+export function temCarga(ex: Exercise): boolean {
+  return (ex.equipamentoDetalhe ?? '') !== 'Peso corporal';
+}
+
+/**
+ * Tem carga que a PROGRESSÃO move em quilos? Exclui o isométrico: ele progride em segundos
+ * (`INCREMENTO_SEG`), então tratá-lo como "modo carga" faria a dupla progressão empurrar
+ * quilo num exercício que registra tempo.
+ */
+export function temCargaProgressivel(ex: Exercise): boolean {
+  return temCarga(ex) && repUnitDe(ex.id) !== 'segundos';
 }
