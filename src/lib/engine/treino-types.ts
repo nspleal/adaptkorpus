@@ -137,6 +137,16 @@ export interface SlotExercicio {
    * (a UI usa o min da prescrição / estado da progressão).
    */
   series?: number;
+  /**
+   * 🔒 Descanso entre séries DESTE exercício, em segundos (cofre §🕐, DF 2026-07-31).
+   *
+   * Ausente = chamada v1 (sem `semanaCiclo`), em que a UI ainda cai na faixa da prescrição.
+   * Quando presente, é o valor FINAL — já com a classe do exercício, o deslocamento pelo
+   * RIR-alvo, o piso do FIT da rampa e a degradação por orçamento de tempo aplicados. A UI
+   * **exibe, não recalcula**: a média `round((min+max)/2)` que ela fazia matava o
+   * deslocamento em silêncio.
+   */
+  descansoSeg?: number;
 }
 
 export interface DiaTreino {

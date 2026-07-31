@@ -14,6 +14,7 @@ import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
+import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -171,34 +172,113 @@ export function montarRotina(
   // sobe p/ ~180 s QUANDO o tempo permite (v2 §5) — i.e., só se não reduzir o nº de
   // exercícios que o descanso base comportaria (tempo é o limitante; cobertura > descanso).
   let descansoEfetivo: Faixa = prescricao.descansoCompostoSeg;
-  let maxExercicios: number;
+  /**
+   * 🔒 ORÇAMENTO DE TEMPO — SOMA ITEM A ITEM (cofre §🕐 Bloco 3, DF 2026-07-31).
+   *
+   * O que saiu: `cap(rest) = tempo / (sPlan × (40 + média_da_faixa))` — **um** descanso
+   * multiplicado pelo total de séries. Com descansos diferentes por exercício essa conta
+   * erra nas DUAS direções: subestima a sessão cheia de composto e superestima a de
+   * acessório. O erro é invisível — a sessão só "não fecha" na vida real.
+   *
+   * O que entrou: cada padrão do dia custa `sPlan × (40 + descanso da CLASSE dele)`, e o dia
+   * recebe padrões enquanto a soma couber. Um dia de composto passa a comportar menos
+   * exercícios que um de acessório, que é o ponto.
+   *
+   * ⚠️ Aqui a estimativa usa a classe do PADRÃO, não do exercício — na hora do orçamento os
+   * exercícios ainda não foram escolhidos. O valor definitivo por slot é calculado depois da
+   * escolha (`descansoDoExercicio`), que é quem enxerga pliométrico e força pesada.
+   */
+  const capDiaPorTempo: number[] = [];
+  /**
+   * Nível de degradação REALMENTE usado em cada dia (0/1/2). Distinto de "coube ou não":
+   * um dia que fechou cedendo só o ISOLADO fica no nível 1, e os compostos dele mantêm a
+   * faixa cheia. Passar 2 direto rebaixaria composto sem necessidade — cobertura > descanso,
+   * mas só o mínimo necessário de descanso é cedido.
+   */
+  const nivelDegradacaoDia: (0 | 1 | 2)[] = [];
   if (semanaCiclo) {
     const banda = prescricao.volumePorGrupoSemana;
     const sPlan = Math.min(
       prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
       prescricao.seriesPorExercicio.max,
     );
-    const restMid = (f: Faixa) => Math.round((f.min + f.max) / 2);
-    const cap = (rest: Faixa) => Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / (sPlan * (40 + restMid(rest)))));
-    const capBase = cap(prescricao.descansoCompostoSeg);
-    // Elegível ao teto 180 s: descanso base já "pesado" (massa, 90–120) OU modo força
-    // (compostos a 6RM). Subir saúde/emagrec. de 60–90 p/ 180 destoa do objetivo.
-    const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
-    if (elegivel180) {
-      const rest180: Faixa = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
-      const precisaSlots = Math.max(...spec.map((d) => Math.min(d.padroes.length, capBase)));
-      if (cap(rest180) >= precisaSlots) descansoEfetivo = rest180;
+    const rirAlvo = prescricao.rirAlvoSemana ?? prescricao.rir.min;
+    const semanaRampa = semanaCiclo.retomada?.semana ?? null;
+    const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+
+    /** Custo de UM slot deste padrão, com o descanso da classe já degradado ao nível dado. */
+    const custoSlot = (padrao: PadraoMovimento, nivelDegradacao: 0 | 1 | 2): number =>
+      sPlan * (40 + descansoDoPadrao(padrao, {
+        rirAlvo,
+        modoForca: prescricao.modoForca === true,
+        semanaRampa,
+        degradacao: nivelDegradacao,
+      }));
+
+    /** Quantos padrões deste dia cabem no orçamento, no nível de degradação dado. */
+    const cabem = (padroes: readonly PadraoMovimento[], nivel: 0 | 1 | 2): number => {
+      let soma = 0;
+      let n = 0;
+      for (const p of padroes) {
+        const c = custoSlot(p, nivel);
+        if (soma + c > orcamentoSeg) break;
+        soma += c;
+        n += 1;
+      }
+      return Math.max(1, n); // ao menos 1 exercício — sessão vazia não é resposta
+    };
+
+    /**
+     * 🔒 Ordem de degradação (regra 3): cede ISOLADO até 60 s, depois COMPOSTO até 90 s, e
+     * só então o nº de exercícios. Nunca se corta exercício para dar descanso mais longo aos
+     * outros — cobertura > descanso.
+     *
+     * 🟡 EXCEÇÃO NOMEADA, durante a rampa: o piso do FIT é INVIOLÁVEL, então não há
+     * degradação e quem cede é o nº de exercícios. Inversão consciente: na rampa o volume já
+     * está cortado 50–70% (sobra tempo) e a rampa É feature de segurança — o risco
+     * documentado é rabdomiólise, não desconforto.
+     */
+    for (const d of spec) {
+      const alvo = d.padroes.length;
+      let n = cabem(d.padroes, 0);
+      let nivel: 0 | 1 | 2 = 0;
+      if (n < alvo && semanaRampa == null) {
+        const n1 = cabem(d.padroes, 1);       // cede ISOLADO → 60 s
+        if (n1 > n) { n = n1; nivel = 1; }
+        if (n < alvo) {
+          const n2 = cabem(d.padroes, 2);     // só então cede COMPOSTO → 90 s
+          if (n2 > n) { n = n2; nivel = 2; }
+        }
+      }
+      capDiaPorTempo.push(n);
+      nivelDegradacaoDia.push(nivel);
     }
-    maxExercicios = cap(descansoEfetivo);
-  } else {
-    maxExercicios = Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / tempoPorExercicioSeg(prescricao)));
+
+    /**
+     * O `descansoEfetivo` da SEMANA virou LEGADO — quem manda agora é o `descansoSeg` de
+     * cada slot. Ele fica exposto para a chamada v1 (sem `semanaCiclo`) e para a UI antiga.
+     *
+     * ⚠️ A sensibilidade ao tempo é preservada de propósito: o teto de 180 s só sobe quando
+     * TODOS os dias couberam com a faixa cheia. Sem esta condição, uma sessão de 30 min
+     * anunciaria 180 s enquanto o orçamento reservou menos — "tempo é o limitante" é regra
+     * do v2 §5, e ela não morre só porque o cálculo mudou de forma.
+     */
+    const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
+    const coubeCheio = nivelDegradacaoDia.every((n) => n === 0);
+    if (elegivel180 && coubeCheio) descansoEfetivo = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
   }
+  const maxExercicios = semanaCiclo
+    ? Math.max(...capDiaPorTempo, 1)
+    : Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / tempoPorExercicioSeg(prescricao)));
 
   // --- Alocador semanal de padrões -----------------------------------------
   // Distribui os padrões pelos dias (respeitando o template e a capacidade por tempo),
   // garantindo por construção: dobradiça presente, puxar ≥ empurrar, e core ∈ [2,3].
   const temPool = (p: PadraoMovimento) => (porPadrao.get(p)?.length ?? 0) + (favsPorPadrao.get(p)?.length ?? 0) > 0;
-  const capDia = spec.map((d) => Math.min(d.padroes.length, maxExercicios));
+  // 🔒 Cap POR DIA: com a soma por item cada dia tem seu próprio limite, porque a
+  // composição (quantos compostos × quantos acessórios) muda o custo. Antes era um escalar
+  // igual para todos — a origem exata do erro "subestima composto, superestima acessório".
+  const capDia = spec.map((d, i) => Math.min(d.padroes.length, capDiaPorTempo[i] ?? maxExercicios));
   const capTotal = capDia.reduce((a, b) => a + b, 0);
   const escolhidos: PadraoMovimento[][] = spec.map(() => []);
   let alocados = 0;
@@ -249,6 +329,39 @@ export function montarRotina(
     }
     return { nome: d.nome, slots };
   });
+
+  /**
+   * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
+   * o valor vem de `descansoDoExercicio` — que enxerga o que o padrão não mostra:
+   * `tipo: 'pliometrico'` (o e151 é `padraoMovimento: cardio` e mesmo assim tem descanso) e
+   * o override de força pesada (só composto COM carga).
+   *
+   * A UI passa a EXIBIR este número. A média `round((min+max)/2)` que ela calculava sai —
+   * ela matava o deslocamento por RIR em silêncio.
+   */
+  if (semanaCiclo) {
+    const rirAlvo = prescricao.rirAlvoSemana ?? prescricao.rir.min;
+    const semanaRampa = semanaCiclo.retomada?.semana ?? null;
+    for (let i = 0; i < diasTreino.length; i += 1) {
+      const dia = diasTreino[i]!;
+      // A degradação aplicada no orçamento vale para os slots deste dia: se o dia coube só
+      // com ISOLADO em 60 s, é 60 s que a pessoa vê — a tela não pode prometer o que o
+      // orçamento não reservou.
+      const degradacao: 0 | 1 | 2 = semanaRampa != null ? 0 : (nivelDegradacaoDia[i] ?? 0);
+      dia.slots = dia.slots.map((s) => {
+        const exato = descansoDoExercicio({
+          exercicio: s.exercicio, rirAlvo,
+          modoForca: prescricao.modoForca === true,
+          semanaRampa,
+        });
+        if (exato == null) return s; // cardio: não há série a descansar
+        const teto = descansoDoPadrao(s.padrao, {
+          rirAlvo, modoForca: prescricao.modoForca === true, semanaRampa, degradacao,
+        });
+        return { ...s, descansoSeg: Math.min(exato, Math.max(teto, DESCANSO_PISO_DURO_SEG)) };
+      });
+    }
+  }
 
   // --- Rampa de volume por grupo (v2 §1, DF 2026-07-08) ---------------------
   // Distribui o volume-alvo da SEMANA (dentro da banda da tabela 1.2 — sem tabela nova)

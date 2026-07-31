@@ -5,6 +5,7 @@ import { montarRotina, type OpcoesSemana } from './treino-montador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino } from './treino-types';
+import { temCarga } from './equipamento';
 
 /**
  * CARACTERIZAÇÃO DO ORÇAMENTO DE TEMPO — escrita ANTES de mexer nele (trava da Leva B).
@@ -153,15 +154,10 @@ describe('📸 caracterização — o estimador de HOJE é cego à composição 
   });
 
   /**
-   * O valor único que sai hoje como propriedade da SEMANA — o escalar que a Leva B
-   * substitui por um descanso de cada slot.
-   */
-  /**
-   * 🔑 `descansoEfetivo` — o escalar que a Leva B substitui. Caracterizado por objetivo
+   * 🔑 `descansoEfetivo` — o escalar da semana, hoje LEGADO. Caracterizado por objetivo
    * porque é ele que decide o `elegivel180`: massa (90–120) e modo força entram no teto de
    * 180 s; saúde e emagrecimento (60–90) não. Sem esta fotografia, forçar
-   * `elegivel180 = true` **sobrevivia** — a mudança não aparecia na contagem de slots,
-   * só no valor do descanso.
+   * `elegivel180 = true` não aparecia na contagem de slots, só no valor do descanso.
    */
   it.each(['massa', 'emagrecimento', 'saude'] as const)('descanso efetivo da semana — objetivo %s', (objetivo) => {
     const r = rotinaComCiclo({ objetivo, tempoPorSessaoMin: 90 });
@@ -178,14 +174,19 @@ describe('📸 caracterização — o estimador de HOJE é cego à composição 
     expect(r.semana?.descansoCompostoSeg).toMatchSnapshot();
   });
 
-  it('a rotina devolve UM descanso, da semana, não um por item', () => {
+  /**
+   * 🔄 INVERTIDO PELA PARTE 2 (era: "a rotina devolve UM descanso, da semana, não um por
+   * item"). O teste existia para registrar que nenhum slot carregava descanso próprio.
+   * Agora TODO slot com série carrega — é a mudança estrutural da leva. O escalar da semana
+   * segue exposto só por compatibilidade da chamada v1.
+   */
+  it('todo slot carrega o SEU descanso (o escalar da semana virou legado)', () => {
     const r = rotinaComCiclo();
     expect(r.semana?.descansoCompostoSeg).toBeDefined();
-    expect(r.semana?.descansoCompostoSeg).toMatchSnapshot();
-    // E nenhum slot carrega descanso próprio — é o que muda.
     for (const d of r.dias) {
       for (const s of d.slots) {
-        expect(s).not.toHaveProperty('descansoSeg');
+        expect(s.descansoSeg, `${s.exercicio.id}`).toBeDefined();
+        expect(s.descansoSeg!).toBeGreaterThanOrEqual(60);
       }
     }
   });
@@ -204,4 +205,181 @@ describe('📸 caracterização — o estimador de HOJE é cego à composição 
  * código morto para o placar fechar. Fica anotado — se a Leva B mudar o divisor (e ela vai:
  * a soma por item troca `sPlan × descanso` por `Σ descanso do item`), **esta conclusão
  * expira** e o piso pode virar alcançável.
+ */
+
+/* ════════════════ PARTE 2 — o comportamento NOVO ════════════════ */
+
+describe('🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composição', () => {
+  /**
+   * O teste que a fórmula antiga não conseguiria passar. Antes, o custo era
+   * `sPlan × (40 + um_descanso)` — igual para qualquer mistura. Agora cada padrão custa o
+   * descanso da SUA classe, então um dia de composto e um de acessório divergem.
+   */
+  it('dia de composto custa mais que dia de acessório (com a fórmula antiga seriam iguais)', () => {
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 60 });
+    const custo = (d: (typeof r.dias)[number]) =>
+      d.slots.reduce((n, s) => n + (s.series ?? 1) * (40 + (s.descansoSeg ?? 0)), 0);
+    const compostos = (d: (typeof r.dias)[number]) => d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').length;
+    const ordenados = [...r.dias].sort((a, b) => compostos(b) - compostos(a));
+    const maisComposto = ordenados[0]!;
+    const menosComposto = ordenados[ordenados.length - 1]!;
+    // Se todos os dias tiverem a mesma composição, o caso não é discriminante — sinalize.
+    expect(compostos(maisComposto)).toBeGreaterThanOrEqual(compostos(menosComposto));
+    if (compostos(maisComposto) > compostos(menosComposto)) {
+      expect(custo(maisComposto) / Math.max(1, maisComposto.slots.length))
+        .toBeGreaterThan(custo(menosComposto) / Math.max(1, menosComposto.slots.length));
+    }
+  });
+
+  it('o custo por slot acompanha a classe (composto ≥ acessório, sempre)', () => {
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 60 });
+    for (const d of r.dias) {
+      const comp = d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core');
+      const aces = d.slots.filter((s) => s.padrao === 'isolado' || s.padrao === 'core');
+      for (const c of comp) for (const a of aces) {
+        expect(c.descansoSeg!, `${c.exercicio.id} vs ${a.exercicio.id}`).toBeGreaterThanOrEqual(a.descansoSeg!);
+      }
+    }
+  });
+});
+
+describe('🔒 o delta dos 18 `core` na saída REAL', () => {
+  /**
+   * 🔑 A confirmação que o handoff pede: um abdominal e um composto na MESMA sessão têm de
+   * mostrar números diferentes. Antes, `sl.padrao !== 'isolado'` punha `core` do lado do
+   * composto e os dois recebiam a mesma faixa.
+   */
+  it('um `core` e um composto na mesma sessão recebem descansos DIFERENTES', () => {
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 60, diasDisponiveis: 4 });
+    const diaComCore = r.dias.find(
+      (d) => d.slots.some((s) => s.padrao === 'core') && d.slots.some((s) => s.padrao !== 'core' && s.padrao !== 'isolado'),
+    );
+    expect(diaComCore, 'nenhuma sessão tem core + composto juntos — caso não discriminante').toBeDefined();
+    const core = diaComCore!.slots.find((s) => s.padrao === 'core')!;
+    const comp = diaComCore!.slots.find((s) => s.padrao !== 'core' && s.padrao !== 'isolado')!;
+    expect(core.descansoSeg).toBeDefined();
+    expect(comp.descansoSeg).toBeDefined();
+    expect(core.descansoSeg).not.toBe(comp.descansoSeg);
+    expect(core.descansoSeg!).toBeLessThan(comp.descansoSeg!);
+  });
+
+  it('nenhum slot de cardio recebe descanso (aceite 7, na saída real)', () => {
+    const r = rotinaComCiclo();
+    for (const d of r.dias) for (const s of d.slots) {
+      if (s.exercicio.tipo === 'cardio') expect(s.descansoSeg).toBeUndefined();
+    }
+  });
+});
+
+describe('🔒 degradação e rampa na saída real (buracos achados por mutação)', () => {
+  /**
+   * B4 — a ORDEM da degradação. Sob orçamento apertado, cede ISOLADO até 60 s ANTES de
+   * COMPOSTO, e o composto nunca desce abaixo de 90 s. Invertida, a mutação sobrevivia:
+   * os snapshots contam SLOTS, não os valores de descanso sob degradação.
+   */
+  it('degradação nível 1: o ACESSÓRIO vai ao piso e o COMPOSTO fica intacto', () => {
+    // ⚠️ 45 min / semana 5 achado por sondagem: é onde o nível 1 BASTA. Em 20 min o dia
+    // precisa do nível 2 (composto também cede a 90 s) e o caso deixa de discriminar a
+    // ORDEM — foi por isso que "inverter a ordem" sobrevivia às primeiras versões.
+    // Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela faixa: na semana 1
+    // (RIR 3) ele JÁ é 60 s pelo deslocamento e degradar fica indistinguível.
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 45, nivelExperiencia: 'intermediario' }, 5);
+    const diaDegradado = r.dias.find((d) =>
+      d.slots.some((x) => (x.padrao === 'isolado' || x.padrao === 'core') && x.descansoSeg === 60));
+    expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();
+    const comp = diaDegradado!.slots.filter((x) => x.padrao !== 'isolado' && x.padrao !== 'core');
+    expect(comp.length).toBeGreaterThan(0);
+    // A regra 3 concentra o benefício no composto pesado: ele NÃO cede enquanto o
+    // acessório resolver. A ordem invertida rebaixaria o composto a 90 aqui.
+    for (const c of comp) expect(c.descansoSeg!, `composto ${c.exercicio.id}`).toBeGreaterThan(90);
+  });
+
+  it('degradação nível 2: quando o acessório não basta, o COMPOSTO cede — mas só até 90 s', () => {
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 20, nivelExperiencia: 'intermediario' }, 5);
+    const todos = r.dias.flatMap((d) => d.slots);
+    for (const x of todos.filter((y) => y.padrao === 'isolado' || y.padrao === 'core')) {
+      expect(x.descansoSeg!, `acessório ${x.exercicio.id}`).toBe(60);
+    }
+    for (const x of todos.filter((y) => y.padrao !== 'isolado' && y.padrao !== 'core')) {
+      expect(x.descansoSeg!, `composto ${x.exercicio.id}`).toBeGreaterThanOrEqual(90);
+    }
+  });
+
+  /**
+   * B5 — 🟡 EXCEÇÃO NOMEADA: na rampa o piso do FIT é INVIOLÁVEL. Mesmo com tempo curto,
+   * ninguém desce de 120 s na semana 1 — quem cede é o nº de exercícios. Sem este teste, a
+   * mutação "rampa passa a degradar" sobrevivia, e ela apaga exatamente a proteção que a
+   * rampa existe para dar (o risco documentado é rabdomiólise, não desconforto).
+   */
+  it('na rampa com tempo curto, NINGUÉM desce do piso do FIT (cede o nº de exercícios)', () => {
+    const p = perfil({ tempoPorSessaoMin: 20 });
+    const opc: OpcoesSemana = {
+      semana: 1, feedbackGrupos: new Map(),
+      retomada: { semana: 1, fator: 0.5, volumeReferencia: 12, exerciciosRecentes: new Set() },
+    };
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
+    const todos = r.dias.flatMap((d) => d.slots).filter((s) => s.descansoSeg != null);
+    expect(todos.length, 'rampa sem slots — caso não discriminante').toBeGreaterThan(0);
+    for (const s of todos) {
+      expect(s.descansoSeg!, `${s.exercicio.id} furou o piso do FIT`).toBeGreaterThanOrEqual(120);
+    }
+  });
+
+  it('na rampa semana 2 o piso é 90 s', () => {
+    const p = perfil({ tempoPorSessaoMin: 20 });
+    const opc: OpcoesSemana = {
+      semana: 1, feedbackGrupos: new Map(),
+      retomada: { semana: 2, fator: 0.7, volumeReferencia: 12, exerciciosRecentes: new Set() },
+    };
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
+    for (const s of r.dias.flatMap((d) => d.slots).filter((x) => x.descansoSeg != null)) {
+      expect(s.descansoSeg!).toBeGreaterThanOrEqual(90);
+    }
+  });
+
+  /**
+   * B3 — o descanso do slot vem do EXERCÍCIO, não do padrão. O padrão não enxerga o override
+   * de força pesada (só composto COM carga), então usar `descansoDoPadrao` no slot final
+   * daria o mesmo número para barra e para peso corporal.
+   */
+  it('modo força: composto COM carga recebe faixa pesada; peso corporal NÃO', () => {
+    const r = rotinaComCiclo({ modoForca: true, nivelExperiencia: 'avancado', tempoPorSessaoMin: 90 });
+    const comp = r.dias.flatMap((d) => d.slots).filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core');
+    const comCarga = comp.filter((s) => temCarga(s.exercicio));
+    const semCarga = comp.filter((s) => !temCarga(s.exercicio));
+    expect(comCarga.length, 'nenhum composto com carga — caso não discriminante').toBeGreaterThan(0);
+    for (const s of comCarga) expect(s.descansoSeg!, `${s.exercicio.id}`).toBeGreaterThanOrEqual(180);
+    for (const s of semCarga) expect(s.descansoSeg!, `${s.exercicio.id}`).toBeLessThanOrEqual(180);
+  });
+});
+
+describe('🔒 o cap é POR DIA — dias de composição diferente cabem coisas diferentes', () => {
+  /**
+   * Antes o cap era um escalar igual para todos os dias: a origem exata do erro
+   * "subestima a sessão de composto, superestima a de acessório". Com a soma por item cada
+   * dia tem seu próprio limite.
+   *
+   * ⚠️ Caso achado por sondagem: em Full-body ×N todos os dias têm o MESMO template, então
+   * escalar e por-dia coincidem e a mutação sobrevive. É o split Upper/Lower/Full, com
+   * composições diferentes, que discrimina — 3 dias, 25 min.
+   */
+  it('Upper / Lower / Full: os três dias NÃO recebem a mesma contagem', () => {
+    const p = perfil({ diasDisponiveis: 3, tempoPorSessaoMin: 25, nivelExperiencia: 'intermediario' });
+    const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
+    expect(r.split).toBe('Upper / Lower / Full');
+    const contagens = r.dias.map((d) => d.slots.length);
+    expect(new Set(contagens).size, `todos os dias com a mesma contagem: ${contagens}`).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * 🟡 SONDAGEM — GUARDA DUPLA na rampa, registrada sem teste.
+ *
+ * "Remover o `semanaRampa != null ? 0 :` do montador" sobrevive, e não é buraco: o laço que
+ * calcula `nivelDegradacaoDia` já tem `if (n < alvo && semanaRampa == null)`, então na rampa
+ * o nível **nunca sai de 0**. São duas guardas para a mesma regra (o piso do FIT é
+ * inviolável) e remover uma deixa a outra. Defense-in-depth deliberada — testar a redundância
+ * seria placar. O que importa é o comportamento, e ele TEM teste: "na rampa com tempo curto,
+ * ninguém desce do piso do FIT".
  */

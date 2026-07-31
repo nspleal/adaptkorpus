@@ -4,9 +4,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "emagrecimento",
   "slots": [
-    3,
-    3,
-    3,
+    2,
+    2,
+    2,
   ],
 }
 `;
@@ -70,9 +70,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "saude",
   "slots": [
-    2,
-    2,
-    2,
+    1,
+    1,
+    1,
   ],
 }
 `;
@@ -116,10 +116,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 25 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    2,
-    2,
-    2,
-    2,
+    3,
+    3,
+    3,
+    3,
   ],
   "tempo": 25,
 }
@@ -342,13 +342,6 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
   3,
   3,
 ]
-`;
-
-exports[`📸 caracterização — o estimador de HOJE é cego à composição da sessão > a rotina devolve UM descanso, da semana, não um por item 1`] = `
-{
-  "max": 180,
-  "min": 90,
-}
 `;
 
 exports[`📸 caracterização — o estimador de HOJE é cego à composição da sessão > descanso efetivo da semana — objetivo emagrecimento 1`] = `

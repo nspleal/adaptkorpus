@@ -173,3 +173,35 @@ export function rotuloDescanso(seg: number): string {
 export function ehIsometrico(ex: Exercise): boolean {
   return repUnitDe(ex.id) === 'segundos';
 }
+
+/**
+ * Descanso estimado a partir do PADRÃO DE MOVIMENTO, para a fase de orçamento do montador —
+ * quando os exercícios ainda não foram escolhidos e só se conhece o padrão do slot.
+ *
+ * ⚠️ É estimativa de PLANEJAMENTO, não o valor exibido. O definitivo sai de
+ * `descansoDoExercicio` depois da escolha, que é quem enxerga `tipo: 'pliometrico'` e o
+ * override de força pesada (ambos dependem do exercício, não do padrão).
+ *
+ * `degradacao` implementa a regra 3 (cobertura > descanso longo), na ordem travada:
+ *   0 = faixa cheia · 1 = ISOLADO cede até 60 s · 2 = COMPOSTO também cede, até 90 s.
+ * Na rampa o chamador NÃO degrada: o piso do FIT é inviolável e quem cede é o nº de itens.
+ */
+export function descansoDoPadrao(
+  padrao: string,
+  args: { rirAlvo: number; modoForca?: boolean; semanaRampa?: number | null; degradacao?: 0 | 1 | 2 },
+): number {
+  const isolado = PADROES_ISOLADO.has(padrao);
+  const classe: Exclude<ClasseDescanso, 'NAO_SE_APLICA'> = isolado ? 'ISOLADO' : 'COMPOSTO';
+  // Força pesada é modal e depende de carga — no planejamento assume-se o caso com carga,
+  // que é o mais custoso: subestimar o tempo é o erro que faz a sessão não fechar.
+  const faixa = args.modoForca === true && classe === 'COMPOSTO' ? FAIXA_FORCA_PESADA : FAIXA_DESCANSO[classe];
+  const base = deslocarPorRir(faixa, args.rirAlvo);
+  const naRampa = args.semanaRampa != null && args.semanaRampa > 0;
+  const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
+  if (naRampa) return Math.max(DESCANSO_PISO_DURO_SEG, comPiso); // piso do FIT inviolável
+
+  const deg = args.degradacao ?? 0;
+  if (deg >= 1 && classe === 'ISOLADO') return DESCANSO_PISO_DURO_SEG;
+  if (deg >= 2 && classe === 'COMPOSTO') return Math.min(comPiso, 90);
+  return Math.max(DESCANSO_PISO_DURO_SEG, comPiso);
+}
