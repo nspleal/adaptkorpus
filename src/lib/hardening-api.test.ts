@@ -153,3 +153,46 @@ describe('item 6 — menores', () => {
     expect(src).toMatch(/nome\.replace\(\/\[\\r\\n\]\/g, ' '\)/);
   });
 });
+
+/**
+ * 🔒 item 2 — `Secure` no cookie de sessão (auditoria 2026-07-06, aplicado em `dc008d7`).
+ *
+ * 🔴 Por que este guard existe: a flag foi implementada e **passou em branco em três
+ * relatórios seguidos** — ninguém conseguia confirmar sem abrir o arquivo. Código correto
+ * que ninguém consegue verificar é pendência que não fecha; o guard é o que torna a
+ * resposta consultável.
+ *
+ * ⚠️ É `secure: <produção>`, NÃO `secure: true` — e de propósito. Em `http://localhost` o
+ * browser recusa cookie `Secure`, a sessão não persiste e o login entra em laço. Em
+ * produção a Vercel serve só HTTPS e o HSTS do `next.config` força, então o condicional
+ * não abre janela nenhuma: é a diferença entre "não acontece" e "não pode acontecer".
+ */
+describe('item 2 — `Secure` no cookie de sessão', () => {
+  const ALVOS = ['src/lib/supabase/server.ts', 'src/middleware.ts'] as const;
+
+  it.each(ALVOS)('%s declara `cookieOptions` com `secure` condicionado à produção', (arq) => {
+    const src = FONTE(arq);
+    expect(src, `${arq} sem cookieOptions`).toMatch(/cookieOptions:\s*\{/);
+    // `secure: producao` (server.ts) ou `secure: process.env.NODE_ENV === 'production'`.
+    expect(src).toMatch(/secure:\s*(producao|process\.env\.NODE_ENV === 'production')/);
+  });
+
+  it.each(ALVOS)('%s NÃO deixa o cookie sem `secure` nem fixa `false`', (arq) => {
+    const src = FONTE(arq);
+    expect(/secure:\s*false/.test(src), `${arq} fixa secure:false`).toBe(false);
+  });
+
+  it('`producao` do server client lê NODE_ENV (não é constante solta)', () => {
+    const src = FONTE('src/lib/supabase/server.ts');
+    expect(src).toMatch(/const producao = process\.env\.NODE_ENV === 'production'/);
+    expect(/const producao = (true|false)/.test(src), 'produção virou literal').toBe(false);
+  });
+
+  it('`sameSite` e `path` acompanham nos dois (o cookie de auth é um só)', () => {
+    for (const arq of ALVOS) {
+      const src = FONTE(arq);
+      expect(src, `${arq}`).toMatch(/sameSite:\s*'lax'/);
+      expect(src, `${arq}`).toMatch(/path:\s*'\/'/);
+    }
+  });
+});
