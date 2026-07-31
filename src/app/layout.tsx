@@ -25,6 +25,10 @@ export const metadata: Metadata = {
   applicationName: 'Evokorpus',
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Evokorpus' },
+  // 🔒 iOS ignora os ícones do manifest: sem `apple-touch-icon` o atalho na tela inicial
+  // usa uma CAPTURA da página. O PNG é RASTERIZADO do `icon.svg` canônico (fidelidade
+  // visual do cofre — nunca redesenhar), por isso 180 px é o mesmo desenho, não outro.
+  icons: { apple: '/icons/apple-touch-icon.png' },
   robots: { index: true, follow: true },
 };
 

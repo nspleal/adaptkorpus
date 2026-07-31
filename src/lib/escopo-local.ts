@@ -36,6 +36,7 @@ export const CHAVES_LOCAIS = [
   'evk_aba',
   'evk_freq_periodo',
   'evk_privacy_ack_v1',
+  'evk_instalar_ack_v1',
 ] as const;
 export type ChaveLocal = (typeof CHAVES_LOCAIS)[number];
 
@@ -63,7 +64,13 @@ export const CHAVES_APOSENTADAS = ['evk_notif'] as const;
  * de privacidade a cada troca de conta no mesmo navegador seria ruído sem ganho de
  * privacidade (o valor é um `'1'`, não contém dado nenhum).
  */
-const SEM_ESCOPO: ReadonlySet<string> = new Set<ChaveLocal>(['evk_privacy_ack_v1']);
+const SEM_ESCOPO: ReadonlySet<string> = new Set<ChaveLocal>([
+  'evk_privacy_ack_v1',
+  // O convite de instalação é do DISPOSITIVO: instalar é ato do aparelho, não da conta.
+  // Re-convidar a cada troca de usuário no mesmo celular seria insistência sem ganho — e o
+  // valor é um `'1'`, sem dado nenhum.
+  'evk_instalar_ack_v1',
+]);
 
 /**
  * Chaves com DADO PESSOAL — as que o logout precisa apagar e o escopo precisa isolar.

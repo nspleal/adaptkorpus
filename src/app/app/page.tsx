@@ -11,6 +11,7 @@ import { supabaseConfigurado } from '@/lib/supabase/env';
 import { emModoDiario } from '@/lib/modo-diario';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import VigiaSessao from '@/components/auth/VigiaSessao';
+import ConviteInstalar from '@/components/pwa/ConviteInstalar';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -89,6 +90,8 @@ export default function AppPage() {
   return (
     <>
       <VigiaSessao />
+      {/* 🔒 O convite vive AQUI, na área logada — nunca na landing (beta por allowlist). */}
+      <ConviteInstalar />
       <Painel
         perfil={estado.perfil}
         dieta={estado.dieta}
