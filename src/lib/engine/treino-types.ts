@@ -3,6 +3,7 @@
  * Fonte: conceitos/parametros-motor-treino-evokorpus (DFs travadas 2026-06-28).
  * Roda após o gate de saúde (herdado). Determinístico, sem IA em runtime.
  */
+import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
 
@@ -155,11 +156,40 @@ export interface DiaTreino {
   slots: SlotExercicio[];
 }
 
+/**
+ * 🔴 O DIA EXCEDENTE, EMITIDO (Leva própria do 3.4, 2026-08-01). Um item de cardio: a
+ * MODALIDADE (default caminhada) e a duração do dia. `minutos: null` = meta em sessões
+ * (massa), em que dizer um número seria inventar o que a spec não dá.
+ *
+ * ⚠️ Por que MODALIDADE e não exercício da biblioteca: **não existe "Caminhada" no
+ * catálogo.** Os 14 de `padrao: 'cardio'` não incluem a modalidade default — o `e109`
+ * "Caminhada do fazendeiro" é carregamento com carga, e o próprio `cardio.ts` o exclui de
+ * propósito. Emitir um exercício obrigaria o montador a escolher algo que NÃO é o default;
+ * a modalidade é também o vocabulário que o registro unificado consome.
+ */
+export interface DiaCardio {
+  nome: string;
+  padrao: 'cardio';
+  modalidade: ModalidadeCardio;
+  /** Duração do dia, já dividida e arredondada. `null` = meta em sessões (massa). */
+  minutos: number | null;
+}
+
 export interface RotinaSemanal {
   diasForcaAgendados: number;
   diasCardioRecuperacao: number;
   split: string;
   dias: DiaTreino[];
+  /**
+   * 🔒 ARRAY PRÓPRIO, nunca dentro de `dias` — e isso é o que torna dois dos três guards
+   * IMPOSSÍVEIS por construção, em vez de vigiados:
+   *  · `iniciarSessaoGuiada(idx)` indexa `dias`; não existindo índice de cardio ali, a
+   *    telemetria `sessao_iniciada` não tem como disparar para cardio (guard ②);
+   *  · `concluirSessao` nunca recebe um dia de cardio, então nada entra no balde de
+   *    `sessoesResistidas` e o relógio do mesociclo não se move (guard ③).
+   * Misturar os dois arrays devolveria as duas travas para o campo do cuidado.
+   */
+  diasCardio: DiaCardio[];
   cardio: CardioPrescricao;
   avisos: string[];
   /** Metadados do mesociclo (v2) — ausente em chamadas v1 (sem semana). */

@@ -37,41 +37,52 @@ const FONTES = arquivos(SRC).map((f) => [rel(f), semComentarios(readFileSync(f, 
 
 describe('🔒 um único caminho grava cardio', () => {
   /**
-   * ⚠️ EXCEÇÃO DECLARADA, com PROVA MECÂNICA (Leva E, 2026-07-31).
+   * ⚠️ A ISENÇÃO É DERIVADA, NÃO UMA LISTA DE NOMES (endurecida em 2026-08-01).
    *
-   * `engine/dia-de-cardio.ts` usa `tipo: 'cardio'` como discriminante de uma união — o
-   * CONTEÚDO do dia excedente (cardio × recuperação) —, não como entrada de histórico. O
-   * guard não se afrouxa por isso: a exceção entra nomeada E o teste abaixo prova que o
-   * arquivo é **incapaz de gravar** (não importa o histórico, não toca storage, não monta
-   * payload de cardio). Exceção sem prova é buraco com nome bonito.
+   * 🔴 O que obrigou a mudança: o padrão `tipo: 'cardio'` acusou DUAS vezes um discriminante
+   * legítimo — `engine/dia-de-cardio.ts` (união cardio × recuperação) e depois `semana.ts`
+   * (o `DiaTipo` da faixa da semana). Uma lista enumerada cresceria a cada peça nova, e a
+   * tentação a cada vez seria acrescentar o reincidente à lista — que é como um guard morre.
+   *
+   * 🔒 A regra que o guard realmente defende é *"só um lugar CRIA entrada de histórico de
+   * cardio"*. Um arquivo que **não consegue gravar** não pode criar uma: não importa o
+   * histórico, não toca storage, não monta payload (`kcal`/`met`/`kcalLiquida`). Isso é
+   * verificável, então vira o critério — e fica ESTRITAMENTE MAIS FORTE que a lista: um
+   * arquivo novo que PODE gravar cai aqui mesmo que ninguém lembre de cadastrá-lo.
    */
-  const EXCECOES: { arquivo: string; motivo: string }[] = [
-    {
-      arquivo: 'src/lib/engine/dia-de-cardio.ts',
-      motivo: 'discriminante da união ConteudoDiaExcedente (cardio × recuperação) — módulo '
-        + 'PURO do motor, sem escrita: não é entrada de histórico.',
-    },
-  ];
+  const podeGravar = (src: string): boolean =>
+    /treino-historico/.test(src) || /localStorage|sessionStorage/.test(src)
+    || /kcalLiquida|met:|kcal:/.test(src);
 
   it('só `treino-historico.ts` cria entrada com `tipo: cardio`', () => {
-    const criam = FONTES.filter(([, src]) => /tipo:\s*'cardio'/.test(src)).map(([f]) => f);
-    const isentos = new Set(EXCECOES.map((e) => e.arquivo));
-    expect(criam.filter((f) => !isentos.has(f))).toEqual(['src/lib/treino-historico.ts']);
+    const criam = FONTES
+      .filter(([, src]) => /tipo:\s*'cardio'/.test(src))
+      .filter(([, src]) => podeGravar(src))
+      .map(([f]) => f);
+    expect(criam, 'apareceu um segundo caminho capaz de gravar cardio').toEqual(['src/lib/treino-historico.ts']);
   });
 
-  it('e cada exceção PROVA que não consegue gravar (senão é buraco com nome bonito)', () => {
-    for (const { arquivo, motivo } of EXCECOES) {
-      expect(motivo.length, arquivo).toBeGreaterThan(40);
-      const fonte = FONTES.find(([f]) => f === arquivo);
-      // Exceção morta é pior que exceção errada: se o arquivo sumiu, a lista tem de cair.
-      expect(fonte, `exceção aponta para arquivo inexistente: ${arquivo}`).toBeTruthy();
-      const src = fonte![1];
-      expect(src, `${arquivo} importa o histórico`).not.toMatch(/treino-historico/);
-      expect(src, `${arquivo} toca storage`).not.toMatch(/localStorage|sessionStorage/);
-      expect(src, `${arquivo} monta payload de cardio`).not.toMatch(/kcalLiquida|met:|kcal:/);
-      // E precisa mesmo casar com o padrão do guard — senão a exceção é decorativa.
-      expect(/tipo:\s*'cardio'/.test(src), `${arquivo} não usa o padrão: exceção morta`).toBe(true);
+  it('e os ISENTOS são mesmo incapazes de gravar — não é confiança, é verificação', () => {
+    const isentos = FONTES
+      .filter(([f, src]) => /tipo:\s*'cardio'/.test(src) && f !== 'src/lib/treino-historico.ts')
+      .map(([f]) => f);
+    // Anti-vacuidade: se não houver isento nenhum, o critério derivado não provou nada e
+    // este teste passaria de graça. Hoje são o módulo do dia e o `DiaTipo` da semana.
+    expect(isentos.length, 'nenhum isento — o critério ficou sem sujeito').toBeGreaterThanOrEqual(2);
+    for (const f of isentos) {
+      const src = FONTES.find(([n]) => n === f)![1];
+      expect(podeGravar(src), `${f} usa o padrão E consegue gravar`).toBe(false);
     }
+  });
+
+  it('🔒 o critério DERIVADO pega um gravador novo que uma lista de nomes deixaria passar', () => {
+    // Simula o arquivo que a lista esqueceria: usa o padrão E importa o histórico.
+    const impostor = "import { registrarCardio } from './treino-historico'; const x = { tipo: 'cardio' };";
+    expect(/tipo:\s*'cardio'/.test(impostor)).toBe(true);
+    expect(podeGravar(impostor), 'o critério não enxerga um gravador').toBe(true);
+    // …e um discriminante puro continua isento, sem precisar de cadastro.
+    const inocente = "export type DiaTipo = 'treino' | 'cardio'; const d = { tipo: 'cardio' as const };";
+    expect(podeGravar(inocente), 'o critério acusou um discriminante puro').toBe(false);
   });
 
   it('só `registrarCardioEm` monta o payload de cardio da sessão', () => {

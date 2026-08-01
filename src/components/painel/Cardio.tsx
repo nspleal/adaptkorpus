@@ -270,12 +270,18 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
 
 const ATALHOS_MIN = [15, 30, 45, 60] as const;
 
-export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalidadeInicial, embutido, nomeDoItem }: {
+export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalidadeInicial, minutosInicial, embutido, nomeDoItem }: {
   pesoKg: number;
   onSalvar: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
   onCancelar: () => void;
   /** 🔒 Registro UNIFICADO: o item de cardio da rotina pré-preenche a modalidade. */
   modalidadeInicial?: ModalidadeCardio;
+  /**
+   * Duração sugerida do DIA DE CARDIO (meta ÷ dias, já arredondada pelo motor).
+   * ⚠️ É só um valor INICIAL do campo — a pessoa edita, e o que vale é o que ela registra.
+   * O app não afirma que ela fez os minutos que ele sugeriu.
+   */
+  minutosInicial?: number;
   /** Aberto de DENTRO da sessão guiada: salva e devolve o controle, sem tela de confirmação
    *  (a confirmação é da tela avulsa; aqui a sessão continua). */
   embutido?: boolean;
@@ -285,7 +291,7 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalida
   const [modalidade, setModalidade] = useState<ModalidadeCardio>(modalidadeInicial ?? 'caminhada');
   const opcoes = intensidadesDe(modalidade);
   const [intensidade, setIntensidade] = useState<IntensidadeCardio>('moderado');
-  const [minutos, setMinutos] = useState(30);
+  const [minutos, setMinutos] = useState(minutosInicial && minutosInicial > 0 ? minutosInicial : 30);
   const [salvo, setSalvo] = useState<null | { minutos: number; met: number; kcal: number; naMeta: number; intensidade: IntensidadeCardio; modalidade: ModalidadeCardio }>(null);
 
   // "Leve" some em pular corda — sem mensagem de erro. Se estava selecionada, cai em moderado.

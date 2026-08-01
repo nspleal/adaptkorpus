@@ -42,9 +42,17 @@ export function diasPadrao(n: number): Weekday[] {
   return (mapas[Math.max(0, Math.min(7, Math.round(n)))] ?? mapas[3]!).slice();
 }
 
-/** treino = sessão de força do motor · recuperacao = dia ativo excedente (cardio/recuperação
- * que o motor prescreve — `diasCardioRecuperacao`) · descanso = folga. */
-export type DiaTipo = 'treino' | 'recuperacao' | 'descanso';
+/**
+ * `treino` = sessão de FORÇA do motor · `cardio` = dia excedente COM item emitido ·
+ * `recuperacao` = dia excedente sem item (massa com sessões batidas, `ROTEAR`) ·
+ * `descanso` = folga.
+ *
+ * 🔴 `cardio` é rótulo PRÓPRIO, e essa é a metade visível do guard ①: chamar o dia de
+ * `'treino'` faria cada um deles abrir a sessão guiada — e abrir cardio como sessão de
+ * força corromperia a métrica de ATIVAÇÃO (`sessao_iniciada`), que acabou de ser medida
+ * pela primeira vez em produção.
+ */
+export type DiaTipo = 'treino' | 'cardio' | 'recuperacao' | 'descanso';
 
 export interface DiaDaSemana {
   idx: number;            // 0=Seg … 6=Dom
@@ -56,6 +64,13 @@ export interface DiaDaSemana {
   tipo: DiaTipo;
   sessionIdx?: number;    // índice em rotina.dias (só tipo 'treino') — abre a sessão
   sessionLabel?: string;  // 'treino' → nome da sessão do motor; 'recuperacao' → 'Recuperação'
+  /**
+   * 🔒 Índice em `rotina.diasCardio` — ARRAY SEPARADO de propósito. Nunca é `sessionIdx`:
+   * quem consome `sessionIdx` abre a sessão guiada e dispara `sessao_iniciada`.
+   */
+  cardioIdx?: number;
+  /** O item do dia de cardio (modalidade + duração), quando houver. */
+  cardio?: { modalidade: string; minutos: number | null };
 }
 
 /**
@@ -64,7 +79,16 @@ export interface DiaDaSemana {
  * que o motor prescreve como `diasCardioRecuperacao`) — nunca repetimos uma sessão de força nem
  * rotulamos errado. `hojeIdx` vem da UI (relógio), fora do motor.
  */
-export function montarSemana(treinoDias: readonly Weekday[], sessoesNomes: readonly string[], hojeIdx: number): DiaDaSemana[] {
+export function montarSemana(
+  treinoDias: readonly Weekday[],
+  sessoesNomes: readonly string[],
+  hojeIdx: number,
+  /**
+   * Dias de cardio EMITIDOS pelo motor (`rotina.diasCardio`). Ausente = comportamento
+   * anterior, byte a byte: o excedente vira `recuperacao`, sem item.
+   */
+  diasCardio: readonly { modalidade: string; minutos: number | null }[] = [],
+): DiaDaSemana[] {
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
   let li = 0;
@@ -72,8 +96,19 @@ export function montarSemana(treinoDias: readonly Weekday[], sessoesNomes: reado
     const ativo = treino.has(weekday);
     const base = { idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full, isTraining: ativo, isToday: idx === hojeIdx };
     if (!ativo) return { ...base, tipo: 'descanso' as const };
+    // 🔒 As `n` sessões de FORÇA primeiro, sempre. `sessionIdx` só existe aqui.
     if (li < n) { const sessionIdx = li; li++; return { ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] }; }
+    // Excedente: dia de CARDIO quando o motor emitiu item; senão, recuperação (que não
+    // prescreve nada). 🔴 Nunca `sessionIdx` — o índice é do outro array.
+    const cardioIdx = li - n;
     li++;
+    const item = diasCardio[cardioIdx];
+    if (item) {
+      return {
+        ...base, tipo: 'cardio' as const, cardioIdx, cardio: item,
+        sessionLabel: item.minutos != null ? `Cardio · ${item.minutos} min` : 'Cardio',
+      };
+    }
     return { ...base, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' };
   });
 }

@@ -14,7 +14,7 @@ import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, onRegistrarCardio }: {
+export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], onRegistrarCardio }: {
   treinoDias: Weekday[];
   sessoesNomes: string[];              // nomes das sessões (rotina.dias[].nome), na ordem do motor
   onIrSessao: (sessionIdx: number) => void;
@@ -26,16 +26,33 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
    * duração: se decidisse aqui, existiriam duas respostas para o que o dia é.
    */
   diaExcedente?: ConteudoDiaExcedente;
-  /** Abre o registro UNIFICADO de cardio — o mesmo da sessão guiada e do cartão. */
-  onRegistrarCardio?: () => void;
+  /** Dias de cardio EMITIDOS pelo motor — rotulam a faixa e trazem o item do dia. */
+  diasCardio?: readonly { modalidade: string; minutos: number | null }[];
+  /**
+   * Abre o registro UNIFICADO de cardio, pré-preenchido com o item do dia.
+   * 🔴 NUNCA a sessão guiada: `sessao_iniciada` é a métrica de ATIVAÇÃO, e dispará-la para
+   * cardio a corromperia. Quem registra aqui é `cardio_registrado`, um dos 7 eventos.
+   */
+  onRegistrarCardio?: (item?: { modalidade: string; minutos: number | null }) => void;
 }) {
   const hojeIdx = weekdayHojeIdx();
-  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx);
+  // 🔒 O dia de cardio vem do MOTOR (`rotina.diasCardio`). A tela não decide se o excedente
+  // é cardio ou recuperação, nem calcula duração — se decidisse, existiriam duas respostas.
+  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio);
   const [selDay, setSelDay] = useState(hojeIdx);
   const sd = semana[selDay]!;
   const proximo = proximoTreinoIdx(semana, hojeIdx);
   /** O item de cardio do dia excedente, quando existe. `null` = o dia é recuperação. */
-  const cardio = diaExcedente?.tipo === 'cardio' ? diaExcedente : null;
+  /**
+   * O item do dia SELECIONADO. Vem do dia da faixa (`sd.cardio`, emitido pelo motor) e cai
+   * no `diaExcedente` do Painel só quando a faixa não trouxe — é ele que carrega a virada
+   * "massa com sessões batidas → recuperação", que depende do histórico.
+   */
+  const cardio = sd.tipo === 'cardio' && diaExcedente?.tipo === 'cardio'
+    ? { ...diaExcedente, minutos: sd.cardio?.minutos ?? diaExcedente.minutos }
+    : (sd.tipo === 'cardio' && diaExcedente == null && sd.cardio
+      ? { tipo: 'cardio' as const, minutos: sd.cardio.minutos, modalidade: sd.cardio.modalidade as never }
+      : null);
 
   const cellStyle = (isTraining: boolean, today: boolean, detailSel: boolean): CSSProperties => ({
     position: 'relative', flex: '1 1 0', minWidth: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
@@ -63,8 +80,8 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
             <div key={d.weekday} onClick={() => setSelDay(d.idx)} className="evk-semana-cell" style={cellStyle(d.isTraining, d.isToday, selDay === d.idx)}>
               {d.isToday && <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: '.58rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0D2818', background: '#BDFF00', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>Hoje</span>}
               <span style={{ fontWeight: 700, fontSize: '.95rem', color: d.isTraining ? '#EAE5DB' : 'rgba(234,229,219,.7)' }}>{d.abbr}</span>
-              <span style={d.tipo === 'treino' ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : d.tipo === 'recuperacao' ? { width: 7, height: 7, borderRadius: '50%', background: '#16A34A' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
-              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'recuperacao' ? 'Recuperação' : 'Descanso'}</span>
+              <span style={d.tipo === 'treino' ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? { width: 7, height: 7, borderRadius: '50%', background: '#16A34A' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
+              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'cardio' ? (d.sessionLabel ?? 'Cardio') : d.tipo === 'recuperacao' ? 'Recuperação' : 'Descanso'}</span>
             </div>
           ))}
         </div>
@@ -84,7 +101,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
               <button onClick={() => sd.sessionIdx != null && onIrSessao(sd.sessionIdx)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>{sd.isToday ? 'Ir para a sessão' : 'Ver este treino'}<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
             </div>
           </div>
-        ) : sd.tipo === 'recuperacao' ? (
+        ) : (sd.tipo === 'recuperacao' || sd.tipo === 'cardio') ? (
           <div style={{ background: 'linear-gradient(160deg, rgba(22,163,74,.09), rgba(15,15,14,.4))', border: '1px solid rgba(22,163,74,.28)', borderRadius: 18, padding: 24, animation: `evkStepIn .35s ease` }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
               <span style={{ width: 52, height: 52, minWidth: 52, borderRadius: 15, background: 'rgba(22,163,74,.14)', border: '1px solid rgba(22,163,74,.34)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2 5 4-12 2 7h6" stroke="#16A34A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
@@ -99,7 +116,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
                 <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade e a intensidade ao registrar — a duração é a meta da semana dividida pelos dias de cardio.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
               </div>
               {cardio && onRegistrarCardio ? (
-                <button onClick={onRegistrarCardio} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#16A34A', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>Registrar cardio<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                <button onClick={() => onRegistrarCardio(sd.cardio)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#16A34A', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>Registrar cardio<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
               ) : (
                 <button onClick={onVerDieta} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.85)', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer', alignSelf: 'center' }}>Ver dieta de hoje</button>
               )}

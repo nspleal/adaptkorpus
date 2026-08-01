@@ -15,8 +15,9 @@ import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
+import { arredondar5, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
-import type { Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
@@ -98,6 +99,36 @@ export interface OpcoesSemana {
 }
 
 /**
+ * 🔴 OS DIAS EXCEDENTES VIRAM DIAS DE CARDIO (spec §🏃, leva própria de 2026-08-01).
+ *
+ * O Passo 3 sempre mandou "dias excedentes → cardio/recuperação"; o motor CONTAVA os dias e
+ * não construía nada, e era isso que mantinha a entrada unificada de cardio dormente desde
+ * a Leva 2.
+ *
+ * 🔒 Só regra travada, recombinada — nenhum número novo entra por esta porta:
+ *  · duração = **meta semanal ÷ nº de dias excedentes**, arredondada ao múltiplo de 5 mais
+ *    próximo, com o **empate para CIMA** (150 ÷ 4 = 37,5 → 40);
+ *  · **emagrecimento usa o PISO da faixa** (`min`), nunca o teto — 150 ÷ 3 = 50 min/dia
+ *    contra 300 ÷ 3 = 100, fator 2 sem base;
+ *  · **massa é meta em SESSÕES**: `minutos: null`, porque dizer um número seria inventar.
+ *
+ * ⚠️ A virada "batidas as sessões → recuperação" NÃO mora aqui: depende de quantas sessões
+ * de cardio a pessoa já registrou nesta semana, e o montador é PURO — não vê histórico.
+ * Ela vive onde o histórico está (`conteudoDoDiaExcedente`, chamado pelo Painel).
+ */
+function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio']): DiaCardio[] {
+  if (quantos < 1) return [];
+  // 🔒 O PISO da faixa é o alvo (`min`), e é o mesmo número que `metaCardioSemanal` usa.
+  const minutos = meta.tipo === 'minutos_semana' ? arredondar5(meta.min / quantos) : null;
+  return Array.from({ length: quantos }, (_, i) => ({
+    nome: quantos > 1 ? `Cardio ${i + 1}` : 'Cardio',
+    padrao: 'cardio' as const,
+    modalidade: MODALIDADE_PADRAO_DIA,
+    minutos: minutos != null && minutos > 0 ? minutos : null,
+  }));
+}
+
+/**
  * Monta a rotina semanal. Função PURA e determinística.
  */
 export function montarRotina(
@@ -126,7 +157,7 @@ export function montarRotina(
   const diasCardioRecuperacao = Math.max(0, dias - diasForca);
 
   if (diasForca === 0) {
-    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
+    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
   }
 
   // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
@@ -484,6 +515,7 @@ export function montarRotina(
   return {
     diasForcaAgendados: diasForca,
     diasCardioRecuperacao,
+    diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio),
     split,
     dias: diasTreino,
     cardio: prescricao.cardio,

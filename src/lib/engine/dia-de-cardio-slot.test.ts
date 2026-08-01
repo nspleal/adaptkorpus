@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana } from './treino-montador';
+import { arredondar5 } from './dia-de-cardio';
 import { EXERCISES } from '../data/exercises';
 import { montarSemana } from '../semana';
 import { sessoesResistidas, sessoesTreino, type SessaoHistorico } from '../treino-historico';
@@ -155,5 +156,103 @@ describe('🔴 ③ o relógio do mesociclo não se move com cardio', () => {
     const antes = semanaDe(soForca);
     const comCardio = [...soForca, cardio(dia(13), 3), cardio(dia(6), 4), cardio(dia(0), 5)];
     expect(semanaDe(comCardio), `3 cardios moveram a semana de ${antes}`).toBe(antes);
+  });
+});
+
+/* ══════════════ A EMISSÃO — agora os três guards são exercitados de verdade ══════════════ */
+
+describe('🔴 o montador EMITE o dia de cardio', () => {
+  it('emite um dia por excedente, e a contagem bate com `diasCardioRecuperacao`', () => {
+    const r = rotinaComExcedente();
+    expect(r.diasCardio, 'o dia excedente continua sendo só um número').toHaveLength(r.diasCardioRecuperacao);
+    expect(r.diasCardio.length).toBeGreaterThan(0);
+    for (const d of r.diasCardio) {
+      expect(d.padrao, 'o slot precisa ser de padrão cardio').toBe('cardio');
+      expect(d.modalidade, 'a modalidade default é caminhada').toBe('caminhada');
+    }
+  });
+
+  /** 🔒 saúde = 150 min/sem; com 2 dias excedentes → 75 min/dia. Número da spec. */
+  it('a duração é a meta ÷ dias, arredondada a 5 — com prova numérica', () => {
+    const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 5 });
+    const n = r.diasCardio.length;
+    expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
+    expect(r.cardio.tipo).toBe('minutos_semana');
+    const esperado = arredondar5((r.cardio as { min: number }).min / n);
+    for (const d of r.diasCardio) expect(d.minutos, `${n} dias`).toBe(esperado);
+    expect(esperado % 5, 'a duração saiu de um múltiplo de 5').toBe(0);
+  });
+
+  /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
+  it('emagrecimento usa o PISO da faixa — o teto daria o dobro', () => {
+    const r = rotinaComExcedente({ objetivo: 'emagrecimento', diasDisponiveis: 6 });
+    const c = r.cardio as { tipo: string; min: number; max: number };
+    expect(c.tipo).toBe('minutos_semana');
+    expect(c.min, 'a faixa mudou — reveja o número da prova').toBe(150);
+    expect(c.max).toBe(300);
+    const n = r.diasCardio.length;
+    expect(r.diasCardio[0]!.minutos).toBe(arredondar5(c.min / n));
+    expect(arredondar5(c.max / n), 'o teto daria o dobro').toBe(arredondar5(c.min / n) * 2);
+  });
+
+  /** 🔒 Massa é meta em SESSÕES: dizer um número seria inventar o que a spec não dá. */
+  it('massa não recebe minutos — `null`, nunca um número inventado', () => {
+    const r = rotinaComExcedente({ objetivo: 'massa', diasDisponiveis: 6 });
+    expect(r.cardio.tipo).toBe('sessoes_moderadas');
+    expect(r.diasCardio.length).toBeGreaterThan(0);
+    for (const d of r.diasCardio) expect(d.minutos, 'apareceu minuto inventado em massa').toBeNull();
+  });
+
+  it('sem dia excedente, nenhum dia de cardio é emitido', () => {
+    const r = rotinaComExcedente({ diasDisponiveis: 3 });
+    expect(r.diasCardioRecuperacao).toBe(0);
+    expect(r.diasCardio).toEqual([]);
+  });
+});
+
+describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exercitado)', () => {
+  it('o dia emitido é rotulado `cardio`, e sem `sessionIdx`', () => {
+    const r = rotinaComExcedente();
+    const semana = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], r.dias.map((d) => d.nome), 0, r.diasCardio);
+    const cardios = semana.filter((d) => d.tipo === 'cardio');
+    expect(cardios.length, 'a emissão não chegou à faixa da semana').toBe(r.diasCardio.length);
+    for (const d of cardios) {
+      // 🔴 `sessionIdx` é o que abre a sessão guiada. O dia de cardio nunca pode ter um.
+      expect(d.sessionIdx, `${d.full} ganhou índice de sessão de força`).toBeUndefined();
+      expect(d.cardioIdx, 'o índice do dia de cardio é de OUTRO array').not.toBeUndefined();
+      expect(r.diasCardio[d.cardioIdx!], 'o índice aponta para fora do array').toBeTruthy();
+    }
+    // E nenhum dia virou 'treino' além das sessões de força que existem.
+    expect(semana.filter((d) => d.tipo === 'treino')).toHaveLength(r.dias.length);
+  });
+
+  it('sem `diasCardio`, o comportamento anterior é byte-idêntico (excedente = recuperação)', () => {
+    const r = rotinaComExcedente();
+    const antes = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], r.dias.map((d) => d.nome), 0);
+    expect(antes.filter((d) => d.tipo === 'recuperacao').length).toBe(r.diasCardioRecuperacao);
+    expect(antes.filter((d) => d.tipo === 'cardio')).toHaveLength(0);
+  });
+});
+
+describe('🔴 ②/③ a emissão NÃO abriu caminho para a sessão guiada nem para o relógio', () => {
+  it('🔒 `rotina.dias` continua só com força — é o que torna ② e ③ impossíveis', () => {
+    const r = rotinaComExcedente();
+    // `iniciarSessaoGuiada(idx)` indexa ESTE array. Um dia de cardio aqui dispararia
+    // `sessao_iniciada` e, ao concluir, entraria no balde de `sessoesResistidas`.
+    expect(r.dias.length, 'o dia de cardio entrou no array das sessões de força').toBe(r.diasForcaAgendados);
+    for (const d of r.dias) {
+      expect(d.slots.length, 'sessão de força sem slot').toBeGreaterThan(0);
+      for (const s of d.slots) {
+        expect(s.padrao, `${d.nome} recebeu slot de cardio`).not.toBe('cardio');
+      }
+    }
+  });
+
+  it('e os dois arrays são disjuntos — nenhum dia de cardio aparece em `dias`', () => {
+    const r = rotinaComExcedente();
+    const nomesForca = new Set(r.dias.map((d) => d.nome));
+    for (const c of r.diasCardio) {
+      expect(nomesForca.has(c.nome), `${c.nome} está nos dois arrays`).toBe(false);
+    }
   });
 });

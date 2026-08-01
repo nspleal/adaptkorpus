@@ -392,6 +392,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // mantém fora do relógio do mesociclo e dentro da Chama. 🟢 A kcal estimada NÃO toca o
   // plano de dieta: `salvarCardio` não chama `recomputarPlano` nem mexe em `dieta`.
   const [registrandoCardio, setRegistrandoCardio] = useState(false);
+  /**
+   * Item do dia de cardio que abriu o registro — só PRÉ-PREENCHE modalidade e minutos.
+   * 🔒 Nada aqui grava: o caminho de escrita continua sendo o `registrarCardio` único.
+   */
+  const [cardioPre, setCardioPre] = useState<{ modalidade: string; minutos: number | null } | null>(null);
   function salvarCardio(payload: NonNullable<SessaoHistorico['cardio']>) {
     registrarEvento('cardio_registrado', {
       modalidade: payload.modalidade, minutos: payload.minutos, origem: 'registro_manual',
@@ -797,7 +802,13 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', padding: '32px 20px 60px' }}>
         <Backdrop />
-        <RegistrarCardio pesoKg={perfil.pesoKg} onSalvar={salvarCardio} onCancelar={() => setRegistrandoCardio(false)} />
+        <RegistrarCardio
+          pesoKg={perfil.pesoKg}
+          modalidadeInicial={cardioPre?.modalidade as ModalidadeCardio | undefined}
+          minutosInicial={cardioPre?.minutos ?? undefined}
+          onSalvar={salvarCardio}
+          onCancelar={() => { setCardioPre(null); setRegistrandoCardio(false); }}
+        />
       </div>
     );
   }
@@ -874,7 +885,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
               diaExcedente={diaExcedente}
-              onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
+              diasCardio={treino.rotina?.diasCardio ?? []}
+              onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
