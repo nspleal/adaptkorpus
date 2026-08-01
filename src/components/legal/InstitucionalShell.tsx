@@ -12,7 +12,10 @@ import { temSessao, useTemSessao } from '@/lib/session';
  * disclaimer + 18+ + copyright). Usada pelas páginas legais e pela /ebook.
  */
 
-type PageKey = 'termos' | 'privacidade' | 'aviso' | 'suporte' | 'ebook' | 'reembolso' | 'faq' | 'changelog';
+// 🔒 `reembolso` saiu do tipo (DF 2026-08-01): a rota foi ao ar descrevendo estorno e
+// garantia que não existem. Tirar só o item do array deixaria a chave viva, e a próxima
+// linha que a usasse compilaria — é o tipo que fecha a porta.
+type PageKey = 'termos' | 'privacidade' | 'aviso' | 'suporte' | 'ebook' | 'faq' | 'changelog';
 
 const NAV: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos', href: '/termos' },
@@ -24,7 +27,6 @@ const FOOTER: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos de Uso', href: '/termos' },
   { key: 'privacidade', label: 'Política de Privacidade', href: '/privacidade' },
   { key: 'aviso', label: 'Aviso', href: '/aviso' },
-  { key: 'reembolso', label: 'Reembolso', href: '/reembolso' },
   { key: 'faq', label: 'Perguntas frequentes', href: '/faq' },
   { key: 'suporte', label: 'Suporte', href: '/suporte' },
   { key: 'changelog', label: 'Changelog', href: '/changelog' },
