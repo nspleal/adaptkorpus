@@ -134,41 +134,41 @@ describe('histerese de recomputação — o plano não muda todo dia', () => {
 
 describe('🔴 histerese ASSIMÉTRICA do gate — proteger rápido, liberar devagar', () => {
   it('ENTRAR é imediato', () => {
-    const r = aplicarHistereseFaixa({ dentroDaFaixaHoje: true, anterior: FAIXA_INICIAL, hojeISO: HOJE });
+    const r = aplicarHistereseFaixa({ dentroDaFaixaHoje: true, anterior: FAIXA_INICIAL, hojeISO: HOJE, ancoraMedida: true });
     expect(r.ativa).toBe(true);
     expect(r.foraDesdeISO).toBeNull();
   });
 
   it('SAIR exige 14 dias fora da faixa', () => {
     // Dia 0: protegido. Sai da faixa hoje → começa a contar, mas continua protegido.
-    let est = { ativa: true, foraDesdeISO: null as string | null };
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(14) });
+    let est = { ativa: true, foraDesdeISO: null as string | null, porMedicao: true };
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(14), ancoraMedida: true });
     expect(est.ativa).toBe(true);
     expect(est.foraDesdeISO).toBe(dia(14));
 
     // 13 dias depois: ainda protegido.
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(1) });
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(1), ancoraMedida: true });
     expect(est.ativa).toBe(true);
 
     // 14 dias depois: sai.
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(0) });
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(0), ancoraMedida: true });
     expect(est.ativa).toBe(false);
     expect(est.foraDesdeISO).toBeNull();
   });
 
   it('voltar para dentro ZERA a contagem (a carência recomeça)', () => {
-    let est: FaixaProtetiva = { ativa: true, foraDesdeISO: dia(10) }; // 10 dias fora
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: true, anterior: est, hojeISO: dia(3) });
+    let est: FaixaProtetiva = { ativa: true, foraDesdeISO: dia(10), porMedicao: true }; // 10 dias fora
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: true, anterior: est, hojeISO: dia(3), ancoraMedida: true });
     expect(est.ativa).toBe(true);
     expect(est.foraDesdeISO).toBeNull(); // zerou
     // Agora sai de novo: precisa dos 14 completos outra vez.
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(2) });
-    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(0) });
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(2), ancoraMedida: true });
+    est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(0), ancoraMedida: true });
     expect(est.ativa, 'saiu antes dos 14 dias').toBe(true);
   });
 
   it('quem nunca esteve protegido não entra em contagem', () => {
-    const r = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: FAIXA_INICIAL, hojeISO: HOJE });
+    const r = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: FAIXA_INICIAL, hojeISO: HOJE, ancoraMedida: true });
     expect(r).toEqual(FAIXA_INICIAL);
   });
 });
@@ -216,12 +216,12 @@ describe('🔒 ACEITE — série ruidosa em torno de um corte NÃO faz o gate os
    * libera depois de 14 dias fora. Simula 21 dias de série ruidosa.
    */
   it('com a histerese, a proteção NÃO pisca nem no pior caso', () => {
-    let est = { ativa: true, foraDesdeISO: null as string | null };
+    let est = { ativa: true, foraDesdeISO: null as string | null, porMedicao: true };
     const trocas: boolean[] = [];
     // 21 dias alternando dentro/fora da faixa, um dia sim um dia não.
     for (let d = 20; d >= 0; d -= 1) {
       const dentro = d % 2 === 0;
-      est = aplicarHistereseFaixa({ dentroDaFaixaHoje: dentro, anterior: est, hojeISO: dia(d) });
+      est = aplicarHistereseFaixa({ dentroDaFaixaHoje: dentro, anterior: est, hojeISO: dia(d), ancoraMedida: true });
       trocas.push(est.ativa);
     }
     // Nunca desligou: cada volta para dentro zerou a contagem dos 14.
@@ -230,9 +230,9 @@ describe('🔒 ACEITE — série ruidosa em torno de um corte NÃO faz o gate os
   });
 
   it('mas quem MELHOROU de verdade sai — depois dos 14 dias limpos', () => {
-    let est = { ativa: true, foraDesdeISO: null as string | null };
+    let est = { ativa: true, foraDesdeISO: null as string | null, porMedicao: true };
     for (let d = 20; d >= 0; d -= 1) {
-      est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(d) });
+      est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(d), ancoraMedida: true });
     }
     expect(est.ativa, 'não liberou nem depois de 21 dias fora').toBe(false);
   });
@@ -278,7 +278,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
   /** 🔒 ACEITE: uma pesagem isolada não muda o alvo — nem via recomputo. */
   it('com âncora fixada ontem, um tranco de 3 kg NÃO move o plano (falta a semana)', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(1), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(1), ancoraMedida: true, faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
@@ -291,7 +291,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
 
   it('passada a semana E vencido o limiar, a âncora anda — evento de RECOMPUTO', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(8), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(8), ancoraMedida: true, faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
@@ -304,7 +304,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
 
   it('passada a semana mas SEM vencer o limiar, nada anda', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(30), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(30), ancoraMedida: true, faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.5], [1, 61.5], [2, 61.5]), // 0,3 kg < max(1; 0,918)
@@ -321,8 +321,8 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
    */
   it('ao SAIR da faixa, o plano continua no peso de dentro durante a carência', () => {
     const anterior = {
-      ancoraKg: 59.9, ancoraDesdeISO: dia(8),
-      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.9, reancoraISO: null,
+      ancoraKg: 59.9, ancoraDesdeISO: dia(8), ancoraMedida: true,
+      faixa: { ativa: true, foraDesdeISO: null, porMedicao: true }, pesoNaFaixaKg: 59.9, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
@@ -336,8 +336,8 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
 
   it('cumpridos os 14 dias, a carência acaba e o plano passa a usar a âncora', () => {
     const anterior = {
-      ancoraKg: 61.0, ancoraDesdeISO: dia(20),
-      faixa: { ativa: true, foraDesdeISO: dia(DIAS_PARA_SAIR_DA_FAIXA) }, pesoNaFaixaKg: 59.9, reancoraISO: null,
+      ancoraKg: 61.0, ancoraDesdeISO: dia(20), ancoraMedida: true,
+      faixa: { ativa: true, foraDesdeISO: dia(DIAS_PARA_SAIR_DA_FAIXA), porMedicao: true }, pesoNaFaixaKg: 59.9, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
@@ -477,8 +477,8 @@ describe('🔒 editar o perfil REANCORA — e não abre porta dos fundos no gate
     const dentro = abaixoDe(60);
     // Estado: protegido, com o peso de dentro pinado.
     const est0: EstadoPesoPlano = {
-      ancoraKg: 59.5, ancoraDesdeISO: dia(20),
-      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.5, reancoraISO: null,
+      ancoraKg: 59.5, ancoraDesdeISO: dia(20), ancoraMedida: true,
+      faixa: { ativa: true, foraDesdeISO: null, porMedicao: true }, pesoNaFaixaKg: 59.5, reancoraISO: null,
     };
     const est1 = reancorar(est0, 70, dia(10)); // a pessoa digita 70
     expect(est1.faixa.ativa, 'a faixa atravessa a reancoragem intacta').toBe(true);
@@ -502,10 +502,108 @@ describe('🔒 editar o perfil REANCORA — e não abre porta dos fundos no gate
 
   it('anti-vacuidade: FORA de faixa protetiva, o digitado vale imediatamente', () => {
     const est0: EstadoPesoPlano = {
-      ancoraKg: 61.4, ancoraDesdeISO: dia(20), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+      ancoraKg: 61.4, ancoraDesdeISO: dia(20), ancoraMedida: true, faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolver([], dia(10), reancorar(est0, 70, dia(10)), abaixoDe(60));
     expect(r.pesoKg).toBe(70);
     expect(r.estado.faixa.ativa).toBe(false);
+  });
+});
+
+/* ══════════ Carência PROPORCIONAL À EVIDÊNCIA DA ENTRADA (spec §4, refinamento) ══════════ */
+
+describe('🔻 a saída da faixa é proporcional à evidência que fez ENTRAR', () => {
+  const abaixoDe = (corte: number) => (kg: number) => kg < corte;
+  const resolver = (
+    pesagens: Pesagem[], hoje: string, anterior: EstadoPesoPlano | null,
+    faixa: (kg: number) => boolean,
+  ) => resolverPesoDoPlano({ pesagens, hojeISO: hoje, pesoPerfilKg: 70, anterior, emFaixaProtetiva: faixa });
+
+  it('entrada por TECLADO carimba `porMedicao: false`', () => {
+    // Sem pesagem nenhuma: a âncora é a semente do perfil — teclado, não medição.
+    const r = resolverPesoDoPlano({
+      pesagens: [], hojeISO: HOJE, pesoPerfilKg: 45, anterior: null,
+      emFaixaProtetiva: abaixoDe(60),
+    });
+    expect(r.estado.ancoraMedida).toBe(false);
+    expect(r.estado.faixa).toEqual({ ativa: true, foraDesdeISO: null, porMedicao: false });
+  });
+
+  it('entrada por MEDIÇÃO carimba `porMedicao: true`', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 59.5], [1, 59.5], [2, 59.5]), hojeISO: HOJE, pesoPerfilKg: 70,
+      anterior: null, emFaixaProtetiva: abaixoDe(60),
+    });
+    expect(r.estado.ancoraMedida).toBe(true);
+    expect(r.estado.faixa.porMedicao).toBe(true);
+  });
+
+  /**
+   * 🔴 O CASO CONCRETO QUE OBRIGOU O REFINAMENTO: 45 kg digitado por engano num perfil de 70
+   * (→ faixa protetiva). Como estava, corrigir para 70 no minuto seguinte deixava a pessoa
+   * 14 dias sem plano — a trava que fecha a fuga por teclado punia o erro de digitação.
+   */
+  it('digitou errado → corrigiu → sai NA HORA', () => {
+    const dentro = abaixoDe(60);
+    const errado = resolverPesoDoPlano({
+      pesagens: [], hojeISO: HOJE, pesoPerfilKg: 45, anterior: null, emFaixaProtetiva: dentro,
+    });
+    expect(errado.estado.faixa.ativa, 'o caso precisa começar protegido').toBe(true);
+
+    const corrigido = resolver([], HOJE, reancorar(errado.estado, 70, HOJE), dentro);
+    expect(corrigido.estado.faixa.ativa, 'segurou um erro de digitação').toBe(false);
+    expect(corrigido.pesoKg, 'o plano tem de usar o valor corrigido na hora').toBe(70);
+  });
+
+  /**
+   * 🔒 E A PORTA DOS FUNDOS, que continua fechada — é o mesmo gesto, com evidência atrás da
+   * entrada: três pesagens em faixa protetiva e um número digitado para escapar.
+   */
+  it('entrou MEDIDO → digitar não abre: os 14 dias continuam valendo', () => {
+    const dentro = abaixoDe(60);
+    const medido = resolverPesoDoPlano({
+      pesagens: serie([0, 59.5], [1, 59.5], [2, 59.5]), hojeISO: HOJE, pesoPerfilKg: 70,
+      anterior: null, emFaixaProtetiva: dentro,
+    });
+    expect(medido.estado.faixa.porMedicao).toBe(true);
+
+    // Digita 70 no dia seguinte.
+    let est = reancorar(medido.estado, 70, dia(-1));
+    const d1 = resolver([], dia(-1), est, dentro);
+    expect(d1.estado.faixa.ativa, 'o teclado abriu o portão').toBe(true);
+    expect(d1.pesoKg, 'o plano tem de continuar no peso protegido').toBe(59.5);
+
+    // 13 dias fora: ainda protegido.
+    est = d1.estado;
+    for (let d = 2; d <= 13; d += 1) est = resolver([], dia(-d), est, dentro).estado;
+    expect(est.faixa.ativa).toBe(true);
+
+    // No 14º, a carência acaba — e só então o 70 vale.
+    const fim = resolver([], dia(-15), est, dentro);
+    expect(fim.estado.faixa.ativa).toBe(false);
+    expect(fim.pesoKg).toBe(70);
+  });
+
+  it('se o valor corrigido cair em OUTRA faixa protetiva, a entrada é imediata de novo', () => {
+    // Faixa dos dois lados: < 60 e > 100 (o gate real tem baixo peso E obesidade).
+    const dentro = (kg: number) => kg < 60 || kg > 100;
+    const errado = resolverPesoDoPlano({
+      pesagens: [], hojeISO: HOJE, pesoPerfilKg: 45, anterior: null, emFaixaProtetiva: dentro,
+    });
+    const corrigido = resolver([], HOJE, reancorar(errado.estado, 130, HOJE), dentro);
+    expect(corrigido.estado.faixa.ativa, 'a assimetria de ENTRADA não muda').toBe(true);
+    expect(corrigido.estado.faixa.porMedicao, 'e a nova entrada também é por teclado').toBe(false);
+    expect(corrigido.pesoKg).toBe(130);
+  });
+
+  it('a procedência ATRAVESSA os dias em que nada acontece', () => {
+    const dentro = abaixoDe(60);
+    let est = resolverPesoDoPlano({
+      pesagens: serie([0, 59.5], [1, 59.5], [2, 59.5]), hojeISO: HOJE, pesoPerfilKg: 70,
+      anterior: null, emFaixaProtetiva: dentro,
+    }).estado;
+    for (let d = 1; d <= 5; d += 1) est = resolver([], dia(-d), est, dentro).estado;
+    expect(est.ancoraMedida, 'a âncora medida virou teclado sozinha').toBe(true);
+    expect(est.faixa.porMedicao).toBe(true);
   });
 });

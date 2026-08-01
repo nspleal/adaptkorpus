@@ -40,8 +40,13 @@ export function lerEstadoPesoPlano(): EstadoPesoPlano | null {
       faixa: {
         ativa: !!f?.ativa,
         foraDesdeISO: typeof f?.foraDesdeISO === 'string' ? f.foraDesdeISO : null,
+        // ⚠️ Estado gravado ANTES do refinamento não tem o campo. `true` é o default
+        // conservador: âncora antiga é tratada como MEDIDA, então a carência de 14 dias
+        // continua valendo para ela. Assumir `false` abriria a saída por teclado no upgrade.
+        porMedicao: f?.porMedicao !== false,
       },
       pesoNaFaixaKg: Number.isFinite(o.pesoNaFaixaKg) ? (o.pesoNaFaixaKg as number) : null,
+      ancoraMedida: o.ancoraMedida !== false,
       reancoraISO: typeof o.reancoraISO === 'string' ? o.reancoraISO : null,
     };
   } catch {
@@ -114,9 +119,13 @@ export function resolverPesoDoPlanoLocal(args: {
  * 🔒 O *Editar perfil* REANCORA (spec §4, DF 2026-07-31): o valor digitado passa a ser o
  * peso do plano **na hora**, e vale até haver ≥ 3 pesagens posteriores à edição.
  *
- * 🔴 **Não encurta a carência do gate.** `reancorar` preserva `faixa` e `pesoNaFaixaKg`, e o
- * `resolverPesoDoPlanoLocal` chamado logo em seguida volta a pinar o peso se a carência
- * estiver correndo. Digitar um número move o plano, **nunca** abre o portão.
+ * 🔴 **Não encurta a carência de uma faixa em que se entrou por MEDIÇÃO.** `reancorar`
+ * preserva `faixa` e `pesoNaFaixaKg`, e o `resolverPesoDoPlanoLocal` chamado em seguida
+ * volta a pinar o peso enquanto os 14 dias correm.
+ *
+ * 🔻 Refinamento (spec §4, 2026-07-31): se a entrada na faixa **não teve medição por trás**
+ * — o erro de digitação —, a saída é **imediata**. A porta dos fundos que continua fechada é
+ * a que importa: não se sai por teclado de uma faixa em que se entrou por medição.
  */
 export function reancorarPesoDoPlanoLocal(pesoKg: number, hojeISO: string): void {
   if (!Number.isFinite(pesoKg)) return;

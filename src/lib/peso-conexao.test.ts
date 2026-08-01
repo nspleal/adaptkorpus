@@ -244,6 +244,17 @@ describe('🔒 editar o perfil REANCORA — e o gate não ganha porta dos fundos
     // limparia a carência do gate — e nenhum outro teste desta suíte notaria.
     expect(corpo).toMatch(/faixa: anterior\?\.faixa \?\? FAIXA_INICIAL/);
     expect(corpo).toMatch(/pesoNaFaixaKg: anterior\?\.pesoNaFaixaKg \?\? null/);
+    // E a âncora reancorada precisa se declarar DIGITADA — é o carimbo que gradua a saída.
+    expect(corpo).toMatch(/ancoraMedida: false/);
+  });
+
+  it('o estado GRAVADO antes do refinamento é lido como MEDIDO (default conservador)', () => {
+    const src = semComentarios('src/lib/peso-plano.ts');
+    // 🔴 `!!f?.porMedicao` trataria toda âncora antiga como digitada e abriria a saída por
+    // teclado no upgrade — para quem já estava em faixa protetiva medida, em produção.
+    expect(src).toMatch(/porMedicao: f\?\.porMedicao !== false/);
+    expect(src).toMatch(/ancoraMedida: o\.ancoraMedida !== false/);
+    expect(src, 'coerção que inverteria o default').not.toMatch(/porMedicao: !!/);
   });
 });
 

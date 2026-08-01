@@ -129,6 +129,14 @@ export interface FaixaProtetiva {
   ativa: boolean;
   /** 1º dia com o suavizado FORA da faixa (começa a contar os 14). `null` = dentro. */
   foraDesdeISO: string | null;
+  /**
+   * 🔒 A ENTRADA foi por MEDIÇÃO (suavizado de ≥ 3 pesagens) ou por valor DIGITADO?
+   *
+   * É o que gradua a saída (spec §4, refinamento 2026-07-31): a carência de 14 dias existe
+   * para não sair por teclado de uma faixa em que se entrou por medição. Entrada sem
+   * medição nenhuma não tem por que segurar ninguém — era erro de digitação.
+   */
+  porMedicao: boolean;
 }
 
 /**
@@ -146,32 +154,53 @@ export interface FaixaProtetiva {
  * **Consequência aceita e declarada:** quem cruza para fora continua vendo o comportamento
  * protetivo por até duas semanas. O erro fica **sempre do lado seguro** — mesma postura do
  * `max(1, floor(alvo))` da rampa de retomada.
+ *
+ * 🔻 **REFINAMENTO (spec §4, 2026-07-31) — a saída é PROPORCIONAL À EVIDÊNCIA DA ENTRADA.**
+ * Como estava, quem digitasse 45 kg por engano num perfil de 70 (→ `ROTEAR` por IMC < 16)
+ * ficava **14 dias sem plano** mesmo corrigindo no minuto seguinte: a mesma trava que impede
+ * a fuga por teclado impedia a correção do erro de digitação.
+ *
+ * | Entrou por… | Sai… |
+ * |---|---|
+ * | valor **digitado** (sem medição por trás) | **imediato** — a entrada também não tinha evidência |
+ * | **suavizado medido** (≥ 3 pesagens) | **14 dias** fora da faixa |
+ *
+ * 🔑 A porta dos fundos segue fechada, agora pelo motivo certo: **não se sai por TECLADO de
+ * uma faixa em que se entrou por MEDIÇÃO.** O abuso real — três pesagens em faixa protetiva
+ * e um número digitado para escapar — continua bloqueado.
  */
 export function aplicarHistereseFaixa(args: {
   /** O suavizado está DENTRO da faixa protetiva hoje? (quem decide isso é o gate) */
   dentroDaFaixaHoje: boolean;
   anterior: FaixaProtetiva;
   hojeISO: string;
+  /** O peso que está decidindo isto veio de MEDIÇÃO (suavizado) ou de teclado? */
+  ancoraMedida: boolean;
 }): FaixaProtetiva {
-  const { dentroDaFaixaHoje, anterior, hojeISO } = args;
+  const { dentroDaFaixaHoje, anterior, hojeISO, ancoraMedida } = args;
 
-  // ENTRAR: imediato. Proteção não espera confirmação, e o contador de saída zera.
-  if (dentroDaFaixaHoje) return { ativa: true, foraDesdeISO: null };
+  // ENTRAR: imediato. Proteção não espera confirmação, e o contador de saída zera. A
+  // procedência é CARIMBADA na entrada — é ela que vai graduar a saída.
+  if (dentroDaFaixaHoje) return { ativa: true, foraDesdeISO: null, porMedicao: ancoraMedida };
 
   // Fora da faixa, mas nunca esteve protegido → nada a fazer.
-  if (!anterior.ativa) return { ativa: false, foraDesdeISO: null };
+  if (!anterior.ativa) return { ativa: false, foraDesdeISO: null, porMedicao: false };
 
-  // Fora da faixa e protegido: começa (ou continua) a contagem dos 14 dias.
+  // 🔒 Entrou SEM medição → sai na hora. Não há evidência a respeitar: segurar aqui seria
+  // punir um erro de digitação com duas semanas sem plano.
+  if (!anterior.porMedicao) return { ativa: false, foraDesdeISO: null, porMedicao: false };
+
+  // Entrou por MEDIÇÃO: começa (ou continua) a contagem dos 14 dias.
   const desde = anterior.foraDesdeISO ?? hojeISO;
   const dias = diasEntreISO(desde, hojeISO);
   if (dias != null && dias >= DIAS_PARA_SAIR_DA_FAIXA) {
-    return { ativa: false, foraDesdeISO: null }; // cumpriu a carência → sai
+    return { ativa: false, foraDesdeISO: null, porMedicao: false }; // cumpriu a carência
   }
-  return { ativa: true, foraDesdeISO: desde };
+  return { ativa: true, foraDesdeISO: desde, porMedicao: true };
 }
 
 /** Estado inicial: sem proteção e sem contagem. */
-export const FAIXA_INICIAL: FaixaProtetiva = { ativa: false, foraDesdeISO: null };
+export const FAIXA_INICIAL: FaixaProtetiva = { ativa: false, foraDesdeISO: null, porMedicao: false };
 
 /* ══════════════════ Resolução: o peso com que o plano é gerado ══════════════════ */
 
@@ -185,6 +214,11 @@ export interface EstadoPesoPlano {
   ancoraKg: number;
   /** Dia em que a âncora foi fixada (base do intervalo mínimo de recomputação). */
   ancoraDesdeISO: string;
+  /**
+   * 🔒 A âncora veio de MEDIÇÃO (suavizado de ≥ 3 pesagens) ou de TECLADO (peso do perfil /
+   * reancoragem manual)? É a procedência que gradua a saída da faixa protetiva (spec §4).
+   */
+  ancoraMedida: boolean;
   /** Estado da faixa protetiva do gate. */
   faixa: FaixaProtetiva;
   /** Peso que estava DENTRO da faixa, preservado durante a carência de saída. */
@@ -216,6 +250,7 @@ export function reancorar(
   return {
     ancoraKg: pesoKg,
     ancoraDesdeISO: hojeISO,
+    ancoraMedida: false, // 🔒 veio do TECLADO — é isto que permite desfazer a digitação
     faixa: anterior?.faixa ?? FAIXA_INICIAL, // ⚠️ preservado de propósito
     pesoNaFaixaKg: anterior?.pesoNaFaixaKg ?? null, // ⚠️ o pino também
     reancoraISO: hojeISO,
@@ -260,6 +295,7 @@ export function resolverPesoDoPlano(args: {
   // ── 1. A âncora ────────────────────────────────────────────────────────────────
   let ancoraKg: number;
   let ancoraDesdeISO: string;
+  let ancoraMedida: boolean;
   let evento: EventoPeso | null = null;
 
   if (!anterior) {
@@ -267,6 +303,7 @@ export function resolverPesoDoPlano(args: {
     // evento de MIGRAÇÃO (o plano vinha do peso do perfil), não uma recomputação de rotina.
     ancoraKg = suavizado ?? pesoPerfilKg;
     ancoraDesdeISO = hojeISO;
+    ancoraMedida = suavizado != null; // sem janela, a semente do perfil é teclado
     if (suavizado != null && suavizado !== pesoPerfilKg) evento = 'migracao';
   } else if (
     deveRecomputar({
@@ -281,10 +318,12 @@ export function resolverPesoDoPlano(args: {
   ) {
     ancoraKg = suavizado as number; // `deveRecomputar` só devolve true com suavizado != null
     ancoraDesdeISO = hojeISO;
+    ancoraMedida = true; // veio da média de pesagens reais
     evento = 'recomputo';
   } else {
     ancoraKg = anterior.ancoraKg;
     ancoraDesdeISO = anterior.ancoraDesdeISO;
+    ancoraMedida = anterior.ancoraMedida;
   }
 
   // ── 2. A faixa protetiva ───────────────────────────────────────────────────────
@@ -293,6 +332,7 @@ export function resolverPesoDoPlano(args: {
     dentroDaFaixaHoje: dentroHoje,
     anterior: anterior?.faixa ?? FAIXA_INICIAL,
     hojeISO,
+    ancoraMedida,
   });
 
   // Em carência de SAÍDA (a âncora já saiu, mas os 14 dias não passaram) o plano continua
@@ -306,7 +346,7 @@ export function resolverPesoDoPlano(args: {
   return {
     pesoKg,
     // A marca da reancoragem cai assim que a série volta a ter janela própria.
-    estado: { ancoraKg, ancoraDesdeISO, faixa, pesoNaFaixaKg, reancoraISO: retomando ? null : reancorada },
+    estado: { ancoraKg, ancoraDesdeISO, ancoraMedida, faixa, pesoNaFaixaKg, reancoraISO: retomando ? null : reancorada },
     evento,
   };
 }
