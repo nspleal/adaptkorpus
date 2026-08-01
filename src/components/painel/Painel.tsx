@@ -85,6 +85,14 @@ export interface PerfilResumo {
   /** Modo força (preset opt-in v2 §4): compostos travados em 6 reps → 6RM. O motor
    *  IGNORA o flag p/ iniciante (o toggle nem aparece). */
   modoForca?: boolean;
+  /**
+   * 🔒 Técnicas avançadas (Leva F, §🥊 — DF 2026-07-31): opt-in DESLIGADO por padrão. O flag
+   * é só a intenção da pessoa; o PORTÃO de elegibilidade é recalculado a cada vez
+   * (`engine/tecnicas-avancadas`), então perder o histórico ou entrar em faixa protetiva
+   * fecha a feature sem precisar reescrever o perfil.
+   * 🔴 O motor NUNCA adiciona técnica sozinho — o flag só torna a escolha POSSÍVEL.
+   */
+  tecnicasAvancadas?: boolean;
   /** Carimbo ISO 8601 do "Fiquei doente" (Leva 2 · Bloco 4, DF 2026-07-27) — o RECONHECIMENTO
    *  da pausa, e nada mais. 🔴 O MOTOR NUNCA LÊ ESTE CAMPO (`engine-sem-reconhecido.test.ts`):
    *  quem avisa e quem some têm o mesmo comportamento. 🔴 Motive-free por LGPD — sem motivo,
@@ -738,7 +746,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <EditarPerfil inicial={perfil} onCancelar={() => setEditando(false)} onSalvar={recalcular} modoDiario={modoDiario} />
+        {/* 🔒 Os insumos do PORTÃO das técnicas avançadas (Leva F, §🥊) vêm DAQUI: quem tem
+            o histórico é o Painel. A tela não conta sessão nem lê gate por conta própria —
+            se contasse, existiriam duas respostas para "quem é elegível". */}
+        <EditarPerfil
+          inicial={perfil}
+          onCancelar={() => setEditando(false)}
+          onSalvar={recalcular}
+          modoDiario={modoDiario}
+          sessoesResistidas={sessoesResistidas(sessoes).length}
+          comportamentoGate={dieta.gate.comportamento}
+          regressaoAtiva={[...feedbackAgregadoPorGrupo(sessoes, hojeISO(), (id) => EXERCISES_SEED.find((e) => e.id === id)).values()].some((f) => f === 'segura')}
+        />
       </div>
     );
   }

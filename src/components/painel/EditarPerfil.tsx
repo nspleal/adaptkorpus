@@ -3,7 +3,8 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { PerfilResumo } from './Painel';
 import { gerarTreino } from '@/lib/engine';
-import type { NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
+import type { ComportamentoGate, NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
+import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
@@ -50,10 +51,18 @@ const PADROES: { id: '' | 'vegetariano' | 'vegano'; t: string; d: string }[] = [
   { id: 'vegetariano', t: 'Vegetariano', d: 'Sem carnes.' },
   { id: 'vegano', t: 'Vegano', d: 'Sem origem animal.' },
 ];
-export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario }: {
+export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario, sessoesResistidas = 0, comportamentoGate = 'PERMITIR', regressaoAtiva = false }: {
   inicial: PerfilResumo;
   onCancelar: () => void;
   onSalvar: (novo: PerfilResumo) => void;
+  /**
+   * 🔒 Insumos do PORTÃO das técnicas avançadas (Leva F, §🥊). Vêm do Painel, que tem o
+   * histórico — a tela não conta sessão nem lê gate por conta própria. Defaults conservadores
+   * (0 sessões, sem regressão) mantêm o portão FECHADO quando o chamador não informa.
+   */
+  sessoesResistidas?: number;
+  comportamentoGate?: ComportamentoGate;
+  regressaoAtiva?: boolean;
   /**
    * 🔒 MODO DIÁRIO: some o CONTROLE do modo força, não só o rótulo. Esconder o texto e
    * deixar o toggle transferiria o vazamento para quem o ligasse. O preset é **inerte**
@@ -73,6 +82,15 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   // Modo força (v2 §4, DF 2026-07-08): preset opt-in SÓ interm./avançado (o motor ignora
   // p/ iniciante e o toggle nem aparece — se o nível voltar a iniciante, o flag fica inerte).
   const [modoForca, setModoForca] = useState(inicial.modoForca ?? false);
+  /**
+   * 🔒 Opt-in das técnicas avançadas — DESLIGADO por padrão (critério 6 do §10.1). O portão
+   * de elegibilidade é do MOTOR (`engine/tecnicas-avancadas`); aqui só se lê a resposta, e a
+   * tela nunca decide sozinha quem pode.
+   */
+  const [tecnicas, setTecnicas] = useState(inicial.tecnicasAvancadas ?? false);
+  const tecnicasLiberadas = elegibilidade({
+    nivel: experiencia, sessoesResistidas, comportamentoGate, regressaoAtiva, ligado: true,
+  }).elegivel;
   // 'nenhum' legado (pré-migração) mapeia para casa + checklist vazio.
   const [local, setLocal] = useState<EquipamentoDisp>(inicial.equipamento === 'nenhum' ? 'casa' : inicial.equipamento);
   const [equipsCasa, setEquipsCasa] = useState<EquipamentoCasa[]>(
@@ -140,6 +158,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
       modoForca,
+      // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
+      tecnicasAvancadas: tecnicasLiberadas ? tecnicas : false,
     });
   }
 
@@ -184,6 +204,31 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
                   </span>
                   <span style={{ width: 44, minWidth: 44, height: 26, borderRadius: 999, padding: 3, transition: 'background .25s ease', background: modoForca ? '#BDFF00' : 'rgba(234,229,219,.18)', display: 'flex', alignItems: 'center' }}>
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: modoForca ? '#0D2818' : '#EAE5DB', transition: `transform .25s ${EASE}`, transform: modoForca ? 'translateX(18px)' : 'translateX(0)' }} />
+                  </span>
+                </div>
+              </div>
+            )}
+            {/* 🔒 TÉCNICAS AVANÇADAS — opt-in ELEGÍVEL (Leva F, cofre §🥊, DF 2026-07-31).
+                A entrada EXISTE e é visível mesmo para quem ainda não é elegível: a colisão
+                declarada na spec é que "experiência demonstrada" exige histórico, e no dia 1
+                o banco tem zero sessões — a feature seria invisível justamente para quem a
+                pediu. 🔴 A linha do não-elegível descreve a REGRA DO APP, sem contador, sem
+                denominador e sem contagem regressiva: "faltam N sessões" é alvo no futuro da
+                atividade da pessoa (classes ① e ③ de vazamento). */}
+            {experiencia !== 'iniciante' && !modoDiario && (
+              <div style={{ marginTop: 14, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 13, padding: '13px 16px' }}>
+                <div onClick={() => tecnicasLiberadas && setTecnicas((v: boolean) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: tecnicasLiberadas ? 'pointer' : 'default', opacity: tecnicasLiberadas ? 1 : .62 }}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '.92rem', fontWeight: 500, color: 'rgba(234,229,219,.85)' }}>Técnicas avançadas</span>
+                    {/* 🔒 "Opção de estilo, não upgrade": o benefício NÃO é superior
+                        (meta-análise 2026), então a copy não pode vendê-las como melhores. */}
+                    <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.45, marginTop: 2 }}>Drop set, rest-pause, myo-reps e cluster na última série de exercícios isolados ou de máquina. É uma opção de estilo, não um upgrade — o app nunca adiciona sozinho.</span>
+                    {!tecnicasLiberadas && (
+                      <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.4)', lineHeight: 1.45, marginTop: 6 }}>Fica disponível quando o app já tiver seu histórico de treinos.</span>
+                    )}
+                  </span>
+                  <span style={{ width: 44, minWidth: 44, height: 26, borderRadius: 999, padding: 3, transition: 'background .25s ease', background: tecnicas ? '#BDFF00' : 'rgba(234,229,219,.18)', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: tecnicas ? '#0D2818' : '#EAE5DB', transition: `transform .25s ${EASE}`, transform: tecnicas ? 'translateX(18px)' : 'translateX(0)' }} />
                   </span>
                 </div>
               </div>
