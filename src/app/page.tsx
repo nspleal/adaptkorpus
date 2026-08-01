@@ -222,8 +222,16 @@ export default function Home() {
       <section id="transparencia" style={sec()}>
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 56, alignItems: 'center' }}>
           <div className="rv">
-            {/* 🔒 Saiu "É como a gente cobra." — não há cobrança nenhuma. */}
-            <h2 style={{ margin: '0 0 18px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', lineHeight: 1.12, letterSpacing: '-.02em' }}>Honestidade não é slogan.</h2>
+            {/* 🔒 O REMATE VOLTA (DF 2026-08-01, `identidade-de-marca-evokorpus` §Passos urgentes).
+                Em 2026-07-29 o h2 perdeu a segunda metade — era "É como a gente cobra." — porque no
+                beta não há cobrança. 🔴 Truncar onde o board tem remate é REGRESSÃO DE MARCA, não
+                conserto: o remate neon era do design. A regra que fica: quando um pilar do
+                posicionamento deixa de ser verdade, troca-se o PILAR, não se apaga a frase.
+                O board trava três pilares do fitness honesto — cobrança honesta · sem promessa
+                mágica · constância. O remate antigo era o ①; este é o ②, e é o que a realidade
+                sustenta hoje. Casa com a seção abaixo, que lista o que o app NÃO faz.
+                Cor: Pulso #BDFF00, o acento de fundo escuro (skill `evokorpus-brand`). */}
+            <h2 style={{ margin: '0 0 18px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', lineHeight: 1.12, letterSpacing: '-.02em' }}>Honestidade não é slogan. <span style={{ color: '#BDFF00' }}>É o que a gente deixa de prometer.</span></h2>
             <p style={{ margin: 0, color: 'rgba(234,229,219,.6)', lineHeight: 1.6, fontSize: '1.02rem' }}>Tudo o que entra na sua conta, você vê antes. E o que a gente não faz, a gente diz na cara.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 28 }}>
               {/* 🔒 Saiu "Sem pegadinha no cancelamento": pressupõe assinatura a cancelar. */}

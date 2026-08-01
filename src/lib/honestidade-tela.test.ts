@@ -271,3 +271,52 @@ describe('landing — sem preço, sem trial, sem cancelamento fantasma', () => {
     expect(src).toMatch(/id="beta"/);
   });
 });
+
+/**
+ * 🔒 O H2 DA TRANSPARÊNCIA TEM REMATE (DF 2026-08-01, `identidade-de-marca-evokorpus`
+ * §Passos urgentes).
+ *
+ * 🔴 O defeito que isto trava: em 2026-07-29 o h2 perdeu a segunda metade — era *"É como a
+ * gente cobra."* — porque no beta não há cobrança. **Truncar onde o board tem remate é
+ * REGRESSÃO DE MARCA, não conserto**; o remate neon era do design. 🔑 **A regra: quando um
+ * pilar do posicionamento deixa de ser verdade, troca-se o PILAR, não se apaga a frase.**
+ * O board trava três pilares (cobrança honesta · sem promessa mágica · constância); o remate
+ * antigo era o ①, este é o ②.
+ *
+ * ⚠️ O guard cobre as DUAS pontas do aceite, porque a segunda é o que dá sentido à primeira:
+ * o remate foi escolhido para casar com uma seção que lista o que o app **não faz**. Se essa
+ * seção mudar de conteúdo, o remate deixa de casar — e isso tem de parar o build, não passar.
+ */
+describe('🔒 h2 da Transparência — o remate voltou, e casa com a seção', () => {
+  const src = () => semComentarios(readFileSync(join(process.cwd(), 'src/app/page.tsx'), 'utf8'));
+  const secao = () => {
+    const s = src();
+    const i = s.indexOf('id="transparencia"');
+    return i < 0 ? '' : s.slice(i, s.indexOf('</section>', i));
+  };
+
+  it('as DUAS metades estão no h2, e o remate está no acento de fundo escuro', () => {
+    const sec = secao();
+    expect(sec, 'seção #transparencia não encontrada').not.toBe('');
+    const h2 = sec.slice(sec.indexOf('<h2'), sec.indexOf('</h2>') + 5);
+    expect(h2).toMatch(/Honestidade não é slogan\./);
+    // 🔑 O remate DENTRO do h2 e DENTRO de um span com o Pulso — a prova de que ele não
+    // virou parágrafo solto nem perdeu o tratamento visual (que é o defeito original).
+    expect(h2).toMatch(/<span style=\{\{ color: '#BDFF00' \}\}>É o que a gente deixa de prometer\.<\/span>/);
+  });
+
+  it('🔑 a seção que ele encima continua listando o que o app NÃO faz', () => {
+    const sec = secao();
+    // Critério, não lista de nomes: a seção afirma a ausência (pílulas "Sem …") e diz que
+    // fala do que não se faz. Se isso mudar, o remate escolhido deixou de casar — pare e
+    // reporte, que é o que esta falha significa.
+    const pilulasSem = sec.match(/'Sem [^']+'/g) ?? [];
+    expect(pilulasSem.length, 'a seção parou de listar ausências — o remate não casa mais').toBeGreaterThanOrEqual(2);
+    expect(sec).toMatch(/o que a gente não faz/);
+  });
+
+  it('anti-vacuidade: o recorte é a seção, não o arquivo', () => {
+    expect(secao().length).toBeGreaterThan(300);
+    expect(secao().length).toBeLessThan(src().length);
+  });
+});

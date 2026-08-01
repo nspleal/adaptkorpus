@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { pesagensDatadas } from './peso-plano';
+import { fazEmFaixaProtetiva, pesagensDatadas } from './peso-plano';
+import { avaliarGateSaude } from '@/lib/engine';
+import type { PerfilUsuario } from '@/lib/engine';
+import { resolverPesoDoPlano } from '@/lib/engine/peso-suavizado';
 import type { RegistroPeso } from './treino-historico';
 
 /**
@@ -287,5 +290,124 @@ describe('🔒 a frase do recálculo diz o que já aconteceu', () => {
     const src = semComentarios(PAINEL);
     expect(src).toContain('Um registro rápido guarda a sua variação.');
     expect(src).not.toMatch(/mant[ée]m seu plano calibrado/);
+  });
+});
+
+/**
+ * 🔒 O EIXO KCAL DO GATE ENTRA NA HISTERESE ASSIMÉTRICA (DF 2026-08-01,
+ * `gate-de-saude-evokorpus` §Histerese assimétrica · prova em
+ * `parametros-motor-dieta-evokorpus` §⚖️ regra 2).
+ *
+ * O desfecho `GET ≤ piso_seguro → ROTEAR` (1250 F / 1550 M) tem de se comportar como os
+ * cortes de IMC: **entrar a cada leitura sobre o suavizado** (o limiar de Δ e o teto de
+ * 1×/semana não bloqueiam) · **sair só depois de 14 dias**.
+ *
+ * 🔑 **Por que este bloco existe mesmo com o código já correto.** A conexão de 2026-07-31
+ * usou um critério DERIVADO (`comportamento !== 'PERMITIR'`), então o eixo kcal entrou de
+ * graça — mas **a prova daquele dia foi toda sobre IMC**. Código certo sem prova é código
+ * que a próxima refatoração quebra em silêncio: trocar o predicado por uma checagem de
+ * faixas de IMC passaria em toda a suíte anterior. **O guard não conserta nada aqui; ele
+ * impede o conserto de ser desfeito.**
+ *
+ * ⚠️ E é COMPORTAMENTAL de propósito — executa o predicado de produção com um suavizado
+ * sub-piso. Um guard que casasse a escrita ("a chamada de ROTEAR está fora do bloco da
+ * histerese") ficaria cego para a mutação mais natural; foi o degrau achado em `f52bd12`.
+ */
+describe('🔒 o eixo kcal do gate — entrar imediato, sair em 14 dias', () => {
+  const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
+  /** Feminino · 155 cm · 60 a · sedentária: cruza o piso de 1250 em 53,392 kg — com IMC 22,2. */
+  const MULHER = { sexo: 'feminino', alturaCm: 155, idade: 60, nivelAtividade: 'sedentario', objetivo: 'saude', flagsSaude: SEM, pesoKg: 54.2 } as const;
+  const perfilCom = (p: Omit<PerfilUsuario, 'pesoKg'>, pesoKg: number): PerfilUsuario => ({ ...p, pesoKg });
+  const serie = (kg: number, dias: readonly string[]) => dias.map((d) => ({ dataISO: d, kg }));
+  const ancoraEm = (kg: number, desde: string) => ({
+    ancoraKg: kg, ancoraDesdeISO: desde, ancoraMedida: true,
+    faixa: { ativa: false, foraDesdeISO: null, porMedicao: false }, pesoNaFaixaKg: null, reancoraISO: null,
+  });
+
+  /**
+   * 🔑 O PAR DISCRIMINANTE que prova que isto é o eixo KCAL e não o de IMC: em 53,30 kg o
+   * IMC é 22,19 — **longe de todos os cortes** (16 · 18,5 · 25 · 30). Um predicado escrito
+   * sobre faixas de IMC devolveria "fora da faixa" aqui e o encaminhamento sumiria.
+   */
+  it('o caso é invisível para qualquer regra de IMC — quem fala é o piso calórico', () => {
+    const g = avaliarGateSaude(perfilCom(MULHER, 53.3));
+    expect(g.derivados.imc).toBeCloseTo(22.19, 2);
+    expect(g.derivados.get).toBeCloseTo(1248.9, 1);
+    expect(g.derivados.get).toBeLessThanOrEqual(g.derivados.pisoSeguro);
+    expect(g.comportamento).toBe('ROTEAR');
+    // …e o predicado DE PRODUÇÃO enxerga esse peso como faixa protetiva.
+    expect(fazEmFaixaProtetiva(MULHER)(53.3)).toBe(true);
+    // O par: 54,2 kg (GET 1259,7 > 1250) é PERMITIR — o mesmo perfil, só o peso muda.
+    expect(avaliarGateSaude(perfilCom(MULHER, 54.2)).comportamento).toBe('PERMITIR');
+    expect(fazEmFaixaProtetiva(MULHER)(54.2)).toBe(false);
+  });
+
+  it('ENTRAR: Δ = 0,90 kg < 1 kg suprime a recomputação, e o ROTEAR sai na mesma leitura', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie(53.3, ['2026-07-30', '2026-07-31', '2026-08-01']),
+      hojeISO: '2026-08-01',
+      pesoPerfilKg: 54.2,
+      anterior: ancoraEm(54.2, '2026-07-29'),
+      emFaixaProtetiva: fazEmFaixaProtetiva(MULHER),
+    });
+    // A histerese de RECOMPUTAÇÃO continua valendo: a âncora não se moveu, não houve evento.
+    expect(54.2 - 53.3).toBeCloseTo(0.9, 10);
+    expect(r.estado.ancoraKg).toBe(54.2);
+    expect(r.evento).toBeNull();
+    // …e mesmo assim o plano é resolvido no peso da LEITURA, que o gate rotea.
+    expect(r.pesoKg).toBe(53.3);
+    expect(avaliarGateSaude(perfilCom(MULHER, r.pesoKg)).comportamento).toBe('ROTEAR');
+    expect(r.estado.faixa).toMatchObject({ ativa: true, porMedicao: true });
+  });
+
+  it('SAIR: volta acima do piso e continua em ROTEAR por 14 dias — prova própria', () => {
+    let estado = resolverPesoDoPlano({
+      pesagens: serie(53.3, ['2026-07-30', '2026-07-31', '2026-08-01']),
+      hojeISO: '2026-08-01', pesoPerfilKg: 54.2, anterior: ancoraEm(54.2, '2026-07-29'),
+      emFaixaProtetiva: fazEmFaixaProtetiva(MULHER),
+    }).estado;
+    const pesagens = [...serie(53.3, ['2026-07-30', '2026-07-31', '2026-08-01']), ...serie(55, ['2026-08-02', '2026-08-03', '2026-08-04'])];
+    const ler = (hojeISO: string) => {
+      const r = resolverPesoDoPlano({ pesagens, hojeISO, pesoPerfilKg: 54.2, anterior: estado, emFaixaProtetiva: fazEmFaixaProtetiva(MULHER) });
+      estado = r.estado;
+      return { peso: r.pesoKg, gate: avaliarGateSaude(perfilCom(MULHER, r.pesoKg)).comportamento };
+    };
+    // 2026-08-04: a leitura já saiu do piso, mas o PINO segura o peso de dentro da faixa.
+    expect(ler('2026-08-04')).toEqual({ peso: 53.3, gate: 'ROTEAR' });
+    expect(ler('2026-08-10')).toEqual({ peso: 53.3, gate: 'ROTEAR' });
+    // Véspera do 14º dia: ainda dentro.
+    expect(ler('2026-08-17')).toEqual({ peso: 53.3, gate: 'ROTEAR' });
+    // 14 dias completos a partir de 2026-08-04 → a carência vence e o plano volta à âncora.
+    expect(ler('2026-08-18')).toEqual({ peso: 54.2, gate: 'PERMITIR' });
+    expect(estado.faixa.ativa).toBe(false);
+  });
+
+  it('🟢 INOCENTE 1: suavizado se move SEM cruzar o piso → nada muda e o plano não recomputa', () => {
+    const r = resolverPesoDoPlano({
+      // 54,2 → 53,8: GET 1254,4 > 1250, e Δ = 0,4 kg < 1 kg.
+      pesagens: serie(53.8, ['2026-07-30', '2026-07-31', '2026-08-01']),
+      hojeISO: '2026-08-01', pesoPerfilKg: 54.2, anterior: ancoraEm(54.2, '2026-07-29'),
+      emFaixaProtetiva: fazEmFaixaProtetiva(MULHER),
+    });
+    expect(avaliarGateSaude(perfilCom(MULHER, 53.8)).comportamento).toBe('PERMITIR');
+    expect(r.estado.faixa.ativa).toBe(false);
+    expect(r.evento).toBeNull();          // a proteção contra churn do cardápio segue de pé
+    expect(r.estado.ancoraKg).toBe(54.2);
+    expect(r.pesoKg).toBe(54.2);          // faixa calada → quem manda é a âncora
+  });
+
+  it('🟢 INOCENTE 2: o caso de IMC de 2026-07-31 (1,60 m · 41,5 → 40,8) não regrediu', () => {
+    const magra = { sexo: 'feminino', alturaCm: 160, idade: 30, nivelAtividade: 'sedentario', objetivo: 'saude', flagsSaude: SEM, pesoKg: 41.5 } as const;
+    expect(avaliarGateSaude(perfilCom(magra, 41.5)).derivados.imc).toBeCloseTo(16.21, 2);
+    expect(avaliarGateSaude(perfilCom(magra, 40.8)).derivados.imc).toBeCloseTo(15.94, 2);
+    const r = resolverPesoDoPlano({
+      pesagens: serie(40.8, ['2026-07-30', '2026-07-31', '2026-08-01']),
+      hojeISO: '2026-08-01', pesoPerfilKg: 41.5, anterior: ancoraEm(41.5, '2026-07-29'),
+      emFaixaProtetiva: fazEmFaixaProtetiva(magra),
+    });
+    expect(41.5 - 40.8).toBeCloseTo(0.7, 10);   // Δ < 1 kg: recomputação suprimida
+    expect(r.estado.ancoraKg).toBe(41.5);
+    expect(r.pesoKg).toBe(40.8);
+    expect(avaliarGateSaude(perfilCom(magra, r.pesoKg)).comportamento).toBe('ROTEAR');
   });
 });

@@ -21,6 +21,9 @@ import {
 } from '@/lib/engine/peso-suavizado';
 import { chaveLocal } from '@/lib/escopo-local';
 import type { PerfilResumo } from '@/components/painel/Painel';
+
+/** Os campos que o gate de saúde realmente lê — `PerfilResumo` os satisfaz. */
+type PerfilDoGate = Pick<PerfilResumo, 'sexo' | 'alturaCm' | 'idade' | 'nivelAtividade' | 'objetivo' | 'flagsSaude'>;
 import type { RegistroPeso } from '@/lib/treino-historico';
 
 const KEY = 'evk_peso_plano' as const;
@@ -77,8 +80,21 @@ export function pesagensDatadas(pesos: readonly RegistroPeso[]): Pesagem[] {
  * "Protetivo" = qualquer coisa que não seja `PERMITIR` (ROTEAR, RESTRINGIR, PISAR). Note que
  * uma condição clínica declarada mantém o gate protetivo em QUALQUER peso — e é isso mesmo:
  * a carência de saída só existe para quem saiu por causa do peso.
+ *
+ * 🔑 **O critério é DERIVADO do gate, não uma lista de cortes de IMC — e é isso que faz o
+ * eixo kcal entrar de graça** (DF 2026-08-01, `gate-de-saude-evokorpus` §Histerese
+ * assimétrica). `GET ≤ piso_seguro → ROTEAR` é `!== 'PERMITIR'` como qualquer outro desfecho
+ * protetivo, então ele já herda *entrar a cada leitura · sair em 14 dias*. ⚠️ Trocar isto por
+ * uma checagem de faixas de IMC reabriria o buraco em silêncio: existe peso que cruza o piso
+ * calórico com **IMC 22,2**, longe de todo corte — invisível para qualquer regra de IMC.
+ * Guard que executa esse caso: `peso-conexao.test.ts` §eixo kcal.
+ *
+ * 🔒 Exportado para que o guard execute ESTE predicado, não uma cópia escrita no teste —
+ * cópia diverge do original sem ninguém perceber. O parâmetro pede só os campos que o gate
+ * LÊ (`PerfilDoGate`): assinatura que exige mais do que usa obriga a fixture do guard a
+ * inventar dado irrelevante, e dado inventado é ruído que esconde o que a prova afirma.
  */
-function fazEmFaixaProtetiva(perfil: PerfilResumo): (pesoKg: number) => boolean {
+export function fazEmFaixaProtetiva(perfil: PerfilDoGate): (pesoKg: number) => boolean {
   return (pesoKg: number) => {
     const p: PerfilUsuario = {
       sexo: perfil.sexo, pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,
