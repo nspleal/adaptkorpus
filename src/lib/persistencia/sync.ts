@@ -10,7 +10,7 @@
  */
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import type { PerfilResumo } from '@/components/painel/Painel';
-import type { SessaoHistorico } from '@/lib/treino-historico';
+import type { RegistroPeso, SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -88,12 +88,18 @@ export async function salvarAderenciaDia(dia: string, logs: Record<string, unkno
 }
 
 // ---- peso ---------------------------------------------------------------------
-export async function carregarPesosServidor(): Promise<number[] | null> {
-  const r = await getJson<{ pesos: number[] }>('/api/dados/peso');
+export async function carregarPesosServidor(): Promise<RegistroPeso[] | null> {
+  // 🔒 A série carrega DATA desde a Leva D — sem ela não há janela de 7 dias.
+  const r = await getJson<{ pesos: RegistroPeso[] }>('/api/dados/peso');
   return r?.pesos ?? null;
 }
-export async function registrarPesoServidor(pesoKg: number): Promise<boolean> {
-  return enviarJson('/api/dados/peso', 'POST', { pesoKg });
+/**
+ * 🔒 `dataISO` vai junto (Leva D). O caso que obriga: a re-subida das pesagens que ficaram
+ * só no navegador. Sem a data, todas chegariam carimbadas com o dia da sincronização e a
+ * janela de 7 dias leria uma série que não aconteceu. Ausente = o banco usa `current_date`.
+ */
+export async function registrarPesoServidor(pesoKg: number, dataISO?: string | null): Promise<boolean> {
+  return enviarJson('/api/dados/peso', 'POST', { pesoKg, ...(dataISO ? { dataISO } : {}) });
 }
 
 // ---- acesso (allowlist/assinatura) -------------------------------------------

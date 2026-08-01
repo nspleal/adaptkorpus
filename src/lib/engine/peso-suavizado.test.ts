@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DIAS_PARA_SAIR_DA_FAIXA, FAIXA_INICIAL, HISTERESE_FRACAO, HISTERESE_KG,
   INTERVALO_MIN_RECOMPUTO_DIAS, JANELA_SUAVIZACAO_DIAS, MIN_REGISTROS_SUAVIZACAO,
-  aplicarHistereseFaixa, deveRecomputar, naJanela, pesoEfetivo, pesoSuavizado,
+  aplicarHistereseFaixa, deveRecomputar, naJanela, pesoEfetivo, pesoSuavizado, resolverPesoDoPlano,
   type FaixaProtetiva, type Pesagem,
 } from './peso-suavizado';
 import { calcularIMC } from './formulas';
@@ -234,5 +234,178 @@ describe('🔒 ACEITE — série ruidosa em torno de um corte NÃO faz o gate os
       est = aplicarHistereseFaixa({ dentroDaFaixaHoje: false, anterior: est, hojeISO: dia(d) });
     }
     expect(est.ativa, 'não liberou nem depois de 21 dias fora').toBe(false);
+  });
+});
+
+/* ══════════════════ resolverPesoDoPlano — as três camadas juntas ══════════════════ */
+
+describe('resolverPesoDoPlano — suavização + histerese de recomputo + carência da faixa', () => {
+  /** Faixa protetiva de mentira, mas com FORMA de gate: abaixo de um corte, protege. */
+  const abaixoDe = (corte: number) => (kg: number) => kg < corte;
+  const nunca = () => false;
+
+  it('sem âncora e com janela cheia, o plano NASCE no suavizado — evento de MIGRAÇÃO', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 61.0], [1, 61.4], [2, 61.2]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: null, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(61.2);
+    expect(r.evento).toBe('migracao');
+    expect(r.estado.ancoraKg).toBe(61.2);
+    expect(r.estado.ancoraDesdeISO).toBe(HOJE);
+  });
+
+  /** 🔒 ACEITE: < 3 registros usa o valor VIGENTE — e isso não é migração nenhuma. */
+  it('sem janela suficiente, cai no peso do perfil e não marca evento', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 61.0], [1, 61.4]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: null, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(70);
+    expect(r.evento).toBeNull();
+  });
+
+  it('migração NÃO é marcada quando o suavizado bate com o peso do perfil', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 70], [1, 70], [2, 70]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: null, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(70);
+    expect(r.evento).toBeNull();
+  });
+
+  /** 🔒 ACEITE: uma pesagem isolada não muda o alvo — nem via recomputo. */
+  it('com âncora fixada ontem, um tranco de 3 kg NÃO move o plano (falta a semana)', () => {
+    const anterior = {
+      ancoraKg: 61.2, ancoraDesdeISO: dia(1), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(61.2);
+    expect(r.evento).toBeNull();
+    expect(r.estado.ancoraDesdeISO, 'a âncora não pode rejuvenescer sem se mover').toBe(dia(1));
+  });
+
+  it('passada a semana E vencido o limiar, a âncora anda — evento de RECOMPUTO', () => {
+    const anterior = {
+      ancoraKg: 61.2, ancoraDesdeISO: dia(8), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(64.2);
+    expect(r.evento).toBe('recomputo');
+    expect(r.estado.ancoraDesdeISO).toBe(HOJE);
+  });
+
+  it('passada a semana mas SEM vencer o limiar, nada anda', () => {
+    const anterior = {
+      ancoraKg: 61.2, ancoraDesdeISO: dia(30), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 61.5], [1, 61.5], [2, 61.5]), // 0,3 kg < max(1; 0,918)
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg).toBe(61.2);
+    expect(r.evento).toBeNull();
+  });
+
+  /**
+   * 🔒 ACEITE (o que a MEDIÇÃO obrigou a travar): a média sozinha NÃO impede o gate de
+   * oscilar — ela só reduz a frequência. É a carência de 14 dias que segura o portão. Aqui
+   * a âncora sai da faixa e mesmo assim o plano continua sendo gerado com o peso de dentro.
+   */
+  it('ao SAIR da faixa, o plano continua no peso de dentro durante a carência', () => {
+    const anterior = {
+      ancoraKg: 59.9, ancoraDesdeISO: dia(8),
+      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.9,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: abaixoDe(60),
+    });
+    expect(r.estado.ancoraKg, 'a âncora anda normalmente').toBe(61);
+    expect(r.estado.faixa.ativa, 'a proteção não pode cair no mesmo dia').toBe(true);
+    expect(r.estado.faixa.foraDesdeISO).toBe(HOJE);
+    expect(r.pesoKg, 'o plano tem de continuar sendo gerado no peso protegido').toBe(59.9);
+  });
+
+  it('cumpridos os 14 dias, a carência acaba e o plano passa a usar a âncora', () => {
+    const anterior = {
+      ancoraKg: 61.0, ancoraDesdeISO: dia(20),
+      faixa: { ativa: true, foraDesdeISO: dia(DIAS_PARA_SAIR_DA_FAIXA) }, pesoNaFaixaKg: 59.9,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: abaixoDe(60),
+    });
+    expect(r.estado.faixa.ativa).toBe(false);
+    expect(r.estado.pesoNaFaixaKg).toBeNull();
+    expect(r.pesoKg).toBe(61);
+  });
+
+  it('ENTRAR na faixa é imediato — sem carência nenhuma', () => {
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 59.5], [1, 59.5], [2, 59.5]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: null, emFaixaProtetiva: abaixoDe(60),
+    });
+    expect(r.estado.faixa.ativa).toBe(true);
+    expect(r.estado.pesoNaFaixaKg).toBe(59.5);
+    expect(r.pesoKg).toBe(59.5);
+  });
+
+  /**
+   * O caso que junta tudo: série ruidosa em torno do corte, 30 dias. Com as três camadas,
+   * o COMPORTAMENTO do gate não pode piscar uma única vez.
+   */
+  it('30 dias de série ruidosa em torno do corte → zero oscilação do gate', () => {
+    const corte = 60;
+    const emFaixa = abaixoDe(corte);
+    // Ruído ±1,2 kg em torno de 60,0 — cruza o corte quase todo dia.
+    const ruido = [-1.2, 0.9, -0.6, 1.1, -1.0, 0.4, 0.8, -0.9, 1.2, -0.3];
+    const pesagens: Pesagem[] = [];
+    for (let d = 34; d >= 0; d -= 1) pesagens.push({ dataISO: dia(d), kg: 60 + ruido[d % 10]! });
+
+    let estado = null as null | ReturnType<typeof resolverPesoDoPlano>['estado'];
+    const protegido: boolean[] = [];
+    for (let d = 29; d >= 0; d -= 1) {
+      const r = resolverPesoDoPlano({
+        pesagens, hojeISO: dia(d), pesoPerfilKg: 70, anterior: estado, emFaixaProtetiva: emFaixa,
+      });
+      estado = r.estado;
+      protegido.push(emFaixa(r.pesoKg));
+    }
+    const viradas = protegido.filter((v, i) => i > 0 && v !== protegido[i - 1]).length;
+    expect(viradas, `o gate piscou ${viradas} vezes`).toBe(0);
+    // ⚠️ Anti-vacuidade nº 1: "nunca protegeu" também dá zero viradas e não provaria nada.
+    expect(protegido[0], 'o caso precisa começar protegido').toBe(true);
+
+    // Anti-vacuidade: a MESMA série, lida crua (última pesagem), pisca muito.
+    const cru = pesagens.slice(-30).map((p) => emFaixa(p.kg));
+    const viradasCru = cru.filter((v, i) => i > 0 && v !== cru[i - 1]).length;
+    expect(viradasCru, 'a série crua precisa oscilar, senão o caso não discrimina').toBeGreaterThanOrEqual(5);
+  });
+
+  it('IMC de verdade: o corte 18,5 lido pelo gate não vira ruído com a série ruidosa', () => {
+    // Ancorado no motor real: 1,70 m e IMC 18,5 → 53,465 kg.
+    const alturaCm = 170;
+    const emFaixa = (kg: number) => calcularIMC(kg, alturaCm) < 18.5;
+    expect(emFaixa(53.4), 'o caso precisa começar DENTRO da faixa').toBe(true);
+    expect(emFaixa(53.6)).toBe(false);
+    const pesagens: Pesagem[] = [];
+    for (let d = 20; d >= 0; d -= 1) pesagens.push({ dataISO: dia(d), kg: d % 2 === 0 ? 53.3 : 53.7 });
+    let estado = null as null | ReturnType<typeof resolverPesoDoPlano>['estado'];
+    const protegido: boolean[] = [];
+    for (let d = 14; d >= 0; d -= 1) {
+      const r = resolverPesoDoPlano({
+        pesagens, hojeISO: dia(d), pesoPerfilKg: 70, anterior: estado, emFaixaProtetiva: emFaixa,
+      });
+      estado = r.estado;
+      protegido.push(emFaixa(r.pesoKg));
+    }
+    expect(new Set(protegido).size, 'o gate piscou com IMC real').toBe(1);
   });
 });

@@ -9,7 +9,6 @@ import { gerarDieta, gerarTreino } from '@/lib/engine';
 import type { OpcoesSemana, PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
-import { pesoEfetivo, type Pesagem } from '@/lib/engine/peso-suavizado';
 import type { PerfilResumo } from '@/components/painel/Painel';
 
 export function recomputarPlano(
@@ -18,30 +17,29 @@ export function recomputarPlano(
   opcoes?: {
     semanaCiclo?: OpcoesSemana;
     /**
-     * 🔒 A CONEXÃO (Leva D, DF 2026-07-31). A série de pesagens + o dia de hoje; quem tem
-     * relógio injeta, como já faz com a semana do mesociclo.
+     * 🔒 A CONEXÃO (Leva D, DF 2026-07-31). O peso já RESOLVIDO — suavizado, com histerese de
+     * recomputação e carência da faixa protetiva aplicadas. Quem resolve é `lib/peso-plano`
+     * (tem storage e relógio); aqui só se recebe, como já se recebe a semana do mesociclo.
      *
      * 🔴 O defeito que isto fecha: `registrarPeso` grava em três destinos e NENHUM é
      * `perfil.pesoKg` — só o *Editar perfil* movia o perfil. A dieta era adaptativa no
      * mecanismo e estática no efeito: com perfil 70 kg e peso real 61,4 o alvo ficava
      * ~110 kcal/dia alto demais. Nenhuma pesagem mudava TMB, macro nem gate.
      *
-     * ⚠️ Ausente = comportamento ANTERIOR, byte a byte (o `pesoEfetivo` cai no vigente).
-     * É o que mantém o servidor e a chamada v1 intactos.
+     * ⚠️ Um knob só, de propósito: se aqui entrassem a série E o peso resolvido, existiriam
+     * duas respostas para "com que peso o plano foi gerado" — e a auditoria do determinismo
+     * depende de existir uma. Ausente = comportamento ANTERIOR, byte a byte (o servidor e a
+     * chamada v1 seguem no `perfil.pesoKg`).
      */
-    pesagens?: readonly Pesagem[];
-    hojeISO?: string;
+    pesoEfetivoKg?: number;
   },
 ): { dieta: ResultadoMotor; treino: ResultadoTreino } {
   /**
-   * 🔒 O peso que o MOTOR usa: suavizado quando existe (≥ 3 registros em 7 dias), senão o
-   * vigente do perfil. Um único ponto de decisão para os SEIS consumidores — TMB, proteína,
-   * gordura, gatilhos de clamp, IMC do gate e a checagem de plausibilidade —, porque todos
-   * leem daqui para baixo. Fonte única, não seis chamadas espalhadas.
+   * 🔒 Um único ponto de decisão para os SEIS consumidores — TMB, proteína, gordura,
+   * gatilhos de clamp, IMC do gate e a checagem de plausibilidade —, porque todos leem daqui
+   * para baixo. Fonte única, não seis chamadas espalhadas.
    */
-  const pesoKg = opcoes?.pesagens && opcoes.hojeISO
-    ? pesoEfetivo(opcoes.pesagens, opcoes.hojeISO, perfil.pesoKg)
-    : perfil.pesoKg;
+  const pesoKg = Number.isFinite(opcoes?.pesoEfetivoKg) ? (opcoes!.pesoEfetivoKg as number) : perfil.pesoKg;
 
   const perfilU: PerfilUsuario = {
     sexo: perfil.sexo, pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,

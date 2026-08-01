@@ -7,7 +7,8 @@ import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/en
 import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
-import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type SessaoHistorico } from '@/lib/treino-historico';
+import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type RegistroPeso, type SessaoHistorico } from '@/lib/treino-historico';
+import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
@@ -185,27 +186,63 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return () => { vivo = false; };
   }, []);
 
-  const [pesos, setPesos] = useState<number[]>([perfil.pesoKg]);
+  // 🔒 A série carrega DATA (Leva D). O 1º item é a SEMENTE do perfil, não uma pesagem:
+  // entra sem data e por isso nunca conta na janela de 7 dias — só aparece no gráfico.
+  const [pesos, setPesos] = useState<RegistroPeso[]>([{ dataISO: null, kg: perfil.pesoKg }]);
+  const pesosKg = pesos.map((p) => p.kg);
   // Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
   // resetavam a cada reload quando o write-through falhava); depois o servidor:
   //  - servidor NÃO-vazio vence (2º device coerente) e renova a cópia local;
   //  - servidor vazio com local não-vazio → mantém o local e RE-SOBE cada peso (retry
   //    dos writes silenciosamente perdidos); GET falho (null) → local fica.
   useEffect(() => {
+    const semente: RegistroPeso = { dataISO: null, kg: perfil.pesoKg };
     const locais = lerPesos();
-    if (locais.length > 0) setPesos([perfil.pesoKg, ...locais]);
+    if (locais.length > 0) setPesos([semente, ...locais]);
     let vivo = true;
     void carregarPesosServidor().then((doServidor) => {
       if (!vivo || !doServidor) return;
       if (doServidor.length > 0) {
-        setPesos([perfil.pesoKg, ...substituirPesos(doServidor)]);
+        setPesos([semente, ...substituirPesos(doServidor)]);
       } else if (locais.length > 0) {
-        for (const v of locais) void registrarPesoServidor(v);
+        // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
+        // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
+        // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
+        for (const v of locais) void registrarPesoServidor(v.kg, v.dataISO);
       }
     });
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- semente única no mount
   }, []);
+  /**
+   * 🔒 O peso com que o PLANO é gerado (Leva D). Não é `perfil.pesoKg` nem a última pesagem:
+   * é a média móvel de 7 dias com as duas histereses aplicadas (`lib/peso-plano`).
+   *
+   * Resolver aqui de novo — `/app/page.tsx` já resolveu no mount — é seguro porque a
+   * resolução é IDEMPOTENTE no mesmo dia: as duas chamadas leem a mesma âncora e devolvem o
+   * mesmo peso. O que muda o valor é a hidratação do servidor e uma pesagem nova, e é
+   * exatamente por isso que `pesos` está nas deps.
+   */
+  const [pesoMotorKg, setPesoMotorKg] = useState(perfil.pesoKg);
+  /** Última âncora já refletida na dieta — evita regerar o cardápio sem o peso ter mudado. */
+  const pesoAplicadoRef = useRef(perfil.pesoKg);
+  useEffect(() => {
+    setPesoMotorKg(resolverPesoDoPlanoLocal({ perfil, pesos, hojeISO: hojeISO() }));
+  }, [pesos, perfil]);
+  /**
+   * 🔒 A frase do recálculo (Leva D). Regras da copy, travadas:
+   *  · **passado** — relata o que já aconteceu, não o que vai acontecer;
+   *  · sobre o **app**, nunca sobre a pessoa (nada de "você emagreceu"/"seu corpo mudou");
+   *  · **sem modo diário**: lá não há plano para recalcular, e a frase pressuporia um.
+   *
+   * ⚠️ Ela NÃO substitui o subtítulo do `RegistrarPesoRow`. "Um registro rápido mantém seu
+   * plano calibrado" continuaria falso no ATO do registro: uma pesagem isolada não move nada
+   * (a janela pede ≥ 3 em 7 dias e a âncora anda no máximo 1×/semana). O que é verdade é o
+   * fato consumado — e é só ele que a tela diz.
+   */
+  const notaPesoPlano = !modoDiario && pesoMotorKg !== perfil.pesoKg
+    ? `Seu plano foi recalculado com a média dos seus registros de peso (${pesoMotorKg.toFixed(1)} kg).`
+    : null;
   const [modal, setModal] = useState<Modal>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
@@ -300,7 +337,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novo = { ...perfil, favoritos: [...atual] };
     setPerfil(novo);
     onPerfilChange?.(novo);
-    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana() });
+    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
@@ -377,7 +414,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
   // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
   function recalcular(novo: PerfilResumo) {
-    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana() });
+    // 🔒 Leva D: o peso é RESOLVIDO aqui, com o perfil novo, e o resultado é o mesmo que o
+    // efeito da âncora produziria — sem isto a edição geraria um plano com o peso digitado e
+    // o efeito o trocaria no quadro seguinte (dois planos em sequência, piscando).
+    // ⚠️ Com janela cheia (≥ 3 pesagens em 7 dias) o SUAVIZADO vence o número digitado: a
+    // média medida é mais confiável que um valor de teclado (spec §4).
+    const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: hojeISO() });
+    setPesoMotorKg(pesoEfetivoKg);
+    pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
+    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg });
     // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
@@ -421,7 +466,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Aplica um novo perfil (só mudou a rotação de pratos — saúde/dias intactos) e recomputa o
   // cardápio. Determinístico: mesmo perfil → mesmo cardápio. Não mexe no treino (não muda).
   function aplicarRotacao(novo: PerfilResumo) {
-    const { dieta: nd } = recomputarPlano(novo);
+    const { dieta: nd } = recomputarPlano(novo, { pesoEfetivoKg: pesoMotorKg });
     if (!nd.plano || !nd.cardapio) return; // robustez (saúde não muda aqui → não vira ROTEAR)
     onPerfilChange?.(novo);
     setPerfil(novo);
@@ -495,9 +540,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
   const registrarPeso = (v: number) => {
     if (!Number.isFinite(v) || v < 30 || v > 300) return;
-    setPesos((p) => [...p, v]);
-    registrarPesoLocal(v); // cópia local primeiro (offline-first — fix 2026-07-08)
-    void registrarPesoServidor(v); // write-through (no-op sem backend)
+    // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
+    // servidor no campo `data` do log — é ela que permite a janela de 7 dias.
+    const dia = hojeISO();
+    setPesos((p) => [...p, { dataISO: dia, kg: v }]);
+    registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
+    void registrarPesoServidor(v, dia); // write-through com a data (no-op sem backend)
   };
 
   const prescricao = treino.prescricao;
@@ -591,7 +639,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // corrente + feedback agregado por grupo. Roda no mount e quando a semana muda (não em
   // cada registro — troca manual de exercício não é clobrada no meio do uso).
   useEffect(() => {
-    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana() });
+    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     // Re-monta quando a semana do ciclo OU a rampa de retomada muda. A rampa entra nas deps
@@ -599,7 +647,30 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // de ciclo — sem isto, a rotina ficaria com o volume cheio enquanto o chip já diz
     // "Retomada" (bug real, pego no smoke do Bloco 3).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator]);
+  }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator, pesoMotorKg]);
+  /**
+   * 🔒 A DIETA SEGUE O PESO (Leva D, DF 2026-07-31). Quando a âncora se move — e ela só se
+   * move com ≥ 1 kg / 1,5% E ≥ 1 semana desde a última —, o cardápio e o alvo são regerados.
+   *
+   * ⚠️ Fail-safe idêntico ao de `recalcular`: se o novo peso cair em ROTEAR (ex.: IMC < 16), o
+   * plano válido de antes NÃO é substituído — a tela de encaminhamento aparece. O gate vale
+   * retroativamente; suprimi-lo aqui seria deixar a pessoa dentro de um plano que o gate já
+   * recusaria. 🔴 Isto NÃO é adaptar o plano "à condição": é o app dar um passo atrás.
+   */
+  useEffect(() => {
+    if (pesoAplicadoRef.current === pesoMotorKg) return;
+    pesoAplicadoRef.current = pesoMotorKg;
+    const { dieta: nd } = recomputarPlano(perfil, { pesoEfetivoKg: pesoMotorKg });
+    if (nd.gate.comportamento === 'ROTEAR' || !nd.plano) {
+      setEncaminhamento(nd.gate.motivos ?? []);
+      return;
+    }
+    setDieta(nd);
+    setCardItens(nd.cardapio?.itens ?? []);
+    setCardTotais(nd.cardapio?.totais ?? null);
+    setMostrarC(nd.gate.comportamento === 'RESTRINGIR' || nd.gate.comportamento === 'PISAR');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só a âncora dispara
+  }, [pesoMotorKg]);
   // Prescrição EFETIVA da semana p/ a sessão (RIR-alvo da rampa 3→1 + descanso do composto
   // até ~180 s quando o tempo permite — o montador decide e devolve em rotina.semana).
   const prescricaoBase = prescricao
@@ -777,7 +848,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
         {!vista && aba === 'progresso' && (
-          <Progresso pesos={pesos} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario}>
+          <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
                 `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
             <FrequenciaGrupos
@@ -792,7 +863,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesos} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesosKg} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
@@ -1112,7 +1183,7 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, children, modoDiario }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode; modoDiario?: boolean }) {
+function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPesoPlano }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -1130,6 +1201,12 @@ function Progresso({ pesos, treinos, onRegistrar, children, modoDiario }: { peso
         {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
       </div>
       <RegistrarPesoRow onRegistrar={onRegistrar} />
+      {/* 🔒 Leva D — o AVISO DO RECÁLCULO. Não é subtítulo nem promessa: é o relato de um
+          fato já ocorrido, no passado, sobre o APP (nunca sobre a pessoa e nunca no futuro).
+          Só aparece quando o peso do plano realmente deixou de ser o do perfil — a string
+          chega pronta de cima justamente para que "apareceu" e "aconteceu" sejam a mesma
+          condição, sem um segundo lugar podendo discordar. */}
+      {notaPesoPlano && <p style={{ margin: '10px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.55 }}>{notaPesoPlano}</p>}
       {children}
       {/* 🔒 CLASSE 2 — o cartão descreve o MOTOR ADAPTATIVO (plano que se recalcula), que o
           modo diário não tem. Não renderiza, e não ganha paráfrase: não existe equivalente
@@ -1437,9 +1514,15 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
  * GET → kcal-alvo existe, mas é alimentada pelo peso DO PERFIL, não pelo registro. Prometer
  * calibração no ato do registro seria falso nos dois modos — não é um caso de modo diário.
  *
- * ⚠️ Se um dia o registro passar a alimentar `perfil.pesoKg` (decisão de PRODUTO — mexe no
- * motor e tem efeito no gate de saúde, então vai em trabalho próprio), esta frase pode
- * voltar a ramificar. Até lá, "guarda a sua variação" é o que o app realmente faz.
+ * ⚠️ **A Leva D (DF 2026-07-31) mexeu no motor e a frase CONTINUA fora daqui.** O registro
+ * agora realimenta o plano — mas por uma ÂNCORA (`lib/peso-plano`), não por `perfil.pesoKg`,
+ * e só quando há ≥ 3 pesagens em 7 dias, movendo-se no máximo 1×/semana. Ou seja: no ATO do
+ * registro, uma pesagem isolada continua não calibrando nada. Prometer calibração no botão
+ * seria falso no instante em que a pessoa lê. O que o app faz de verdade — o recálculo já
+ * ocorrido — é dito no `notaPesoPlano`, no passado, e só quando aconteceu.
+ *
+ * 🔴 NÃO reintroduza `modoDiario` aqui: o subtítulo segue unificado, e a diferença entre os
+ * modos mora na nota, que é outra frase e outro lugar.
  */
 function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void }) {
   const [v, setV] = useState('');

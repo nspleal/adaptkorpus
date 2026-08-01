@@ -13,6 +13,8 @@ import { resolverEscopoLocal } from '@/lib/escopo-local';
 import VigiaSessao from '@/components/auth/VigiaSessao';
 import ConviteInstalar from '@/components/pwa/ConviteInstalar';
 import { registrarEvento } from '@/lib/metricas/registrar';
+import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
+import { hojeISO, lerPesos } from '@/lib/treino-historico';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -35,7 +37,11 @@ export default function AppPage() {
     // Monta o painel a partir de um perfil resolvido (local ou do servidor).
     function montar(perfil: PerfilResumo) {
       if (!vivo) return;
-      const { dieta, treino } = recomputarPlano(perfil);
+      // 🔒 Leva D: o plano é gerado com o peso RESOLVIDO (média de 7 dias + histereses), não
+      // com o `perfil.pesoKg` cru. É seguro ler o storage aqui — no caminho com backend
+      // `montar` só roda depois de `resolverEscopoLocal()`, então a gaveta já é a certa.
+      const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil, pesos: lerPesos(), hojeISO: hojeISO() });
+      const { dieta, treino } = recomputarPlano(perfil, { pesoEfetivoKg });
       // 🔒 Cofre, DF 2026-07-27: gate ROTEAR NÃO é mais um beco sem saída. O painel monta em
       // MODO DIÁRIO (registra, não recebe prescrição). Antes daqui o ROTEAR caía no
       // `limparSessao()` abaixo e era chutado de volta ao onboarding — o defeito vivo.

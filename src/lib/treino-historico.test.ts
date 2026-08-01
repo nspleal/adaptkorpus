@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { lerPesos, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, sessoesTreino, substituirPesos, type SessaoHistorico } from './treino-historico';
+import { lerPesos, lerPesosKg, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, sessoesTreino, substituirPesos, type SessaoHistorico } from './treino-historico';
 import { diasDeTreino } from './chama';
 
 /**
@@ -98,15 +98,28 @@ describe('pesos locais (evk_pesos — fix: pesos eram só memória)', () => {
     });
     try {
       expect(lerPesos()).toEqual([]);
-      expect(registrarPesoLocal(80)).toEqual([80]);
-      expect(registrarPesoLocal(79.5)).toEqual([80, 79.5]);
-      expect(lerPesos()).toEqual([80, 79.5]);
-      expect(substituirPesos([81, 80])).toEqual([81, 80]);
-      expect(lerPesos()).toEqual([81, 80]);
+      // 🔒 Leva D: a série carrega DATA. A data é carimbada aqui (UI), não no motor.
+      expect(registrarPesoLocal(80, '2026-07-30')).toEqual([{ dataISO: '2026-07-30', kg: 80 }]);
+      expect(registrarPesoLocal(79.5, '2026-07-31')).toEqual([
+        { dataISO: '2026-07-30', kg: 80 }, { dataISO: '2026-07-31', kg: 79.5 },
+      ]);
+      expect(lerPesos()).toEqual([
+        { dataISO: '2026-07-30', kg: 80 }, { dataISO: '2026-07-31', kg: 79.5 },
+      ]);
+      expect(substituirPesos([{ dataISO: '2026-07-29', kg: 81 }, { dataISO: '2026-07-30', kg: 80 }]))
+        .toEqual([{ dataISO: '2026-07-29', kg: 81 }, { dataISO: '2026-07-30', kg: 80 }]);
       store.set('evk_pesos', '{corrompido');
       expect(lerPesos()).toEqual([]);
+      // 🔒 RETROCOMPATÍVEL: número puro (formato anterior) entra SEM data — não conta na
+      // janela de 7 dias, mas continua no gráfico. Perder o ponto trocaria um defeito por
+      // outro. `lerPesosKg` é a porta do gráfico e devolve todos.
       store.set('evk_pesos', '[80,"x",null,79]');
-      expect(lerPesos()).toEqual([80, 79]); // filtra não-números
+      expect(lerPesos()).toEqual([{ dataISO: null, kg: 80 }, { dataISO: null, kg: 79 }]);
+      expect(lerPesosKg()).toEqual([80, 79]);
+      // Série MISTA (o navegador de quem já usava): legado + novo, na mesma lista.
+      store.set('evk_pesos', '[80,{"dataISO":"2026-07-31","kg":79.2}]');
+      expect(lerPesos()).toEqual([{ dataISO: null, kg: 80 }, { dataISO: '2026-07-31', kg: 79.2 }]);
+      expect(lerPesosKg()).toEqual([80, 79.2]);
     } finally {
       vi.unstubAllGlobals();
     }

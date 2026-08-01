@@ -164,27 +164,70 @@ export function reconciliarHistorico(
 
 const KEY_PESOS = 'evk_pesos' as const;
 
-/** Lê os pesos registrados (ordem de registro). Robusto a storage ausente/corrompido. */
-export function lerPesos(): number[] {
+/**
+ * 🔒 A série de pesos passa a carregar DATA (Leva D, DF 2026-07-31).
+ *
+ * 🔴 O bloqueio que isto remove: `evk_pesos` era `number[]` e a rota devolvia `number[]`,
+ * descartando o `data`/`created_at` que a tabela `logs` guarda. **Sem data não existe janela
+ * de 7 dias** — e a suavização é o que impede pesagem crua de bater no gate.
+ *
+ * ⚠️ NÃO se contorna assumindo "uma pesagem por dia, a mais recente é hoje": isso produz a
+ * média de uma série que não aconteceu, e quem lê essa média é o GATE. Dado fabricado no
+ * eixo do tempo, no lugar em que menos se pode errar.
+ *
+ * **Retrocompatível:** entrada antiga (número puro) entra com `dataISO: null` — **não conta
+ * na janela** (conservador) **mas continua no gráfico**: é peso válido, só sem eixo de tempo
+ * utilizável. Perder o ponto trocaria um defeito por outro.
+ */
+export interface RegistroPeso {
+  /** Dia declarado da pesagem. `null` = registro legado, sem data. */
+  dataISO: string | null;
+  kg: number;
+}
+
+/** Aceita `number` (legado) e `{dataISO,kg}` (novo), devolvendo sempre o novo. */
+function normalizarRegistroPeso(v: unknown): RegistroPeso | null {
+  if (Number.isFinite(v)) return { dataISO: null, kg: v as number };
+  if (v && typeof v === 'object') {
+    const o = v as { dataISO?: unknown; kg?: unknown };
+    if (Number.isFinite(o.kg)) {
+      return { dataISO: typeof o.dataISO === 'string' ? o.dataISO : null, kg: o.kg as number };
+    }
+  }
+  return null;
+}
+
+/** Lê a série de pesos (ordem de registro). Robusto a storage ausente/corrompido/legado. */
+export function lerPesos(): RegistroPeso[] {
   if (typeof window === 'undefined') return [];
   try {
     const arr = JSON.parse(localStorage.getItem(chaveLocal(KEY_PESOS)) || '[]');
-    return Array.isArray(arr) ? arr.filter((v): v is number => Number.isFinite(v)) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.map(normalizarRegistroPeso).filter((r): r is RegistroPeso => r !== null);
   } catch {
     return [];
   }
 }
 
-/** Acrescenta um peso à cópia local (write-through: o servidor recebe em paralelo). */
-export function registrarPesoLocal(pesoKg: number): number[] {
-  const todos = [...lerPesos(), pesoKg];
+/** Só os valores, para quem desenha o gráfico (inclui os legados, sem data). */
+export function lerPesosKg(): number[] {
+  return lerPesos().map((r) => r.kg);
+}
+
+/**
+ * Acrescenta um peso à cópia local, com a data do dia. Write-through: o servidor recebe em
+ * paralelo. A gravação já migra o formato — os legados são reescritos com `dataISO: null`,
+ * sem perder ponto nenhum.
+ */
+export function registrarPesoLocal(pesoKg: number, dataISO: string = hojeISO()): RegistroPeso[] {
+  const todos = [...lerPesos(), { dataISO, kg: pesoKg }];
   try { localStorage.setItem(chaveLocal(KEY_PESOS), JSON.stringify(todos)); } catch { /* storage indisponível */ }
   return todos;
 }
 
-/** Substitui a cópia local pelos pesos do SERVIDOR (hidratação com servidor não-vazio). */
-export function substituirPesos(pesos: readonly number[]): number[] {
-  const arr = [...pesos];
+/** Substitui a cópia local pela série do SERVIDOR (hidratação com servidor não-vazio). */
+export function substituirPesos(pesos: readonly (RegistroPeso | number)[]): RegistroPeso[] {
+  const arr = pesos.map(normalizarRegistroPeso).filter((r): r is RegistroPeso => r !== null);
   try { localStorage.setItem(chaveLocal(KEY_PESOS), JSON.stringify(arr)); } catch { /* storage indisponível */ }
   return arr;
 }

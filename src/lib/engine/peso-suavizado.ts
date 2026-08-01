@@ -172,3 +172,94 @@ export function aplicarHistereseFaixa(args: {
 
 /** Estado inicial: sem proteção e sem contagem. */
 export const FAIXA_INICIAL: FaixaProtetiva = { ativa: false, foraDesdeISO: null };
+
+/* ══════════════════ Resolução: o peso com que o plano é gerado ══════════════════ */
+
+/**
+ * O estado PERSISTIDO da âncora. É o mínimo que precisa sobreviver ao reload para que a
+ * histerese exista — sem ele, "no máximo uma recomputação por semana" não teria como saber
+ * quando foi a última, e a carência de 14 dias não teria como contar.
+ */
+export interface EstadoPesoPlano {
+  /** Peso com que o plano vigente foi gerado. */
+  ancoraKg: number;
+  /** Dia em que a âncora foi fixada (base do intervalo mínimo de recomputação). */
+  ancoraDesdeISO: string;
+  /** Estado da faixa protetiva do gate. */
+  faixa: FaixaProtetiva;
+  /** Peso que estava DENTRO da faixa, preservado durante a carência de saída. */
+  pesoNaFaixaKg: number | null;
+}
+
+export type EventoPeso = 'migracao' | 'recomputo';
+
+/**
+ * 🔒 O ÚNICO lugar que decide com que peso o plano é gerado (Leva D, DF 2026-07-31).
+ *
+ * Junta as três camadas na ordem travada — **conectar → suavizar → histerese**:
+ *  1. **suavizar**: média móvel de 7 dias (≥ 3 registros), senão o vigente do perfil;
+ *  2. **histerese de recomputação**: a âncora só se move com ≥ 1 kg / 1,5% E ≥ 1 semana;
+ *  3. **histerese assimétrica do gate**: sair de faixa protetiva exige 14 dias.
+ *
+ * `emFaixaProtetiva` entra INJETADA: quem sabe o que é faixa protetiva é o gate de saúde, e
+ * este módulo não pode depender dele (o gate já depende de peso — a seta iria e voltaria).
+ *
+ * 🟢 Puro: todo estado entra por `anterior` e sai em `estado`. Quem guarda é o cliente.
+ */
+export function resolverPesoDoPlano(args: {
+  pesagens: readonly Pesagem[];
+  hojeISO: string;
+  /** Peso do *Editar perfil* — a SEMENTE, usada enquanto não houver janela suficiente. */
+  pesoPerfilKg: number;
+  anterior: EstadoPesoPlano | null;
+  /** O gate trata este peso com comportamento protetivo? (≠ PERMITIR) */
+  emFaixaProtetiva: (pesoKg: number) => boolean;
+}): { pesoKg: number; estado: EstadoPesoPlano; evento: EventoPeso | null } {
+  const { pesagens, hojeISO, pesoPerfilKg, anterior, emFaixaProtetiva } = args;
+  const suavizado = pesoSuavizado(pesagens, hojeISO);
+
+  // ── 1. A âncora ────────────────────────────────────────────────────────────────
+  let ancoraKg: number;
+  let ancoraDesdeISO: string;
+  let evento: EventoPeso | null = null;
+
+  if (!anterior) {
+    // Primeira resolução. Se já existe janela, o plano nasce no suavizado — e isso é um
+    // evento de MIGRAÇÃO (o plano vinha do peso do perfil), não uma recomputação de rotina.
+    ancoraKg = suavizado ?? pesoPerfilKg;
+    ancoraDesdeISO = hojeISO;
+    if (suavizado != null && suavizado !== pesoPerfilKg) evento = 'migracao';
+  } else if (
+    deveRecomputar({
+      suavizadoKg: suavizado,
+      pesoDoPlanoKg: anterior.ancoraKg,
+      ultimoRecomputoISO: anterior.ancoraDesdeISO,
+      hojeISO,
+    })
+  ) {
+    ancoraKg = suavizado as number; // `deveRecomputar` só devolve true com suavizado != null
+    ancoraDesdeISO = hojeISO;
+    evento = 'recomputo';
+  } else {
+    ancoraKg = anterior.ancoraKg;
+    ancoraDesdeISO = anterior.ancoraDesdeISO;
+  }
+
+  // ── 2. A faixa protetiva ───────────────────────────────────────────────────────
+  const dentroHoje = emFaixaProtetiva(ancoraKg);
+  const faixa = aplicarHistereseFaixa({
+    dentroDaFaixaHoje: dentroHoje,
+    anterior: anterior?.faixa ?? FAIXA_INICIAL,
+    hojeISO,
+  });
+
+  // Em carência de SAÍDA (a âncora já saiu, mas os 14 dias não passaram) o plano continua
+  // sendo gerado com o peso que estava DENTRO da faixa. É o que dá efeito à histerese: sem
+  // fixar o peso, o gate recalcularia PERMITIR no dia seguinte e a carência seria decorativa.
+  // 🔒 O erro fica do lado seguro — mesma postura do `max(1, floor(alvo))` da retomada.
+  const emCarencia = faixa.ativa && !dentroHoje;
+  const pesoNaFaixaKg = dentroHoje ? ancoraKg : (emCarencia ? (anterior?.pesoNaFaixaKg ?? null) : null);
+  const pesoKg = emCarencia && pesoNaFaixaKg != null ? pesoNaFaixaKg : ancoraKg;
+
+  return { pesoKg, estado: { ancoraKg, ancoraDesdeISO, faixa, pesoNaFaixaKg }, evento };
+}

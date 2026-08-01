@@ -32,6 +32,9 @@ export const CHAVES_LOCAIS = [
   'evk_sessao',
   'evk_treinos',
   'evk_pesos',
+  // Âncora do peso do plano (Leva D): com que peso o plano vigente foi gerado, desde quando,
+  // e o estado da faixa protetiva do gate. É dado de SAÚDE derivado — entra na varredura.
+  'evk_peso_plano',
   'evk_aderencia',
   'evk_aba',
   'evk_freq_periodo',
