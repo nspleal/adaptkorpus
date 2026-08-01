@@ -113,9 +113,15 @@ describe('recursos `sem_alvo` — o desenho de alvo está atrás do guard', () =
     chama: {
       arquivo: 'src/components/painel/ChamaContador.tsx',
       provas: [
-        // as chamas apagadas dos marcos futuros vivem no bloco inteiro guardado
-        /\{!modoDiario && \([\s\S]{0,400}Próximos marcos/,
+        // As chamas apagadas dos marcos à frente existem e são desenhadas a partir de
+        // `proximos` — o desenho de alvo desta tela.
+        // ⚠️ A janela `\{!modoDiario && \([\s\S]{0,400}Próximos marcos` saiu daqui: ela
+        // ancorava em TÍTULO (que mudou para "Os marcos da chama" quando o "faltam N" saiu,
+        // DF 2026-08-01) e media DISTÂNCIA em caracteres. O pareamento condição↔bloco agora
+        // é provado por casamento de chaves em `modo-diario.test.ts` — aqui fica só a
+        // existência do elemento visual.
         /estado="futuro"/,
+        /\{proximos\.map\(/,
       ],
     },
   };

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import {
-  APOIO_CHAMA, CHAMA_COR_HEX, CHAMA_COR_RGB, bandaChama, chamaAtual, pillChama, proximosMarcos,
+  APOIO_CHAMA, CHAMA_COR_HEX, CHAMA_COR_RGB, bandaChama, chamaAtual, marcosAlcancados, pillChama, proximosMarcos,
   type ChamaCor,
 } from '@/lib/chama';
 
@@ -108,13 +108,21 @@ export function Chama({ cor, estado = 'atual', enfase = true, size = 88, celebra
  * "em contexto") + linha "próximos marcos". Primeiro elemento da aba, acima da saudação.
  * Substitui por completo o sistema de marcos 7/30 (indicador do Hoje + cartão do Progresso).
  *
+ * 🔻 O "faltam N dias" SAIU DE TODOS OS MODOS (DF 2026-08-01) — e o argumento já estava
+ * escrito AQUI desde 2026-07-29: *"quantidade de treino apresentada como pendência […]
+ * anunciar o que falta é alvo"*. 🔴 O erro foi escopar a remoção ao modo diário: reconhecer
+ * um defeito e removê-lo só num caso é deixá-lo vivo nos outros. A forma é o defeito, não a
+ * promessa — **quem quebrou a chama já sabe, e dizer "faltam 7" a quem parou é comentar a
+ * ausência.**
+ *
+ * 🔒 O bloco agora descreve o SISTEMA, não a distância da pessoa: os marcos que ainda vêm
+ * aparecem como **lista estática** (os mesmos números para todo mundo), e os **alcançados**
+ * aparecem no passado. Sem contador, sem denominador, sem contagem regressiva.
+ *
  * 🔒 MODO DIÁRIO (`sem_alvo`, DF 2026-07-29): a Chama FICA — ela conta o que aconteceu, e
- * contar o que aconteceu é leitura. Some o bloco **"Próximos marcos"**: "faltam 7 dias" é
- * quantidade de treino apresentada como pendência, com chamas vazias esperando ser
- * preenchidas. O app disse a essa pessoa que não vai dizer quanto ela deve treinar — e isso
- * diz exatamente isso, de lado. **Anunciar o que falta é alvo.**
- * Custo aceito: ela perde um elemento motivacional; é o mesmo custo que o modo diário
- * inteiro já aceita.
+ * contar o que aconteceu é leitura. O bloco dos PRÓXIMOS continua fora ali: lá o app disse
+ * que não vai dizer quanto a pessoa deve treinar, e listar marcos à frente diria isso de
+ * lado. Os marcos ALCANÇADOS, esses, aparecem nos dois modos — são passado.
  */
 export function ContadorTreinos({ dias, celebrarToken, modoDiario }: { dias: number; celebrarToken: number; modoDiario?: boolean }) {
   const a = chamaAtual(dias);
@@ -122,6 +130,7 @@ export function ContadorTreinos({ dias, celebrarToken, modoDiario }: { dias: num
   const hex = CHAMA_COR_HEX[a.cor];
   const rgb = CHAMA_COR_RGB[a.cor];
   const proximos = proximosMarcos(dias);
+  const alcancados = marcosAlcancados(dias);
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ background: 'linear-gradient(165deg, rgba(22,163,74,.12), rgba(15,15,14,.55))', border: '1px solid rgba(234,229,219,.1)', borderRadius: 20, padding: 26, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -132,26 +141,45 @@ export function ContadorTreinos({ dias, celebrarToken, modoDiario }: { dias: num
           <div style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', marginTop: 7, lineHeight: 1.55 }}>{APOIO_CHAMA[b]}</div>
         </div>
       </div>
-      {!modoDiario && (
+      {(alcancados.length > 0 || !modoDiario) && (
       <div style={{ background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.09)', borderRadius: 18, padding: '20px 24px' }}>
-        <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', marginBottom: 16 }}>Próximos marcos</div>
-        {proximos.length === 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(234,229,219,.55)', fontSize: '.92rem', lineHeight: 1.5 }}>
-            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M5 12l5 5 9-11" stroke="#16A34A" strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Você chegou no último marco por cor. O contador continua somando — sem teto, sem pressa.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'clamp(18px,5vw,40px)', flexWrap: 'wrap' }}>
-            {proximos.map((m) => (
-              <div key={m.dias} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
-                <Chama cor={m.cor} estado="futuro" size={46} />
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '.9rem', fontWeight: 800, color: 'rgba(234,229,219,.55)' }}>{m.dias} dias</div>
-                  <div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.38)', marginTop: 1 }}>{m.faltamTxt}</div>
-                </div>
-              </div>
+        <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)', marginBottom: 16 }}>Os marcos da chama</div>
+        {/* 🔒 Os ALCANÇADOS ficam FORA do guard `!modoDiario` — são PASSADO, e contar o
+            passado é leitura, não alvo. Ficam ACIMA do que ainda vem: o que a pessoa já
+            fez vem primeiro. Quem está em modo diário vê só esta parte. */}
+        {alcancados.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: modoDiario ? 0 : 18 }}>
+            {alcancados.map((m) => (
+              <span key={m.dias} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '.78rem', fontWeight: 700, color: CHAMA_COR_HEX[m.cor], background: `rgba(${CHAMA_COR_RGB[m.cor]},.12)`, border: `1px solid rgba(${CHAMA_COR_RGB[m.cor]},.3)`, borderRadius: 999, padding: '5px 12px' }}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" aria-hidden><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                {m.dias} dias · {m.nome}
+              </span>
             ))}
           </div>
+        )}
+        {!modoDiario && (
+        <div>
+          {proximos.length === 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'rgba(234,229,219,.55)', fontSize: '.92rem', lineHeight: 1.5 }}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M5 12l5 5 9-11" stroke="#16A34A" strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Você chegou no último marco por cor. O contador continua somando — sem teto, sem pressa.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'clamp(18px,5vw,40px)', flexWrap: 'wrap' }}>
+              {proximos.map((m) => (
+                <div key={m.dias} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
+                  <Chama cor={m.cor} estado="futuro" size={46} />
+                  {/* 🔒 Só o marco e a cor — o que o SISTEMA tem. Uma segunda linha com a
+                      distância seria o "faltam N" de volta com outro nome. */}
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '.9rem', fontWeight: 800, color: 'rgba(234,229,219,.55)' }}>{m.dias} dias</div>
+                    <div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.38)', marginTop: 1 }}>{m.nome}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         )}
       </div>
       )}

@@ -87,14 +87,36 @@ export function pillChama(x: number, modoDiario = false): string {
   return modoDiario ? 'Aquecendo' : 'Aquecendo · antes do 1º marco';
 }
 
-/** Marcos ainda não alcançados (para a linha "próximos marcos", estado futuro/apagado).
- *  Concordância no singular ("falta 1 dia") — correção de gramática sobre o texto GERADO
- *  do protótipo (não é copy desenhada; sinalizado no handoff). */
-export function proximosMarcos(x: number): { cor: ChamaCor; dias: number; faltamTxt: string }[] {
-  return MARCOS_CHAMA.filter((m) => m.dias > x).map((m) => {
-    const n = m.dias - x;
-    return { cor: m.cor, dias: m.dias, faltamTxt: n === 1 ? 'falta 1 dia' : `faltam ${n} dias` };
-  });
+/**
+ * 🔴 O "faltam N dias" SAIU — em TODOS OS MODOS (DF 2026-08-01).
+ *
+ * A forma é o defeito, não a promessa. *"Faltam X para os Y"* é a **classe ①** (alvo no
+ * futuro da atividade da pessoa) somada à **classe ③** (denominador), e 🔑 **a varredura de
+ * afirmações nunca a pegou porque procurava copy FALSA — e essa era verdadeira.** Classe
+ * nova de escape: **copy verdadeira que viola trava de forma.**
+ *
+ * ⚠️ O contra-argumento da gamificação foi recusado, e vale registrar por quê: **quem
+ * quebrou a chama já sabe**, e dizer *"faltam 7"* a quem parou é **comentar a ausência**.
+ * O JSDoc do `ChamaContador` já defendia isto desde 2026-07-29 — mas escopou a remoção ao
+ * modo diário, deixando a mesma frase no ar para todo o resto.
+ *
+ * 🔒 REFINO DA CLASSE ③ que decide o caso (método de verificação): **denominador que
+ * descreve a ESTRUTURA DO PRESENTE fica; denominador que projeta ACÚMULO FUTURO sai.**
+ * "3 de 4 séries concluídas" descreve a sessão em curso; "faltam 7 dias" projeta acúmulo.
+ */
+
+/** Marcos JÁ ALCANÇADOS — passado, e contar o passado é leitura. */
+export function marcosAlcancados(x: number): MarcoChama[] {
+  return MARCOS_CHAMA.filter((m) => m.dias <= x);
+}
+
+/**
+ * Os marcos que ainda vêm, como **LISTA ESTÁTICA** — descreve o SISTEMA ("os marcos são 15,
+ * 25, 50 e 100 dias"), nunca a distância da pessoa até eles. Sem contador, sem denominador,
+ * sem contagem regressiva: os mesmos números para todo mundo, mudando só quais já saíram.
+ */
+export function proximosMarcos(x: number): { cor: ChamaCor; dias: number; nome: string }[] {
+  return MARCOS_CHAMA.filter((m) => m.dias > x).map((m) => ({ cor: m.cor, dias: m.dias, nome: m.nome }));
 }
 
 /** Nº de dias DISTINTOS com treino (guiado ou manual) — dedupe por dia calendário: registrar

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { APOIO_CHAMA, MARCOS_CHAMA, bandaChama, chamaAtual, diasDeTreino, pillChama, proximosMarcos } from './chama';
+import { readFileSync } from 'node:fs';
+import { APOIO_CHAMA, MARCOS_CHAMA, bandaChama, chamaAtual, diasDeTreino, marcosAlcancados, pillChama, proximosMarcos } from './chama';
 
 /**
  * Âncoras da spec (design_handoff_chama_marcos + cofre registro-de-aderencia §Contador):
@@ -47,17 +48,46 @@ describe('chama dos 4 marcos (contador de treinos)', () => {
     }
   });
 
-  it('próximos marcos: só os não alcançados, com "faltam N dias"; vazio em X≥100', () => {
+  /**
+   * 🔻 O "faltam N dias" SAIU (DF 2026-08-01). Os marcos à frente viram LISTA ESTÁTICA: os
+   * mesmos números para todo mundo, mudando só quais já saíram da lista. Sem contador.
+   */
+  it('marcos à frente: lista ESTÁTICA, sem distância até a pessoa', () => {
     expect(proximosMarcos(12)).toEqual([
-      { cor: 'amber', dias: 15, faltamTxt: 'faltam 3 dias' },
-      { cor: 'azul', dias: 25, faltamTxt: 'faltam 13 dias' },
-      { cor: 'roxo', dias: 50, faltamTxt: 'faltam 38 dias' },
-      { cor: 'verde', dias: 100, faltamTxt: 'faltam 88 dias' },
+      { cor: 'amber', dias: 15, nome: 'Âmbar' },
+      { cor: 'azul', dias: 25, nome: 'Azul' },
+      { cor: 'roxo', dias: 50, nome: 'Roxo' },
+      { cor: 'verde', dias: 100, nome: 'Verde Folha' },
     ]);
     expect(proximosMarcos(50).map((m) => m.dias)).toEqual([100]);
     expect(proximosMarcos(100)).toEqual([]);
-    // concordância: 1 dia restante fica no singular
-    expect(proximosMarcos(14)[0]!.faltamTxt).toBe('falta 1 dia');
+  });
+
+  /**
+   * 🔑 A PROVA DE QUE É ESTÁTICA: duas pessoas com contadores diferentes veem os MESMOS
+   * marcos, com os mesmos números. Se algum campo variasse com `x`, ele seria a distância
+   * de volta com outro nome — que é exatamente como "faltam N" voltaria.
+   */
+  it('nenhum campo varia com o contador — só quais marcos já saíram da lista', () => {
+    const a = proximosMarcos(1);
+    const b = proximosMarcos(14);
+    // Os 4 estão à frente nos dois casos, e os objetos são idênticos campo a campo.
+    expect(a).toHaveLength(4);
+    expect(b).toHaveLength(4);
+    expect(a).toEqual(b);
+    // …e o único efeito de avançar é o marco SAIR da lista.
+    expect(proximosMarcos(15).map((m) => m.dias)).toEqual([25, 50, 100]);
+  });
+
+  it('marcos ALCANÇADOS são passado, e crescem com o contador', () => {
+    expect(marcosAlcancados(0)).toEqual([]);
+    expect(marcosAlcancados(14)).toEqual([]);
+    expect(marcosAlcancados(15).map((m) => m.dias)).toEqual([15]);
+    expect(marcosAlcancados(100).map((m) => m.dias)).toEqual([15, 25, 50, 100]);
+    // Alcançados + à frente = o sistema inteiro, sempre.
+    for (const x of [0, 14, 15, 40, 99, 100, 500]) {
+      expect(marcosAlcancados(x).length + proximosMarcos(x).length, `x=${x}`).toBe(4);
+    }
   });
 
   it('contador conta dias DISTINTOS: dois treinos no mesmo dia = 1 dia (dedupe)', () => {
@@ -73,5 +103,54 @@ describe('chama dos 4 marcos (contador de treinos)', () => {
       expect(b).toBeGreaterThanOrEqual(prev);
       prev = b;
     }
+  });
+});
+
+/**
+ * 🔒 O GUARD DA AUSÊNCIA (DF 2026-08-01): "faltam" não pode reaparecer em copy de marco,
+ * **em nenhum modo**.
+ *
+ * 🔻 Por que este guard existe com esta forma: o argumento contra o "faltam N dias" já
+ * estava escrito no JSDoc do `ChamaContador` desde 2026-07-29 — e a remoção foi escopada ao
+ * MODO DIÁRIO. Reconhecer um defeito e removê-lo só num caso é deixá-lo vivo nos outros.
+ * O guard varre os dois arquivos inteiros, sem ramo de modo.
+ */
+describe('🔒 "faltam" não volta à copy de marco — em modo nenhum', () => {
+  const ARQUIVOS = ['src/lib/chama.ts', 'src/components/painel/ChamaContador.tsx'] as const;
+  const ler = (p: string) => readFileSync(p, 'utf8');
+  /** Só o CÓDIGO: os JSDoc citam a frase proibida para explicar por que ela saiu. */
+  const podar = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+
+  it.each(ARQUIVOS)('%s não produz nem renderiza contagem regressiva de marco', (arq) => {
+    const src = podar(ler(arq));
+    expect(src, 'a dívida voltou').not.toMatch(/faltam?\s/i);
+    expect(src, 'o campo do contador voltou').not.toMatch(/faltamTxt/);
+    expect(src, 'contagem regressiva por outro nome').not.toMatch(/restam?\s|dias restantes|m\.dias - x|dias - x\b/);
+  });
+
+  it('🔑 e nenhum campo do marco à frente DERIVA do contador — a lista é estática', () => {
+    const src = podar(ler('src/lib/chama.ts'));
+    const i = src.indexOf('export function proximosMarcos');
+    // ⚠️ Do `{` de abertura, não da assinatura: o `x` do PARÂMETRO não é uso, e contá-lo
+    // fazia o guard acusar a declaração. (Falhou assim na primeira escrita.)
+    const corpo = src.slice(src.indexOf('{', i), src.indexOf('\n}', i));
+    // Só `m.dias > x` pode usar `x` — é o filtro de quais marcos JÁ saíram da lista.
+    // Qualquer outra aritmética com `x` seria a distância de volta com outro nome.
+    const usosDeX = corpo.match(/\bx\b/g) ?? [];
+    expect(usosDeX, `o contador aparece ${usosDeX.length}× no corpo de proximosMarcos`).toHaveLength(1);
+    expect(corpo).toMatch(/m\.dias > x/);
+  });
+
+  it('os marcos ALCANÇADOS podem ler o contador — passado é leitura', () => {
+    const src = podar(ler('src/lib/chama.ts'));
+    expect(src).toMatch(/export function marcosAlcancados/);
+    expect(src).toMatch(/m\.dias <= x/);
+  });
+
+  it('anti-vacuidade: a varredura lê arquivos de verdade e o léxico funciona', () => {
+    for (const a of ARQUIVOS) expect(ler(a).length, a).toBeGreaterThan(1000);
+    // O léxico pega a frase que saiu (prova de que ele não é cego).
+    expect(/faltam?\s/i.test('faltam 7 dias')).toBe(true);
+    expect(/faltam?\s/i.test('Você já completou 14 dias de treino.')).toBe(false);
   });
 });
