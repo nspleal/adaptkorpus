@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
+import { aceitaTecnica, DESCRICAO_TECNICA, serieDaTecnica, TECNICAS, type TecnicaAvancada } from '@/lib/engine/tecnicas-avancadas';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
@@ -54,6 +55,11 @@ interface ExView {
   comoFazer: string;
   /** Unidade de registro (cofre): 'segundos' nos 5 isométricos, 'reps' no resto. */
   repUnit: RepUnit;
+  /**
+   * 🔒 O exercício aceita técnica avançada? (Leva F). Resolvido no MOTOR, aqui só carregado —
+   * o critério é o que acontece quando a série FALHA, não a classe do exercício.
+   */
+  aceitaTec: boolean;
   /** Faixa de tempo do hold no nível do usuário (só quando repUnit==='segundos'). */
   faixaSeg: FaixaHold | null;
   /** Progressão (Bloco B): séries efetivas (com deload), meta que evolui, sugestão de carga, hint. */
@@ -113,9 +119,18 @@ export interface ResumoSessao {
      *  exatamente uma das formas {cargaKg,reps} | {degrauId,reps} | {modificacaoIdx,segundos}. */
     calibracao?: { cargaKg?: number; reps?: number; degrauId?: string; modificacaoIdx?: number; segundos?: number };
   }[];
+  /**
+   * 🔒 TÉCNICA AVANÇADA usada nesta sessão (Leva F, §🥊) — no MÁXIMO uma, na última série do
+   * exercício escolhido. Ausente = sessão de séries retas, que é o caso normal.
+   *
+   * ⚠️ Guarda só QUAL técnica e ONDE, nunca a dose: o cofre não prescreve quanto reduzir nem
+   * quantas pausas (DF 2026-07-31). Descrever a técnica que a pessoa escolheu é orientação
+   * geral; prescrever a dose dela encostaria em prescrição.
+   */
+  tecnica?: { exercicioId: string; tecnica: TecnicaAvancada; serie: number };
 }
 
-export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir, onRegistrarCardio, pesoKg }: {
+export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir, onRegistrarCardio, pesoKg, tecnicasLiberadas }: {
   dia: DiaTreino;
   prescricao: PrescricaoFITT;
   /** Alvo progredido por exercício (Bloco B), derivado do histórico; ausente na 1ª sessão. */
@@ -133,6 +148,13 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   onRegistrarCardio?: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
   /** Peso do usuário — entra só na estimativa de kcal do registro de cardio. */
   pesoKg?: number;
+  /**
+   * 🔒 TÉCNICAS AVANÇADAS liberadas? (Leva F, §🥊). Vem PRONTO do Painel, que resolveu o
+   * portão de 10 critérios no motor. A sessão não decide elegibilidade — se decidisse,
+   * existiriam duas respostas para "quem pode", e uma delas envelheceria.
+   * Ausente/false = a sessão não oferece a escolha, e é o caso normal.
+   */
+  tecnicasLiberadas?: boolean;
 }) {
   // "Ver variação": detalhe em LEITURA do degrau-alvo (nunca troca nada — V8.3).
   const [verVariacao, setVerVariacao] = useState<Exercise | null>(null);
@@ -218,6 +240,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       rirAlvoSemana: prescricao.rirAlvoSemana ?? null,
       // 🔒 O padrão do SLOT decide (é ele que o montador alocou como cardio), não o nome.
       cardio: sl.padrao === 'cardio' ? { modalidade: modalidadeDoExercicio(sl.exercicio.id) } : null,
+      aceitaTec: aceitaTecnica(sl.exercicio),
     };
   });
   const nSets = prescricao.seriesPorExercicio.min;
@@ -230,6 +253,11 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   // 🔒 Registro de cardio UNIFICADO (DF 2026-07-27): índice do item de cardio cujo registro
   // está aberto. Ele é o MESMO componente da tela avulsa — não existe segunda fonte.
   const [cardioAberto, setCardioAberto] = useState<number | null>(null);
+  /**
+   * 🔒 DOSE PEQUENA: UMA técnica por sessão (§10.1). O estado é único de propósito — escolher
+   * no segundo exercício substitui, em vez de somar. Não existe caminho para duas.
+   */
+  const [tecnica, setTecnica] = useState<{ exercicioId: string; tecnica: TecnicaAvancada } | null>(null);
   const [cur, setCur] = useState(0);
   const [showRM, setShowRM] = useState(false);
   const [dorOpen, setDorOpen] = useState(false);
@@ -278,7 +306,18 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   const doneCount = est.sets.filter((s) => s.done).length;
   const ehUltimo = cur === total - 1;
 
+  /**
+   * 🔒 FEEDBACK OBRIGATÓRIO na série com técnica (critério 8 do §10.1). É o único ponto do
+   * app em que o avanço fica preso — e é de propósito: a técnica leva a série para perto da
+   * falha, e seguir sem saber como foi tiraria da autorregulação exatamente o dado de que
+   * ela mais precisa. Sem técnica, o feedback continua opcional como sempre foi.
+   */
+  const tecnicaAqui = tecnica?.exercicioId === ex.id ? tecnica : null;
+  const exigeFeedback = tecnicaAqui != null;
+  const feedbackPendente = exigeFeedback && est.fb == null;
+
   function avancar() {
+    if (feedbackPendente) return; // o botão já está desabilitado; isto fecha o caminho
     pararDescanso();
     setShowRM(false);
     if (ehUltimo) { setFase('summary'); window.scrollTo(0, 0); }
@@ -305,7 +344,15 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       // Pausa por dor PERSISTE no histórico (insumo do motivo "em pausa por dor" — B5).
       ...(estados[ei]!.paused ? { pausado: true } : {}),
     }));
-    onConcluir({ dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios, ...(prescricao.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}) });
+    // 🔒 A técnica só entra no resumo se o exercício escolhido AINDA está na sessão e a
+    // série existe. Guardar uma técnica órfã seria registrar algo que não aconteceu.
+    const idxTec = tecnica ? exs.findIndex((e) => e.id === tecnica.exercicioId) : -1;
+    const serieTec = idxTec >= 0 ? serieDaTecnica(exs[idxTec]!.nSetsEx) : null;
+    onConcluir({
+      dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios,
+      ...(prescricao.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}),
+      ...(tecnica && serieTec != null ? { tecnica: { ...tecnica, serie: serieTec } } : {}),
+    });
   }
 
   // 🔒 Registro de cardio aberto DE DENTRO da sessão: mesma peça, mesmo `onSalvar`. Sai
@@ -516,6 +563,47 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
               </div>
             </div>
 
+            {/* 🔒 TÉCNICAS AVANÇADAS — o seletor (Leva F, §🥊, DF 2026-07-31).
+                Só aparece quando o PORTÃO liberou (resolvido no motor, recebido por prop) e
+                o exercício aceita: o critério não é a classe, é o que acontece quando a série
+                FALHA — máquina e guiado entram, composto livre não.
+                🔴 O motor NUNCA adiciona sozinho: nada aqui é pré-selecionado. */}
+            {tecnicasLiberadas && ex.aceitaTec && (
+              <div style={{ background: 'rgba(234,229,219,.04)', border: `1px solid ${tecnicaAqui ? 'rgba(189,255,0,.4)' : 'rgba(234,229,219,.1)'}`, borderRadius: 16, padding: '16px 18px', marginTop: 16 }}>
+                <div style={{ fontSize: '.9rem', fontWeight: 600, marginBottom: 4 }}>Técnica na última série</div>
+                {/* 🔒 "Opção de estilo, não upgrade": o benefício não é superior. */}
+                <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)', marginBottom: 12, lineHeight: 1.5 }}>
+                  {tecnica && !tecnicaAqui
+                    ? `Você já escolheu uma técnica nesta sessão (${DESCRICAO_TECNICA[tecnica.tecnica].rotulo}). Escolher aqui move para este exercício — é uma por treino.`
+                    : 'Opcional, e é opção de estilo, não um upgrade. Uma por treino.'}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {TECNICAS.map((t) => {
+                    const on = tecnicaAqui?.tecnica === t;
+                    return (
+                      <button key={t} onClick={() => setTecnica(on ? null : { exercicioId: ex.id, tecnica: t })} style={{ cursor: 'pointer', flex: '1 1 auto', minWidth: 96, padding: '10px 8px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>
+                        {DESCRICAO_TECNICA[t].rotulo}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* 🔒 EXPLICAÇÃO DE EXECUÇÃO **E** INTERRUPÇÃO (critério 7). Renderizada
+                    sempre que há técnica escolhida — não só na 1ª vez: mostrar sempre cumpre
+                    "obrigatório na 1ª exibição" com folga e dispensa uma chave de storage
+                    para lembrar quem já viu. ⚠️ Sem número de dose, de propósito: o cofre
+                    não prescreve quanto reduzir nem quantas pausas (DF 2026-07-31) —
+                    descrever a técnica é orientação geral, prescrever a dose encostaria em
+                    prescrição. */}
+                {tecnicaAqui && (
+                  <div style={{ marginTop: 14, background: 'rgba(189,255,0,.06)', border: '1px solid rgba(189,255,0,.22)', borderRadius: 12, padding: '13px 15px' }}>
+                    <div style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 7 }}>Na série {serieDaTecnica(ex.nSetsEx)} de {ex.nSetsEx}</div>
+                    <p style={{ margin: '0 0 8px', fontSize: '.86rem', color: 'rgba(234,229,219,.78)', lineHeight: 1.55 }}>{DESCRICAO_TECNICA[tecnicaAqui.tecnica].comoExecutar}</p>
+                    <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.62)', lineHeight: 1.55 }}><strong style={{ color: 'rgba(234,229,219,.85)', fontWeight: 600 }}>Quando parar:</strong> {DESCRICAO_TECNICA[tecnicaAqui.tecnica].comoInterromper}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* senti dor */}
             <div style={{ textAlign: 'center', margin: '16px 0 0' }}>
               <button onClick={() => setDorOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', color: 'rgba(229,72,77,.85)', fontWeight: 600, fontSize: '.86rem', padding: 8, cursor: 'pointer', textDecoration: 'underline' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Senti dor neste exercício</button>
@@ -537,12 +625,17 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
             {/* nav */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 22 }}>
               {cur > 0 && <button onClick={voltar} className="evk-voltar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: '14px 22px', borderRadius: 13, cursor: 'pointer' }}>Anterior</button>}
-              <button onClick={avancar} className={ex.cardio && onRegistrarCardio ? 'evk-voltar' : 'hov-btn'} style={ex.cardio && onRegistrarCardio
+              <button onClick={avancar} disabled={feedbackPendente} className={ex.cardio && onRegistrarCardio ? 'evk-voltar' : 'hov-btn'} style={ex.cardio && onRegistrarCardio
                 ? { flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.8)', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }
-                : { flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>
+                : { flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1.02rem', padding: 14, border: 'none', borderRadius: 13, cursor: feedbackPendente ? 'not-allowed' : 'pointer', opacity: feedbackPendente ? .45 : 1 }}>
                 {ex.cardio && onRegistrarCardio ? (ehUltimo ? 'Pular e concluir treino' : 'Pular este cardio') : (ehUltimo ? 'Concluir treino' : 'Próximo exercício')}
               </button>
             </div>
+            {/* 🔒 O MOTIVO, não só o botão apagado. Botão desabilitado sem explicação é a
+                tela deixando a pessoa adivinhar — e aqui a razão é boa, então se diz. */}
+            {feedbackPendente && (
+              <p style={{ margin: '10px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Marque como foi este exercício para seguir — na série com técnica o retorno é necessário.</p>
+            )}
           </div>
         )}
 

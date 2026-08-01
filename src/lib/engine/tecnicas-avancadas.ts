@@ -33,11 +33,20 @@ export const TECNICAS: readonly TecnicaAvancada[] = ['drop_set', 'rest_pause', '
 /**
  * O que o app diz sobre cada técnica.
  *
- * ⚠️ **Sem número de execução, de propósito.** O cofre nomeia as técnicas e trava o PORTÃO;
- * não trava quanto reduzir, quantas pausas, quantos segundos. Inventar esses números aqui
- * seria prescrever o que a spec não decidiu — e a §🥊 é explícita em que a entrada é de
- * estilo, não de dose. O texto descreve **execução e interrupção**, que é o que o critério 7
- * exige, e a pessoa conduz.
+ * 🔒 **DOSE INTERNA: o cofre NÃO prescreve — decisão travada (DF 2026-07-31).** Ficam
+ * **frequência e colocação** (1 por sessão, última série), que são **trilho de segurança**.
+ * NÃO entram quanto reduzir no drop set, quantas pausas no rest-pause, quantos segundos no
+ * cluster. Três razões, e a terceira é a que fecha:
+ *  1. a evidência dá benefício pequeno/não significativo — um número seria **precisão onde
+ *     não há evidência**;
+ *  2. reabrir foi por **reconhecimento, não eficácia**: a pessoa já sabe como faz o drop set
+ *     dela, e dizer o número seria ensinar a um experiente a técnica que ele trouxe de fora;
+ *  3. 🔴 **descrever a técnica que o usuário escolheu é orientação geral; prescrever a DOSE
+ *     dela encosta em prescrição** (`enquadramento-legal-fitness-brasil`). A linha fica onde
+ *     o enquadramento a coloca.
+ *
+ * O app entrega o texto de **execução e interrupção** (critério 7); a condução é da pessoa.
+ * Há guard que falha se um número de dose aparecer na superfície.
  */
 export const DESCRICAO_TECNICA: Record<TecnicaAvancada, { rotulo: string; comoExecutar: string; comoInterromper: string }> = {
   drop_set: {
@@ -63,11 +72,18 @@ export const DESCRICAO_TECNICA: Record<TecnicaAvancada, { rotulo: string; comoEx
 };
 
 /**
- * 🔒 EXERCÍCIO COMPATÍVEL — "só isolado ou máquina, nunca composto livre com carga".
+ * 🔒 EXERCÍCIO COMPATÍVEL — **critério, não lista** (spec reformulada em 2026-07-31).
  *
- * Máquina e polia entram mesmo quando o padrão é composto (leg press é composto guiado): o
- * que o critério exclui é o **composto livre**, onde falhar tem consequência mecânica. A
- * decisão é do EXERCÍCIO, não do nível — o nível já foi checado no portão.
+ * 🔑 O que decide **não é a classe do exercício, é o que acontece quando a série FALHA.**
+ * Máquina e polia entram mesmo com padrão composto — **leg press é composto e entra**, porque
+ * a trajetória é imposta e falhar só significa parar. **Composto livre não entra**: ali
+ * falhar tem consequência mecânica, a barra no peito.
+ *
+ * ⚠️ Escrever o CRITÉRIO e não a lista é o que impede a regra de envelhecer: um exercício
+ * novo no catálogo é classificado sozinho, sem ninguém precisar lembrar de atualizar um
+ * array. *(Medido: nenhum dos 30+ compostos livres passa, todos os guiados passam.)*
+ *
+ * A decisão é do EXERCÍCIO, não do nível — o nível já foi checado no portão.
  */
 export function aceitaTecnica(ex: Exercise): boolean {
   if (ex.tipo !== 'forca_hipertrofia') return false;

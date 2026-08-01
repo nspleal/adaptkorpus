@@ -18,6 +18,7 @@ import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
+import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
@@ -613,6 +614,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * ⚠️ A meta que entra é a JÁ ESCALADA pela rampa: na retomada o dia existe com duração
    * menor, sem regra nova. E `sessoesFeitas` só é lida na meta em sessões (massa).
    */
+  /**
+   * 🔒 O PORTÃO das técnicas avançadas (Leva F, §🥊) — resolvido UMA vez, aqui, e distribuído.
+   * O Editar perfil e a sessão guiada leem o MESMO valor: duas resoluções seriam duas
+   * respostas para "quem pode", e uma delas envelheceria em silêncio.
+   * 🔴 `ligado: true` na consulta porque a pergunta aqui é "o portão liberaria?"; o opt-in
+   * da pessoa entra logo abaixo, na conjunção.
+   */
+  const portaoTecnicas = elegibilidade({
+    nivel: perfil.nivelExperiencia,
+    sessoesResistidas: sessoesResistidas(sessoes).length,
+    comportamentoGate: dieta.gate.comportamento,
+    regressaoAtiva: [...feedbackAgregadoPorGrupo(sessoes, hojeISO(), (id) => EXERCISES_SEED.find((e) => e.id === id)).values()].some((f) => f === 'segura'),
+    ligado: true,
+  }).elegivel;
+  const tecnicasLiberadas = portaoTecnicas && (perfil.tecnicasAvancadas ?? false);
   const diaExcedente = conteudoDoDiaExcedente({
     meta: metaCardio,
     diasExcedentes: treino.rotina?.diasCardioRecuperacao ?? 0,
@@ -796,7 +812,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricaoEfetiva} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} onRegistrarCardio={salvarCardio} pesoKg={perfil.pesoKg} />
+        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricaoEfetiva} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} onRegistrarCardio={salvarCardio} pesoKg={perfil.pesoKg} tecnicasLiberadas={tecnicasLiberadas} />
       </div>
     );
   }

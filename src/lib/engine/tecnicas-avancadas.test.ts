@@ -278,3 +278,119 @@ describe('🔴 a entrada na tela EXISTE, e a linha do não-elegível não tem co
     expect(b).toMatch(/o app nunca adiciona sozinho/i);
   });
 });
+
+/* ══════════ A SUPERFÍCIE DE USO — sem ela o toggle é SUCESSO SIMULADO (5ª classe) ══════════ */
+
+describe('🔴 o toggle tem superfície: escolher, ler e responder', () => {
+  const SESSAO = 'src/components/painel/SessaoTreino.tsx';
+  const PAINEL = 'src/components/painel/Painel.tsx';
+  const src = (f: string) => FONTES.find(([n]) => n === f)![1];
+
+  /** O bloco do seletor, recortado — `toMatch` no arquivo não prova ONDE está. */
+  /**
+   * ⚠️ Âncoras PRECISAS, não janela por tamanho. A primeira escrita usava `i ± N chars` e
+   * vazava para o cartão "Senti dor" — o guard passou a acusar CSS do vizinho como dose.
+   * Início = a condição do próprio bloco; fim = `setDorOpen`, o 1º símbolo do bloco seguinte
+   * (âncora de CÓDIGO, porque o comentário `senti dor` é podado antes).
+   */
+  function blocoSeletor(): string {
+    const s = src(SESSAO);
+    const ini = s.indexOf('tecnicasLiberadas && ex.aceitaTec');
+    expect(ini, '🔴 o seletor não existe: o toggle ligaria e nada mudaria').toBeGreaterThanOrEqual(0);
+    const fim = s.indexOf('setDorOpen(true)', ini);
+    expect(fim, 'âncora de fim sumiu — o recorte pegaria a tela inteira').toBeGreaterThan(ini);
+    return s.slice(ini, fim);
+  }
+
+  it('① o SELETOR existe e é gateado pelo portão E pelo exercício', () => {
+    const b = blocoSeletor();
+    expect(b).toMatch(/tecnicasLiberadas && ex\.aceitaTec/);
+    // As quatro técnicas, vindas da lista fechada do motor — não de um array na tela.
+    expect(b).toMatch(/TECNICAS\.map/);
+  });
+
+  it('① … e NADA vem pré-selecionado (o motor nunca adiciona sozinho)', () => {
+    const s = src(SESSAO);
+    expect(s).toMatch(/useState<\{ exercicioId: string; tecnica: TecnicaAvancada \} \| null>\(null\)/);
+    // 🔴 Um default diferente de `null` seria o motor escolhendo pela pessoa.
+    expect(s, 'a técnica nasce escolhida').not.toMatch(/useState<[^>]*TecnicaAvancada[^>]*>\((?!null)/);
+  });
+
+  it('② o TEXTO de execução E interrupção é renderizado — as duas partes', () => {
+    const b = blocoSeletor();
+    expect(b).toMatch(/DESCRICAO_TECNICA\[tecnicaAqui\.tecnica\]\.comoExecutar/);
+    // 🔒 Sem a interrupção o critério 7 fica pela metade — e é a metade que protege.
+    expect(b).toMatch(/DESCRICAO_TECNICA\[tecnicaAqui\.tecnica\]\.comoInterromper/);
+    expect(b).toMatch(/Quando parar/);
+  });
+
+  it('③ a série é a ÚLTIMA, e vem do motor (a tela não recalcula)', () => {
+    const b = blocoSeletor();
+    expect(b).toMatch(/serieDaTecnica\(ex\.nSetsEx\)/);
+    expect(b, 'a tela inventou a série').not.toMatch(/Na série 1 de|serie: 1/);
+  });
+
+  it('④ FEEDBACK OBRIGATÓRIO: o avanço fica preso, e o motivo é dito', () => {
+    const s = src(SESSAO);
+    expect(s).toMatch(/const exigeFeedback = tecnicaAqui != null;/);
+    expect(s).toMatch(/const feedbackPendente = exigeFeedback && est\.fb == null;/);
+    // 🔒 As DUAS travas: o botão desabilitado E o `return` na função. Só desabilitar
+    // deixaria o caminho aberto para quem chamasse `avancar()` por outro lugar.
+    expect(s).toMatch(/disabled=\{feedbackPendente\}/);
+    expect(s).toMatch(/function avancar\(\) \{\s*if \(feedbackPendente\) return;/);
+    // Botão apagado sem explicação é a tela deixando a pessoa adivinhar.
+    expect(s).toMatch(/Marque como foi este exercício para seguir/);
+  });
+
+  it('⑤ DOSE PEQUENA por construção: o estado é UM, não uma lista', () => {
+    const s = src(SESSAO);
+    // 🔴 Se virasse array, "1 por sessão" passaria a depender de alguém lembrar de checar.
+    expect(s, 'a técnica virou lista — a dose deixou de ser estrutural').not.toMatch(/setTecnica\(\[|tecnicas: TecnicaAvancada\[\]/);
+    // ⚠️ O motivo mora num JSDoc, e `podar` corta comentário — a checagem lê o arquivo CRU.
+    // (O guard falhou aqui na primeira escrita: procurava no fonte já podado.)
+    const cru = readFileSync(SESSAO, 'utf8');
+    expect(cru.replace(/\s*\n\s*\*\s*/g, ' ')).toMatch(/escolher no segundo exercício substitui/i);
+  });
+
+  it('⑥ a sessão NÃO decide elegibilidade — recebe pronto do Painel', () => {
+    const s = src(SESSAO);
+    expect(s, 'a sessão recalculou o portão').not.toMatch(/elegibilidade\(/);
+    expect(s).toMatch(/tecnicasLiberadas\?: boolean;/);
+    const p = src(PAINEL);
+    expect(p).toMatch(/tecnicasLiberadas=\{tecnicasLiberadas\}/);
+    // 🔒 O portão é resolvido UMA vez no Painel e distribuído — duas resoluções seriam
+    // duas respostas para "quem pode", e uma delas envelheceria em silêncio.
+    expect(p.match(/elegibilidade\(\{/g) ?? [], 'o portão foi resolvido mais de uma vez').toHaveLength(1);
+    // E o opt-in da pessoa entra na conjunção: o portão sozinho não liga a feature.
+    expect(p).toMatch(/portaoTecnicas && \(perfil\.tecnicasAvancadas \?\? false\)/);
+  });
+
+  it('⑦ a técnica escolhida chega ao HISTÓRICO — senão a sessão esquece o que houve', () => {
+    const s = src(SESSAO);
+    expect(s).toMatch(/tecnica: \{ \.\.\.tecnica, serie: serieTec \}/);
+    // 🔒 Técnica órfã (exercício que saiu da sessão) NÃO entra: seria registrar algo que
+    // não aconteceu — a 5ª classe outra vez, agora no dado em vez da tela.
+    expect(s).toMatch(/const idxTec = tecnica \? exs\.findIndex/);
+    expect(s).toMatch(/tecnica && serieTec != null \?/);
+  });
+
+  it('⑧ a superfície NÃO prescreve DOSE (o cofre não prescreve — DF 2026-07-31)', () => {
+    // ⚠️ A checagem é sobre o que a pessoa LÊ, não sobre o fonte: `style={{...}}` está cheio
+    // de `12px`/`.85rem` e faria o guard acusar CSS como dose. (Foi o que aconteceu na
+    // primeira escrita — o guard cobrava a coisa certa no lugar errado.)
+    const visivel = blocoSeletor().replace(/style=\{\{[\s\S]*?\}\}/g, ' ');
+    // 🔴 "reduza 20%", "3 pausas de 15 s": descrever a técnica é orientação geral;
+    // prescrever a dose dela encosta em prescrição.
+    expect(visivel, 'apareceu percentual de dose').not.toMatch(/\d+\s*%/);
+    expect(visivel, 'apareceu duração de dose').not.toMatch(/\d+\s*(s|seg|segundos)\b/);
+    expect(visivel, 'apareceu contagem de dose').not.toMatch(/\d+\s*(reps?|repetições|pausas|blocos|mini-séries)/i);
+    // Anti-vacuidade: a poda não pode ter comido o bloco inteiro.
+    expect(visivel).toMatch(/Quando parar/);
+  });
+
+  it('anti-vacuidade: o recorte do bloco realmente contém o seletor', () => {
+    const b = blocoSeletor();
+    expect(b.length).toBeGreaterThan(800);
+    expect(b).toMatch(/Drop set|DESCRICAO_TECNICA\[t\]\.rotulo/);
+  });
+});
