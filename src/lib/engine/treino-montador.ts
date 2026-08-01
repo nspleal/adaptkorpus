@@ -349,16 +349,28 @@ export function montarRotina(
       // orçamento não reservou.
       const degradacao: 0 | 1 | 2 = semanaRampa != null ? 0 : (nivelDegradacaoDia[i] ?? 0);
       dia.slots = dia.slots.map((s) => {
+        // 🔒 1.3/1.4: a degradação entra AQUI, onde a classe é conhecida. O teto por padrão
+        // não enxerga POTENCIA nem força pesada e cortaria os dois no piso do composto.
         const exato = descansoDoExercicio({
           exercicio: s.exercicio, rirAlvo,
           modoForca: prescricao.modoForca === true,
-          semanaRampa,
+          semanaRampa, degradacao,
         });
         if (exato == null) return s; // cardio: não há série a descansar
-        const teto = descansoDoPadrao(s.padrao, {
-          rirAlvo, modoForca: prescricao.modoForca === true, semanaRampa, degradacao,
-        });
-        return { ...s, descansoSeg: Math.min(exato, Math.max(teto, DESCANSO_PISO_DURO_SEG)) };
+        /**
+         * 🔻 O teto por PADRÃO saiu daqui (correções 1.3/1.4, 2026-07-31).
+         *
+         * Ele era o valor efetivamente exibido — o `min` fazia dele o limitante em todos os
+         * casos — e o padrão **não enxerga classe**: `POTENCIA` (o `e151` é
+         * `padrao: 'cardio'`) e força pesada eram cortados no piso do composto. Era por isso
+         * que a força pesada ia a 90 s.
+         *
+         * Agora quem degrada é `descansoDoExercicio`, que conhece a classe. O orçamento
+         * segue usando `descansoDoPadrao` para PLANEJAR (é o que existe antes da escolha), e
+         * os dois compartilham o mesmo `degradar` — a divergência que resta é justamente a
+         * que as correções mandam preservar: onde a classe real pede mais, ela recebe mais.
+         */
+        return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG) };
       });
     }
   }

@@ -607,3 +607,196 @@ describe('🔻 a saída da faixa é proporcional à evidência que fez ENTRAR', 
     expect(est.faixa.porMedicao).toBe(true);
   });
 });
+
+/* ══════ 1.1 — DOIS RELÓGIOS: a histerese governa kcal, NUNCA o gate (2026-07-31) ══════ */
+
+describe('🔴 1.1 SEGURANÇA — o gate lê o suavizado a cada leitura', () => {
+  /**
+   * A prova da spec, com IMC REAL: **1,60 m**.
+   *  · perfil/âncora **41,5 kg** → IMC **16,21** — FORA da faixa de magreza severa;
+   *  · suavizado **40,8 kg**    → IMC **15,94** — DENTRO.
+   *  · **Δ = 0,7 kg**, abaixo do limiar de 1 kg → a âncora NÃO se move.
+   *
+   * Antes da correção, a faixa era decidida sobre a âncora: o cruzamento era INVISÍVEL e uma
+   * pessoa em magreza severa seguia recebendo plano.
+   */
+  const ALTURA = 160;
+  const emMagrezaSevera = (kg: number) => calcularIMC(kg, ALTURA) < 16;
+
+  it('os números da spec batem no motor real (senão o caso não é o caso)', () => {
+    expect(calcularIMC(41.5, ALTURA)).toBeCloseTo(16.21, 2);
+    expect(calcularIMC(40.8, ALTURA)).toBeCloseTo(15.94, 2);
+    expect(emMagrezaSevera(41.5), '41,5 precisa estar FORA da faixa').toBe(false);
+    expect(emMagrezaSevera(40.8), '40,8 precisa estar DENTRO').toBe(true);
+    // E o Δ precisa mesmo ser invisível para a histerese, senão o defeito não existiria.
+    expect(Math.abs(40.8 - 41.5)).toBeLessThan(Math.max(HISTERESE_KG, 41.5 * HISTERESE_FRACAO));
+  });
+
+  it('🔴 o gate ROTEIA na leitura seguinte, mesmo com a âncora parada', () => {
+    // Âncora fixada ONTEM em 41,5 (fora da faixa): a histerese trava o recomputo duas vezes
+    // — por Δ e por intervalo. Nada disso pode calar o gate.
+    const anterior: EstadoPesoPlano = {
+      ancoraKg: 41.5, ancoraDesdeISO: dia(1), ancoraMedida: true,
+      faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 40.8], [1, 40.8], [2, 40.8]),
+      hojeISO: HOJE, pesoPerfilKg: 41.5, anterior, emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(r.estado.ancoraKg, 'a âncora NÃO pode se mover: Δ 0,7 < 1 kg').toBe(41.5);
+    expect(r.evento, 'e por isso não há recomputo de cardápio').toBeNull();
+    // 🔒 …e mesmo assim o gate vê:
+    expect(r.estado.faixa.ativa, 'o gate ficou cego para o cruzamento').toBe(true);
+    expect(r.estado.faixa.porMedicao).toBe(true);
+    expect(emMagrezaSevera(r.pesoKg), 'o plano é gerado num peso que o gate não rotearia').toBe(true);
+    expect(r.pesoKg).toBe(40.8);
+  });
+
+  it('a histerese CONTINUA governando kcal enquanto o gate está calado', () => {
+    // Mesmo Δ de 0,7 kg, mas longe de qualquer faixa: aí a âncora manda e o cardápio não muda.
+    const anterior: EstadoPesoPlano = {
+      ancoraKg: 70, ancoraDesdeISO: dia(1), ancoraMedida: true,
+      faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+    };
+    const r = resolverPesoDoPlano({
+      pesagens: serie([0, 70.7], [1, 70.7], [2, 70.7]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior, emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(r.pesoKg, 'o cardápio mudou por 0,7 kg — a histerese foi perdida').toBe(70);
+    expect(r.evento).toBeNull();
+  });
+
+  it('e a assimetria segue de pé: entrar imediato, sair em 14 dias', () => {
+    // Entrou pela leitura; no dia seguinte a leitura sai da faixa. Não pode liberar.
+    const dentro = resolverPesoDoPlano({
+      pesagens: serie([0, 40.8], [1, 40.8], [2, 40.8]),
+      hojeISO: HOJE, pesoPerfilKg: 41.5, anterior: null, emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(dentro.estado.faixa.ativa).toBe(true);
+    const depois = resolverPesoDoPlano({
+      pesagens: serie([0, 43], [1, 43], [2, 43]).map((p) => ({ ...p, dataISO: p.dataISO })),
+      hojeISO: dia(-1), pesoPerfilKg: 41.5, anterior: dentro.estado, emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(depois.estado.faixa.ativa, 'a leitura crua fez o portão piscar').toBe(true);
+    expect(depois.pesoKg, 'o plano tem de continuar no peso protegido').toBe(40.8);
+  });
+
+  /** 🔒 1.5 — a reancoragem continua NÃO vencendo o pino DEPOIS de 1.1. */
+  it('1.5 · digitar não vence o pino de uma faixa em que se entrou por MEDIÇÃO', () => {
+    const dentro = resolverPesoDoPlano({
+      pesagens: serie([0, 40.8], [1, 40.8], [2, 40.8]),
+      hojeISO: HOJE, pesoPerfilKg: 41.5, anterior: null, emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(dentro.estado.faixa.porMedicao).toBe(true);
+    const r = resolverPesoDoPlano({
+      pesagens: [], hojeISO: dia(-1), pesoPerfilKg: 60,
+      anterior: reancorar(dentro.estado, 60, dia(-1)), emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(r.estado.faixa.ativa, 'o teclado abriu o portão').toBe(true);
+    expect(r.pesoKg, 'o pino cedeu ao valor digitado').toBe(40.8);
+  });
+
+  /**
+   * 🔴 O buraco que a própria 1.1 abriu, e que a suíte pegou: sem pesagem na janela,
+   * `suavizado` é `null` e o carimbo da entrada seria reescrito como "digitado" — rebaixando
+   * uma entrada MEDIDA e reabrindo a saída por teclado. Medição nova só fortalece.
+   */
+  it('1.1b · a procedência MEDIDA não decai quando a janela esvazia', () => {
+    let est = resolverPesoDoPlano({
+      pesagens: serie([0, 40.8], [1, 40.8], [2, 40.8]),
+      hojeISO: HOJE, pesoPerfilKg: 41.5, anterior: null, emFaixaProtetiva: emMagrezaSevera,
+    }).estado;
+    expect(est.faixa.porMedicao).toBe(true);
+    // 10 dias sem se pesar: a janela esvazia, mas a entrada continua sendo medida.
+    for (let d = 1; d <= 10; d += 1) {
+      est = resolverPesoDoPlano({
+        pesagens: [], hojeISO: dia(-d), pesoPerfilKg: 41.5, anterior: est,
+        emFaixaProtetiva: emMagrezaSevera,
+      }).estado;
+    }
+    expect(est.faixa.porMedicao, 'a medição decaiu para "digitado"').toBe(true);
+    // Anti-vacuidade: uma entrada genuinamente DIGITADA continua saindo na hora.
+    const digitada = resolverPesoDoPlano({
+      pesagens: [], hojeISO: HOJE, pesoPerfilKg: 40.8, anterior: null,
+      emFaixaProtetiva: emMagrezaSevera,
+    });
+    expect(digitada.estado.faixa.porMedicao).toBe(false);
+  });
+});
+
+/**
+ * 🔴 O carimbo da faixa lê a PROCEDÊNCIA DA LEITURA, não a da âncora — e a diferença entre
+ * as duas é ALCANÇÁVEL (sondado antes de escrever este teste, não presumido).
+ *
+ * O caso: reancoragem em 40,5 (teclado) e, dias depois, 3 pesagens em 40,6. Como Δ = 0,1 kg
+ * fica abaixo do limiar, a âncora NÃO se move e continua marcada como digitada — mas a
+ * entrada na faixa aconteceu por MEDIÇÃO. Carimbar pela âncora rebaixaria essa entrada e
+ * devolveria a saída por teclado.
+ */
+describe('🔒 1.1c — o carimbo vem da LEITURA, não da âncora', () => {
+  const banda = (kg: number) => calcularIMC(kg, 160) < 16; // corte em 40,96 kg
+
+  it('âncora digitada + leitura medida → a entrada é MEDIDA', () => {
+    const est = reancorar(null, 40.5, dia(4));
+    const r = resolverPesoDoPlano({
+      pesagens: [1, 2, 3].map((d) => ({ dataISO: dia(d), kg: 40.6 })),
+      hojeISO: HOJE, pesoPerfilKg: 40.5, anterior: est, emFaixaProtetiva: banda,
+    });
+    // As duas procedências DIVERGEM aqui — é isso que torna o caso discriminante.
+    expect(r.estado.ancoraKg, 'Δ 0,1 < limiar: a âncora não se move').toBe(40.5);
+    expect(r.estado.ancoraMedida, 'a âncora segue digitada').toBe(false);
+    expect(r.estado.faixa.porMedicao, 'mas quem fez ENTRAR foi a medição').toBe(true);
+
+    // E a consequência: digitar não abre o portão.
+    const fuga = resolverPesoDoPlano({
+      pesagens: [], hojeISO: dia(-1), pesoPerfilKg: 60,
+      anterior: reancorar(r.estado, 60, dia(-1)), emFaixaProtetiva: banda,
+    });
+    expect(fuga.estado.faixa.ativa, 'o teclado escapou de uma faixa medida').toBe(true);
+  });
+});
+
+/**
+ * 🔒 1.6 — a janela pós-edição IGNORA registros anteriores à edição.
+ *
+ * Sem isso a média que "retoma" vem contaminada pelos valores dos quais a pessoa acabou de
+ * se corrigir — mesma forma do bug do alívio que se re-disparava sozinho: o estado novo
+ * herdando a evidência que o motivou.
+ */
+describe('🔒 1.6 — a janela pós-edição não é contaminada pelo que veio antes', () => {
+  const nunca = () => false;
+
+  it('registros ANTERIORES à edição não contam, nem em maioria', () => {
+    const est = reancorar(null, 70, dia(3));
+    // 5 pesagens ANTES da edição (58 kg) e nenhuma depois: a série não retoma.
+    const r = resolverPesoDoPlano({
+      pesagens: serie([4, 58], [5, 58], [6, 58], [7, 58], [8, 58]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: est, emFaixaProtetiva: nunca,
+    });
+    expect(r.pesoKg, 'a média veio contaminada pelo que a pessoa corrigiu').toBe(70);
+    expect(r.estado.reancoraISO).toBe(dia(3));
+  });
+
+  it('e a média que retoma usa SÓ as posteriores — o valor prova', () => {
+    const est = reancorar(null, 70, dia(3));
+    const r = resolverPesoDoPlano({
+      // 3 antigas em 58 (ignoradas) + 3 novas em 64 (as que valem).
+      pesagens: serie([4, 58], [5, 58], [6, 58], [0, 64], [1, 64], [2, 64]),
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: est, emFaixaProtetiva: nunca,
+    });
+    // Média das 6 seria 61; das 3 posteriores, 64. O número diz qual janela foi usada.
+    expect(r.pesoKg, 'usou a janela contaminada (61) em vez da limpa (64)').toBe(64);
+    expect(r.estado.reancoraISO, 'a marca cai quando a série retoma').toBeNull();
+  });
+
+  it('o corte é ESTRITO: pesagem NO DIA da edição não conta', () => {
+    const est = reancorar(null, 70, dia(3));
+    const r = resolverPesoDoPlano({
+      pesagens: serie([3, 64], [3, 64], [3, 64]), // todas no próprio dia da edição
+      hojeISO: HOJE, pesoPerfilKg: 70, anterior: est, emFaixaProtetiva: nunca,
+    });
+    // 🔒 A pesagem do dia pode ter sido feita ANTES de a pessoa editar — sem hora, não dá
+    // para saber, e o lado seguro é não deixar entrar.
+    expect(r.pesoKg).toBe(70);
+  });
+});

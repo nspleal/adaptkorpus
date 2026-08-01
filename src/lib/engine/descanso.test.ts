@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DESCANSO_PISO_DURO_SEG, FAIXA_DESCANSO, FAIXA_FORCA_PESADA, classeDeDescanso,
-  classificarComOrigem, descansoDoExercicio, deslocarPorRir, ehIsometrico, faixaDoExercicio, pisoFitDaRampa,
+  classificarComOrigem, descansoDoExercicio, descansoDoPadrao, deslocarPorRir, ehIsometrico, faixaDoExercicio, pisoFitDaRampa,
   rotuloDescanso, type ClasseDescanso,
 } from './descanso';
 import { EXERCISES } from '../data/exercises';
@@ -250,3 +250,72 @@ describe('rótulo humano', () => {
  * "cede ISOLADO até 60 s", e é lá que o piso vira o limite operante. O teste que o prova
  * pertence ao montador, que é quem conhece a sessão inteira — não a este módulo puro.
  */
+
+/* ══════ 1.3 / 1.4 — os pisos da degradação, por classe (correções de 2026-07-31) ══════ */
+
+describe('🔴 1.3 — força pesada NÃO desce de 180 s ao degradar', () => {
+  const supino = EXERCISES.find((e) => e.padraoMovimento === 'empurrar' && /Barra/.test(e.equipamentoDetalhe ?? ''))!;
+
+  it('o caso existe: composto COM carga, em modo força, no topo da faixa', () => {
+    expect(temCarga(supino), supino.nomePt).toBe(true);
+    // RIR 1 → topo da FAIXA_FORCA_PESADA.
+    expect(descansoDoExercicio({ exercicio: supino, rirAlvo: 1, modoForca: true })).toBe(300);
+  });
+
+  it('🔴 300 → 180 ao degradar, nunca 90 (era −70 %, o oposto da §5.7)', () => {
+    const cheio = descansoDoExercicio({ exercicio: supino, rirAlvo: 1, modoForca: true })!;
+    const degradado = descansoDoExercicio({ exercicio: supino, rirAlvo: 1, modoForca: true, degradacao: 2 })!;
+    expect(cheio).toBe(300);
+    expect(degradado, 'força pesada furou o piso de 3 min').toBe(180);
+    expect(degradado / cheio, 'a queda passou de 40 %').toBeGreaterThanOrEqual(0.6);
+    // E o orçamento (que só vê o padrão) tem de concordar — senão o `min` do montador
+    // reintroduz o corte pelo outro lado.
+    expect(descansoDoPadrao('empurrar', { rirAlvo: 1, modoForca: true, degradacao: 2 })).toBe(180);
+  });
+
+  it('composto SEM força pesada continua cedendo até 90 s', () => {
+    const comp = EXERCISES.find((e) => classeDeDescanso(e) === 'COMPOSTO')!;
+    expect(descansoDoExercicio({ exercicio: comp, rirAlvo: 1, degradacao: 2 })).toBe(90);
+  });
+
+  it('composto sem carga não vira força pesada nem com o modo ligado', () => {
+    const semCarga = EXERCISES.find((e) => classeDeDescanso(e) === 'COMPOSTO' && !temCarga(e))!;
+    expect(descansoDoExercicio({ exercicio: semCarga, rirAlvo: 1, modoForca: true, degradacao: 2 })).toBe(90);
+  });
+});
+
+describe('🟡 1.4 — POTÊNCIA degrada junto com o composto (piso 90 s)', () => {
+  /**
+   * 🔒 `e151` Patinador é CASO-TESTE OBRIGATÓRIO de toda regra nova sobre a biblioteca
+   * (regra do lote de correção). Ele já quebrou três: o remap anatômico, a ordem
+   * `tipo` vence `padrao`, e o fallback de tipo. É `padraoMovimento: 'cardio'` com
+   * `tipo: 'pliometrico'` — quem olha só o padrão não enxerga que ele é POTÊNCIA.
+   */
+  const e151 = EXERCISES.find((e) => e.id === 'e151')!;
+
+  it('o e151 é mesmo o caso torto que o teste precisa', () => {
+    expect(e151.nomePt).toMatch(/Patinador/);
+    expect(e151.tipo).toBe('pliometrico');
+    expect(e151.padraoMovimento).toBe('cardio');
+    expect(classificarComOrigem(e151)).toEqual({ classe: 'POTENCIA', viaFallback: false });
+  });
+
+  it('degrada até 90 s — nem fica intacto, nem cai no piso do isolado', () => {
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 1 })).toBe(180);
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 1, degradacao: 1 }), 'cedeu no nível do ISOLADO').toBe(180);
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 1, degradacao: 2 })).toBe(90);
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 3, degradacao: 2 })).toBe(90);
+  });
+
+  it('e na RAMPA não degrada nunca — o piso do FIT é inviolável', () => {
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 3, semanaRampa: 1, degradacao: 2 })).toBe(120);
+  });
+
+  it('ISOLADO cede já no nível 1; POTÊNCIA e COMPOSTO só no 2 (a ordem travada)', () => {
+    const iso = EXERCISES.find((e) => classeDeDescanso(e) === 'ISOLADO')!;
+    const comp = EXERCISES.find((e) => classeDeDescanso(e) === 'COMPOSTO')!;
+    expect(descansoDoExercicio({ exercicio: iso, rirAlvo: 1, degradacao: 1 })).toBe(60);
+    expect(descansoDoExercicio({ exercicio: comp, rirAlvo: 1, degradacao: 1 })).toBe(180);
+    expect(descansoDoExercicio({ exercicio: e151, rirAlvo: 1, degradacao: 1 })).toBe(180);
+  });
+});

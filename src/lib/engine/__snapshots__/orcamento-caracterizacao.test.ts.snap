@@ -197,12 +197,12 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 }
 `;
 
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força em sessão curta — o teto de 180 s morde o cap 1`] = `
+exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força em sessão curta — o piso de 180 s da força pesada custa exercício 1`] = `
 [
-  2,
-  2,
-  2,
-  2,
+  1,
+  1,
+  1,
+  1,
 ]
 `;
 

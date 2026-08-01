@@ -130,6 +130,45 @@ export function pisoFitDaRampa(semanaRampa: number): number {
   return semanaRampa <= 1 ? sem1 : sem2;
 }
 
+/**
+ * 🔒 PISOS DA DEGRADAÇÃO POR CLASSE (correções 1.3 e 1.4, 2026-07-31).
+ *
+ * A ordem travada é *cobertura > descanso longo*: quando o tempo aperta, o descanso cede
+ * antes do número de exercícios. **Mas ceder não é despencar** — cada classe tem um chão:
+ *
+ * | Classe | Piso ao degradar | Por quê |
+ * |---|---|---|
+ * | `ISOLADO` | **60 s** | é o piso duro global; abaixo disso não é descanso |
+ * | `COMPOSTO` | **90 s** | já era |
+ * | `COMPOSTO` **força pesada** | 🔴 **180 s** | 1.3 — o orçamento levava **300 → 90 (−70 %)**, o oposto do que a §5.7 manda para força pesada (3–5 min) |
+ * | `POTENCIA` | **90 s** | 1.4 — degrada **junto com o composto**; antes não tinha lugar na ordem e só não despencava por acidente (o padrão `cardio` do `e151` caía no ramo do composto) |
+ */
+export const PISO_DEGRADACAO: Record<Exclude<ClasseDescanso, 'NAO_SE_APLICA'>, number> = {
+  ISOLADO: DESCANSO_PISO_DURO_SEG,
+  COMPOSTO: 90,
+  POTENCIA: 90,
+};
+/** 🔴 1.3 — força pesada tem chão próprio: nunca abaixo de 3 min. */
+export const PISO_DEGRADACAO_FORCA_PESADA = 180;
+
+/**
+ * Aplica a degradação de tempo a um descanso já calculado, respeitando o piso da classe.
+ * `degradacao`: 0 = faixa cheia · 1 = ISOLADO cede · 2 = as demais classes também cedem.
+ */
+export function degradar(
+  base: number,
+  classe: Exclude<ClasseDescanso, 'NAO_SE_APLICA'>,
+  degradacao: 0 | 1 | 2,
+  forcaPesada = false,
+): number {
+  if (degradacao >= 1 && classe === 'ISOLADO') return PISO_DEGRADACAO.ISOLADO;
+  if (degradacao >= 2 && classe !== 'ISOLADO') {
+    const piso = forcaPesada && classe === 'COMPOSTO' ? PISO_DEGRADACAO_FORCA_PESADA : PISO_DEGRADACAO[classe];
+    return Math.max(Math.min(base, piso), DESCANSO_PISO_DURO_SEG);
+  }
+  return base;
+}
+
 export interface ArgsDescanso {
   exercicio: Exercise;
   /** RIR-alvo da semana do mesociclo (já vem da prescrição). */
@@ -137,6 +176,12 @@ export interface ArgsDescanso {
   modoForca?: boolean;
   /** Semana da rampa de retomada, 1-based. `null`/ausente = sem rampa. */
   semanaRampa?: number | null;
+  /**
+   * Nível de degradação do orçamento de tempo do DIA (0/1/2). Entra aqui — e não só no teto
+   * por padrão — porque a classe só é conhecida com o exercício em mãos: `POTENCIA` e força
+   * pesada são invisíveis para quem só vê o padrão do slot (1.3/1.4).
+   */
+  degradacao?: 0 | 1 | 2;
 }
 
 /**
@@ -155,10 +200,14 @@ export function descansoDoExercicio(args: ArgsDescanso): number | null {
   const faixa = faixaDoExercicio(args.exercicio, args.modoForca === true);
   if (!faixa) return null;
   const base = deslocarPorRir(faixa, args.rirAlvo);
-  const comPiso = args.semanaRampa != null && args.semanaRampa > 0
-    ? Math.max(pisoFitDaRampa(args.semanaRampa), base)
-    : base;
-  return Math.max(DESCANSO_PISO_DURO_SEG, comPiso);
+  const naRampa = args.semanaRampa != null && args.semanaRampa > 0;
+  const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
+  // 🔒 Na rampa NÃO se degrada: o piso do FIT é inviolável e quem cede é o nº de itens.
+  const { classe } = classificarComOrigem(args.exercicio);
+  const final = naRampa || classe === 'NAO_SE_APLICA'
+    ? comPiso
+    : degradar(comPiso, classe, args.degradacao ?? 0, args.modoForca === true && temCarga(args.exercicio));
+  return Math.max(DESCANSO_PISO_DURO_SEG, final);
 }
 
 /** Rótulo humano em passos legíveis: "2 min", "2 min 30", "1 min 30", "45 s". */
@@ -200,8 +249,8 @@ export function descansoDoPadrao(
   const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
   if (naRampa) return Math.max(DESCANSO_PISO_DURO_SEG, comPiso); // piso do FIT inviolável
 
-  const deg = args.degradacao ?? 0;
-  if (deg >= 1 && classe === 'ISOLADO') return DESCANSO_PISO_DURO_SEG;
-  if (deg >= 2 && classe === 'COMPOSTO') return Math.min(comPiso, 90);
-  return Math.max(DESCANSO_PISO_DURO_SEG, comPiso);
+  // 🔒 O MESMO `degradar` do valor exibido: se o orçamento e a tela usassem pisos
+  // diferentes, o `min(exato, teto)` do montador reintroduziria o corte que 1.3 removeu.
+  const deg = degradar(comPiso, classe, args.degradacao ?? 0, args.modoForca === true);
+  return Math.max(DESCANSO_PISO_DURO_SEG, deg);
 }

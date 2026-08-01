@@ -6,6 +6,7 @@ import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino } from './treino-types';
 import { temCarga } from './equipamento';
+import { classeDeDescanso, descansoDoExercicio } from './descanso';
 
 /**
  * CARACTERIZAÇÃO DO ORÇAMENTO DE TEMPO — escrita ANTES de mexer nele (trava da Leva B).
@@ -120,7 +121,19 @@ describe('📸 caracterização — nº de exercícios por dia, com o estimador 
     expect({ objetivo, slots: slotsPorDia(r) }).toMatchSnapshot();
   });
 
-  it('modo força em sessão curta — o teto de 180 s morde o cap', () => {
+  /**
+   * 🔻 ESTE NÚMERO MUDOU DE PROPÓSITO (correção 1.3, 2026-07-31): `[2,2,2,2]` → `[1,1,1,1]`.
+   *
+   * Antes, o orçamento degradava a força pesada de **300 → 90 s (−70 %)** — o oposto do que
+   * a §5.7 manda (3–5 min). Com o piso de 180 s, 20 min só comportam UM exercício, e é a
+   * resposta honesta: quem escolhe força pesada aceita que o descanso é o custo.
+   *
+   * 🟢 Alcance MEDIDO em produção: **zero**. O app oferece 30/45/60/75 min
+   * (`EditarPerfil.tsx:258`); 20 min não é selecionável. Nas durações reais, com e sem modo
+   * força, o nº de exercícios por dia ficou **byte-idêntico** — só os segundos exibidos
+   * mudaram, para cima, onde a §5.7 mandava.
+   */
+  it('modo força em sessão curta — o piso de 180 s da força pesada custa exercício', () => {
     const r = rotinaComCiclo({ tempoPorSessaoMin: 20, objetivo: 'emagrecimento', modoForca: true });
     expect(slotsPorDia(r)).toMatchSnapshot();
   });
@@ -312,7 +325,10 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
    * rampa existe para dar (o risco documentado é rabdomiólise, não desconforto).
    */
   it('na rampa com tempo curto, NINGUÉM desce do piso do FIT (cede o nº de exercícios)', () => {
-    const p = perfil({ tempoPorSessaoMin: 20 });
+    // 🔻 1.2: 30 min, não 20. MEDIDO: a 20 min a sessão na rampa sai com **zero ISOLADO**
+    // (4 slots, todos composto) — era essa a razão de o aceite passar sem provar nada. A 30
+    // min há 2 isolados, e 30 é duração REAL do app (as opções são 30/45/60/75).
+    const p = perfil({ tempoPorSessaoMin: 30 });
     const opc: OpcoesSemana = {
       semana: 1, feedbackGrupos: new Map(),
       retomada: { semana: 1, fator: 0.5, volumeReferencia: 12, exerciciosRecentes: new Set() },
@@ -322,6 +338,22 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
     expect(todos.length, 'rampa sem slots — caso não discriminante').toBeGreaterThan(0);
     for (const s of todos) {
       expect(s.descansoSeg!, `${s.exercicio.id} furou o piso do FIT`).toBeGreaterThanOrEqual(120);
+    }
+
+    /**
+     * 🔻 CORREÇÃO 1.2 (2026-07-31) — o aceite acima era VACUOSO sozinho.
+     *
+     * Com composto, o RIR-alvo 3 da rampa já dá **120 s**, que é o próprio piso do FIT: o
+     * `max(120, 120)` é inerte, e apagar o piso não mudaria número nenhum. O caso que
+     * discrimina é o **ISOLADO**, cuja base a RIR 3 é **60 s** — só o piso o leva a 120.
+     */
+    const isolados = todos.filter((s) => classeDeDescanso(s.exercicio) === 'ISOLADO');
+    expect(isolados.length, 'sem ISOLADO na sessão o aceite volta a ser vacuoso').toBeGreaterThan(0);
+    for (const s of isolados) {
+      // O que o deslocamento daria SOZINHO, fora da rampa — a prova de que o piso agiu.
+      const semRampa = descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: 3 });
+      expect(semRampa, `${s.exercicio.id}: base do isolado`).toBe(60);
+      expect(s.descansoSeg!, `${s.exercicio.id}: 60 → 120 é o efeito do piso`).toBe(120);
     }
   });
 

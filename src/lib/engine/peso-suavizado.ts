@@ -181,7 +181,19 @@ export function aplicarHistereseFaixa(args: {
 
   // ENTRAR: imediato. Proteção não espera confirmação, e o contador de saída zera. A
   // procedência é CARIMBADA na entrada — é ela que vai graduar a saída.
-  if (dentroDaFaixaHoje) return { ativa: true, foraDesdeISO: null, porMedicao: ancoraMedida };
+  //
+  // 🔴 A procedência MEDIDA não decai (achado da correção 1.1, 2026-07-31). Quem entrou por
+  // medição e depois passa dias sem se pesar tem `suavizado = null` — e carimbar `false` ali
+  // rebaixaria a entrada a "digitada", abrindo a saída por teclado de uma faixa em que se
+  // entrou por medição. É exatamente a porta dos fundos que o refinamento fechou. Medição
+  // nova só pode FORTALECER o carimbo; a janela esvaziar nunca o enfraquece.
+  if (dentroDaFaixaHoje) {
+    return {
+      ativa: true,
+      foraDesdeISO: null,
+      porMedicao: ancoraMedida || (anterior.ativa && anterior.porMedicao),
+    };
+  }
 
   // Fora da faixa, mas nunca esteve protegido → nada a fazer.
   if (!anterior.ativa) return { ativa: false, foraDesdeISO: null, porMedicao: false };
@@ -327,21 +339,50 @@ export function resolverPesoDoPlano(args: {
   }
 
   // ── 2. A faixa protetiva ───────────────────────────────────────────────────────
-  const dentroHoje = emFaixaProtetiva(ancoraKg);
+  /**
+   * 🔴 DOIS RELÓGIOS (correção 1.1, 2026-07-31 — a única deste lote com consequência de
+   * SEGURANÇA).
+   *
+   * O defeito: a faixa era decidida sobre a **âncora**, então a histerese de recomputação
+   * (Δ ≥ 1 kg · 1×/semana) — que existe para o **cardápio não mudar todo dia** — passava a
+   * governar também o **gate de saúde**. Um cruzamento pequeno ficava INVISÍVEL.
+   *
+   * Prova numérica: **1,60 m · 41,5 kg** (IMC 16,21, fora da faixa) com suavizado **40,8**
+   * (IMC **15,94**, dentro). **Δ = 0,7 kg < 1 kg** → a âncora não se move → o gate nunca via
+   * o 40,8 e não roteava. Uma pessoa em magreza severa seguia recebendo plano.
+   *
+   * 🔒 A regra: **a histerese governa kcal/macros; o gate lê o SUAVIZADO a cada leitura.**
+   * Enquanto o gate está calado, a âncora manda (é ela que segura o churn do cardápio); no
+   * instante em que o gate fala, ele fala a partir da medição, sem limiar e sem esperar
+   * semana. 🟢 A assimetria não muda: **entrar é imediato, sair continua exigindo 14 dias** —
+   * e é isso que impede a leitura crua de fazer o portão piscar.
+   */
+  const pesoDaLeitura = suavizado ?? ancoraKg;
+  const dentroHoje = emFaixaProtetiva(pesoDaLeitura);
   const faixa = aplicarHistereseFaixa({
     dentroDaFaixaHoje: dentroHoje,
     anterior: anterior?.faixa ?? FAIXA_INICIAL,
     hojeISO,
-    ancoraMedida,
+    // A procedência é a da LEITURA que decidiu a entrada, não a da âncora: é o que o
+    // refinamento da carência (digitado × medido) precisa saber para graduar a saída.
+    ancoraMedida: suavizado != null,
   });
 
-  // Em carência de SAÍDA (a âncora já saiu, mas os 14 dias não passaram) o plano continua
+  // Em carência de SAÍDA (a leitura já saiu, mas os 14 dias não passaram) o plano continua
   // sendo gerado com o peso que estava DENTRO da faixa. É o que dá efeito à histerese: sem
   // fixar o peso, o gate recalcularia PERMITIR no dia seguinte e a carência seria decorativa.
   // 🔒 O erro fica do lado seguro — mesma postura do `max(1, floor(alvo))` da retomada.
   const emCarencia = faixa.ativa && !dentroHoje;
-  const pesoNaFaixaKg = dentroHoje ? ancoraKg : (emCarencia ? (anterior?.pesoNaFaixaKg ?? null) : null);
-  const pesoKg = emCarencia && pesoNaFaixaKg != null ? pesoNaFaixaKg : ancoraKg;
+  const pesoNaFaixaKg = dentroHoje ? pesoDaLeitura : (emCarencia ? (anterior?.pesoNaFaixaKg ?? null) : null);
+  /**
+   * 🔒 Com a faixa ATIVA, o comportamento segue a LEITURA (ou o pino da carência), nunca a
+   * âncora: se o gate viu magreza severa e o plano fosse gerado no peso ancorado, o gate
+   * interno de `gerarDieta` recalcularia `PERMITIR` e o roteamento evaporaria. Faixa calada →
+   * a âncora manda, e o cardápio segue estável como a Leva D travou.
+   */
+  const pesoKg = faixa.ativa
+    ? (emCarencia && pesoNaFaixaKg != null ? pesoNaFaixaKg : pesoDaLeitura)
+    : ancoraKg;
 
   return {
     pesoKg,
