@@ -196,6 +196,15 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
     // Pliométrico sem pliométrico elegível → força do MESMO padrão; se nem isso (ex.: skater,
     // padrão Cardio, sem força nesse padrão) → último recurso = MESMO PADRÃO, qualquer tipo
     // ("cruzar tipo dentro do padrão" — opção travada da spec p/ o caso skater #151).
+    //
+    // 🔒 INALCANÇÁVEL POR **DADO**, não por código (Bloco 5, 2026-08-01): com perfil
+    // consistente este ramo não roda hoje — os 3 pliométricos do catálogo são todos
+    // `intermediario` e disponíveis em qualquer local, então sempre há outro do mesmo tipo.
+    // Fica DECLARADO em vez de removido justamente porque nenhuma linha impede o dado de
+    // mudar. ⚠️ Um pliométrico `iniciante` no catálogo o acende, e o preço está medido: o
+    // substituto vira e23 Polichinelo (tipo cardio, `grupoPrimario` null) — potência de
+    // quadríceps por cardio genérico. Guard que quebra o build nesse dia:
+    // `substituicao.test.ts` → "degradação do pliométrico: inalcançável por DADO".
     if (atual.tipo === 'pliometrico' && !temMesmoTipo) {
       if (y.tipo === 'forca_hipertrofia' && y.padraoMovimento === atual.padraoMovimento) return true;
       const temForcaMesmoPadrao = p.exercises.some(

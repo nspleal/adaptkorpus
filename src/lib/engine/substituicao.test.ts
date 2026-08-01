@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { substituirExercicio, substituirPrato, listarSubstituicoesPrato, listarSubstituicoesExercicio } from './substituicao';
 import { ESCALA_PORCAO } from './constants';
 import { locaisPermitidos } from './treino-montador';
+import { dificuldadesLiberadas } from './treino';
+import { EQUIPAMENTOS_CASA } from './equipamento';
+import type { EquipamentoCasa } from '../data/types';
 import { gerarDieta } from './index';
 import { macrosDePrato } from '../data/nutrition';
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '../data/seed';
@@ -308,5 +311,107 @@ describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
           if (r.status === 'sinalizado') vazios.push(`${e.id}·${nivel}·${eq}`);
         }
     expect(vazios).toEqual(['e116·iniciante·nenhum', 'e116·intermediario·nenhum', 'e116·avancado·nenhum']);
+  });
+});
+
+/**
+ * 🔒 O RAMO DE DEGRADAÇÃO DO PLIOMÉTRICO É INALCANÇÁVEL **POR DADO** (Bloco 5, 2026-08-01).
+ *
+ * `substituicao.ts:199-205` — pliométrico sem pliométrico elegível → força do mesmo padrão
+ * → último recurso, mesmo padrão de qualquer tipo. A spec o mantém **declarado**, não
+ * removido, e é isto que este bloco existe para sustentar:
+ *
+ * 🔑 **Remove-se capacidade inalcançável por CÓDIGO; declara-se — com guard — capacidade
+ * inalcançável por DADO.** O ramo não roda hoje porque o catálogo tem 3 pliométricos, todos
+ * `intermediario`, todos disponíveis em qualquer local. Nenhuma linha impede que isso mude:
+ * no dia em que o DADO mudar, o ramo passa a valer **sem aviso**.
+ *
+ * ⚠️ E o preço está MEDIDO, não suposto: um pliométrico `iniciante` no catálogo faz o
+ * substituto virar **e23 Polichinelo — tipo `cardio`, `grupoPrimario` null**. Potência de
+ * quadríceps trocada por cardio genérico sem grupo. Pelo outro caminho (e143/e163 marcados
+ * só-academia), quem degrada é o **próprio e151 Patinador → e30 Burpee**, igualmente sem
+ * grupo. Este guard transforma essa surpresa latente em falha de build.
+ *
+ * 🔻 ESCOPO, dito com precisão: "inalcançável" vale para **perfil CONSISTENTE** — o nível do
+ * usuário libera o exercício que ele tem em mãos, que é o que o montador produz. A chamada
+ * DESCASADA (`e151` + usuário `iniciante`) alcança o ramo hoje e está travada logo acima, em
+ * "refino skater intocado": ali a degradação é comportamento declarado, não surpresa.
+ */
+describe('🔒 degradação do pliométrico: inalcançável por DADO, com guard (Bloco 5)', () => {
+  type Catalogo = typeof EXERCISES;
+  const NIVEIS = ['iniciante', 'intermediario', 'avancado'] as const;
+  const COMBOS_CASA: (readonly EquipamentoCasa[] | undefined)[] = [
+    undefined, [], ...EQUIPAMENTOS_CASA.map((e) => [e] as const), EQUIPAMENTOS_CASA,
+  ];
+
+  /**
+   * 🔑 CRITÉRIO OBSERVÁVEL, não espelho da implementação: **substituto de pliométrico que
+   * não é pliométrico** só pode ter vindo do ramo 199-205 — a linha 195 (`mesmo tipo`) é a
+   * única outra porta de `tipoCompativel`, e ela nunca deixa passar outro tipo. Então a
+   * lista abaixo vazia ⇔ o ramo não decidiu nada. Sem reimplementar `temMesmoTipo` aqui
+   * (espelho deriva do original sem ninguém perceber).
+   */
+  const degradacoes = (cat: Catalogo): string[] => {
+    const fora: string[] = [];
+    for (const atual of cat.filter((e) => e.tipo === 'pliometrico')) {
+      for (const nivel of NIVEIS) {
+        if (!dificuldadesLiberadas(nivel).includes(atual.nivel)) continue; // perfil CONSISTENTE
+        for (const eq of ['nenhum', 'casa', 'academia'] as const) {
+          if (!locaisPermitidos(eq).includes(atual.local)) continue;
+          for (const casa of eq === 'casa' ? COMBOS_CASA : [undefined]) {
+            const r = substituirExercicio({ exercicioAtual: atual, equipamento: eq, equipamentosCasa: casa, nivelExperiencia: nivel, exercises: cat });
+            if (r.status === 'ok' && r.exercicio && r.exercicio.tipo !== 'pliometrico')
+              fora.push(`${atual.id}·${nivel}·${eq} → ${r.exercicio.id} ${r.exercicio.nomePt} (${r.exercicio.tipo}, grupo ${r.exercicio.grupoPrimario})`);
+          }
+        }
+      }
+    }
+    return fora;
+  };
+
+  it('🔴 NENHUM pliométrico de nível INICIANTE no catálogo — se entrar um, o ramo acende', () => {
+    const iniciantes = EXERCISES.filter((e) => e.tipo === 'pliometrico' && e.nivel === 'iniciante');
+    expect(
+      iniciantes.map((e) => `${e.id} ${e.nomePt}`),
+      'entrou pliométrico iniciante: 199-205 passou a valer — reveja a degradação ANTES de publicar o conteúdo',
+    ).toEqual([]);
+    // ⚠️ Só `iniciante`. A 1ª escrita também travava a COMPOSIÇÃO (`todos intermediários`) e
+    // acusava um pliométrico AVANÇADO — que é inofensivo: para o usuário avançado todos os
+    // níveis estão liberados, então nunca falta pliométrico. Travar composição em vez de
+    // critério é guard que reprova dado correto. Quem cobre os outros caminhos é a varredura.
+  });
+
+  it('critério derivado: com perfil consistente, substituto de pliométrico É pliométrico', () => {
+    // Pega TAMBÉM o caminho do equipamento — o nível não é a única forma de o dado mudar.
+    expect(degradacoes(EXERCISES)).toEqual([]);
+  });
+
+  it('e151 Patinador (caso-teste obrigatório): troca por pliométrico, quadríceps preservado', () => {
+    const e151 = EXERCISES.find((e) => e.id === 'e151')!;
+    // ⚠️ Perfil derivado do PRÓPRIO exercício, não fixado em 'intermediario': cravar o nível
+    // aqui faz o teste cair quando o e151 for re-nivelado — mudança de dado legítima que não
+    // tem nada a ver com a degradação que este bloco guarda.
+    const r = substituirExercicio({ exercicioAtual: e151, equipamento: 'nenhum', nivelExperiencia: e151.nivel, exercises: EXERCISES });
+    expect(r.status).toBe('ok');
+    // ⚠️ A PROPRIEDADE, não a identidade: cravar `e143` transformava este teste num retrato
+    // da ORDENAÇÃO entre pliométricos de mesmo rank — outra asserção, já travada em "refino
+    // skater intocado". Aqui o que se guarda é que o estímulo não degrada.
+    expect(r.exercicio!.tipo).toBe('pliometrico');
+    expect(r.exercicio!.grupoPrimario).toBe('quadriceps'); // NÃO é o cardio sem grupo
+  });
+
+  it('anti-vacuidade A — um pliométrico INICIANTE acende o ramo: vira Polichinelo (cardio, sem grupo)', () => {
+    const e151 = EXERCISES.find((e) => e.id === 'e151')!;
+    const cat = [...EXERCISES, { ...e151, id: 'eZZZ', nomePt: 'Plio iniciante hipotético', nivel: 'iniciante' as const }];
+    const achados = degradacoes(cat);
+    expect(achados.length, 'o guard ficou cego para o pliométrico iniciante').toBeGreaterThan(0);
+    expect(achados.every((l) => l.includes('e23 Polichinelo (cardio, grupo null)'))).toBe(true);
+  });
+
+  it('anti-vacuidade B — outro caminho do dado: e143/e163 só-academia degradam o próprio e151', () => {
+    const cat = EXERCISES.map((e) => (e.id === 'e143' || e.id === 'e163' ? { ...e, local: 'academia' as const } : e));
+    const achados = degradacoes(cat);
+    expect(achados.length, 'o guard só olha nível — o caminho do equipamento passa') .toBeGreaterThan(0);
+    expect(achados.some((l) => l.startsWith('e151·') && l.includes('(cardio, grupo null)'))).toBe(true);
   });
 });
