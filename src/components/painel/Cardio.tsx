@@ -69,31 +69,51 @@ export function PorQueOAparelho() {
 
 /* ═════════════════ Progresso da semana ═════════════════ */
 
-function BarraMinutos({ feito, meta }: { feito: number; meta: MetaCardio }) {
-  const pct = meta.alvo > 0 ? Math.min(100, (feito / meta.alvo) * 100) : 0;
-  const faltam = Math.max(0, meta.alvo - feito);
+/**
+ * 🔴 O CARTÃO MEDE CONTRA O QUE O PLANO PRESCREVE (DF 2026-08-01, §🏃) — não contra a meta
+ * abstrata. **O app cobra o que ele deu.**
+ *
+ * O defeito que isto fecha é ANTERIOR ao teto de 90: o cartão dizia *"Faltam 150 minutos
+ * para os 150"* enquanto o plano oferecia UM dia de cardio. Com o teto, a distância ficou
+ * visível — o plano prescreve 90 e o cartão cobrava 150 —, mas a dívida já existia sempre
+ * que a pessoa oferecia menos dias do que a meta pede.
+ *
+ * 🔻 E a forma da frase saiu junto: *"Faltam X para os Y"* é a **classe ①** (alvo no futuro
+ * da atividade da pessoa) somada à **classe ③** (denominador). 🔑 A varredura de afirmações
+ * nunca a pegou porque procurava copy **FALSA** — e essa era **verdadeira**. É classe nova
+ * de escape: **copy verdadeira que viola trava de forma.**
+ *
+ * A forma agora é de **REGISTRO, não de dívida**: o que a semana tem, o que foi registrado,
+ * **sem contagem regressiva**. A diretriz de 150 min não some do mundo — ela deixa de ser
+ * uma dívida que o app cobra de quem ele não deu os dias.
+ */
+function BarraMinutos({ feito, meta, prescrito }: { feito: number; meta: MetaCardio; prescrito?: number }) {
+  // O denominador é o PLANO quando ele existe; a meta só sobra como referência da diretriz.
+  const base = prescrito != null && prescrito > 0 ? prescrito : meta.alvo;
+  const pct = base > 0 ? Math.min(100, (feito / base) * 100) : 0;
+  const completo = feito >= base;
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: '2.1rem', fontWeight: 800, color: NEON, letterSpacing: '-.02em', lineHeight: 1 }}>{feito}</span>
-        <span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.6)' }}>de {meta.alvo} min</span>
+        <span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.6)' }}>de {base} min no seu plano</span>
       </div>
       <div style={{ height: 9, borderRadius: 999, background: 'rgba(234,229,219,.08)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, #16A34A, #BDFF00)', transition: 'width .4s ease' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, fontSize: '.72rem', color: 'rgba(234,229,219,.42)' }}>
         <span>0</span>
-        <span>{meta.alvo} (meta{meta.max != null ? '' : ' desta semana'})</span>
+        <span>{base} (o cardio do seu plano)</span>
         {/* 🔒 300 NÃO é teto: a diretriz reconhece benefício acima disso. Nenhum rótulo o
             chama de máximo, e passar dele não dispara nada. */}
         {meta.max != null && <span>{meta.max} (faixa recomendada)</span>}
       </div>
+      {/* 🔒 FORMA DE REGISTRO, NÃO DE DÍVIDA. Sem "faltam", sem contagem regressiva e sem
+          alvo no futuro da atividade da pessoa: diz o que a semana tem e o que ela registrou. */}
       <p style={{ ...apoio, margin: '12px 0 0' }}>
-        {faltam > 0
-          ? `Faltam ${faltam} minuto${faltam === 1 ? '' : 's'} para os ${meta.alvo}.`
-          : `Você fechou os ${meta.alvo} minutos desta semana.`}
-        {meta.max != null && faltam > 0 ? ` A faixa até ${meta.max} continua valendo se você quiser ir além.` : ''}
-        {faltam === 0 ? ' Nada muda no seu cardápio — é só a semana feita.' : ''}
+        {completo
+          ? `Você registrou ${feito} min de cardio nesta semana. Nada muda no seu cardápio — é só o registro.`
+          : `Você registrou ${feito} min de cardio nesta semana. Seu plano tem ${base} min.`}
       </p>
     </>
   );
@@ -158,10 +178,16 @@ function LinhaSessao({ r, leve }: { r: RegistroCardioDatado; leve: boolean }) {
 
 /* ═════════════════ A seção da semana ═════════════════ */
 
-export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin, objetivo, onRegistrar }: {
+export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin, objetivo, onRegistrar, prescritoMin }: {
   registros: readonly RegistroCardioDatado[];
   /** `null` = usuário roteado (registra, mas não recebe meta). */
   meta: MetaCardio | null;
+  /**
+   * 🔒 Minutos que o PLANO prescreve nesta semana (soma dos dias de cardio emitidos). É o
+   * denominador do cartão (DF 2026-08-01): o app cobra o que ele deu, não a meta abstrata.
+   * Ausente = sem dia de cardio emitido → cai na meta, como antes.
+   */
+  prescritoMin?: number;
   /** Chip da rampa, quando ativa — o MESMO das telas de treino (é o mesmo movimento). */
   retomada?: { semana: number; totalSemanas: number } | null;
   hojeISO: string;
@@ -206,7 +232,7 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
             </div>
             {meta.tipo === 'sessoes'
               ? <BlocosSessoes feitas={resumo.sessoesNaMeta} meta={meta} />
-              : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} />}
+              : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} prescrito={prescritoMin} />}
             {retomada && (
               <p style={{ ...apoio, margin: '12px 0 0' }}>
                 Sua meta está menor porque você está voltando. Ela sobe junto com o treino e volta ao normal quando a retomada terminar.

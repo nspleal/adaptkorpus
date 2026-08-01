@@ -286,3 +286,42 @@ describe('🔴 o teto morde sem o app mentir sobre a semana', () => {
     expect(semana().length).toBeGreaterThan(3000);
   });
 });
+
+/**
+ * 🔴 O CARTÃO SEMANAL MEDE CONTRA O PLANO, E EM FORMA DE REGISTRO (DF 2026-08-01).
+ *
+ * Defeito ANTERIOR ao teto: o cartão dizia "Faltam 150 minutos para os 150" enquanto o
+ * plano oferecia um único dia de cardio. 🔑 A varredura de afirmações nunca o pegou porque
+ * procurava copy FALSA — e essa era verdadeira. Classe nova: **copy verdadeira que viola
+ * trava de forma** (① alvo no futuro da atividade + ③ denominador).
+ */
+describe('🔴 o cartão de cardio: denominador do PLANO, forma de registro', () => {
+  const podarSrc = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+  const card = () => podarSrc(readFileSync('src/components/painel/Cardio.tsx', 'utf8'));
+
+  it('(b) o "Faltam" SAIU — sem contagem regressiva', () => {
+    const s = card();
+    expect(s, 'a dívida voltou').not.toMatch(/Faltam? \$\{/);
+    expect(s, 'a forma "para os Y" voltou').not.toMatch(/para os \$\{/);
+    expect(s).toMatch(/Você registrou \$\{feito\} min de cardio nesta semana/);
+  });
+
+  it('(a) o denominador é o que o PLANO prescreve, não a meta abstrata', () => {
+    const s = card();
+    expect(s).toMatch(/prescrito != null && prescrito > 0 \? prescrito : meta\.alvo/);
+    // 🔒 A barra e os rótulos usam `base` (o plano), não `meta.alvo` direto.
+    expect(s).toMatch(/de \{base\} min no seu plano/);
+    expect(s).toMatch(/\{base\} \(o cardio do seu plano\)/);
+    expect(s, 'a barra voltou a medir contra a meta abstrata').not.toMatch(/\(feito \/ meta\.alvo\)/);
+  });
+
+  it('e o Painel passa a soma dos dias de cardio EMITIDOS pelo motor', () => {
+    const p = podarSrc(readFileSync('src/components/painel/Painel.tsx', 'utf8'));
+    expect(p).toMatch(/prescritoMin: \(treino\.rotina\?\.diasCardio \?\? \[\]\)\.reduce/);
+  });
+
+  it('anti-vacuidade: o recorte lê o cartão certo e enxerga a barra', () => {
+    expect(card()).toMatch(/function BarraMinutos/);
+    expect(card().length).toBeGreaterThan(3000);
+  });
+});

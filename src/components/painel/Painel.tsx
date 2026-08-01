@@ -607,6 +607,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     registros: registrosCardioSemana, meta: metaCardio, retomada, hojeISO: hojeISO(),
     acumuladoMin: minutosAcumulados(sessoes), objetivo: perfil.objetivo,
     onRegistrar: () => { setRegistrandoCardio(true); window.scrollTo(0, 0); },
+    // 🔒 O denominador do cartão é o que o PLANO prescreve (DF 2026-08-01) — soma dos dias
+    // de cardio emitidos pelo motor. Sem dia emitido, `undefined`: o cartão cai na meta.
+    prescritoMin: (treino.rotina?.diasCardio ?? []).reduce((n, d) => n + (d.minutos ?? 0), 0) || undefined,
   };
   /**
    * 🔒 DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃). O motor conta esses dias desde
