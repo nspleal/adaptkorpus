@@ -36,9 +36,42 @@ const semComentarios = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').rep
 const FONTES = arquivos(SRC).map((f) => [rel(f), semComentarios(readFileSync(f, 'utf8'))] as const);
 
 describe('🔒 um único caminho grava cardio', () => {
+  /**
+   * ⚠️ EXCEÇÃO DECLARADA, com PROVA MECÂNICA (Leva E, 2026-07-31).
+   *
+   * `engine/dia-de-cardio.ts` usa `tipo: 'cardio'` como discriminante de uma união — o
+   * CONTEÚDO do dia excedente (cardio × recuperação) —, não como entrada de histórico. O
+   * guard não se afrouxa por isso: a exceção entra nomeada E o teste abaixo prova que o
+   * arquivo é **incapaz de gravar** (não importa o histórico, não toca storage, não monta
+   * payload de cardio). Exceção sem prova é buraco com nome bonito.
+   */
+  const EXCECOES: { arquivo: string; motivo: string }[] = [
+    {
+      arquivo: 'src/lib/engine/dia-de-cardio.ts',
+      motivo: 'discriminante da união ConteudoDiaExcedente (cardio × recuperação) — módulo '
+        + 'PURO do motor, sem escrita: não é entrada de histórico.',
+    },
+  ];
+
   it('só `treino-historico.ts` cria entrada com `tipo: cardio`', () => {
     const criam = FONTES.filter(([, src]) => /tipo:\s*'cardio'/.test(src)).map(([f]) => f);
-    expect(criam).toEqual(['src/lib/treino-historico.ts']);
+    const isentos = new Set(EXCECOES.map((e) => e.arquivo));
+    expect(criam.filter((f) => !isentos.has(f))).toEqual(['src/lib/treino-historico.ts']);
+  });
+
+  it('e cada exceção PROVA que não consegue gravar (senão é buraco com nome bonito)', () => {
+    for (const { arquivo, motivo } of EXCECOES) {
+      expect(motivo.length, arquivo).toBeGreaterThan(40);
+      const fonte = FONTES.find(([f]) => f === arquivo);
+      // Exceção morta é pior que exceção errada: se o arquivo sumiu, a lista tem de cair.
+      expect(fonte, `exceção aponta para arquivo inexistente: ${arquivo}`).toBeTruthy();
+      const src = fonte![1];
+      expect(src, `${arquivo} importa o histórico`).not.toMatch(/treino-historico/);
+      expect(src, `${arquivo} toca storage`).not.toMatch(/localStorage|sessionStorage/);
+      expect(src, `${arquivo} monta payload de cardio`).not.toMatch(/kcalLiquida|met:|kcal:/);
+      // E precisa mesmo casar com o padrão do guard — senão a exceção é decorativa.
+      expect(/tipo:\s*'cardio'/.test(src), `${arquivo} não usa o padrão: exceção morta`).toBe(true);
+    }
   });
 
   it('só `registrarCardioEm` monta o payload de cardio da sessão', () => {

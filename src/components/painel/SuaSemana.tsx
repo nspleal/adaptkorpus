@@ -2,6 +2,8 @@
 
 import { useState, type CSSProperties } from 'react';
 import { montarSemana, proximoTreinoIdx, weekdayHojeIdx, type Weekday } from '@/lib/semana';
+import { ROTULO_MODALIDADE } from '@/lib/engine/cardio';
+import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 
 /**
  * "Sua semana" (handoff Dias-e-Preferências §5.4) — porte FIEL. Faixa Seg–Dom no topo da
@@ -12,18 +14,28 @@ import { montarSemana, proximoTreinoIdx, weekdayHojeIdx, type Weekday } from '@/
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerDieta, onEditarPerfil }: {
+export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, onRegistrarCardio }: {
   treinoDias: Weekday[];
   sessoesNomes: string[];              // nomes das sessões (rotina.dias[].nome), na ordem do motor
   onIrSessao: (sessionIdx: number) => void;
   onVerDieta: () => void;
   onEditarPerfil: () => void;
+  /**
+   * 🔒 O DIA EXCEDENTE PASSA A TER CONTEÚDO (Leva E, spec §🏃). Vem pronto do motor
+   * (`conteudoDoDiaExcedente`) — a tela não decide entre cardio e recuperação nem calcula
+   * duração: se decidisse aqui, existiriam duas respostas para o que o dia é.
+   */
+  diaExcedente?: ConteudoDiaExcedente;
+  /** Abre o registro UNIFICADO de cardio — o mesmo da sessão guiada e do cartão. */
+  onRegistrarCardio?: () => void;
 }) {
   const hojeIdx = weekdayHojeIdx();
   const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx);
   const [selDay, setSelDay] = useState(hojeIdx);
   const sd = semana[selDay]!;
   const proximo = proximoTreinoIdx(semana, hojeIdx);
+  /** O item de cardio do dia excedente, quando existe. `null` = o dia é recuperação. */
+  const cardio = diaExcedente?.tipo === 'cardio' ? diaExcedente : null;
 
   const cellStyle = (isTraining: boolean, today: boolean, detailSel: boolean): CSSProperties => ({
     position: 'relative', flex: '1 1 0', minWidth: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
@@ -77,11 +89,20 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
               <span style={{ width: 52, height: 52, minWidth: 52, borderRadius: 15, background: 'rgba(22,163,74,.14)', border: '1px solid rgba(22,163,74,.34)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2 5 4-12 2 7h6" stroke="#16A34A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{sd.isToday ? 'Hoje · Recuperação' : `${cap(sd.full)} · Recuperação`}</div>
-                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>Recuperação ativa</h3>
-                <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.</p>
+                {/* 🔒 Leva E — o dia excedente deixa de ser só um rótulo. Com meta em
+                    minutos ele traz UM item de cardio (modalidade + duração, ambos do
+                    motor); sem meta em minutos continua sendo recuperação, que não
+                    prescreve nada. O texto do cardio NÃO fala no futuro nem promete
+                    resultado: descreve o item do dia. */}
+                <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{`${sd.isToday ? 'Hoje' : cap(sd.full)} · ${cardio ? 'Cardio' : 'Recuperação'}`}</div>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade]} · ${cardio.minutos} min` : ROTULO_MODALIDADE[cardio.modalidade]) : 'Recuperação ativa'}</h3>
+                <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade e a intensidade ao registrar — a duração é a meta da semana dividida pelos dias de cardio.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
               </div>
-              <button onClick={onVerDieta} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.85)', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer', alignSelf: 'center' }}>Ver dieta de hoje</button>
+              {cardio && onRegistrarCardio ? (
+                <button onClick={onRegistrarCardio} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#16A34A', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>Registrar cardio<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              ) : (
+                <button onClick={onVerDieta} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.2)', color: 'rgba(234,229,219,.85)', fontWeight: 600, fontSize: '.92rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer', alignSelf: 'center' }}>Ver dieta de hoje</button>
+              )}
             </div>
           </div>
         ) : sd.isToday ? (

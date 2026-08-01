@@ -16,7 +16,8 @@ import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progres
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
-import { metaCardioComRetomada, metaCardioSemanal, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
+import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
+import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
@@ -596,6 +597,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     acumuladoMin: minutosAcumulados(sessoes), objetivo: perfil.objetivo,
     onRegistrar: () => { setRegistrandoCardio(true); window.scrollTo(0, 0); },
   };
+  /**
+   * 🔒 DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃). O motor conta esses dias desde
+   * sempre (`diasCardioRecuperacao`) e nunca construía nada — a pessoa era informada de N
+   * dias de cardio e não recebia item nenhum. É o que mantinha a entrada unificada dormente.
+   *
+   * ⚠️ A meta que entra é a JÁ ESCALADA pela rampa: na retomada o dia existe com duração
+   * menor, sem regra nova. E `sessoesFeitas` só é lida na meta em sessões (massa).
+   */
+  const diaExcedente = conteudoDoDiaExcedente({
+    meta: metaCardio,
+    diasExcedentes: treino.rotina?.diasCardioRecuperacao ?? 0,
+    roteado: treino.gate.comportamento === 'ROTEAR',
+    sessoesFeitas: resumoCardioSemana(registrosCardioSemana).sessoesNaMeta,
+  });
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
     const base = {
@@ -828,6 +843,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : setAba('treino'))}
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
+              diaExcedente={diaExcedente}
+              onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
