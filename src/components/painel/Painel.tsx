@@ -76,9 +76,6 @@ export interface PerfilResumo {
    *  semanas (fonte de verdade da semana). Nasce no 1º boot do Painel; o deload reativo
    *  reancora (hoje − 35 d). Ausente = conta ainda não ancorada (v1). */
   mesocicloInicio?: string;
-  /** Espelho DERIVADO da semana do ciclo (1–6) gravado a cada save p/ observabilidade
-   *  (spec §7 pede os dois); a fonte é sempre `mesocicloInicio` + hoje + sessões. */
-  mesocicloSemana?: number;
   /** Fim (ISO, exclusivo) do alívio disparado pelo botão de fadiga / ≥3 "difícil" — marca
    *  explícita do deload REATIVO (Leva 1B, DF 2026-07-26). Único estado que a mitigação do
    *  relógio introduz; expira sozinho quando `hoje` o alcança. */
@@ -666,13 +663,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     if (!ancora) return;
     const deloadAte = ciclo.novoDeloadAteISO ?? perfil.deloadAte;
     const igual = ancora === perfil.mesocicloInicio
-      && ciclo.semanaEfetiva === perfil.mesocicloSemana
       && deloadAte === perfil.deloadAte;
     if (igual) return;
     const novo = {
       ...perfil,
       mesocicloInicio: ancora,
-      mesocicloSemana: ciclo.semanaEfetiva,
       ...(deloadAte ? { deloadAte } : {}),
     };
     setPerfil(novo);

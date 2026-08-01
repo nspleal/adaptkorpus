@@ -26,9 +26,12 @@ export const perfilResumoSchema = z.object({
     .array(z.enum(['halteres', 'barra_fixa', 'elastico', 'banco', 'kettlebell', 'corda_pular', 'roda_abdominal']))
     .optional(),
   pratosCansados: z.array(z.object({ id: z.string(), ate: z.string() })).default([]),
-  // Mesociclo v2 (§7, DF 2026-07-08): âncora ISO + espelho da semana (1–6) + modo força.
+  // Mesociclo v2 (§7, DF 2026-07-08): âncora ISO + modo força.
+  // 🔻 O "espelho da semana" SAIU na correção 3.5 (2026-08-01): era cache sem consumidor —
+  // a semana sempre foi derivada de `mesocicloInicio` + hoje + sessões, e o único read do
+  // campo comparava o valor contra ele mesmo. Validar um campo que ninguém lê só dava ao
+  // fóssil aparência de dado legítimo. A poda do legado vive em `persistencia/perfil-profile`.
   mesocicloInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO').optional(),
-  mesocicloSemana: z.number().int().min(1).max(6).optional(),
   deloadAte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO').optional(),
   modoForca: z.boolean().optional(),
   // "Fiquei doente" (Leva 2 · Bloco 4, DF 2026-07-27): SÓ o carimbo ISO 8601 do

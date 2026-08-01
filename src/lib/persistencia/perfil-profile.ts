@@ -27,7 +27,20 @@ export interface PreferenciasPerfil {
   favoritos: PerfilResumo['favoritos'];
   pratosCansados: PerfilResumo['pratosCansados'];
   mesocicloInicio?: PerfilResumo['mesocicloInicio'];
-  mesocicloSemana?: PerfilResumo['mesocicloSemana'];
+  /**
+   * 🔻 LEGADO — só existe para ser PODADO na leitura (correção 3.5, 2026-08-01).
+   *
+   * `mesocicloSemana` era cache sem consumidor: a semana do ciclo sempre foi derivada de
+   * `mesocicloInicio` + as datas das sessões (`semanaDoCiclo`), e o único read do campo
+   * comparava o valor contra ele mesmo para decidir se se reescrevia. Saiu do
+   * `PerfilResumo` inteiro.
+   *
+   * ⚠️ Continua declarado AQUI porque o valor está gravado no `preferencias` das contas que
+   * já existem. Sem a poda, o `2` fóssil seguiria sendo lido por telemetria, suporte e
+   * export LGPD — e é esse o motivo pelo qual o item existe. Poda na leitura + ausência na
+   * escrita = o campo some do banco no próximo save, sem migration.
+   */
+  mesocicloSemana?: number;
   deloadAte?: PerfilResumo['deloadAte'];
   modoForca?: PerfilResumo['modoForca'];
   reconhecidoEm?: PerfilResumo['reconhecidoEm'];
@@ -78,7 +91,9 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       favoritos: p.favoritos,
       pratosCansados: p.pratosCansados,
       ...(p.mesocicloInicio != null ? { mesocicloInicio: p.mesocicloInicio } : {}),
-      ...(p.mesocicloSemana != null ? { mesocicloSemana: p.mesocicloSemana } : {}),
+      // 🔒 `mesocicloSemana` NÃO é escrito (3.5): junto com a poda da leitura, o campo some
+      // do `preferencias` no próximo save de cada conta — sem migration e sem varredura.
+
       ...(p.deloadAte != null ? { deloadAte: p.deloadAte } : {}),
       ...(p.modoForca != null ? { modoForca: p.modoForca } : {}),
       ...(p.reconhecidoEm != null ? { reconhecidoEm: p.reconhecidoEm } : {}),
@@ -132,7 +147,9 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     equipamentosCasa: pref.equipamentosCasa,
     pratosCansados: pref.pratosCansados,
     ...(pref.mesocicloInicio != null ? { mesocicloInicio: pref.mesocicloInicio } : {}),
-    ...(pref.mesocicloSemana != null ? { mesocicloSemana: pref.mesocicloSemana } : {}),
+    // 🔻 PODA (3.5): o fóssil não entra no perfil. Ignorar não bastaria — ele voltaria ao
+    // banco no save seguinte e continuaria visível para telemetria, suporte e export LGPD.
+
     ...(pref.deloadAte != null ? { deloadAte: pref.deloadAte } : {}),
     ...(pref.modoForca != null ? { modoForca: pref.modoForca } : {}),
     ...(pref.reconhecidoEm != null ? { reconhecidoEm: pref.reconhecidoEm } : {}),

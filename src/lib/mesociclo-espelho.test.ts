@@ -116,10 +116,26 @@ describe('o Painel entrega ao montador a semana recomputada, não a gravada', ()
   });
 
   /**
-   * O outro lado: o espelho é ESCRITO a partir do recomputado. É isso que faz o fóssil
-   * se corrigir sozinho no primeiro mount, em vez de ficar divergindo para sempre.
+   * 🔻 A REGRA MUDOU, e por isso este guard foi REESCRITO — não apagado (correção 3.5,
+   * 2026-08-01).
+   *
+   * Ele exigia que o espelho, SE escrito, viesse do recomputado: era o que fazia o fóssil se
+   * corrigir sozinho no primeiro mount em vez de divergir para sempre. Com o campo removido
+   * como classe, o espelho **não é escrito** — o que é estritamente mais forte: não existe
+   * valor a divergir. A prova passa de *"grava o certo"* para *"não há o que gravar"*.
+   *
+   * ⚠️ Guard não se afrouxa porque o CÓDIGO mudou; este mudou porque a REGRA mudou, com
+   * aprovação. A varredura de ausência vive em `persistencia/perfil-profile.test.ts`.
    */
-  it('o efeito de espelho grava o recomputado por cima do gravado', () => {
-    expect(src).toMatch(/mesocicloSemana:\s*ciclo\.semanaEfetiva/);
+  it('o espelho não é mais ESCRITO — não existe valor a divergir', () => {
+    expect(src, 'o espelho voltou a ser gravado').not.toMatch(/mesocicloSemana:/);
+    // E o que sustenta a regra continua de pé: a semana entregue ao montador é a recomputada.
+    expect(corpo).toMatch(/semana:\s*ciclo\.semanaEfetiva/);
+  });
+
+  it('a âncora — a fonte de verdade que SOBRA — continua sendo gravada', () => {
+    // 🔒 Anti-vacuidade do teste acima: se o efeito inteiro tivesse sumido, "não grava o
+    // espelho" passaria por acidente. `mesocicloInicio` prova que o efeito ainda existe.
+    expect(src).toMatch(/mesocicloInicio:\s*ancora/);
   });
 });
