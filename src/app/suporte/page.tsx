@@ -3,6 +3,7 @@ import LegalLayout from '@/components/legal/LegalLayout';
 import { SecaoLegal, Paragrafo, AValidar } from '@/components/legal/ui';
 import FaqAccordion from '@/components/legal/FaqAccordion';
 import ContactForm from '@/components/legal/ContactForm';
+import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 
 export const metadata = { title: 'Suporte e Contato · Evokorpus' };
 
@@ -18,7 +19,7 @@ const FAQ = [
   // 🔒 Saíram "Como funciona a cobrança e o teste grátis?" e "Como eu cancelo?" (DF
   // 2026-07-29): não há cobrança, e a segunda mandava o usuário a "Conta → Assinatura",
   // uma seção que deixou de existir — instrução para uma tela inexistente.
-  { q: 'Quanto custa?', a: 'Nada. O beta é gratuito e as vagas são por convite: não existe cobrança nem assinatura hoje.' },
+  { q: 'Quanto custa?', a: QUANTO_CUSTA.suporte },
   { q: 'Quero exercer meus direitos de dados. Como faço?', a: <>Em Conta → Privacidade você pode baixar ou excluir seus dados. Também pode falar com nosso Encarregado (DPO): <AValidar>e-mail do DPO</AValidar></> },
 ];
 

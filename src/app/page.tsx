@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { temSessao, useTemSessao } from '@/lib/session';
+import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 
 /**
  * Landing pública do Evokorpus — porte FIEL do protótipo de design (Evokorpus.dc.html):
@@ -312,7 +313,7 @@ export default function Home() {
               { q: 'Isso substitui um nutricionista ou personal?', a: 'Não. O Evokorpus é uma ferramenta geral e educacional, dirigida por você. Para condições de saúde, procure um profissional habilitado.' },
               { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
               { q: 'Vou perder quantos quilos?', a: 'Não prometemos número nem prazo. Entregamos um método que se adapta à sua rotina — o resto é constância.' },
-              { q: 'Quanto custa?', a: 'Nada. O beta é gratuito e as vagas são por convite — não existe cobrança nem assinatura hoje. Se um plano pago existir no futuro, você decide se entra.' },
+              { q: 'Quanto custa?', a: QUANTO_CUSTA.landing },
               { q: 'Preciso ter quantos anos?', a: 'É um produto para maiores de 18 anos.' },
             ].map((it, i) => <FAQItem key={it.q} q={it.q} a={it.a} delay={i * 60} />)}
           </div>

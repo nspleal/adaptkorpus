@@ -1,4 +1,5 @@
 import LegalLayout from '@/components/legal/LegalLayout';
+import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 import FaqBusca, { type FaqCat } from '@/components/legal/FaqBusca';
 
 export const metadata = { title: 'Perguntas frequentes · Evokorpus' };
@@ -25,9 +26,9 @@ const CATEGORIAS: FaqCat[] = [
   {
     id: 's-cat-assinatura', label: 'Preço e acesso', desc: 'Quanto custa hoje e como se entra no beta.',
     items: [
-      { q: 'Quanto custa?', a: 'Nada. O beta é gratuito: não existe cobrança, assinatura nem teste pago. O ebook "A Curva" é R$ 27, compra única e separada — e o checkout dele ainda não está no ar.' },
+      { q: 'Quanto custa?', a: QUANTO_CUSTA.faq },
       { q: 'Como eu entro?', a: 'O beta está fechado e as vagas são por convite. Quem já tem conta entra pela tela de login.' },
-      { q: 'Vou ser cobrado de surpresa?', a: 'Não. Não há nenhuma forma de cobrança ativa no app. Se um plano pago existir no futuro, você decide se entra — e nada é cobrado sem você contratar.' },
+      { q: 'Vou ser cobrado de surpresa?', a: 'Não. Não existe cobrança no beta. Se um plano pago existir no futuro, você decide se entra.' },
     ],
   },
   {
