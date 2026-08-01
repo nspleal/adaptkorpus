@@ -15,7 +15,7 @@ import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
-import { LinkLegal } from '@/components/auth/ui';
+import { LinhaConsentimento, LinkLegal } from '@/components/auth/ui';
 
 /**
  * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
@@ -271,10 +271,14 @@ function Step0({ terms, setTerms }: { terms: [boolean, boolean, boolean]; setTer
       <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.98rem' }}>O Evokorpus é uma ferramenta de uso geral e educacional. Ele <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>sugere</strong> um plano de treino e dieta — você está sempre no comando e pode ajustar tudo. Não é prescrição médica, nutricional ou de educação física, e não substitui um profissional.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {linhas.map((l, i) => (
-          <div key={i} onClick={() => tog(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 13, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 16, cursor: 'pointer' }}>
-            <Box on={!!terms[i]} />
-            <span style={{ fontSize: '.96rem', lineHeight: 1.45, paddingTop: 1 }}>{l}</span>
-          </div>
+          <LinhaConsentimento
+            key={i}
+            on={!!terms[i]}
+            onToggle={() => tog(i)}
+            style={{ gap: 13, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 16 }}
+          >
+            {l}
+          </LinhaConsentimento>
         ))}
       </div>
     </div>
@@ -482,5 +486,4 @@ function Logo({ size }: { size: number }) {
   );
 }
 const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
-const Box = ({ on }: { on: boolean }) => <div style={{ width: 24, height: 24, minWidth: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.3)'}`, background: on ? '#BDFF00' : 'transparent' }}>{on && <svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}</div>;
 const CheckCircle = () => <span style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', background: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></span>;

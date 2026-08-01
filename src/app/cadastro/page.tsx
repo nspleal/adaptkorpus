@@ -3,7 +3,7 @@
 import { useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Backdrop, LogoFloat, Marca, cardAuth, inputAuth, labelAuth, EASE, forcaSenha, CheckBox, LinkLegal } from '@/components/auth/ui';
+import { Backdrop, LogoFloat, Marca, cardAuth, inputAuth, labelAuth, EASE, forcaSenha, LinhaConsentimento, LinkLegal } from '@/components/auth/ui';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,9 +93,7 @@ export default function CadastroPage() {
                 <>Li e aceito os <LinkLegal href="/termos">Termos de Uso</LinkLegal> e o <LinkLegal href="/aviso">Aviso (disclaimer)</LinkLegal>.</>,
                 <>Autorizo o tratamento dos meus dados conforme a <LinkLegal href="/privacidade">Política de Privacidade</LinkLegal> (LGPD).</>,
               ].map((txt, i) => (
-                <div key={i} onClick={() => tog(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
-                  <CheckBox on={t[i]!} /><span style={{ fontSize: '.92rem', lineHeight: 1.45, color: 'rgba(234,229,219,.82)' }}>{txt}</span>
-                </div>
+                <LinhaConsentimento key={i} on={t[i]!} onToggle={() => tog(i)}>{txt}</LinhaConsentimento>
               ))}
             </div>
 

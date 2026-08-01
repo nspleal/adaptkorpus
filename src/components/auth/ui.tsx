@@ -110,10 +110,51 @@ export function AuthHead({ logoSize = 48, marca = '1.3rem' }: { logoSize?: numbe
 }
 
 /** Caixa de checkbox (selo neon quando marcada). */
-export function CheckBox({ on }: { on: boolean }) {
+/**
+ * 🔴 LINHA DE CONSENTIMENTO — ACESSÍVEL POR TECLADO (correção 3.3, 2026-07-31).
+ *
+ * O defeito, aberto desde 26/07 e marcado "leva futura" sem nunca entrar em leva: o aceite
+ * era um `<div onClick>` sem `role`, sem `aria-checked` e sem `tabIndex`. **Quem navega por
+ * teclado ou usa leitor de tela não conseguia consentir** — e esta é a tela do
+ * consentimento, que tem peso legal (LGPD/CDC). Não é polimento: é a porta de entrada.
+ *
+ * Estrutura, e ela importa:
+ *  · o **box** é quem carrega `role="checkbox"`, `aria-checked` e o foco — nunca a linha
+ *    inteira, porque o rótulo contém LINKS, e conteúdo interativo dentro de um `checkbox`
+ *    é armadilha de leitor de tela (o link some da ordem de leitura);
+ *  · a **linha** mantém o `onClick` só como alvo de mouse, do tamanho de antes;
+ *  · o box para a propagação, senão clicar nele dispararia os dois e o valor voltaria.
+ *
+ * 🔒 O `LinkLegal` segue com `stopPropagation`: **ler o documento não pode marcar o
+ * consentimento** — consentimento tem de ser ato deliberado, nunca efeito colateral.
+ */
+export function LinhaConsentimento({ on, onToggle, children, style, boxSize = 24 }: {
+  on: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  style?: CSSProperties;
+  boxSize?: number;
+}) {
+  const acionar = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggle();
+  };
   return (
-    <div style={{ width: 24, height: 24, minWidth: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.3)'}`, background: on ? '#BDFF00' : 'transparent' }}>
-      {on && <svg width={13} height={13} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+    <div onClick={onToggle} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', ...style }}>
+      <span
+        role="checkbox"
+        aria-checked={on}
+        tabIndex={0}
+        onClick={acionar}
+        // Espaço é o acionador canônico de checkbox; Enter entra junto porque em formulário
+        // longo a mão já está nele e negar seria atrito sem ganho.
+        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') acionar(e); }}
+        style={{ width: boxSize, height: boxSize, minWidth: boxSize, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.3)'}`, background: on ? '#BDFF00' : 'transparent', cursor: 'pointer', outlineOffset: 3 }}
+      >
+        {on && <svg width={Math.round(boxSize * 0.55)} height={Math.round(boxSize * 0.55)} viewBox="0 0 24 24" aria-hidden><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      </span>
+      <span style={{ fontSize: '.92rem', lineHeight: 1.45, color: 'rgba(234,229,219,.82)' }}>{children}</span>
     </div>
   );
 }
