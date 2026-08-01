@@ -8,7 +8,7 @@ import type { FlagsSaude } from '@/lib/engine';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type RegistroPeso, type SessaoHistorico } from '@/lib/treino-historico';
-import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
+import { reancorarPesoDoPlanoLocal, resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
@@ -417,9 +417,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // 🔒 Leva D: o peso é RESOLVIDO aqui, com o perfil novo, e o resultado é o mesmo que o
     // efeito da âncora produziria — sem isto a edição geraria um plano com o peso digitado e
     // o efeito o trocaria no quadro seguinte (dois planos em sequência, piscando).
-    // ⚠️ Com janela cheia (≥ 3 pesagens em 7 dias) o SUAVIZADO vence o número digitado: a
-    // média medida é mais confiável que um valor de teclado (spec §4).
-    const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: hojeISO() });
+    const dia = hojeISO();
+    // 🔒 Editar o peso REANCORA (spec §4, DF 2026-07-31): vale na hora, e a série só retoma
+    // com ≥ 3 pesagens POSTERIORES. Sem isto a correção manual era inócua — quem digitasse
+    // 65 com três pesagens em 61,4 continuava com o plano em 61,4, sem nenhuma saída.
+    // 🔴 O que a reancoragem NÃO faz: encurtar a carência do gate. Quem está em faixa
+    // protetiva continua nela pelos 14 dias — digitar um número não abre o portão.
+    if (novo.pesoKg !== perfil.pesoKg) reancorarPesoDoPlanoLocal(novo.pesoKg, dia);
+    const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: dia });
     setPesoMotorKg(pesoEfetivoKg);
     pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
     const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg });

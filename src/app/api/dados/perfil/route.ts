@@ -40,8 +40,20 @@ export async function PUT(req: NextRequest) {
   const { error } = await ctx.supabase.from('profile').upsert(linha, { onConflict: 'id' });
   if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
 
-  // Snapshot auditável (best-effort — o perfil já está salvo): dieta+treino recomputados
-  // no servidor pelo MESMO mapeamento do client (lib/plano.ts, determinístico).
+  /**
+   * Snapshot auditável (best-effort — o perfil já está salvo): dieta+treino recomputados
+   * no servidor pelo MESMO mapeamento do client (lib/plano.ts, determinístico).
+   *
+   * ⚠️ EXCEÇÃO ACEITA COMO TEMPORÁRIA (cofre `parametros-motor-dieta-evokorpus` §5, DF
+   * 2026-07-31): daqui **não** sai o peso resolvido da Leva D. A âncora do peso do plano
+   * (`evk_peso_plano`) vive no NAVEGADOR, e o servidor não a enxerga — então este snapshot
+   * pode divergir do plano que a pessoa vê. Duas verdades para o mesmo número, latentes.
+   *
+   * 🔒 GATILHO DO CONSERTO, declarado: **no dia em que qualquer tela exibir kcal derivada
+   * deste snapshot**, a âncora migra para `profile.preferencias` (jsonb — zero SQL) e os
+   * dois lados passam a ler o mesmo número. Enquanto nada exibe, a divergência não chega a
+   * ninguém; quando exibir, chega. Há teste que mantém esta exceção nomeada.
+   */
   try {
     const { dieta, treino } = recomputarPlano(perfil);
     await ctx.supabase.from('plans').update({ ativo: false }).eq('user_id', ctx.user.id).eq('ativo', true);

@@ -206,15 +206,44 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
   });
 
   /**
-   * ⚠️ EXCEÇÃO DECLARADA. O `PUT /api/dados/perfil` grava um snapshot em `plans` e roda no
-   * SERVIDOR, onde não existe a âncora (`evk_peso_plano` é do navegador). Ele segue no
-   * `perfil.pesoKg` de propósito: inventar ali uma segunda resolução criaria um plano
-   * auditável que discorda do que a pessoa vê. Fica nomeado aqui para não virar esquecimento.
+   * ⚠️ EXCEÇÃO ACEITA COMO TEMPORÁRIA, COM GATILHO DECLARADO (cofre §5, DF 2026-07-31).
+   *
+   * O `PUT /api/dados/perfil` grava um snapshot em `plans` e roda no SERVIDOR, onde a âncora
+   * não existe (`evk_peso_plano` é do navegador) — então o snapshot pode divergir do que a
+   * pessoa vê. Duas verdades para o mesmo número é a classe de defeito que esta semana
+   * inteira fechou; aqui ela está **latente, não visível**.
+   *
+   * 🔒 GATILHO DO CONSERTO: **assim que qualquer tela exibir kcal derivada do snapshot do
+   * servidor**, a âncora vai para `preferencias` (jsonb — zero SQL) e os dois lados passam a
+   * ler o mesmo. Este teste existe para a exceção continuar NOMEADA até lá.
    */
-  it('a rota do perfil NÃO passa peso resolvido — e isso está declarado', () => {
+  it('a rota do perfil NÃO passa peso resolvido — exceção temporária, com gatilho', () => {
     const cs = chamadas('src/app/api/dados/perfil/route.ts');
     expect(cs).toHaveLength(1);
     expect(cs[0]).not.toMatch(/pesoEfetivoKg/);
+    // O gatilho tem de estar ESCRITO na rota — comentário aqui morre com o teste; na rota,
+    // quem for ligar uma tela ao snapshot topa com ele.
+    const rota = readFileSync('src/app/api/dados/perfil/route.ts', 'utf8');
+    expect(rota, 'a exceção precisa estar declarada na própria rota').toMatch(/preferencias/);
+    expect(rota).toMatch(/kcal/i);
+  });
+});
+
+describe('🔒 editar o perfil REANCORA — e o gate não ganha porta dos fundos', () => {
+  it('`recalcular` reancora antes de resolver, e só quando o peso mudou', () => {
+    const corpo = corpoDe(semComentarios(PAINEL), 'function recalcular(');
+    expect(corpo).toMatch(/novo\.pesoKg !== perfil\.pesoKg.*reancorarPesoDoPlanoLocal\(novo\.pesoKg/s);
+    // ORDEM: reancorar tem de vir ANTES de resolver, senão a edição só valeria no próximo
+    // quadro — e o plano dessa tela sairia com o peso antigo.
+    expect(corpo.indexOf('reancorarPesoDoPlanoLocal')).toBeLessThan(corpo.indexOf('resolverPesoDoPlanoLocal'));
+  });
+
+  it('a reancoragem PRESERVA a faixa e o pino (a linha que fecha a porta)', () => {
+    const corpo = corpoDe(semComentarios('src/lib/engine/peso-suavizado.ts'), 'export function reancorar(');
+    // 🔴 Se qualquer um dos dois voltasse a `FAIXA_INICIAL`/`null`, digitar um número
+    // limparia a carência do gate — e nenhum outro teste desta suíte notaria.
+    expect(corpo).toMatch(/faixa: anterior\?\.faixa \?\? FAIXA_INICIAL/);
+    expect(corpo).toMatch(/pesoNaFaixaKg: anterior\?\.pesoNaFaixaKg \?\? null/);
   });
 });
 

@@ -3,7 +3,8 @@ import {
   DIAS_PARA_SAIR_DA_FAIXA, FAIXA_INICIAL, HISTERESE_FRACAO, HISTERESE_KG,
   INTERVALO_MIN_RECOMPUTO_DIAS, JANELA_SUAVIZACAO_DIAS, MIN_REGISTROS_SUAVIZACAO,
   aplicarHistereseFaixa, deveRecomputar, naJanela, pesoEfetivo, pesoSuavizado, resolverPesoDoPlano,
-  type FaixaProtetiva, type Pesagem,
+  reancorar,
+  type EstadoPesoPlano, type FaixaProtetiva, type Pesagem,
 } from './peso-suavizado';
 import { calcularIMC } from './formulas';
 
@@ -277,7 +278,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
   /** 🔒 ACEITE: uma pesagem isolada não muda o alvo — nem via recomputo. */
   it('com âncora fixada ontem, um tranco de 3 kg NÃO move o plano (falta a semana)', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(1), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(1), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
@@ -290,7 +291,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
 
   it('passada a semana E vencido o limiar, a âncora anda — evento de RECOMPUTO', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(8), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(8), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 64.2], [1, 64.2], [2, 64.2]),
@@ -303,7 +304,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
 
   it('passada a semana mas SEM vencer o limiar, nada anda', () => {
     const anterior = {
-      ancoraKg: 61.2, ancoraDesdeISO: dia(30), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null,
+      ancoraKg: 61.2, ancoraDesdeISO: dia(30), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.5], [1, 61.5], [2, 61.5]), // 0,3 kg < max(1; 0,918)
@@ -321,7 +322,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
   it('ao SAIR da faixa, o plano continua no peso de dentro durante a carência', () => {
     const anterior = {
       ancoraKg: 59.9, ancoraDesdeISO: dia(8),
-      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.9,
+      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.9, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
@@ -336,7 +337,7 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
   it('cumpridos os 14 dias, a carência acaba e o plano passa a usar a âncora', () => {
     const anterior = {
       ancoraKg: 61.0, ancoraDesdeISO: dia(20),
-      faixa: { ativa: true, foraDesdeISO: dia(DIAS_PARA_SAIR_DA_FAIXA) }, pesoNaFaixaKg: 59.9,
+      faixa: { ativa: true, foraDesdeISO: dia(DIAS_PARA_SAIR_DA_FAIXA) }, pesoNaFaixaKg: 59.9, reancoraISO: null,
     };
     const r = resolverPesoDoPlano({
       pesagens: serie([0, 61.0], [1, 61.0], [2, 61.0]),
@@ -407,5 +408,104 @@ describe('resolverPesoDoPlano — suavização + histerese de recomputo + carên
       protegido.push(emFaixa(r.pesoKg));
     }
     expect(new Set(protegido).size, 'o gate piscou com IMC real').toBe(1);
+  });
+});
+
+/* ══════════════════ Reancoragem manual (Editar perfil) ══════════════════ */
+
+describe('🔒 editar o perfil REANCORA — e não abre porta dos fundos no gate', () => {
+  const nunca = () => false;
+  const abaixoDe = (corte: number) => (kg: number) => kg < corte;
+  const resolver = (pesagens: Pesagem[], hoje: string, anterior: EstadoPesoPlano | null, faixa: (kg: number) => boolean = nunca) =>
+    resolverPesoDoPlano({ pesagens, hojeISO: hoje, pesoPerfilKg: 70, anterior, emFaixaProtetiva: faixa });
+
+  /**
+   * 🔴 O DEFEITO QUE A REGRA CORRIGIDA FECHA: com a redação antiga ("o suavizado vence
+   * quando existe"), quem digitasse 65 com três pesagens em 61,4 continuaria em 61,4 — a
+   * correção manual era inócua e não havia saída nenhuma.
+   */
+  it('o valor digitado vale NA HORA, mesmo com janela cheia discordando', () => {
+    const pesagens = serie([0, 61.4], [1, 61.2], [2, 61.6]);
+    const antes = resolver(pesagens, HOJE, null);
+    expect(antes.pesoKg, 'sem edição, a série manda').toBe(61.4);
+
+    const est = reancorar(antes.estado, 65, HOJE);
+    expect(est.ancoraKg).toBe(65);
+    expect(est.reancoraISO).toBe(HOJE);
+    // E resolver logo em seguida NÃO desfaz a edição: as pesagens são todas anteriores.
+    expect(resolver(pesagens, HOJE, est).pesoKg).toBe(65);
+  });
+
+  it('a série NÃO retoma com pesagens anteriores à edição, por mais que sejam', () => {
+    const est = reancorar(null, 65, dia(3));
+    // Seis pesagens, todas de ANTES da edição — nenhuma conta.
+    const antigas = serie([4, 61], [5, 61], [6, 61], [7, 61], [8, 61], [9, 61]);
+    const r = resolver(antigas, dia(0), est);
+    expect(r.pesoKg).toBe(65);
+    expect(r.estado.reancoraISO, 'a marca não pode cair sem registro novo').toBe(dia(3));
+  });
+
+  it('com ≥ 3 pesagens POSTERIORES, a série retoma — sem esperar mais uma semana', () => {
+    const est = reancorar(null, 65, dia(4));
+    const novas = serie([1, 61.4], [2, 61.2], [3, 61.6]); // todas depois de dia(4)
+    const r = resolver(novas, dia(0), est);
+    expect(r.pesoKg).toBe(61.4);
+    expect(r.evento).toBe('recomputo');
+    expect(r.estado.reancoraISO, 'a marca cai quando a série volta').toBeNull();
+  });
+
+  it('duas posteriores ainda não bastam (o mínimo de 3 continua valendo)', () => {
+    const est = reancorar(null, 65, dia(4));
+    const r = resolver(serie([1, 61.4], [2, 61.2]), dia(0), est);
+    expect(r.pesoKg).toBe(65);
+    expect(r.estado.reancoraISO).toBe(dia(4));
+  });
+
+  it('retomada que CONCORDA com o digitado não move o plano (limiar continua valendo)', () => {
+    const est = reancorar(null, 61.5, dia(4));
+    const r = resolver(serie([1, 61.4], [2, 61.4], [3, 61.4]), dia(0), est);
+    expect(r.pesoKg, 'diferença de 0,1 kg não justifica recomputo').toBe(61.5);
+    expect(r.estado.reancoraISO, 'mas a série já retomou').toBeNull();
+  });
+
+  /**
+   * 🔴 A PORTA DOS FUNDOS. Digitar um número move o peso do PLANO; sair de faixa protetiva
+   * continua exigindo os 14 dias. Sem esta linha, o gate teria uma saída por teclado — e o
+   * gate é a única parte que não pode ter porta dos fundos (spec §4, 2026-07-31).
+   */
+  it('reancorar NÃO encurta a carência de saída da faixa protetiva', () => {
+    const dentro = abaixoDe(60);
+    // Estado: protegido, com o peso de dentro pinado.
+    const est0: EstadoPesoPlano = {
+      ancoraKg: 59.5, ancoraDesdeISO: dia(20),
+      faixa: { ativa: true, foraDesdeISO: null }, pesoNaFaixaKg: 59.5, reancoraISO: null,
+    };
+    const est1 = reancorar(est0, 70, dia(10)); // a pessoa digita 70
+    expect(est1.faixa.ativa, 'a faixa atravessa a reancoragem intacta').toBe(true);
+    expect(est1.pesoNaFaixaKg, 'o pino também').toBe(59.5);
+
+    // No dia seguinte à edição: o plano continua no peso protegido.
+    const d1 = resolver([], dia(9), est1, dentro);
+    expect(d1.estado.faixa.ativa).toBe(true);
+    expect(d1.pesoKg, 'o teclado não abriu o portão').toBe(59.5);
+
+    // 13 dias depois da saída: ainda protegido.
+    let est = d1.estado;
+    for (let d = 8; d >= 1; d -= 1) est = resolver([], dia(d), est, dentro).estado;
+    expect(est.faixa.ativa, 'liberou antes dos 14 dias').toBe(true);
+
+    // No 14º dia contado a partir da saída, a carência acaba — e aí o 70 vale.
+    const fim = resolver([], dia(-5), est, dentro);
+    expect(fim.estado.faixa.ativa).toBe(false);
+    expect(fim.pesoKg).toBe(70);
+  });
+
+  it('anti-vacuidade: FORA de faixa protetiva, o digitado vale imediatamente', () => {
+    const est0: EstadoPesoPlano = {
+      ancoraKg: 61.4, ancoraDesdeISO: dia(20), faixa: FAIXA_INICIAL, pesoNaFaixaKg: null, reancoraISO: null,
+    };
+    const r = resolver([], dia(10), reancorar(est0, 70, dia(10)), abaixoDe(60));
+    expect(r.pesoKg).toBe(70);
+    expect(r.estado.faixa.ativa).toBe(false);
   });
 });

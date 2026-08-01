@@ -14,6 +14,7 @@
 import { avaliarGateSaude } from '@/lib/engine';
 import type { PerfilUsuario } from '@/lib/engine';
 import {
+  reancorar,
   resolverPesoDoPlano,
   type EstadoPesoPlano,
   type Pesagem,
@@ -41,6 +42,7 @@ export function lerEstadoPesoPlano(): EstadoPesoPlano | null {
         foraDesdeISO: typeof f?.foraDesdeISO === 'string' ? f.foraDesdeISO : null,
       },
       pesoNaFaixaKg: Number.isFinite(o.pesoNaFaixaKg) ? (o.pesoNaFaixaKg as number) : null,
+      reancoraISO: typeof o.reancoraISO === 'string' ? o.reancoraISO : null,
     };
   } catch {
     return null;
@@ -106,4 +108,17 @@ export function resolverPesoDoPlanoLocal(args: {
   });
   gravarEstadoPesoPlano(estado);
   return pesoKg;
+}
+
+/**
+ * 🔒 O *Editar perfil* REANCORA (spec §4, DF 2026-07-31): o valor digitado passa a ser o
+ * peso do plano **na hora**, e vale até haver ≥ 3 pesagens posteriores à edição.
+ *
+ * 🔴 **Não encurta a carência do gate.** `reancorar` preserva `faixa` e `pesoNaFaixaKg`, e o
+ * `resolverPesoDoPlanoLocal` chamado logo em seguida volta a pinar o peso se a carência
+ * estiver correndo. Digitar um número move o plano, **nunca** abre o portão.
+ */
+export function reancorarPesoDoPlanoLocal(pesoKg: number, hojeISO: string): void {
+  if (!Number.isFinite(pesoKg)) return;
+  gravarEstadoPesoPlano(reancorar(lerEstadoPesoPlano(), pesoKg, hojeISO));
 }

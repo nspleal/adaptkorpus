@@ -189,6 +189,37 @@ export interface EstadoPesoPlano {
   faixa: FaixaProtetiva;
   /** Peso que estava DENTRO da faixa, preservado durante a carência de saída. */
   pesoNaFaixaKg: number | null;
+  /**
+   * Dia da última REANCORAGEM manual (*Editar perfil*). Enquanto estiver preenchido, só
+   * contam pesagens POSTERIORES a ele. `null` = a série manda normalmente.
+   */
+  reancoraISO: string | null;
+}
+
+/**
+ * 🔒 EDITAR O PERFIL REANCORA (spec §4, regra CORRIGIDA em 2026-07-31).
+ *
+ * A redação anterior — *"o suavizado vence quando existe"* — tornava a correção manual
+ * inócua: quem digitasse 65 com três pesagens em 61,4 continuaria com o plano em 61,4, **sem
+ * nenhuma saída**. Agora o valor digitado vira o peso do plano **na hora**, e vale até a
+ * janela ter ≥ 3 registros **posteriores** à edição — aí a série retoma.
+ *
+ * 🔴 O QUE A REANCORAGEM NÃO FAZ: encurtar a carência de saída da faixa protetiva. `faixa` e
+ * `pesoNaFaixaKg` atravessam esta função **intactos**. Sem isso, digitar um número seria a
+ * porta dos fundos do gate — e o gate é a única parte que não pode ter porta dos fundos.
+ */
+export function reancorar(
+  anterior: EstadoPesoPlano | null,
+  pesoKg: number,
+  hojeISO: string,
+): EstadoPesoPlano {
+  return {
+    ancoraKg: pesoKg,
+    ancoraDesdeISO: hojeISO,
+    faixa: anterior?.faixa ?? FAIXA_INICIAL, // ⚠️ preservado de propósito
+    pesoNaFaixaKg: anterior?.pesoNaFaixaKg ?? null, // ⚠️ o pino também
+    reancoraISO: hojeISO,
+  };
 }
 
 export type EventoPeso = 'migracao' | 'recomputo';
@@ -216,7 +247,15 @@ export function resolverPesoDoPlano(args: {
   emFaixaProtetiva: (pesoKg: number) => boolean;
 }): { pesoKg: number; estado: EstadoPesoPlano; evento: EventoPeso | null } {
   const { pesagens, hojeISO, pesoPerfilKg, anterior, emFaixaProtetiva } = args;
-  const suavizado = pesoSuavizado(pesagens, hojeISO);
+
+  // ── 0. A reancoragem manual (spec §4) ──────────────────────────────────────────
+  // Com reancoragem em vigor, só contam pesagens POSTERIORES à edição: as anteriores são
+  // justamente as que a pessoa está corrigindo, e deixá-las na média manteria o número que
+  // ela veio consertar. Quando as ≥ 3 novas aparecem, a série retoma e a marca cai.
+  const reancorada = anterior?.reancoraISO ?? null;
+  const elegiveis = reancorada ? pesagens.filter((p) => p.dataISO > reancorada) : pesagens;
+  const suavizado = pesoSuavizado(elegiveis, hojeISO);
+  const retomando = reancorada != null && suavizado != null;
 
   // ── 1. A âncora ────────────────────────────────────────────────────────────────
   let ancoraKg: number;
@@ -233,7 +272,10 @@ export function resolverPesoDoPlano(args: {
     deveRecomputar({
       suavizadoKg: suavizado,
       pesoDoPlanoKg: anterior.ancoraKg,
-      ultimoRecomputoISO: anterior.ancoraDesdeISO,
+      // Na RETOMADA o intervalo mínimo não se aplica: a reancoragem foi um movimento
+      // deliberado de dias atrás, e exigir mais uma semana faria "a série retoma" significar
+      // "a série retoma daqui a sete dias". O limiar de ≥ 1 kg/1,5% continua valendo.
+      ultimoRecomputoISO: retomando ? null : anterior.ancoraDesdeISO,
       hojeISO,
     })
   ) {
@@ -261,5 +303,10 @@ export function resolverPesoDoPlano(args: {
   const pesoNaFaixaKg = dentroHoje ? ancoraKg : (emCarencia ? (anterior?.pesoNaFaixaKg ?? null) : null);
   const pesoKg = emCarencia && pesoNaFaixaKg != null ? pesoNaFaixaKg : ancoraKg;
 
-  return { pesoKg, estado: { ancoraKg, ancoraDesdeISO, faixa, pesoNaFaixaKg }, evento };
+  return {
+    pesoKg,
+    // A marca da reancoragem cai assim que a série volta a ter janela própria.
+    estado: { ancoraKg, ancoraDesdeISO, faixa, pesoNaFaixaKg, reancoraISO: retomando ? null : reancorada },
+    evento,
+  };
 }
