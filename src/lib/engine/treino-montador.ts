@@ -15,7 +15,7 @@ import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
-import { arredondar5, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
+import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -107,7 +107,7 @@ export interface OpcoesSemana {
  *
  * 🔒 Só regra travada, recombinada — nenhum número novo entra por esta porta:
  *  · duração = **meta semanal ÷ nº de dias excedentes**, arredondada ao múltiplo de 5 mais
- *    próximo, com o **empate para CIMA** (150 ÷ 4 = 37,5 → 40);
+ *    próximo com **empate para CIMA** (150 ÷ 4 = 37,5 → 40), e **limitada a 90 min/dia**;
  *  · **emagrecimento usa o PISO da faixa** (`min`), nunca o teto — 150 ÷ 3 = 50 min/dia
  *    contra 300 ÷ 3 = 100, fator 2 sem base;
  *  · **massa é meta em SESSÕES**: `minutos: null`, porque dizer um número seria inventar.
@@ -119,7 +119,9 @@ export interface OpcoesSemana {
 function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio']): DiaCardio[] {
   if (quantos < 1) return [];
   // 🔒 O PISO da faixa é o alvo (`min`), e é o mesmo número que `metaCardioSemanal` usa.
-  const minutos = meta.tipo === 'minutos_semana' ? arredondar5(meta.min / quantos) : null;
+  // 🔒 A MESMA função do conteúdo do dia: divide, arredonda (empate p/ cima) e aplica o
+  // teto de 90. Dividir aqui por conta própria faria o teto valer num caminho e não no outro.
+  const minutos = meta.tipo === 'minutos_semana' ? duracaoDoDiaDeCardio(meta.min, quantos) : null;
   return Array.from({ length: quantos }, (_, i) => ({
     nome: quantos > 1 ? `Cardio ${i + 1}` : 'Cardio',
     padrao: 'cardio' as const,

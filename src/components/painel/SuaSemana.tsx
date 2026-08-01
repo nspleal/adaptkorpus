@@ -106,14 +106,21 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
               <span style={{ width: 52, height: 52, minWidth: 52, borderRadius: 15, background: 'rgba(22,163,74,.14)', border: '1px solid rgba(22,163,74,.34)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2 5 4-12 2 7h6" stroke="#16A34A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
               <div style={{ flex: 1, minWidth: 200 }}>
-                {/* 🔒 Leva E — o dia excedente deixa de ser só um rótulo. Com meta em
+                {/* 🔒 A FRASE NÃO EXPLICA A FÓRMULA (DF 2026-08-01, teto de 90 min).
+                    Ela dizia "a duração é a meta da semana dividida pelos dias de cardio" —
+                    verdade até o teto existir, e FALSA quando ele morde (1 dia excedente:
+                    a meta é 150, o dia mostra 90). 🔴 E a saída não é "faltam 60 min": isso
+                    é alvo no futuro da atividade da pessoa, classes ① e ③ de vazamento.
+                    O app mostra O QUE PRESCREVE e não afirma que a semana está coberta —
+                    silêncio sobre o resto, não versão adaptada da frase.
+                    🔒 Leva E — o dia excedente deixa de ser só um rótulo. Com meta em
                     minutos ele traz UM item de cardio (modalidade + duração, ambos do
                     motor); sem meta em minutos continua sendo recuperação, que não
                     prescreve nada. O texto do cardio NÃO fala no futuro nem promete
                     resultado: descreve o item do dia. */}
                 <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{`${sd.isToday ? 'Hoje' : cap(sd.full)} · ${cardio ? 'Cardio' : 'Recuperação'}`}</div>
                 <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade]} · ${cardio.minutos} min` : ROTULO_MODALIDADE[cardio.modalidade]) : 'Recuperação ativa'}</h3>
-                <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade e a intensidade ao registrar — a duração é a meta da semana dividida pelos dias de cardio.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
+                <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade, a intensidade e a duração ao registrar.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
               </div>
               {cardio && onRegistrarCardio ? (
                 <button onClick={() => onRegistrarCardio(sd.cardio)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#16A34A', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>Registrar cardio<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana } from './treino-montador';
-import { arredondar5 } from './dia-de-cardio';
+import { arredondar5, duracaoDoDiaDeCardio } from './dia-de-cardio';
 import { EXERCISES } from '../data/exercises';
 import { montarSemana } from '../semana';
 import { sessoesResistidas, sessoesTreino, type SessaoHistorico } from '../treino-historico';
@@ -178,9 +178,11 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     const n = r.diasCardio.length;
     expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
     expect(r.cardio.tipo).toBe('minutos_semana');
-    const esperado = arredondar5((r.cardio as { min: number }).min / n);
+    // 🔒 A MESMA função do módulo puro — inclusive o teto de 90 (DF 2026-08-01).
+    const esperado = duracaoDoDiaDeCardio((r.cardio as { min: number }).min, n);
     for (const d of r.diasCardio) expect(d.minutos, `${n} dias`).toBe(esperado);
     expect(esperado % 5, 'a duração saiu de um múltiplo de 5').toBe(0);
+    expect(esperado).toBeLessThanOrEqual(90);
   });
 
   /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
@@ -254,5 +256,33 @@ describe('🔴 ②/③ a emissão NÃO abriu caminho para a sessão guiada nem p
     for (const c of r.diasCardio) {
       expect(nomesForca.has(c.nome), `${c.nome} está nos dois arrays`).toBe(false);
     }
+  });
+});
+
+/**
+ * 🔒 A HONESTIDADE QUE VEM COM O TETO (DF 2026-08-01). Quando o teto morde, o app NÃO pode
+ * afirmar que a meta semanal está coberta — nem explicar uma fórmula que deixou de valer.
+ */
+describe('🔴 o teto morde sem o app mentir sobre a semana', () => {
+  const podarSrc = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+  const semana = () => podarSrc(readFileSync('src/components/painel/SuaSemana.tsx', 'utf8'));
+
+  it('a copy NÃO explica mais a fórmula — ela virou falsa quando o teto corta', () => {
+    const s = semana();
+    expect(s, 'a frase da divisão voltou e mente com 1 dia excedente')
+      .not.toMatch(/meta da semana dividida/);
+    expect(s).toMatch(/Dia ativo de cardio\. Pode trocar a modalidade/);
+  });
+
+  it('🔴 e não aparece contador do que "falta" da meta — futuro da atividade da pessoa', () => {
+    const s = semana();
+    for (const re of [/faltam?\s+\d/i, /restam?\s+\d/i, /de \d+ min da semana/i, /\d+\s*\/\s*\d+\s*min/]) {
+      expect(re.test(s), `contador de meta na tela: ${re}`).toBe(false);
+    }
+  });
+
+  it('anti-vacuidade: o recorte lê o arquivo certo e enxerga o cartão do dia', () => {
+    expect(semana()).toMatch(/tipo === 'cardio'|sd\.cardio/);
+    expect(semana().length).toBeGreaterThan(3000);
   });
 });

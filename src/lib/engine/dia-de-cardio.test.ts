@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arredondar5, conteudoDoDiaExcedente, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
+import { arredondar5, conteudoDoDiaExcedente, duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA, TETO_MIN_DIA_CARDIO } from './dia-de-cardio';
 import { metaCardioComRetomada, metaCardioSemanal } from './cardio';
 
 /**
@@ -39,7 +39,8 @@ describe('a duração sai da meta travada dividida pelos dias', () => {
     expect(MODALIDADE_PADRAO_DIA).toBe('caminhada');
     const meta = metaCardioSemanal('saude', false);
     const r = conteudoDoDiaExcedente({ ...opcoes, meta, modalidade: 'bike' });
-    expect(r).toEqual({ tipo: 'cardio', minutos: 150, modalidade: 'bike' });
+    // 🔻 90, não 150: com UM dia excedente o teto morde (ver o bloco do teto abaixo).
+    expect(r).toEqual({ tipo: 'cardio', minutos: 90, modalidade: 'bike' });
   });
 });
 
@@ -130,5 +131,63 @@ describe('🔒 1.7 — o piso da faixa é o alvo, e o empate arredonda para CIMA
 
   it('saúde usa o valor único 150 (não é faixa)', () => {
     expect(metaCardioSemanal('saude', false)).toEqual({ tipo: 'minutos', alvo: 150 });
+  });
+});
+
+/**
+ * 🔴 TETO DE 90 min POR DIA (DF 2026-08-01) — 🏷️ política declarada, não evidência.
+ *
+ * O defeito veio da MEDIÇÃO da emissão: a fórmula `meta ÷ dias` não tinha teto, e o
+ * denominador 1 a quebrava — saúde com 1 dia excedente dava **150 min**, duas horas e meia
+ * de caminhada num dia. A meta da OMS é desenhada para ser DISTRIBUÍDA (30 × 5).
+ */
+describe('🔴 o teto de 90 min/dia — corta o patológico, não redesenha o saudável', () => {
+  const saude = metaCardioSemanal('saude', false)!;
+
+  it('o valor é 90 e está declarado como constante', () => {
+    expect(TETO_MIN_DIA_CARDIO).toBe(90);
+  });
+
+  /** 🔒 ACEITE: saúde · 1 dia excedente → 90, não 150. */
+  it('1 dia excedente: 150 → 90 (o caso que quebrava)', () => {
+    expect(arredondar5(saude.alvo / 1), 'sem teto seria isto').toBe(150);
+    expect(duracaoDoDiaDeCardio(saude.alvo, 1)).toBe(90);
+    expect(conteudoDoDiaExcedente({ ...opcoes, meta: saude, diasExcedentes: 1 }))
+      .toEqual({ tipo: 'cardio', minutos: 90, modalidade: 'caminhada' });
+  });
+
+  /** 🔒 ACEITE, o outro lado do par: 2 dias continua 75, byte-idêntico. */
+  it('🔑 INERTE onde a fórmula se comporta: 2 dias → 75, 3 dias → 50', () => {
+    expect(duracaoDoDiaDeCardio(saude.alvo, 2), '2 dias mudou').toBe(75);
+    expect(duracaoDoDiaDeCardio(saude.alvo, 3), '3 dias mudou').toBe(50);
+    // …e são os mesmos números que a divisão crua daria — a prova de que o teto não tocou.
+    expect(duracaoDoDiaDeCardio(saude.alvo, 2)).toBe(arredondar5(saude.alvo / 2));
+    expect(duracaoDoDiaDeCardio(saude.alvo, 3)).toBe(arredondar5(saude.alvo / 3));
+  });
+
+  it('o teto morde SÓ no denominador 1 — varredura de 1 a 7 dias', () => {
+    const mordidos = [1, 2, 3, 4, 5, 6, 7].filter(
+      (n) => duracaoDoDiaDeCardio(saude.alvo, n) !== arredondar5(saude.alvo / n),
+    );
+    expect(mordidos, 'o teto passou a redesenhar casos saudáveis').toEqual([1]);
+  });
+
+  it('emagrecimento (piso 150) segue a mesma regra, e o teto não muda o piso', () => {
+    const emag = metaCardioSemanal('emagrecimento', false)!;
+    expect(emag.alvo).toBe(150);
+    expect(duracaoDoDiaDeCardio(emag.alvo, 1)).toBe(90);
+    expect(duracaoDoDiaDeCardio(emag.alvo, 3)).toBe(50); // inalterado
+  });
+
+  it('na rampa a meta já chega menor — o teto simplesmente não morde', () => {
+    const rampa = metaCardioComRetomada(saude, 0.5)!;
+    expect(rampa.alvo).toBe(75);
+    expect(duracaoDoDiaDeCardio(rampa.alvo, 1), 'a rampa passou a ser cortada pelo teto').toBe(75);
+  });
+
+  it('entrada absurda não vira duração', () => {
+    expect(duracaoDoDiaDeCardio(0, 2)).toBe(0);
+    expect(duracaoDoDiaDeCardio(150, 0)).toBe(0);
+    expect(duracaoDoDiaDeCardio(Number.NaN, 2)).toBe(0);
   });
 });
