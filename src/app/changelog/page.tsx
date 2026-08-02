@@ -8,6 +8,16 @@ export const metadata = { title: 'Changelog · Evokorpus' };
 type Tag = 'Novo' | 'Melhoria' | 'Correção';
 const GRUPOS: { mes: string; itens: { data: string; titulo: string; tag: Tag; desc: string }[] }[] = [
   {
+    mes: 'Agosto 2026',
+    itens: [
+      // 🔒 A RETRATAÇÃO DA GARANTIA (DF 2026-08-01). A entrada de 02/jul anunciou a página de
+      // garantia e FICA: changelog é registro datado, e apagá-la falsificaria a história na
+      // direção oposta. O que fecha o buraco é esta entrada — a promessa não é apagada, é
+      // RESPONDIDA. Guard que exige o par: `sem-garantia.test.ts` §changelog.
+      { data: '01 ago', titulo: 'A página de garantia saiu', tag: 'Melhoria', desc: 'Ela explicava um reembolso de 7 dias — e garantia é sobre uma compra. No beta não existe compra: nada é cobrado, não há assinatura nem checkout. A página prometia um caminho que não existe, então ela saiu. Quando houver plano pago, a garantia volta junto com ele.' },
+    ],
+  },
+  {
     mes: 'Julho 2026',
     itens: [
       { data: '05 jul', titulo: 'Escolha o que você tem em casa', tag: 'Novo', desc: 'Treina em casa? Agora você marca exatamente o que tem — halteres, barra fixa, elástico, banco, kettlebell — e o plano usa só os exercícios que cabem no seu equipamento.' },

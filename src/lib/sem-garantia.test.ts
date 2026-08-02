@@ -49,12 +49,13 @@ const rel = (p: string) => p.slice(process.cwd().length + 1);
  *
  *  · `/termos` — documento legal, pauta jurídica única. Mexer sem advogado troca um texto
  *    errado por outro (instrução explícita do lote).
- *  · `/changelog` — 🟡 **PENDÊNCIA REPORTADA, não resolvida.** A entrada de 02/jul anuncia
- *    *"Garantia de 7 dias e reembolso — nova página explicando a garantia"*: com a rota fora
- *    do ar, ela é **promessa órfã**, exatamente o que a armadilha ① do lote nomeia. Mas
- *    changelog é **registro datado do que aconteceu**, e apagar a entrada falsifica a
- *    história na direção oposta. O conserto provável é uma entrada NOVA dizendo que a página
- *    saiu — e essa copy é do autor. Enquanto não vier, a promessa continua viva aqui.
+ *  · `/changelog` — 🔒 **EXCEÇÃO PERMANENTE (DF 2026-08-01), não "até consertar".** A entrada
+ *    de 02/jul anuncia a garantia e **fica**: changelog é **registro datado do que aconteceu**,
+ *    e apagá-la falsificaria a história na direção oposta. Ela vai casar o léxico **para
+ *    sempre**, por construção — um log do passado sempre citará capacidades que já não valem.
+ *    🔑 Por isso a isenção não é em branco: o changelog troca o critério ① por um **próprio e
+ *    mais forte** (bloco §changelog abaixo) — *capacidade anunciada e depois removida precisa
+ *    da entrada que a retrata*. A promessa não é apagada; é **respondida**.
  */
 const FORA_DO_CRITERIO = ['src/app/termos/page.tsx', 'src/app/changelog/page.tsx'];
 
@@ -142,12 +143,63 @@ describe('🔒 ② nenhuma tela linka para rota que não existe', () => {
  * isenção que não é testada vira o lugar onde o defeito mora.
  */
 describe('🔒 as exceções declaradas seriam REPROVADAS pelo critério', () => {
-  it('o changelog ainda contém a promessa — é pendência aberta, não isenção silenciosa', () => {
+  it('o changelog casa o léxico — a isenção é real, não decorativa', () => {
     const src = semComentarios(readFileSync(join(process.cwd(), 'src/app/changelog/page.tsx'), 'utf8'));
-    expect(/garantia de \d+ dias?/i.test(src), 'o changelog foi consertado — tire-o de FORA_DO_CRITERIO').toBe(true);
+    // 🔒 Isto NÃO é "pendência a consertar": é a prova de que a exceção existe por necessidade.
+    // Se um dia parar de casar, a exceção virou decoração e deve sair da lista.
+    expect(/garantia de \d+ dias?/i.test(src), 'o changelog não casa mais o léxico — a exceção virou decoração').toBe(true);
   });
 
   it('a lista de exceções não cresceu', () => {
     expect(FORA_DO_CRITERIO).toEqual(['src/app/termos/page.tsx', 'src/app/changelog/page.tsx']);
+  });
+});
+
+/**
+ * 🔒 §changelog — O CRITÉRIO QUE SUBSTITUI O ① NO LOG DATADO (DF 2026-08-01).
+ *
+ * 🔑 O changelog não pode ser cobrado por "não prometer": ele **registra o que foi
+ * anunciado**, e um log do passado sempre citará capacidades que já não valem. Cobrá-lo pelo
+ * ① só levaria a apagar história. O que se exige dele é mais forte e é o que fecha o buraco:
+ * **capacidade anunciada e depois removida precisa da entrada que a retrata.** A promessa
+ * não some do registro — ela ganha resposta, com data.
+ *
+ * ⚠️ Este é o par que sustenta a exceção. Sem ele, `FORA_DO_CRITERIO` seria isenção em
+ * branco — e isenção em branco é onde o defeito volta a morar.
+ */
+describe('🔒 changelog — toda capacidade retirada tem a entrada que a retrata', () => {
+  const src = () => semComentarios(readFileSync(join(process.cwd(), 'src/app/changelog/page.tsx'), 'utf8'));
+
+  it('se o log anuncia a garantia, ele TAMBÉM anuncia que ela saiu', () => {
+    const s = src();
+    const anuncia = /titulo: 'Garantia de \d+ dias e reembolso'/.test(s);
+    if (!anuncia) return; // entrada removida por outra decisão → nada a exigir
+    expect(s, 'a garantia foi anunciada e nunca retratada — promessa órfã no log').toMatch(
+      /titulo: 'A página de garantia saiu'/,
+    );
+  });
+
+  it('a retratação é posterior ao anúncio — retratar antes não retrata nada', () => {
+    const s = src();
+    // ⚠️ ARMADILHA DO -1, que deixou uma mutação passar na 1ª escrita: `indexOf` devolve -1
+    // quando não acha, e -1 satisfaz QUALQUER `toBeLessThan`. A prova de ordem entre duas
+    // coisas ausentes passava sozinha. Existência primeiro, ordem depois — sempre.
+    const pos = (agulha: string): number => {
+      const i = s.indexOf(agulha);
+      expect(i, `não encontrado no changelog: ${agulha}`).toBeGreaterThan(-1);
+      return i;
+    };
+    // O log vai do mais novo para o mais antigo: vir ANTES no arquivo é vir DEPOIS no tempo.
+    expect(pos("titulo: 'A página de garantia saiu'")).toBeLessThan(pos("titulo: 'Garantia de 7 dias e reembolso'"));
+    expect(pos("mes: 'Agosto 2026'")).toBeLessThan(pos("mes: 'Julho 2026'"));
+  });
+
+  it('a retratação diz por que saiu — entrada que só avisa a remoção não fecha a promessa', () => {
+    const s = src();
+    const i = s.indexOf("titulo: 'A página de garantia saiu'");
+    const entrada = s.slice(i, s.indexOf('},', i));
+    expect(entrada).toMatch(/n[ãa]o existe compra/i);
+    expect(entrada).toMatch(/n[ãa]o h[áa] assinatura nem checkout/i);
+    expect(entrada, 'a tag do vermelho é para erro/segurança').toMatch(/tag: 'Melhoria'/);
   });
 });
