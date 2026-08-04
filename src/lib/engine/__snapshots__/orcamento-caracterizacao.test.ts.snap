@@ -377,7 +377,7 @@ exports[`📸 caracterização — o estimador de HOJE é cego à composição d
 exports[`📸 caracterização — o estimador de HOJE é cego à composição da sessão > descanso efetivo — massa, 30 min (o teto de 180 s depende do tempo) 1`] = `
 {
   "descanso": {
-    "max": 120,
+    "max": 180,
     "min": 90,
   },
   "tempo": 30,

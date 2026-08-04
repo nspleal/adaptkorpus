@@ -15,6 +15,7 @@ import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
+import { rirAlvoDaSemana } from './treino-mesociclo';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -235,7 +236,21 @@ export function montarRotina(
       prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
       prescricao.seriesPorExercicio.max,
     );
-    const rirAlvo = prescricao.rirAlvoSemana ?? prescricao.rir.min;
+    /**
+     * 🔴 O RIR-ALVO DA SEMANA DO MESOCICLO (conserto 2026-08-04, item 2 do lote).
+     *
+     * O defeito medido: o fallback era `prescricao.rir.min` — uma CONSTANTE. `rirAlvoSemana`
+     * só é preenchido pela retomada (`aplicarRetomada`), então fora da rampa o deslocamento
+     * por RIR recebia sempre o mesmo número e o descanso NUNCA se movia dentro da faixa.
+     * Resultado em produção: **2 valores** (composto 180 · isolado 120, os TOPOS das duas
+     * faixas) idênticos da semana 1 à 5 — exatamente o *"o tempo de descanso sempre ser o
+     * mesmo"* que a spec §🕐 existe para consertar.
+     *
+     * `rirAlvoDaSemana` já existia, exportada e testada — e **nenhuma linha de produção a
+     * chamava**. A leva B construiu a função e não a ligou. 🔑 A precedência fica: a rampa
+     * (`rirAlvoSemana`) vence, como antes; sem ela, manda a semana do ciclo.
+     */
+    const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
     const semanaRampa = semanaCiclo.retomada?.semana ?? null;
     const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
 
@@ -373,7 +388,8 @@ export function montarRotina(
    * ela matava o deslocamento por RIR em silêncio.
    */
   if (semanaCiclo) {
-    const rirAlvo = prescricao.rirAlvoSemana ?? prescricao.rir.min;
+    // Mesma derivação do orçamento (ver o bloco acima): a rampa vence; senão, a semana do ciclo.
+    const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
     const semanaRampa = semanaCiclo.retomada?.semana ?? null;
     for (let i = 0; i < diasTreino.length; i += 1) {
       const dia = diasTreino[i]!;

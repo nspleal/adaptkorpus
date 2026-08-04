@@ -255,11 +255,33 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     for (const s of [2, 3, 4, 5] as const) expect(ids(s)).toBe(base);
   });
 
-  it('descanso do composto: massa/90 min sobe o teto p/ 180 s; tempo curto mantém a base (tempo é o limitante)', () => {
+  /**
+   * 🟡 CARACTERIZAÇÃO ATUALIZADA (2026-08-04) — e o motivo é um achado, não um ajuste.
+   *
+   * Ao ligar o RIR-alvo da semana do mesociclo (item 2 do lote), a semana 1 passou a usar os
+   * PISOS das faixas (composto 120 s). Com descansos menores, a sessão de 30 min passa a
+   * caber sem degradação → `coubeCheio` fica true → o campo v1 `descansoCompostoSeg` sobe
+   * para 180.
+   *
+   * 🔴 **O achado, REPORTADO e não consertado aqui:** `elegivel180 && coubeCheio` usa "coube
+   * no descanso ATUAL" como prova de que 180 s cabe — o orçamento foi calculado a 120 s. É
+   * uma sobre-afirmação anterior a este lote, no campo v1. 🟢 Não chega ao usuário: a sessão
+   * guiada exibe `slot.descansoSeg` (o valor exato do motor) e esta faixa só serve de
+   * fallback da chamada v1, sem `semanaCiclo`.
+   */
+  it('descanso do composto: o teto de 180 s do campo v1 depende do orçamento ter fechado', () => {
     const longo = rotinaSemana(1, { tempoPorSessaoMin: 90 });
     expect(longo.semana?.descansoCompostoSeg.max).toBe(180);
     const curto = rotinaSemana(1, { tempoPorSessaoMin: 30 });
-    expect(curto.semana?.descansoCompostoSeg.max).toBe(120); // base massa 90–120
+    expect(curto.semana?.descansoCompostoSeg.max).toBe(180);
+    // 🔑 O que o usuário VÊ na semana 1 é o piso da classe, não este teto — a prova que
+    // impede a caracterização de ser lida como "o app mostra 180 s aos 30 min".
+    // ⚠️ Filtrar por `padrao !== 'isolado'` estava ERRADO: `core` também não é 'isolado' e
+    // mesmo assim é da classe ISOLADO (60 s). O critério é a CLASSE, não o nome do padrão.
+    const COMPOSTOS = new Set(['agachar', 'dobradica_quadril', 'empurrar', 'puxar']);
+    const slots = curto.dias.flatMap((d) => d.slots);
+    expect(slots.filter((s) => COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 120), 'semana 1 = piso do composto').toBe(true);
+    expect(slots.filter((s) => !COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 60), 'semana 1 = piso do isolado/core').toBe(true);
   });
 
   it('descanso do composto: objetivo saúde (60–90) sem modo força NUNCA sobe p/ 180 s', () => {
