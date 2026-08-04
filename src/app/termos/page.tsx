@@ -1,4 +1,5 @@
 import LegalLayout from '@/components/legal/LegalLayout';
+import { NUCLEO_COBRANCA } from '@/lib/copy-cobranca';
 import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, AValidar } from '@/components/legal/ui';
 
 export const metadata = { title: 'Termos de Uso · Evokorpus' };
@@ -7,7 +8,7 @@ const TOC = [
   { id: 's-objeto', label: 'Objeto do serviço' },
   { id: 's-elegibilidade', label: 'Elegibilidade' },
   { id: 's-conta', label: 'Conta e acesso' },
-  { id: 's-assinatura', label: 'Assinatura e cobrança' },
+  { id: 's-assinatura', label: 'Acesso e cobrança' },
   { id: 's-conteudo', label: 'Conteúdo e propriedade' },
   { id: 's-responsabilidade', label: 'Isenções e responsabilidade' },
   { id: 's-alteracoes', label: 'Alterações e foro' },
@@ -34,15 +35,16 @@ export default function Termos() {
         </Lista>
       </SecaoLegal>
 
-      <SecaoLegal id="s-assinatura" titulo="Assinatura e cobrança">
-        <Paragrafo mb>A assinatura dá acesso aos recursos do Evokorpus enquanto estiver ativa. Sem cobrança-surpresa, sem letra miúda.</Paragrafo>
-        <Lista mb>
-          <ItemLista><Forte>7 dias grátis</Forte> para testar.</ItemLista>
-          <ItemLista>Enviamos um <Forte>aviso por e-mail antes da primeira cobrança</Forte>.</ItemLista>
-          <ItemLista>Valor de R$ 29/mês <AValidar>valores e ciclo</AValidar></ItemLista>
-          <ItemLista ultimo><Forte>Cancelamento a qualquer momento.</Forte></ItemLista>
-        </Lista>
-        <Paragrafo>O cancelamento encerra as renovações seguintes; o acesso permanece até o fim do período já pago. <AValidar>política de reembolso</AValidar></Paragrafo>
+      {/* 🔒 A SEÇÃO DE ASSINATURA SAIU (DF 2026-08-04). Ela descrevia 7 dias grátis, R$ 29/mês,
+          aviso antes da 1ª cobrança e regras de renovação — mecanismo que não existe: no beta
+          não há cobrança, assinatura nem checkout. Documento legal que descreve cobrança
+          inexistente é o mesmo defeito das telas de produto, num lugar que pesa mais.
+          🟢 A página FICA no ar (o cadastro precisa dela para o consentimento) e os
+          `[A validar:]` jurídicos continuam — são do advogado, não deste lote. O núcleo abaixo
+          é o mesmo publicado no /faq, na landing e no /suporte (`lib/copy-cobranca`). */}
+      <SecaoLegal id="s-assinatura" titulo="Acesso e cobrança">
+        <Paragrafo mb>{NUCLEO_COBRANCA}</Paragrafo>
+        <Paragrafo>Se um plano pago passar a existir, ele será <Forte>anunciado antes</Forte> de qualquer cobrança, e você decide se entra. Nada é cobrado sem você contratar.</Paragrafo>
       </SecaoLegal>
 
       <SecaoLegal id="s-conteudo" titulo="Conteúdo e propriedade intelectual">

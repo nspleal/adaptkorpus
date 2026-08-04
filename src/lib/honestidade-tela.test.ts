@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -199,12 +199,44 @@ describe('/conta — o e-mail não se edita por autoatendimento', () => {
  * documento jurídico é defensável — o problema era o mecanismo apresentado como operante nas
  * telas de produto. A revisão dos Termos é jurídica, não de código.
  */
-const PUBLICAS = ['src/app/page.tsx', 'src/app/faq/page.tsx', 'src/app/suporte/page.tsx'] as const;
+/**
+ * 🔴 A VARREDURA É POR EIXO, NÃO POR LISTA (DF 2026-08-04, item 3 do lote).
+ *
+ * A lista fixa de três arquivos foi exatamente o furo: `/termos` ficou de fora da varredura
+ * de 01/08 e continuou publicando *"7 dias grátis"*, *"R$ 29/mês"* e regras de renovação —
+ * alcançável pelo rodapé do site E pelo Perfil do app. 🔑 **Conserto de classe se varre por
+ * eixo:** TODA rota pública entra, descoberta em disco, e uma rota nova nasce coberta.
+ *
+ * Fora ficam só as rotas de API (não são tela) e as áreas logadas do produto, que não
+ * publicam política — a descoberta abaixo é sobre `src/app`, e `/app` é a única exclusão.
+ */
+const PUBLICAS: readonly string[] = (function descobrir(dir = 'src/app', fora: string[] = []): string[] {
+  for (const nome of readdirSync(join(process.cwd(), dir))) {
+    const rel = `${dir}/${nome}`;
+    if (statSync(join(process.cwd(), rel)).isDirectory()) {
+      if (nome !== 'api') descobrir(rel, fora);
+    } else if (nome === 'page.tsx') {
+      fora.push(rel);
+    }
+  }
+  return fora;
+})();
 
 const semComentarios = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
 
 describe('landing — sem preço, sem trial, sem cancelamento fantasma', () => {
+  /**
+   * ⚠️ ANTI-VACUIDADE DA DESCOBERTA: sem isto, um coletor quebrado devolveria lista vazia e
+   * o `it.each` não rodaria asserção nenhuma — verde perfeito varrendo o nada.
+   */
+  it('a varredura descobre TODAS as rotas públicas, inclusive a que ficou de fora em 01/08', () => {
+    expect(PUBLICAS.length, 'a descoberta de rotas devolveu quase nada').toBeGreaterThanOrEqual(10);
+    for (const obrigatoria of ['src/app/page.tsx', 'src/app/faq/page.tsx', 'src/app/suporte/page.tsx', 'src/app/termos/page.tsx'])
+      expect(PUBLICAS, `rota fora da varredura: ${obrigatoria}`).toContain(obrigatoria);
+    expect(PUBLICAS.some((p) => p.includes('/api/')), 'rota de API não é tela').toBe(false);
+  });
+
   const FALSAS: readonly [RegExp, string][] = [
     [/R\$\s*29(?!\s*7)/, 'preço de assinatura (não existe checkout)'],
     [/7 dias gr[áa]tis/i, 'teste grátis (não existe trial)'],
