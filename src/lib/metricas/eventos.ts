@@ -20,7 +20,11 @@
  * `registrar.ts`, que é o único com efeito.
  */
 
-/** Os 7 tipos. Espelha o `check` da migration `0009` — tipo fora daqui o BANCO rejeita. */
+/**
+ * Os tipos. Espelha o `check` das migrations `0009` (os 7 originais) e `0010` (os 2 do v3 ·
+ * Bloco A) — tipo fora daqui o BANCO rejeita, e como a telemetria engole erro por decisão, a
+ * rejeição seria SILENCIOSA. Evento novo entra em par com a migration, sempre.
+ */
 export const TIPOS_EVENTO = [
   'app_aberto',
   'plano_gerado',
@@ -29,6 +33,10 @@ export const TIPOS_EVENTO = [
   'exercicio_substituido',
   'refeicao_marcada',
   'cardio_registrado',
+  // 🎛️ v3 · Bloco A (2026-08-04): a instrumentação nasce COM o bloco, não depois — sem ela
+  // o default declarado nunca vira evidência.
+  'preferencia_criada',
+  'preferencia_recusada',
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -44,6 +52,10 @@ export interface PayloadPorEvento {
   exercicio_substituido: { de_id: string; para_id: string; motivo: string };
   refeicao_marcada: { refeicao: string; seguiu: boolean };
   cardio_registrado: { modalidade: string; minutos: number; origem: string };
+  /** `tipo`: 'troca' | 'banimento'. Sem nome de exercício em texto — só ids do catálogo. */
+  preferencia_criada: { tipo: string; de_id: string; para_id: string };
+  /** 🔑 O EVENTO ADVERSO: sem ele mede-se só o caminho feliz. `motivo` é vocabulário fechado. */
+  preferencia_recusada: { tipo: string; motivo: string; de_id: string; para_id: string };
 }
 
 /** As chaves permitidas de cada evento — derivadas da spec, usadas para PODAR o payload. */
@@ -55,6 +67,8 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
   exercicio_substituido: ['de_id', 'para_id', 'motivo'],
   refeicao_marcada: ['refeicao', 'seguiu'],
   cardio_registrado: ['modalidade', 'minutos', 'origem'],
+  preferencia_criada: ['tipo', 'de_id', 'para_id'],
+  preferencia_recusada: ['tipo', 'motivo', 'de_id', 'para_id'],
 };
 
 /**

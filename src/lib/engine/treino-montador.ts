@@ -16,6 +16,7 @@ import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './trein
 import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
+import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -146,14 +147,31 @@ export function montarRotina(
    */
   favoritos: ReadonlySet<string> = new Set(),
   semanaCiclo?: OpcoesSemana,
+  /**
+   * 🎛️ v3 · Bloco A — as preferências da pessoa, COMO ENTRADA (cofre §"A FORMA da edição
+   * manual"). Elas entram pelo trilho dos favoritos, que é o único que já sobrevive ao
+   * recompute: o preterido/banido sai do pool, o preferido entra como fixo. Nada aqui
+   * remenda a saída — por isso a edição sobrevive a reload, virada de semana, rampa,
+   * âncora de peso, favorito novo e edição de perfil.
+   */
+  preferencias: PreferenciasTreino | undefined = perfil.preferencias,
 ): RotinaSemanal {
   const avisos: string[] = [];
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
   // dos favoritos (mecanismo existente), para o montador preferi-los em vez de rotacionar.
   const recentes = semanaCiclo?.retomada?.exerciciosRecentes;
-  const favoritosEfetivos = recentes && recentes.size > 0
-    ? new Set<string>([...favoritos, ...recentes])
+  // 🎛️ v3 · Bloco A: revalidadas AQUI, na montagem — equipamento e nível mudam no perfil, e
+  // preferência que deixou de caber é ignorada na geração (o plano sai correto) sem ser
+  // apagada do perfil: se a pessoa recuperar o equipamento, ela volta a valer sozinha.
+  const prefs = preferenciasEfetivas(
+    { exercises, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia },
+    preferencias,
+  );
+  const favoritosEfetivos = recentes && recentes.size > 0 || prefs.preferidos.size > 0
+    ? new Set<string>([...favoritos, ...(recentes ?? []), ...prefs.preferidos])
     : favoritos;
+  /** Fora do pool: banidos ("não quero mais") + preteridos ("prefiro X no lugar deste"). */
+  const excluidos = new Set<string>([...prefs.banidos, ...prefs.preteridos]);
   const dias = Math.max(0, Math.floor(perfil.diasDisponiveis));
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
@@ -167,7 +185,7 @@ export function montarRotina(
   // liberada. Ordenado (tier↑, depois id).
   const liberadas = new Set(dificuldadesLiberadas(perfil.nivelExperiencia));
   const pool = exercises
-    .filter((e) => exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
+    .filter((e) => !excluidos.has(e.id) && exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
     .slice()
     .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 

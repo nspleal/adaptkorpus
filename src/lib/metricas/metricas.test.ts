@@ -80,12 +80,22 @@ describe('🔴 DENYLIST — nenhuma chave de saúde ou PII entra em payload', ()
   });
 });
 
-describe('🔒 os 7 eventos, e só eles', () => {
-  it('a lista tem exatamente os 7 da spec', () => {
+describe('🔒 os eventos declarados, e só eles', () => {
+  it('a lista é exatamente a das specs (7 da Leva C2 + 2 do v3 · Bloco A)', () => {
     expect([...TIPOS_EVENTO].sort()).toEqual([
       'app_aberto', 'cardio_registrado', 'exercicio_substituido', 'plano_gerado',
+      'preferencia_criada', 'preferencia_recusada',
       'refeicao_marcada', 'sessao_concluida', 'sessao_iniciada',
     ]);
+  });
+
+  it('v3 · Bloco A: o par uso × EVENTO ADVERSO — medir só o caminho feliz não mede nada', () => {
+    // A recusa é o que diz se os trilhos estão no lugar ou atrapalhando; sem ela, o default
+    // declarado nunca vira evidência (§16 da pesquisa).
+    expect(TIPOS_EVENTO).toContain('preferencia_criada');
+    expect(TIPOS_EVENTO).toContain('preferencia_recusada');
+    expect(CHAVES_PERMITIDAS.preferencia_criada).toEqual(['tipo', 'de_id', 'para_id']);
+    expect(CHAVES_PERMITIDAS.preferencia_recusada).toEqual(['tipo', 'motivo', 'de_id', 'para_id']);
   });
 
   it('todo tipo tem payload declarado, e o payload da spec bate', () => {
@@ -218,11 +228,29 @@ describe('🔒 primeira parte — nada de terceiro, e nada fora de `eventos`', (
 
 describe('🔒 a migration `0009` cria a tabela certa', () => {
   const sql = readFileSync(join('supabase', 'migrations', '0009_eventos_telemetria.sql'), 'utf8');
+  /**
+   * ⚠️ O CHECK do banco evolui por migration NOVA (0010 acrescentou os dois do v3), então
+   * procurar o tipo só na 0009 quebraria a cada evento — e a tentação seria afrouxar o
+   * guard. O critério certo é o EFEITO: o tipo tem de estar no CHECK **vigente**, isto é, na
+   * migration mais recente que o define. Varre-se a pasta inteira.
+   *
+   * 🔴 Por que isto é guard e não conforto: o `tipo` fora do CHECK é rejeitado pelo BANCO, e
+   * `registrarEvento` engole todo erro por decisão — o app pareceria medir sem medir.
+   */
+  const migrations = readdirSync(join('supabase', 'migrations'))
+    .filter((f) => f.endsWith('.sql')).sort()
+    .map((f) => readFileSync(join('supabase', 'migrations', f), 'utf8'));
 
-  it('cria `eventos` com cascade e CHECK fechado nos 7', () => {
+  it('cria `eventos` com cascade, e todo tipo declarado está no CHECK vigente', () => {
     expect(sql).toMatch(/create table if not exists public\.eventos/);
     expect(sql).toMatch(/references auth\.users\(id\) on delete cascade/);
-    for (const t of TIPOS_EVENTO) expect(sql, `CHECK sem ${t}`).toMatch(new RegExp(`'${t}'`));
+    for (const t of TIPOS_EVENTO)
+      expect(migrations.some((m) => m.includes(`'${t}'`)), `nenhuma migration põe ${t} no CHECK — o banco rejeitaria em silêncio`).toBe(true);
+  });
+
+  it('anti-vacuidade: a varredura lê migrations de verdade e um tipo inventado NÃO passa', () => {
+    expect(migrations.length).toBeGreaterThanOrEqual(10);
+    expect(migrations.some((m) => m.includes(`'evento_que_nunca_existiu'`))).toBe(false);
   });
 
   it('tem RLS e é append-only (sem update, sem delete pelo cliente)', () => {

@@ -3,6 +3,7 @@
  * Fonte: conceitos/parametros-motor-treino-evokorpus (DFs travadas 2026-06-28).
  * Roda após o gate de saúde (herdado). Determinístico, sem IA em runtime.
  */
+import type { PreferenciasTreino } from './preferencias';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
@@ -22,6 +23,11 @@ export interface PerfilTreino {
   // Entradas do motor de treino:
   objetivo: Objetivo;
   nivelExperiencia: NivelExperiencia;
+  /**
+   * 🎛️ v3 · Bloco A — preferências de treino, lidas pelo montador como ENTRADA.
+   * Opcional: ausente = comportamento anterior, byte a byte.
+   */
+  preferencias?: PreferenciasTreino;
   equipamento: EquipamentoDisp;
   /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
    *  equipamento" (≡ antigo `nenhum`); ausente = chamada legada (casa antiga = tudo). */

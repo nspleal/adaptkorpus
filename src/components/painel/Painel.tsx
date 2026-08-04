@@ -16,6 +16,7 @@ import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progres
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
+import { avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -68,6 +69,12 @@ export interface PerfilResumo {
   /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
    *  equipamento". Só relevante quando equipamento === 'casa'. */
   equipamentosCasa?: EquipamentoCasa[];
+  /**
+   * 🎛️ v3 · Bloco A — as preferências de treino ("prefiro X" · "não quero mais Y").
+   * Vivem AQUI, no perfil, e não na rotina: a rotina é recomputada e não é persistida, então
+   * preferência guardada nela morre no primeiro reload. Mesmo trilho dos favoritos.
+   */
+  preferencias?: PreferenciasTreino;
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -252,6 +259,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     ? `Seu plano foi recalculado com a média dos seus registros de peso (${pesoMotorKg.toFixed(1)} kg).`
     : null;
   const [modal, setModal] = useState<Modal>(null);
+  /** 🎛️ v3 · Bloco A: a explicação da preferência RECUSADA. Recusa que não explica é recusa silenciosa. */
+  const [recusa, setRecusa] = useState<string | null>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
@@ -549,12 +558,45 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     if (!n.length) { n = gerarOpcoesEx(modal.d, modal.s, []); excl = n.map((e) => e.id); } // esgotou → recomeça o ciclo
     if (n.length) setModal({ ...modal, opcoes: n, excl });
   };
+  /**
+   * 🎛️ v3 · Bloco A — a troca vira PREFERÊNCIA (DF 2026-07-31, cofre §"A FORMA da edição
+   * manual"). Antes ela mexia só em `rotinaDias`, que é memória de render: o primeiro reload
+   * (ou a virada de semana, ou a rampa, ou um favorito novo) apagava a escolha da pessoa.
+   * Agora ela vai para o PERFIL, que é o que o montador lê como entrada — o mesmo trilho dos
+   * favoritos, o único que já sobrevive ao recompute.
+   *
+   * 🔴 A preferência que fura um trilho é RECUSADA COM EXPLICAÇÃO, nunca aplicada em
+   * silêncio — e a recusa é medida, porque é ela que diz se os trilhos estão no lugar.
+   */
   function aplicarEx(d: number, s: number, ex: Exercise) {
-    registrarEvento('exercicio_substituido', {
-      de_id: rotinaDias[d]?.slots[s]?.exercicio.id ?? '', para_id: ex.id, motivo: 'escolha_usuario',
-    });
-    const novos = rotinaDias.map((dia) => ({ ...dia, slots: dia.slots.slice() })); novos[d]!.slots[s] = { ...novos[d]!.slots[s]!, exercicio: ex };
-    setRotinaDias(novos); marcar(`e${d}-${s}`); setModal(null);
+    const deId = rotinaDias[d]?.slots[s]?.exercicio.id ?? '';
+    const veredito = avaliarTroca(
+      { exercises: EXERCISES_SEED, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia },
+      { de: deId, para: ex.id },
+    );
+    if (!veredito.aceita) {
+      registrarEvento('preferencia_recusada', { tipo: 'troca', motivo: veredito.motivo ?? 'desconhecido', de_id: deId, para_id: ex.id });
+      setRecusa(veredito.explicacao ?? null);
+      return;
+    }
+    registrarEvento('exercicio_substituido', { de_id: deId, para_id: ex.id, motivo: 'escolha_usuario' });
+    registrarEvento('preferencia_criada', { tipo: 'troca', de_id: deId, para_id: ex.id });
+    const prefsAtuais = perfil.preferencias ?? PREFERENCIAS_VAZIAS;
+    const novoPerfil = {
+      ...perfil,
+      preferencias: {
+        ...prefsAtuais,
+        // Uma preferência por exercício preterido: escolher de novo SUBSTITUI a anterior,
+        // senão a lista cresceria com decisões que a pessoa já revogou.
+        trocas: [...prefsAtuais.trocas.filter((t) => t.de !== deId), { de: deId, para: ex.id }],
+      },
+    };
+    setPerfil(novoPerfil);
+    onPerfilChange?.(novoPerfil);
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    marcar(`e${d}-${s}`); setModal(null);
   }
   const registrarPeso = (v: number) => {
     if (!Number.isFinite(v) || v < 30 || v > 300) return;
@@ -956,7 +998,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
-      {modal && <ModalTroca modal={modal} onFechar={() => setModal(null)} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
+      {modal && <ModalTroca modal={modal} recusaTexto={recusa} onFechar={() => { setRecusa(null); setModal(null); }} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
       {detalhe?.tipo === 'prato' && cardItens[detalhe.idx] && (
         <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
       )}
@@ -1494,7 +1536,9 @@ function EncaminhamentoEdicao({ motivos, onRevisar, onManter }: { motivos: strin
 
 /* ════════════════════ Modal (fiel) ════════════════════ */
 
-function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx }: {
+function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx }: {
+  /** 🎛️ v3 · Bloco A: a explicação da preferência recusada (null = nenhuma recusa). */
+  recusaTexto?: string | null;
   modal: NonNullable<Modal>; onFechar: () => void;
   onAplicarPrato: (idx: number, o: OpcaoPrato) => void; onMaisPrato: () => void;
   onAplicarPorcao: (idx: number, f: number) => void;
@@ -1531,6 +1575,12 @@ function ModalTroca({ modal, onFechar, onAplicarPrato, onMaisPrato, onAplicarPor
         </div>
         <div style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-.01em', marginBottom: 6 }}>{modal.base}</div>
         <p style={{ margin: '0 0 18px', fontSize: '.86rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>{sub}</p>
+        {/* 🎛️ v3 · Bloco A: a RECUSA aparece aqui, com a razão. Preferência recusada em
+            silêncio é a mesma coisa que preferência ignorada — e o cofre proíbe as duas.
+            Sem vermelho: recusar um pedido legítimo não é erro da pessoa. */}
+        {recusaTexto && (
+          <p role="status" style={{ margin: '-8px 0 18px', fontSize: '.88rem', lineHeight: 1.5, color: 'rgba(234,229,219,.82)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '11px 13px' }}>{recusaTexto}</p>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: showMore ? 14 : 0 }}>
           {/* Vazio honesto (DF 2026-07-04): com o filtro duro de preservação, um movimento único
               no seu equipamento não tem troca equivalente — sinalizamos em vez de inventar. */}
