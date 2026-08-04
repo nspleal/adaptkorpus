@@ -29,6 +29,7 @@ import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
 import type { Weekday } from '@/lib/semana';
+import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
 import { registrarEvento } from '@/lib/metricas/registrar';
@@ -640,6 +641,27 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     roteado: treino.gate.comportamento === 'ROTEAR',
     sessoesFeitas: resumoCardioSemana(registrosCardioSemana).sessoesNaMeta,
   });
+  /**
+   * 🔒 A SESSÃO DE **HOJE** — fonte única com a faixa "Sua semana" (DF 2026-08-04).
+   *
+   * 🔴 Aqui morava a contradição medida em produção: o cartão "Treino de hoje" e o seu botão
+   * liam `rotinaDias[0]` — a 1ª sessão da rotina, SEMPRE —, enquanto a faixa mapeava o dia do
+   * calendário. Numa terça de seg/ter/qui/sex a faixa dizia *Lower A* e o cartão dizia
+   * *Upper A*; o cartão acertava 1 dia em 7 e, no descanso, anunciava treino que não havia.
+   * Pior que o rótulo: "Começar treino" ABRIA a sessão errada, carimbando `sessao_iniciada`
+   * na sessão que a pessoa não fez.
+   *
+   * `null` = hoje não é dia de treino → o cartão não é montado (quem fala do descanso é a
+   * faixa, que já traz "Ver próximo treino").
+   */
+  const sessaoHojeIdx = sessaoDeHojeIdx(
+    perfil.treinoDias ?? [],
+    rotinaDias.map((d) => d.nome),
+    weekdayHojeIdx(),
+    treino.rotina?.diasCardio ?? [],
+  );
+  const diaDeHoje = sessaoHojeIdx != null ? rotinaDias[sessaoHojeIdx] : undefined;
+
   /** Opções da semana p/ o montador (rampa + feedback agregado por grupo — v2 §1/§6). */
   function opcoesDaSemana() {
     const base = {
@@ -787,7 +809,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
         <RegistrarTreino
-          diaHoje={rotinaDias[0]}
+          diaHoje={diaDeHoje}
           prescricao={prescricaoEfetiva}
           progresso={progresso}
           exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
@@ -891,7 +913,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               diasCardio={treino.rotina?.diasCardio ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={rotinaDias[0]} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não

@@ -121,3 +121,25 @@ export function proximoTreinoIdx(semana: readonly DiaDaSemana[], hojeIdx: number
   }
   return -1;
 }
+
+/**
+ * 🔒 A SESSÃO DE FORÇA DE **HOJE** — `null` quando hoje não é dia de treino.
+ *
+ * 🔴 Existe porque a tela Hoje se contradizia (DF 2026-08-04, varredura de produção): o
+ * cartão "Treino de hoje" lia `rotinaDias[0]` — a **primeira sessão da rotina, sempre** —
+ * enquanto a faixa "Sua semana" mapeava o dia do calendário. Numa terça de `seg/ter/qui/sex`
+ * a faixa dizia *Lower A* e o cartão dizia *Upper A*; o cartão só acertava no dia que calha
+ * de mapear para a sessão 0, **1 em 7**, e num dia de descanso anunciava treino nenhum.
+ *
+ * 🔑 **Fonte única, e por isso esta função existe em vez de um `[0]` corrigido:** ela deriva
+ * de `montarSemana`, a MESMA que desenha a faixa. Duas leituras do "treino de hoje" são duas
+ * verdades para o mesmo dia — e foi assim que o defeito nasceu.
+ */
+export function sessaoDeHojeIdx(
+  treinoDias: readonly Weekday[],
+  sessoesNomes: readonly string[],
+  hojeIdx: number,
+  diasCardio: readonly { modalidade: string; minutos: number | null }[] = [],
+): number | null {
+  return montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio)[hojeIdx]?.sessionIdx ?? null;
+}
