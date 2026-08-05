@@ -8,7 +8,7 @@ import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
-import { MeusFavoritos, ToastDesfazer } from './Favoritos';
+import { ExerciciosBanidos, MeusFavoritos, ToastDesfazer } from './Favoritos';
 import { elegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 import { lerHistorico } from '@/lib/treino-historico';
 import { EXERCISES_SEED } from '@/lib/data/seed';
@@ -106,6 +106,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   // Favoritos (⭐ V8.2): edição local como o "não gosto" — persiste no Salvar. Remover é
   // reversível por toast (4,5 s; sair da tela = confirma, como o Cancelar descarta tudo).
   const [favoritos, setFavoritos] = useState<string[]>(inicial.favoritos ?? []);
+  // 🎛️ v3 · Bloco A: os banidos editam-se aqui, como os favoritos — persistem no Salvar.
+  const [banidos, setBanidos] = useState<string[]>([...(inicial.preferencias?.banidos ?? [])]);
   const [removidoFav, setRemovidoFav] = useState<{ id: string; idx: number } | null>(null);
   const [confirmar, setConfirmar] = useState(false);
 
@@ -157,6 +159,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [],
       diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
+      // 🎛️ v3 · Bloco A: as trocas ficam intactas; só a lista de banidos é editável aqui.
+      preferencias: { trocas: inicial.preferencias?.trocas ?? [], banidos },
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
       tecnicasAvancadas: tecnicasLiberadas ? tecnicas : false,
@@ -271,6 +275,12 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
             elegibilidadeDe={(ex) => elegibilidadeFavorito(ex, { equipamento: local, nivelExperiencia: experiencia, equipamentosCasa: local === 'casa' ? equipsCasa : [] }, rotinaAtual, historicoRef)}
             onRemover={removerFavorito}
+          />
+
+          <ExerciciosBanidos
+            banidos={banidos}
+            exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
+            onRestaurar={(id) => setBanidos((p) => p.filter((x) => x !== id))}
           />
 
         </div>

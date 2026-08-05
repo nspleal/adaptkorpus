@@ -142,3 +142,37 @@ export function MeusFavoritos({ favoritos, exercicioPorId, elegibilidadeDe, onRe
     </div>
   );
 }
+
+/**
+ * 🎛️ v3 · Bloco A — O CAMINHO DE VOLTA do *"não quero mais este"*.
+ *
+ * 🔴 Existe porque a confirmação do banimento diz *"se mudar de ideia, dá para trazer de
+ * volta em Editar perfil"* — e copy que promete um controle inexistente é a classe de
+ * defeito que este projeto vem fechando lote após lote. **A frase e o botão entram juntos.**
+ *
+ * Espelho NEGATIVO de "Meus favoritos", na mesma família de preferências.
+ */
+export function ExerciciosBanidos({ banidos, exercicioPorId, onRestaurar }: {
+  banidos: readonly string[];
+  exercicioPorId: (id: string) => Exercise | undefined;
+  onRestaurar: (id: string) => void;
+}) {
+  if (banidos.length === 0) return null; // sem banimento, sem seção: nada a explicar
+  return (
+    <div>
+      <div style={{ fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Fora do meu plano</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Exercícios que você pediu para não ver mais. O montador não os usa — e você pode trazer qualquer um de volta quando quiser.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {banidos.map((id) => {
+          const ex = exercicioPorId(id);
+          return (
+            <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 12, padding: '11px 13px' }}>
+              <span style={{ fontSize: '.92rem', color: 'rgba(234,229,219,.82)' }}>{ex?.nomePt ?? id}</span>
+              <button type="button" onClick={() => onRestaurar(id)} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.84rem', padding: '7px 13px', borderRadius: 10, cursor: 'pointer', minHeight: 36 }}>Trazer de volta</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

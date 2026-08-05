@@ -220,3 +220,59 @@ describe('🔒 a preferência é INPUT — nunca patch na saída', () => {
     expect(prefs.trocas.length, 'a preferência foi apagada do perfil em vez de ignorada').toBe(1);
   });
 });
+
+/**
+ * 🔒 A SUPERFÍCIE DO *"não quero mais Y"* — motor sem botão é sucesso simulado.
+ *
+ * 🔴 Regra da casa, aprendida na Leva F: *"toggle 'ativado' sem superfície de uso é SUCESSO
+ * SIMULADO"*. O banimento tinha motor, validação e telemetria prontos e **nenhum botão** —
+ * por isso o Bloco A não foi dado por entregue no relatório anterior.
+ *
+ * ⚠️ E o par que fecha: a confirmação diz *"dá para trazer de volta em Editar perfil"*.
+ * **Copy que promete controle inexistente é a classe que este projeto vem fechando** — a
+ * frase e o botão de volta entram juntos, e este guard não deixa um sobreviver sem o outro.
+ */
+describe('🔒 o banimento tem SUPERFÍCIE — e o caminho de volta existe', () => {
+  const fonte = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ').replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ');
+
+  it('existe o botão de banir, e ele chama o handler do motor', () => {
+    const modal = fonte('src/components/painel/DetalheModais.tsx');
+    expect(modal, 'o botão "não quero mais" não existe').toMatch(/Não quero mais este exercício/);
+    expect(modal).toMatch(/onClick=\{onBanir\}/);
+    const painel = fonte('src/components/painel/Painel.tsx');
+    expect(painel, 'o botão não está ligado ao Painel').toMatch(/onBanir=\{/);
+    expect(painel, 'o handler não consulta o motor').toMatch(/avaliarBanimento\(/);
+  });
+
+  it('a recusa e a confirmação chegam à tela — nenhuma das duas é silenciosa', () => {
+    const modal = fonte('src/components/painel/DetalheModais.tsx');
+    expect(modal, 'a resposta do motor não é renderizada').toMatch(/\{banidoTexto\}/);
+    const painel = fonte('src/components/painel/Painel.tsx');
+    expect(painel).toMatch(/setBanimentoTexto\(veredito\.explicacao/);
+  });
+
+  it('🔑 a promessa da copy tem controle atrás dela', () => {
+    const painel = fonte('src/components/painel/Painel.tsx');
+    const prometeVolta = /trazer de volta em Editar perfil/.test(painel);
+    if (!prometeVolta) return; // copy mudou: nada a exigir
+    const favoritos = fonte('src/components/painel/Favoritos.tsx');
+    expect(favoritos, 'a copy promete um controle que não existe').toMatch(/export function ExerciciosBanidos/);
+    expect(favoritos).toMatch(/Trazer de volta/);
+    const editar = fonte('src/components/painel/EditarPerfil.tsx');
+    const i = editar.indexOf('<ExerciciosBanidos');
+    expect(i, 'o Editar perfil não monta a lista de banidos').toBeGreaterThan(-1);
+    // ⚠️ Casar a PRESENÇA da tag deixou passar `{false && <ExerciciosBanidos` — a mutação M2
+    // sobreviveu à 1ª escrita. O que vale é RENDERIZAR: o componente já devolve `null` com a
+    // lista vazia, então o call site não pode estar atrás de condição nenhuma.
+    const antes = editar.slice(Math.max(0, i - 60), i).trimEnd();
+    expect(antes.endsWith('&&') || antes.endsWith('?'), 'a lista de banidos está atrás de uma condição — pode nunca renderizar').toBe(false);
+    expect(editar, 'a edição dos banidos não persiste no Salvar').toMatch(/preferencias: \{ trocas:.*banidos \}/);
+  });
+
+  it('os dois eventos do bloco têm call site — declarado não conta', () => {
+    const painel = fonte('src/components/painel/Painel.tsx');
+    expect(painel).toMatch(/registrarEvento\('preferencia_criada', \{ tipo: 'banimento'/);
+    expect(painel).toMatch(/registrarEvento\('preferencia_recusada', \{ tipo: 'banimento'/);
+  });
+});

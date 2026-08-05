@@ -16,7 +16,7 @@ import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progres
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
-import { avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
+import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -261,6 +261,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [modal, setModal] = useState<Modal>(null);
   /** 🎛️ v3 · Bloco A: a explicação da preferência RECUSADA. Recusa que não explica é recusa silenciosa. */
   const [recusa, setRecusa] = useState<string | null>(null);
+  /** 🎛️ v3 · Bloco A: a resposta do motor ao "não quero mais este" (recusa ou confirmação). */
+  const [banimentoTexto, setBanimentoTexto] = useState<string | null>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
@@ -598,6 +600,42 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setRotinaDias(nt.rotina?.dias ?? []);
     marcar(`e${d}-${s}`); setModal(null);
   }
+  /**
+   * 🎛️ v3 · Bloco A — *"não quero mais Y"*: o gatilho da B5 servido por PREFERÊNCIA.
+   *
+   * 🔴 A trava executada aqui: banimento que esvaziaria um movimento é RECUSADO, não
+   * obedecido — o vazio apareceria no meio do treino, não na hora do banimento. E tanto o
+   * aceite quanto a recusa são medidos: sem o evento adverso, mede-se só o caminho feliz.
+   */
+  function banirExercicio(id: string) {
+    const prefsAtuais = perfil.preferencias ?? PREFERENCIAS_VAZIAS;
+    const veredito = avaliarBanimento(
+      { exercises: EXERCISES_SEED, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia, banidos: prefsAtuais.banidos },
+      id,
+    );
+    if (!veredito.aceita) {
+      registrarEvento('preferencia_recusada', { tipo: 'banimento', motivo: veredito.motivo ?? 'desconhecido', de_id: id, para_id: '' });
+      setBanimentoTexto(veredito.explicacao ?? null);
+      return;
+    }
+    registrarEvento('preferencia_criada', { tipo: 'banimento', de_id: id, para_id: '' });
+    const novoPerfil = {
+      ...perfil,
+      preferencias: {
+        // Banir também revoga a preferência que apontava PARA ele: manter as duas deixaria
+        // o perfil com uma ordem que se contradiz.
+        trocas: prefsAtuais.trocas.filter((t) => t.para !== id),
+        banidos: [...new Set([...prefsAtuais.banidos, id])],
+      },
+    };
+    setPerfil(novoPerfil);
+    onPerfilChange?.(novoPerfil);
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
+  }
+
   const registrarPeso = (v: number) => {
     if (!Number.isFinite(v) || v < 30 || v > 300) return;
     // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
@@ -1007,8 +1045,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           ex={exercicioEfetivo(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id, progresso, (id) => EXERCISES_SEED.find((e) => e.id === id)) ?? rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio}
           favoritado={favoritosSet.has(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id)}
           onToggleFavorito={() => toggleFavorito(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id)}
-          onFechar={() => setDetalhe(null)}
+          onFechar={() => { setBanimentoTexto(null); setDetalhe(null); }}
           onTrocar={() => { const { d, s } = detalhe; setDetalhe(null); abrirTrocaEx(d, s); }}
+          onBanir={() => banirExercicio(rotinaDias[detalhe.d]!.slots[detalhe.s]!.exercicio.id)}
+          banidoTexto={banimentoTexto}
         />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}

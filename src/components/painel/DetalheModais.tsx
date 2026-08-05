@@ -42,9 +42,17 @@ function Shell({ children, onClose, kicker }: { children: ReactNode; onClose: ()
 
 const secCap: CSSProperties = { fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 10 };
 
-export function DetalheExercicio({ ex, onFechar, onTrocar, readOnly, favoritado, onToggleFavorito }: {
+export function DetalheExercicio({ ex, onFechar, onTrocar, onBanir, banidoTexto, readOnly, favoritado, onToggleFavorito }: {
   ex: Exercise;
   onFechar: () => void;
+  /**
+   * 🎛️ v3 · Bloco A — *"não quero mais este"*. É o gatilho da B5 (*"enjoei"*) servido por
+   * PREFERÊNCIA, e não por rotação automática: rotacionar toda semana zeraria a base de
+   * comparação da dupla progressão. Ausente em modo leitura, como o trocar.
+   */
+  onBanir?: () => void;
+  /** Resposta do motor ao banimento: recusa explicada, ou a confirmação do que foi guardado. */
+  banidoTexto?: string | null;
   /** Ausente/ignorado quando readOnly ("Ver variação" é LEITURA — nunca troca, V8.3). */
   onTrocar?: () => void;
   /** Modo leitura (V8.3 "Ver variação"): esconde o botão "Trocar exercício". */
@@ -79,6 +87,18 @@ export function DetalheExercicio({ ex, onFechar, onTrocar, readOnly, favoritado,
         <div style={secCap}>Erros comuns</div>
         <div style={{ marginBottom: 22 }}><ListaErrosComuns exId={ex.id} /></div>
       </>)}
+      {/* 🔒 A resposta do motor fica ACIMA dos botões, onde a pessoa acabou de tocar. Sem
+          vermelho: recusar um pedido legítimo — ou confirmar que ele foi guardado — não é
+          erro dela. */}
+      {!readOnly && banidoTexto && (
+        <p role="status" style={{ margin: '0 0 14px', fontSize: '.88rem', lineHeight: 1.5, color: 'rgba(234,229,219,.82)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 12, padding: '11px 13px' }}>{banidoTexto}</p>
+      )}
+      {!readOnly && onBanir && (
+        <button onClick={onBanir} style={{ width: '100%', marginBottom: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'none', border: '1px dashed rgba(234,229,219,.24)', color: 'rgba(234,229,219,.75)', fontWeight: 600, fontSize: '.9rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M5 12h14" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" /></svg>
+          Não quero mais este exercício
+        </button>
+      )}
       <div style={{ display: 'flex', gap: 10 }}>
         {!readOnly && onTrocar && <button onClick={onTrocar} className="evk-troca" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: 13, borderRadius: 12, cursor: 'pointer' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M4 7h12l-3-3M20 17H8l3 3" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>Trocar exercício</button>}
         <button onClick={onFechar} className="hov-btn" style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.94rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Voltar</button>
