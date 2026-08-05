@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { aceitaTecnica, DESCRICAO_TECNICA, serieDaTecnica, TECNICAS, type TecnicaAvancada } from '@/lib/engine/tecnicas-avancadas';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
+import { registrarEvento } from '@/lib/metricas/registrar';
 import { repUnitDe, faixaSegundos, rotuloFaixaSeg, PISO_HOLD_SEG, type RepUnit, type FaixaHold } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
@@ -296,6 +297,15 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     if (ligando) iniciarDescanso(ex.restSeg); else pararDescanso();
   }
   function setFb(f: Feedback) {
+    /**
+     * 🎛️ v3 · Bloco C — o EVENTO ADVERSO. As técnicas foram reabertas por RECONHECIMENTO, não
+     * por eficácia; o que precisa ser vigiado é o custo em esforço percebido. Emite SÓ quando
+     * o feedback é do exercício que recebeu a técnica — feedback de série reta não é dado
+     * sobre técnica nenhuma, e misturar os dois inventaria um número.
+     */
+    if (tecnica && exs[cur]?.id === tecnica.exercicioId) {
+      registrarEvento('tecnica_feedback', { tecnica: tecnica.tecnica, esforco: f });
+    }
     setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, fb: f } : e)));
   }
   function pausarEx() {
@@ -581,7 +591,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
                   {TECNICAS.map((t) => {
                     const on = tecnicaAqui?.tecnica === t;
                     return (
-                      <button key={t} onClick={() => setTecnica(on ? null : { exercicioId: ex.id, tecnica: t })} style={{ cursor: 'pointer', flex: '1 1 auto', minWidth: 96, padding: '10px 8px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>
+                      <button key={t} onClick={() => { if (!on) registrarEvento('tecnica_ativada', { tecnica: t, exercicio_id: ex.id }); setTecnica(on ? null : { exercicioId: ex.id, tecnica: t }); }} style={{ cursor: 'pointer', flex: '1 1 auto', minWidth: 96, padding: '10px 8px', borderRadius: 10, fontWeight: 600, fontSize: '.85rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.12)' : 'transparent', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>
                         {DESCRICAO_TECNICA[t].rotulo}
                       </button>
                     );

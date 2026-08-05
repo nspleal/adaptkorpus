@@ -87,6 +87,7 @@ describe('🔒 os eventos declarados, e só eles', () => {
       'foco_ativado', 'foco_encerrado', 'plano_gerado',
       'preferencia_criada', 'preferencia_recusada',
       'refeicao_marcada', 'sessao_concluida', 'sessao_iniciada',
+      'tecnica_ativada', 'tecnica_elegivel', 'tecnica_feedback',
     ]);
   });
 
@@ -104,6 +105,16 @@ describe('🔒 os eventos declarados, e só eles', () => {
     expect(CHAVES_PERMITIDAS.foco_ativado).toEqual(['grupo', 'compensa', 'entrega', 'delta']);
     // Sem o encerramento não se mede duração, e a janela de 4–6 semanas nunca vira evidência.
     expect(CHAVES_PERMITIDAS.foco_encerrado).toEqual(['grupo', 'semanas', 'motivo']);
+  });
+
+  it('v3 · Bloco C: o portão medido, o uso medido — e o custo em esforço', () => {
+    // `tecnica_elegivel` é o DENOMINADOR: sem ele, "poucos usam" não distingue "poucos
+    // querem" de "poucos podem".
+    expect(CHAVES_PERMITIDAS.tecnica_elegivel).toEqual(['sessoes', 'nivel']);
+    expect(CHAVES_PERMITIDAS.tecnica_ativada).toEqual(['tecnica', 'exercicio_id']);
+    // 🔑 O evento adverso: reabertas por reconhecimento, não por eficácia — o que se vigia é
+    // o custo em esforço percebido.
+    expect(CHAVES_PERMITIDAS.tecnica_feedback).toEqual(['tecnica', 'esforco']);
   });
 
   it('todo tipo tem payload declarado, e o payload da spec bate', () => {

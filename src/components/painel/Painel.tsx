@@ -739,14 +739,31 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * 🔴 `ligado: true` na consulta porque a pergunta aqui é "o portão liberaria?"; o opt-in
    * da pessoa entra logo abaixo, na conjunção.
    */
+  const nSessoesResistidas = sessoesResistidas(sessoes).length;
   const portaoTecnicas = elegibilidade({
     nivel: perfil.nivelExperiencia,
-    sessoesResistidas: sessoesResistidas(sessoes).length,
+    sessoesResistidas: nSessoesResistidas,
     comportamentoGate: dieta.gate.comportamento,
     regressaoAtiva: [...feedbackAgregadoPorGrupo(sessoes, hojeISO(), (id) => EXERCISES_SEED.find((e) => e.id === id)).values()].some((f) => f === 'segura'),
     ligado: true,
   }).elegivel;
   const tecnicasLiberadas = portaoTecnicas && (perfil.tecnicasAvancadas ?? false);
+  /**
+   * 🎛️ v3 · Bloco C — o PORTÃO ABRIU. Emitido na VIRADA (o ref guarda o estado anterior), não
+   * a cada render: um evento por quadro inflaria a métrica e ainda mediria render, não
+   * elegibilidade.
+   *
+   * 🔑 Mede quantos CHEGAM ao portão — o denominador honesto de qualquer taxa de adoção. Sem
+   * ele, "poucos usam técnicas" não distingue "poucos querem" de "poucos podem".
+   */
+  const portaoAntesRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const antes = portaoAntesRef.current;
+    portaoAntesRef.current = portaoTecnicas;
+    if (antes === false && portaoTecnicas) {
+      registrarEvento('tecnica_elegivel', { sessoes: nSessoesResistidas, nivel: perfil.nivelExperiencia });
+    }
+  }, [portaoTecnicas, nSessoesResistidas, perfil.nivelExperiencia]);
   const diaExcedente = conteudoDoDiaExcedente({
     meta: metaCardio,
     diasExcedentes: treino.rotina?.diasCardioRecuperacao ?? 0,

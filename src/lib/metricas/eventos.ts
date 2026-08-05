@@ -40,6 +40,10 @@ export const TIPOS_EVENTO = [
   // 🎛️ v3 · Bloco B (2026-08-05)
   'foco_ativado',
   'foco_encerrado',
+  // 🎛️ v3 · Bloco C (2026-08-05)
+  'tecnica_elegivel',
+  'tecnica_ativada',
+  'tecnica_feedback',
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -66,6 +70,14 @@ export interface PayloadPorEvento {
   foco_ativado: { grupo: string; compensa: string; entrega: string; delta: number };
   /** Sem ele não se mede DURAÇÃO — e a janela de 4–6 semanas nunca vira evidência. */
   foco_encerrado: { grupo: string; semanas: number; motivo: string };
+  /** O portão abriu: mede quantos CHEGAM lá — o denominador honesto de qualquer adoção. */
+  tecnica_elegivel: { sessoes: number; nivel: string };
+  tecnica_ativada: { tecnica: string; exercicio_id: string };
+  /**
+   * 🔑 O EVENTO ADVERSO desta feature. As técnicas foram reabertas por RECONHECIMENTO, não
+   * por eficácia — o que precisa ser vigiado é o custo em esforço percebido.
+   */
+  tecnica_feedback: { tecnica: string; esforco: string };
 }
 
 /** As chaves permitidas de cada evento — derivadas da spec, usadas para PODAR o payload. */
@@ -81,6 +93,9 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
   preferencia_recusada: ['tipo', 'motivo', 'de_id', 'para_id'],
   foco_ativado: ['grupo', 'compensa', 'entrega', 'delta'],
   foco_encerrado: ['grupo', 'semanas', 'motivo'],
+  tecnica_elegivel: ['sessoes', 'nivel'],
+  tecnica_ativada: ['tecnica', 'exercicio_id'],
+  tecnica_feedback: ['tecnica', 'esforco'],
 };
 
 /**

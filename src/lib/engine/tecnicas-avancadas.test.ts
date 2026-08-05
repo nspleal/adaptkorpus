@@ -218,6 +218,42 @@ describe('🔒 a copy nunca apresenta as técnicas como MELHORES', () => {
       }
     }
   });
+
+  /**
+   * 🔴 O VÃO QUE ESTE BLOCO FECHA (2026-08-05): o guard varria só o CATÁLOGO. A copy que a
+   * pessoa lê está nas TELAS — e ali nada impedia um "leve seu treino a outro nível".
+   * Descrição honesta com tela vendendo superioridade é a promessa de volta por outra porta,
+   * exatamente como a página de garantia e o "trazer de volta".
+   *
+   * 🔑 A varredura é DERIVADA, não uma lista de arquivos: toda tela que IMPORTA o módulo das
+   * técnicas entra. Tela nova que use a feature nasce coberta.
+   */
+  it('🔴 nenhuma TELA que usa técnicas vende superioridade', () => {
+    const raiz = join(process.cwd(), 'src');
+    const arquivos: string[] = [];
+    (function varrer(dir: string) {
+      for (const nome of readdirSync(dir)) {
+        const caminho = join(dir, nome);
+        if (statSync(caminho).isDirectory()) varrer(caminho);
+        else if (/\.tsx$/.test(nome)) arquivos.push(caminho);
+      }
+    })(raiz);
+    const telas = arquivos.filter((f) => /tecnicas-avancadas/.test(readFileSync(f, 'utf8')));
+    expect(telas.length, 'nenhuma tela importa o módulo — a varredura está vazia').toBeGreaterThanOrEqual(2);
+    for (const tela of telas) {
+      const src = readFileSync(tela, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+      for (const re of PROIBIDO) {
+        expect(re.test(src), `${tela.slice(process.cwd().length + 1)} :: ${re}`).toBe(false);
+      }
+    }
+  });
+
+  it('🔑 e a tela DIZ que é estilo, não upgrade — a afirmação positiva, não só a ausência', () => {
+    const sessao = readFileSync(join(process.cwd(), 'src/components/painel/SessaoTreino.tsx'), 'utf8');
+    const perfil = readFileSync(join(process.cwd(), 'src/components/painel/EditarPerfil.tsx'), 'utf8');
+    expect(`${sessao} ${perfil}`, 'nenhuma tela enquadra a técnica como opção de estilo')
+      .toMatch(/estilo, n[ãa]o um upgrade|op[çc][ãa]o de estilo/i);
+  });
 });
 
 describe('🔴 a entrada na tela EXISTE, e a linha do não-elegível não tem contador', () => {
