@@ -17,6 +17,7 @@ import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
+import { aplicarFoco, focoVigente, ordenarComFoco } from './trilhos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -163,6 +164,8 @@ export function montarRotina(
   // 🎛️ v3 · Bloco A: revalidadas AQUI, na montagem — equipamento e nível mudam no perfil, e
   // preferência que deixou de caber é ignorada na geração (o plano sai correto) sem ser
   // apagada do perfil: se a pessoa recuperar o equipamento, ela volta a valer sozinha.
+  /** 🎛️ v3 · Bloco B — o foco vigente (fora da janela de 4–6 semanas, não existe). */
+  const foco = focoVigente(perfil.foco) ? perfil.foco : undefined;
   const prefs = preferenciasEfetivas(
     { exercises, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia },
     preferencias,
@@ -397,6 +400,26 @@ export function montarRotina(
   });
 
   /**
+   * 🎛️ v3 · Bloco B — A ORDEM DO FOCO, aplicada com os exercícios já escolhidos.
+   *
+   * 🔴 **Dentro da classe, sempre.** *"Vem primeiro na sessão"* sem a qualificação inverteria
+   * composto → isolado quando o foco fosse num músculo pequeno, e fatigar o bíceps antes das
+   * puxadas é **pré-exaustão** — técnica avançada que a seção vizinha decidiu não prescrever
+   * por default. O conserto teria criado de graça o que a outra seção proíbe.
+   *
+   * 🟢 Vale para TODO MUNDO, inclusive para quem não tem folga de volume: é justamente o que
+   * o foco entrega a quem já está no MRV.
+   */
+  if (foco) {
+    for (const dia of diasTreino) {
+      dia.slots = ordenarComFoco(dia.slots, foco.grupo, {
+        classe: (sl) => (sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto'),
+        grupo: (sl) => sl.exercicio.grupoPrimario ?? null,
+      });
+    }
+  }
+
+  /**
    * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
    * o valor vem de `descansoDoExercicio` — que enxerga o que o padrão não mostra:
    * `tipo: 'pliometrico'` (o e151 é `padraoMovimento: cardio` e mesmo assim tem descanso) e
@@ -506,7 +529,16 @@ export function montarRotina(
     } else
     for (const grupo of [...porGrupo.keys()].sort()) {
       const slots = porGrupo.get(grupo)!;
-      const alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
+      let alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
+      // 🎛️ v3 · Bloco B — FOCO: +2–4 séries no grupo focado, compensadas 1:1 em outro, e
+      // 🔴 NUNCA acima do MRV (teto duro). Quem já está no topo não ganha volume — ganha
+      // ORDEM, aplicada mais abaixo, DENTRO DA CLASSE.
+      if (foco && (grupo === foco.grupo || grupo === foco.compensa)) {
+        const baseFocado = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
+        const baseCompensa = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
+        const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo });
+        alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
+      }
       const n = slots.length;
       const base = n * sMin;
       const teto = n * sMax;

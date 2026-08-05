@@ -17,6 +17,7 @@ import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDo
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
+import { aplicarFoco, type FocoGrupo } from '@/lib/engine/trilhos';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -75,6 +76,8 @@ export interface PerfilResumo {
    * preferência guardada nela morre no primeiro reload. Mesmo trilho dos favoritos.
    */
   preferencias?: PreferenciasTreino;
+  /** 🎛️ v3 · Bloco B — o grupo em foco (1 por vez, janela de 4–6 semanas). */
+  foco?: FocoGrupo;
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -438,6 +441,28 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
   // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
   function recalcular(novo: PerfilResumo) {
+    /**
+     * 🎛️ v3 · Bloco B — os eventos do FOCO, emitidos na virada do estado (não a cada render).
+     *
+     * 🔑 `entrega` é o campo que faz o evento valer: 'volume' quando havia folga até o MRV,
+     * 'ordem' quando o grupo já estava no topo. É ele que diz se o teto duro morde na
+     * população real ou só na teoria — e sem isso o default declarado nunca vira evidência.
+     */
+    const focoAntes = perfil.foco;
+    const focoDepois = novo.foco;
+    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
+      const efeito = aplicarFoco({
+        alvoBase: seriesSemanaisDoGrupo(focoDepois.grupo),
+        alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
+        nivel: novo.nivelExperiencia,
+        objetivo: novo.objetivo,
+      });
+      registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
+    }
+    if (focoAntes && !focoDepois) {
+      registrarEvento('foco_encerrado', { grupo: focoAntes.grupo, semanas: focoAntes.semana, motivo: 'escolha_usuario' });
+    }
+
     // 🔒 Leva D: o peso é RESOLVIDO aqui, com o perfil novo, e o resultado é o mesmo que o
     // efeito da âncora produziria — sem isto a edição geraria um plano com o peso digitado e
     // o efeito o trocaria no quadro seguinte (dois planos em sequência, piscando).
@@ -634,6 +659,13 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
+  }
+
+  /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */
+  function seriesSemanaisDoGrupo(grupo: string): number {
+    let n = 0;
+    for (const d of rotinaDias) for (const sl of d.slots) if (sl.exercicio.grupoPrimario === grupo) n += sl.series ?? 0;
+    return n;
   }
 
   const registrarPeso = (v: number) => {

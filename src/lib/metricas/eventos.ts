@@ -37,6 +37,9 @@ export const TIPOS_EVENTO = [
   // o default declarado nunca vira evidência.
   'preferencia_criada',
   'preferencia_recusada',
+  // 🎛️ v3 · Bloco B (2026-08-05)
+  'foco_ativado',
+  'foco_encerrado',
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -56,6 +59,13 @@ export interface PayloadPorEvento {
   preferencia_criada: { tipo: string; de_id: string; para_id: string };
   /** 🔑 O EVENTO ADVERSO: sem ele mede-se só o caminho feliz. `motivo` é vocabulário fechado. */
   preferencia_recusada: { tipo: string; motivo: string; de_id: string; para_id: string };
+  /**
+   * `entrega`: 'volume' (havia folga até o MRV) | 'ordem' (o grupo já estava no topo).
+   * 🔑 É este campo que diz se o teto duro morde na população real ou só na teoria.
+   */
+  foco_ativado: { grupo: string; compensa: string; entrega: string; delta: number };
+  /** Sem ele não se mede DURAÇÃO — e a janela de 4–6 semanas nunca vira evidência. */
+  foco_encerrado: { grupo: string; semanas: number; motivo: string };
 }
 
 /** As chaves permitidas de cada evento — derivadas da spec, usadas para PODAR o payload. */
@@ -69,6 +79,8 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
   cardio_registrado: ['modalidade', 'minutos', 'origem'],
   preferencia_criada: ['tipo', 'de_id', 'para_id'],
   preferencia_recusada: ['tipo', 'motivo', 'de_id', 'para_id'],
+  foco_ativado: ['grupo', 'compensa', 'entrega', 'delta'],
+  foco_encerrado: ['grupo', 'semanas', 'motivo'],
 };
 
 /**

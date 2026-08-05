@@ -4,6 +4,7 @@
  * Roda após o gate de saúde (herdado). Determinístico, sem IA em runtime.
  */
 import type { PreferenciasTreino } from './preferencias';
+import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
@@ -28,6 +29,11 @@ export interface PerfilTreino {
    * Opcional: ausente = comportamento anterior, byte a byte.
    */
   preferencias?: PreferenciasTreino;
+  /**
+   * 🎛️ v3 · Bloco B — o GRUPO EM FOCO (pedido nº 4 do beta). Vive no perfil, como as
+   * preferências: é entrada do gerador, não remendo na saída.
+   */
+  foco?: FocoGrupo;
   equipamento: EquipamentoDisp;
   /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
    *  equipamento" (≡ antigo `nenhum`); ausente = chamada legada (casa antiga = tudo). */

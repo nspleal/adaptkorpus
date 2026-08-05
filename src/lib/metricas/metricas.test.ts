@@ -83,7 +83,8 @@ describe('🔴 DENYLIST — nenhuma chave de saúde ou PII entra em payload', ()
 describe('🔒 os eventos declarados, e só eles', () => {
   it('a lista é exatamente a das specs (7 da Leva C2 + 2 do v3 · Bloco A)', () => {
     expect([...TIPOS_EVENTO].sort()).toEqual([
-      'app_aberto', 'cardio_registrado', 'exercicio_substituido', 'plano_gerado',
+      'app_aberto', 'cardio_registrado', 'exercicio_substituido',
+      'foco_ativado', 'foco_encerrado', 'plano_gerado',
       'preferencia_criada', 'preferencia_recusada',
       'refeicao_marcada', 'sessao_concluida', 'sessao_iniciada',
     ]);
@@ -96,6 +97,13 @@ describe('🔒 os eventos declarados, e só eles', () => {
     expect(TIPOS_EVENTO).toContain('preferencia_recusada');
     expect(CHAVES_PERMITIDAS.preferencia_criada).toEqual(['tipo', 'de_id', 'para_id']);
     expect(CHAVES_PERMITIDAS.preferencia_recusada).toEqual(['tipo', 'motivo', 'de_id', 'para_id']);
+  });
+
+  it('v3 · Bloco B: o foco mede USO e DURAÇÃO — e o que ele de fato entregou', () => {
+    // 🔑 `entrega` diz se o teto duro (MRV) morde na população real ou só na teoria.
+    expect(CHAVES_PERMITIDAS.foco_ativado).toEqual(['grupo', 'compensa', 'entrega', 'delta']);
+    // Sem o encerramento não se mede duração, e a janela de 4–6 semanas nunca vira evidência.
+    expect(CHAVES_PERMITIDAS.foco_encerrado).toEqual(['grupo', 'semanas', 'motivo']);
   });
 
   it('todo tipo tem payload declarado, e o payload da spec bate', () => {

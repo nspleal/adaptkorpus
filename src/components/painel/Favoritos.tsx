@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Exercise } from '@/lib/data/types';
 import type { ElegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 
@@ -176,3 +176,51 @@ export function ExerciciosBanidos({ banidos, exercicioPorId, onRestaurar }: {
     </div>
   );
 }
+
+/**
+ * 🎛️ v3 · Bloco B — O GRUPO EM FOCO (pedido nº 4 do beta: *"selecionar grupo muscular em foco"*).
+ *
+ * 🔒 Copy travada em duas frentes:
+ *  · **1 grupo por vez, 4–6 semanas** — a janela é declarada, não sugerida;
+ *  · **quem já está no topo do volume não ganha séries: ganha ORDEM.** Prometer volume a
+ *    quem está no MRV seria prometer o que o teto duro proíbe.
+ */
+export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
+  grupos: readonly { id: string; rotulo: string }[];
+  foco: string | null;
+  compensa: string | null;
+  onFoco: (id: string | null) => void;
+  onCompensa: (id: string | null) => void;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Grupo em foco</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>
+        Um grupo por vez, por 4 a 6 semanas. Ele ganha algumas séries, e outro grupo cede o mesmo tanto — o total da sua semana não muda. Se o grupo escolhido já estiver no topo do volume do seu nível, ele não ganha séries: passa a vir primeiro na sessão, entre os exercícios do mesmo tipo.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <button type="button" onClick={() => { onFoco(null); onCompensa(null); }} aria-pressed={foco === null} style={pill(foco === null)}>Nenhum</button>
+        {grupos.map((g) => (
+          <button key={g.id} type="button" onClick={() => onFoco(g.id)} aria-pressed={foco === g.id} style={pill(foco === g.id)}>{g.rotulo}</button>
+        ))}
+      </div>
+      {foco && (
+        <>
+          <div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Qual grupo cede as séries?</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {grupos.filter((g) => g.id !== foco).map((g) => (
+              <button key={g.id} type="button" onClick={() => onCompensa(g.id)} aria-pressed={compensa === g.id} style={pill(compensa === g.id)}>{g.rotulo}</button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const pill = (ativo: boolean): CSSProperties => ({
+  background: ativo ? 'rgba(189,255,0,.14)' : 'none',
+  border: `1px solid ${ativo ? 'rgba(189,255,0,.5)' : 'rgba(234,229,219,.18)'}`,
+  color: ativo ? '#BDFF00' : 'rgba(234,229,219,.8)',
+  fontWeight: 600, fontSize: '.86rem', padding: '8px 14px', borderRadius: 999, cursor: 'pointer', minHeight: 40,
+});

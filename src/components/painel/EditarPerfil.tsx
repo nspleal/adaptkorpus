@@ -8,7 +8,19 @@ import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
-import { ExerciciosBanidos, MeusFavoritos, ToastDesfazer } from './Favoritos';
+import { ExerciciosBanidos, GrupoEmFoco, MeusFavoritos, ToastDesfazer } from './Favoritos';
+import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
+
+/**
+ * 🎛️ v3 · Bloco B — os grupos que podem receber foco.
+ *
+ * 🔒 `core` e `lombar` ficam de FORA de propósito: o core tem invariante própria de
+ * frequência (2–3×/semana) e focar nele brigaria com ela; o lombar não é alvo de volume no
+ * motor. Os rótulos vêm de `ROTULO_GRUPO` — uma fonte só para o nome do grupo em todo o app.
+ */
+const GRUPOS_FOCO: readonly { id: string; rotulo: string }[] = (
+  ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'quadriceps', 'posterior', 'gluteos', 'panturrilha', 'antebraco'] as const
+).map((id) => ({ id, rotulo: ROTULO_GRUPO[id] ?? id }));
 import { elegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 import { lerHistorico } from '@/lib/treino-historico';
 import { EXERCISES_SEED } from '@/lib/data/seed';
@@ -108,6 +120,10 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   const [favoritos, setFavoritos] = useState<string[]>(inicial.favoritos ?? []);
   // 🎛️ v3 · Bloco A: os banidos editam-se aqui, como os favoritos — persistem no Salvar.
   const [banidos, setBanidos] = useState<string[]>([...(inicial.preferencias?.banidos ?? [])]);
+  // 🎛️ v3 · Bloco B — o grupo em foco. `compensa` é obrigatório: sem ele não há 1:1, e sem
+  // 1:1 o "foco" seria aumento geral de volume com outro nome.
+  const [focoGrupo, setFocoGrupo] = useState<string | null>(inicial.foco?.grupo ?? null);
+  const [focoCompensa, setFocoCompensa] = useState<string | null>(inicial.foco?.compensa ?? null);
   const [removidoFav, setRemovidoFav] = useState<{ id: string; idx: number } | null>(null);
   const [confirmar, setConfirmar] = useState(false);
 
@@ -161,6 +177,10 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
       // 🎛️ v3 · Bloco A: as trocas ficam intactas; só a lista de banidos é editável aqui.
       preferencias: { trocas: inicial.preferencias?.trocas ?? [], banidos },
+      // Só vira foco quando o par está completo — meio foco não é foco.
+      foco: focoGrupo && focoCompensa
+        ? { grupo: focoGrupo as never, compensa: focoCompensa as never, semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
+        : undefined,
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
       tecnicasAvancadas: tecnicasLiberadas ? tecnicas : false,
@@ -275,6 +295,14 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
             elegibilidadeDe={(ex) => elegibilidadeFavorito(ex, { equipamento: local, nivelExperiencia: experiencia, equipamentosCasa: local === 'casa' ? equipsCasa : [] }, rotinaAtual, historicoRef)}
             onRemover={removerFavorito}
+          />
+
+          <GrupoEmFoco
+            grupos={GRUPOS_FOCO}
+            foco={focoGrupo}
+            compensa={focoCompensa}
+            onFoco={(g) => { setFocoGrupo(g); if (g === null) setFocoCompensa(null); }}
+            onCompensa={setFocoCompensa}
           />
 
           <ExerciciosBanidos
