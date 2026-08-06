@@ -17,7 +17,7 @@ import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
-import { aplicarFoco, focoVigente, ordenarComFoco } from './trilhos';
+import { aplicarFoco, aplicarFocoCore, focoVigente, ordenarComFoco } from './trilhos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -536,8 +536,40 @@ export function montarRotina(
       if (foco && (grupo === foco.grupo || grupo === foco.compensa)) {
         const baseFocado = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
         const baseCompensa = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
-        const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo });
-        alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
+        const objetivoEfetivo = prescricao.objetivoEfetivo ?? perfil.objetivo;
+        if (foco.grupo === 'core') {
+          /**
+           * 🔒 FOCO DE CORE — mecânica PRÓPRIA (cofre §Foco de CORE, DF 2026-08-05): séries
+           * nos slots que já existem, com teto de **séries por exercício do nível** — não o
+           * MRV semanal. Frequência (2–3×/sem) e montagem de dias ficam intocadas por
+           * construção: nada neste caminho as toca.
+           *
+           * 🔴 Sem folga, o efeito é RECUSA — e aqui ela aparece como "não mexe em nada". A
+           * recusa EXPLICADA para a pessoa é emitida na borda (Painel), que é quem tem tela.
+           */
+          const slotsCore = porGrupo.get('core')?.length ?? 0;
+          const slotsCompensa = porGrupo.get(foco.compensa)?.length ?? 0;
+          /**
+           * ⚠️ EFETIVO nos DOIS lados, não só no core. O alvo do grupo é truncado pela
+           * distribuição em `n × sMax`: o peito com 2 slots fica em 6 mesmo com alvo 7. Usar o
+           * alvo cru do compensador fazia o 1:1 virar NOMINAL — o core ganhava a série e o
+           * compensador não perdia nenhuma, porque já estava no próprio teto. Medido: total
+           * 37 → 38 com o foco ligado, contra a copy que promete que o total não muda.
+           */
+          const seriesCoreAtuais = Math.min(baseFocado, slotsCore * sMax);
+          const seriesCompensaAtuais = Math.min(baseCompensa, slotsCompensa * sMax);
+          const efeito = aplicarFocoCore({
+            nSlotsCore: slotsCore, seriesCoreAtuais, alvoCompensaBase: seriesCompensaAtuais,
+            nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo,
+            // 🔴 O piso real de quem compensa: cada slot já tem `sMin`, então abaixo de
+            // `n × sMin` a redução seria absorvida pela distribuição e o 1:1 viraria nominal.
+            pisoCompensa: slotsCompensa * sMin,
+          });
+          alvo = grupo === 'core' ? efeito.alvoCore : efeito.alvoCompensado;
+        } else {
+          const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo });
+          alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
+        }
       }
       const n = slots.length;
       const base = n * sMin;

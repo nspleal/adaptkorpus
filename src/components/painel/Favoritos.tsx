@@ -195,8 +195,17 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
   return (
     <div>
       <div style={{ fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Grupo em foco</div>
+      {/**
+        * 🔒 A segunda frase é CONDICIONAL de propósito (DF 2026-08-05). A saída por ORDEM não
+        * existe para o core: sem folga, o core recebe RECUSA EXPLICADA e o foco não é salvo.
+        * Prometer "passa a vir primeiro na sessão" a quem escolheu Core seria copy que
+        * pressupõe uma prescrição inexistente — a classe de vazamento que já custou caro.
+        */}
       <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>
-        Um grupo por vez, por 4 a 6 semanas. Ele ganha algumas séries, e outro grupo cede o mesmo tanto — o total da sua semana não muda. Se o grupo escolhido já estiver no topo do volume do seu nível, ele não ganha séries: passa a vir primeiro na sessão, entre os exercícios do mesmo tipo.
+        Um grupo por vez, por 4 a 6 semanas. Ele ganha algumas séries, e outro grupo cede o mesmo tanto — o total da sua semana não muda.{' '}
+        {foco === 'core'
+          ? 'No core, as séries entram nos exercícios que você já faz — a quantidade de dias não muda. Se não houver folga, o app avisa e não ativa o foco.'
+          : 'Se o grupo escolhido já estiver no topo do volume do seu nível, ele não ganha séries: passa a vir primeiro na sessão, entre os exercícios do mesmo tipo.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <button type="button" onClick={() => { onFoco(null); onCompensa(null); }} aria-pressed={foco === null} style={pill(foco === null)}>Nenhum</button>

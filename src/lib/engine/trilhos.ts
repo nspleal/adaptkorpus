@@ -179,3 +179,85 @@ export function ordenarComFoco<T>(
   }
   return itens.map((x) => fila.get(leitura.classe(x))!.shift()!);
 }
+
+/* ═══════════════════ FOCO DE CORE — spec travada (DF 2026-08-05) ═══════════════════ */
+
+/** 🏷️ O foco de core tem versão própria: a mecânica é outra, e a auditoria precisa distingui-las. */
+export const FOCO_CORE: Rotulo & { origem: string } = {
+  procedencia: 'politica', versao: 'v3.1', desde: '2026-08-05',
+  origem: 'nossa — mecânica "séries nos slots existentes", sem número novo',
+};
+
+/**
+ * 🔒 FOCO DE CORE — **séries nos slots que JÁ existem** (cofre §Foco de CORE).
+ *
+ * 🔑 Por que a mecânica é diferente da dos outros grupos: focar core mexendo em FREQUÊNCIA
+ * colidiria com a invariante travada de **2–3×/semana** e com a montagem de dias. Distribuir
+ * séries nos slots existentes deixa **frequência e montagem intocadas por construção** — não
+ * por cuidado de quem implementa, mas porque nada nesse caminho as toca.
+ *
+ * 🔴 **O teto aqui é OUTRO:** não é o MRV semanal, é **séries por exercício do nível** (3/4/4)
+ * — trilho que já existia, nenhum número novo. Slot de core no teto não sobe.
+ *
+ * 🔴 **E não existe queda para `'ordem'`.** Core tem tipicamente **1 slot por sessão**:
+ * reordenar seria **inerte**, e entrega inerte é sucesso simulado. Sem folga ⇒ **recusa
+ * explicada**, nunca entrega vazia.
+ */
+export interface EfeitoFocoCore {
+  aceita: boolean;
+  /** Só quando aceita. Sempre > 0 — delta zero é recusa, não aceite silencioso. */
+  deltaAplicado: number;
+  alvoCore: number;
+  alvoCompensado: number;
+  /** 🔒 Para core é SEMPRE 'volume' — `'ordem'` nunca é entregue, logo nunca é emitido. */
+  entrega: 'volume';
+  motivo?: 'core_sem_folga';
+  explicacao?: string;
+}
+
+/** Quantas séries ainda cabem nos slots de core, pelo teto por exercício do nível. */
+export function folgaDeCore(nSlotsCore: number, seriesCoreAtuais: number, nivel: NivelExperiencia): number {
+  return Math.max(0, nSlotsCore * tetoSeriesPorExercicio(nivel) - seriesCoreAtuais);
+}
+
+export function aplicarFocoCore(args: {
+  nSlotsCore: number;
+  seriesCoreAtuais: number;
+  alvoCompensaBase: number;
+  nivel: NivelExperiencia;
+  objetivo: Objetivo;
+  delta?: number;
+  /**
+   * 🔴 O piso REAL do compensador, quando quem chama o conhece.
+   *
+   * ⚠️ Isto nasceu de um teste que falhou no código: o MEV sozinho não basta. Cada slot já
+   * carrega no mínimo `seriesPorExercicio.min`, então um grupo com `n` slots **não consegue
+   * ceder** abaixo de `n × sMin` — a redução é absorvida pela distribuição e some. Sem este
+   * piso o core ganhava a série e o compensador não perdia nenhuma: o **1:1 virava nominal**
+   * e o volume semanal CRESCIA, contra a copy que promete que o total não muda.
+   */
+  pisoCompensa?: number;
+}): EfeitoFocoCore {
+  const desejado = Math.min(Math.max(args.delta ?? FOCO_DELTA.min, FOCO_DELTA.min), FOCO_DELTA.max);
+  const folga = folgaDeCore(args.nSlotsCore, args.seriesCoreAtuais, args.nivel);
+  // O compensador é protegido pelo MEV E pelo piso real dos seus slots — o que for maior.
+  const piso = Math.max(mev(args.nivel, args.objetivo), args.pisoCompensa ?? 0);
+  const cabeNoCompensa = Math.max(0, args.alvoCompensaBase - piso);
+  const deltaAplicado = Math.min(desejado, folga, cabeNoCompensa);
+
+  if (deltaAplicado <= 0) {
+    return {
+      aceita: false, deltaAplicado: 0, entrega: 'volume',
+      alvoCore: args.seriesCoreAtuais, alvoCompensado: args.alvoCompensaBase,
+      motivo: 'core_sem_folga',
+      explicacao: folga <= 0
+        ? 'Seu core já está no teto de séries do seu nível — não dá para somar mais sem furar esse limite. Conforme você avança de nível, o teto sobe junto.'
+        : 'Para somar séries no core, outro grupo precisa ceder as mesmas — e nenhum tem folga hoje sem cair abaixo do mínimo.',
+    };
+  }
+  return {
+    aceita: true, deltaAplicado, entrega: 'volume',
+    alvoCore: args.seriesCoreAtuais + deltaAplicado,
+    alvoCompensado: args.alvoCompensaBase - deltaAplicado,
+  };
+}

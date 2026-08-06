@@ -59,7 +59,9 @@ export type MotivoRecusa =
   | 'equipamento'
   | 'nivel'
   | 'papel_diferente'
-  | 'esvaziaria_o_treino';
+  | 'esvaziaria_o_treino'
+  /** 🎛️ v3.1 — foco de core sem folga de séries. É PAYLOAD: não exige migration. */
+  | 'core_sem_folga';
 
 export interface Veredito {
   aceita: boolean;

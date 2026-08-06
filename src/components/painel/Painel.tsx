@@ -17,7 +17,7 @@ import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDo
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
-import { aplicarFoco, type FocoGrupo } from '@/lib/engine/trilhos';
+import { aplicarFoco, aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -266,6 +266,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [recusa, setRecusa] = useState<string | null>(null);
   /** 🎛️ v3 · Bloco A: a resposta do motor ao "não quero mais este" (recusa ou confirmação). */
   const [banimentoTexto, setBanimentoTexto] = useState<string | null>(null);
+  /** 🎛️ v3.1: a recusa EXPLICADA do foco de core (sem folga de séries). */
+  const [avisoFoco, setAvisoFoco] = useState<string | null>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
@@ -449,15 +451,46 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      * população real ou só na teoria — e sem isso o default declarado nunca vira evidência.
      */
     const focoAntes = perfil.foco;
-    const focoDepois = novo.foco;
+    let focoDepois = novo.foco;
     if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
-      const efeito = aplicarFoco({
-        alvoBase: seriesSemanaisDoGrupo(focoDepois.grupo),
-        alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
-        nivel: novo.nivelExperiencia,
-        objetivo: novo.objetivo,
-      });
-      registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
+      if (focoDepois.grupo === 'core') {
+        /**
+         * 🔒 FOCO DE CORE (DF 2026-08-05): mecânica de SÉRIES NOS SLOTS EXISTENTES, com teto
+         * de séries por exercício do nível.
+         *
+         * 🔴 **Sem folga ⇒ RECUSA EXPLICADA, nunca entrega vazia.** Core tem tipicamente 1
+         * slot por sessão, então cair para `'ordem'` — como fazem os outros grupos — seria
+         * INERTE, e entrega inerte é sucesso simulado. Por isso o foco não é salvo: guardar
+         * um foco que não faz nada é a mesma mentira, guardada.
+         */
+        const slots = rotinaDias.flatMap((d) => d.slots).filter((sl) => sl.exercicio.grupoPrimario === 'core');
+        const efeito = aplicarFocoCore({
+          nSlotsCore: slots.length,
+          seriesCoreAtuais: slots.reduce((a, sl) => a + (sl.series ?? 0), 0),
+          alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
+          nivel: novo.nivelExperiencia,
+          objetivo: novo.objetivo,
+        });
+        if (!efeito.aceita) {
+          registrarEvento('preferencia_recusada', { tipo: 'foco_core', motivo: efeito.motivo ?? 'core_sem_folga', de_id: 'core', para_id: focoDepois.compensa });
+          setAvisoFoco(efeito.explicacao ?? null);
+          focoDepois = undefined;
+          novo = { ...novo, foco: undefined };
+        } else {
+          // 🔒 Para core, `entrega` é SEMPRE 'volume' — 'ordem' nunca é entregue, logo nunca emitido.
+          registrarEvento('foco_ativado', { grupo: 'core', compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
+          setAvisoFoco(null);
+        }
+      } else {
+        const efeito = aplicarFoco({
+          alvoBase: seriesSemanaisDoGrupo(focoDepois.grupo),
+          alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
+          nivel: novo.nivelExperiencia,
+          objetivo: novo.objetivo,
+        });
+        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
+        setAvisoFoco(null);
+      }
     }
     if (focoAntes && !focoDepois) {
       registrarEvento('foco_encerrado', { grupo: focoAntes.grupo, semanas: focoAntes.semana, motivo: 'escolha_usuario' });
@@ -1032,6 +1065,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'hoje' && !modoDiario && (
           <div style={sec}>
+            {/* 🎛️ v3.1 — a RECUSA do foco de core, explicada. Sem folga de séries o foco não
+                é salvo, e a pessoa precisa saber POR QUE o que ela pediu não valeu: recusa
+                silenciosa e aplicação silenciosa são o mesmo defeito. Sem vermelho — pedir
+                foco no core é legítimo, só não cabe hoje. */}
+            {avisoFoco && (
+              <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
+                <p style={{ margin: 0, flex: 1, fontSize: '.9rem', lineHeight: 1.55, color: 'rgba(234,229,219,.82)' }}>{avisoFoco}</p>
+                <button onClick={() => setAvisoFoco(null)} aria-label="Fechar aviso" style={{ background: 'none', border: 'none', color: 'rgba(234,229,219,.5)', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 2 }}>×</button>
+              </div>
+            )}
             <SuaSemana
               treinoDias={perfil.treinoDias}
               sessoesNomes={rotinaDias.map((d) => d.nome)}

@@ -14,12 +14,16 @@ import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 /**
  * 🎛️ v3 · Bloco B — os grupos que podem receber foco.
  *
- * 🔒 `core` e `lombar` ficam de FORA de propósito: o core tem invariante própria de
- * frequência (2–3×/semana) e focar nele brigaria com ela; o lombar não é alvo de volume no
- * motor. Os rótulos vêm de `ROTULO_GRUPO` — uma fonte só para o nome do grupo em todo o app.
+ * 🔒 **`core` ENTRA (DF 2026-08-05)** com mecânica própria — séries nos slots que já existem,
+ * teto de séries por exercício do nível. É o que permite focá-lo **sem tocar** na invariante
+ * de frequência (2–3×/sem) nem na montagem de dias. Ver `engine/trilhos` §Foco de CORE.
+ *
+ * 🔒 `lombar` segue de FORA: não é alvo de volume no motor.
+ *
+ * Os rótulos vêm de `ROTULO_GRUPO` — uma fonte só para o nome do grupo em todo o app.
  */
 const GRUPOS_FOCO: readonly { id: string; rotulo: string }[] = (
-  ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'quadriceps', 'posterior', 'gluteos', 'panturrilha', 'antebraco'] as const
+  ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'quadriceps', 'posterior', 'gluteos', 'panturrilha', 'antebraco', 'core'] as const
 ).map((id) => ({ id, rotulo: ROTULO_GRUPO[id] ?? id }));
 import { elegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 import { lerHistorico } from '@/lib/treino-historico';
