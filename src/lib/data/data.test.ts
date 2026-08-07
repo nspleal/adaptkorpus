@@ -18,17 +18,19 @@ const semFlags: FlagsSaude = {
 
 describe('integridade da base curada', () => {
   // Âncoras da V2 limpa (cofre: banco-alimentos §Expansão V2 + handoff-pratos-v2, 2026-07-01)
-  it('contagens da base (V2: 167 alimentos · 96 pratos · 363 ingredientes · 163 exercícios)', () => {
+  // 🔒 2026-08-06: +11 pratos veganos (p97–p107, +41 ingredientes) — leva de importação.
+  // 404 e não 405: a tabela de composição do handoff tem 41 linhas, não as 42 da prosa.
+  it('contagens da base (167 alimentos · 107 pratos · 404 ingredientes · 163 exercícios)', () => {
     expect(FOODS).toHaveLength(167);
-    expect(RECIPES).toHaveLength(96);
-    expect(RECIPES.reduce((n, r) => n + r.itens.length, 0)).toBe(363);
+    expect(RECIPES).toHaveLength(107);
+    expect(RECIPES.reduce((n, r) => n + r.itens.length, 0)).toBe(404);
     expect(EXERCISES).toHaveLength(163);
   });
 
-  it('distribuição por tipo (vegano 35 · vegetariano 29 · onívoro 32)', () => {
+  it('distribuição por tipo (vegano 46 · vegetariano 29 · onívoro 32)', () => {
     const conta = { vegano: 0, vegetariano: 0, onivoro: 0 };
     for (const r of RECIPES) conta[r.tipo]++;
-    expect(conta).toEqual({ vegano: 35, vegetariano: 29, onivoro: 32 });
+    expect(conta).toEqual({ vegano: 46, vegetariano: 29, onivoro: 32 });
   });
 
   // Âncoras do grupoPrimario (cofre: parametros-motor-substituicao §2, DF 2026-07-04 —

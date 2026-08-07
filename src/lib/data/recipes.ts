@@ -3,6 +3,16 @@
  *   node scripts/gerar-seed.mjs <paleta-V2-limpa.xlsx> <pratos-V2.xlsx>
  * Fonte: cofre (banco-alimentos V2 limpa + pratos V2, 2026-07-01). Validado Δ=0
  * (167 alimentos · 96 pratos · 363 ingredientes · tipos 35/29/32 · Atwater ≤12%).
+ *
+ * 🔒 MERGE MANUAL de 2026-08-06 — p97–p107 (11 pratos veganos, +41 ingredientes).
+ * Fonte: outputs/handoff-leva-importacao-pratos-2026-08-06 (planilha aprovada
+ * `pratos-novos-veganos-2026-08-05.xlsx`, SHA-256 535f55de…). Acrescentados à mão, no
+ * estilo de emissão do gerador, por DECISÃO do autor: a transcrição tem dupla
+ * procedência (planilha aprovada + Δ=0 contra a paleta deste seed), então o xlsx não
+ * acrescentaria informação. O merge das abas na planilha-mestra fica com o autor; até
+ * lá, regenerar do xlsx V2 FALHA ALTO nas contagens do gerador — que é o comportamento
+ * certo, não um defeito. Os números transcritos estão ancorados em
+ * `pratos-veganos-2026-08.test.ts` (kcal + 3 macros por prato).
  */
 import type { Recipe } from './types';
 
@@ -2826,6 +2836,317 @@ export const RECIPES: Recipe[] = [
       "lactose",
       "origem_animal",
       "peixe_frutos_do_mar"
+    ]
+  },
+  {
+    "id": "p97",
+    "nome": "Tofu grelhado com brócolis e broto de feijão",
+    "refeicoes": [
+      "almoco",
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a47",
+        "gramas": 200.0
+      },
+      {
+        "alimentoId": "a97",
+        "gramas": 120.0
+      },
+      {
+        "alimentoId": "a163",
+        "gramas": 80.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p98",
+    "nome": "Tofu ao forno com couve-flor e tomate",
+    "refeicoes": [
+      "almoco",
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a47",
+        "gramas": 200.0
+      },
+      {
+        "alimentoId": "a104",
+        "gramas": 150.0
+      },
+      {
+        "alimentoId": "a111",
+        "gramas": 50.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p99",
+    "nome": "Tofu salteado com broto de feijão e cebola",
+    "refeicoes": [
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a47",
+        "gramas": 220.0
+      },
+      {
+        "alimentoId": "a163",
+        "gramas": 100.0
+      },
+      {
+        "alimentoId": "a98",
+        "gramas": 15.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p100",
+    "nome": "Tofu mexido com brócolis",
+    "refeicoes": [
+      "cafe",
+      "almoco"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a47",
+        "gramas": 180.0
+      },
+      {
+        "alimentoId": "a97",
+        "gramas": 80.0
+      },
+      {
+        "alimentoId": "a98",
+        "gramas": 10.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p101",
+    "nome": "Shake de farinha de soja com banana",
+    "refeicoes": [
+      "cafe"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a132",
+        "gramas": 50.0
+      },
+      {
+        "alimentoId": "a133",
+        "gramas": 200.0
+      },
+      {
+        "alimentoId": "a71",
+        "gramas": 50.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p102",
+    "nome": "Vitamina de banana com farinha de soja",
+    "refeicoes": [
+      "cafe",
+      "lanche"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a71",
+        "gramas": 80.0
+      },
+      {
+        "alimentoId": "a132",
+        "gramas": 30.0
+      },
+      {
+        "alimentoId": "a133",
+        "gramas": 150.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p103",
+    "nome": "Salada de broto de feijão com pepino e tofu",
+    "refeicoes": [
+      "almoco",
+      "lanche"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a163",
+        "gramas": 90.0
+      },
+      {
+        "alimentoId": "a106",
+        "gramas": 80.0
+      },
+      {
+        "alimentoId": "a47",
+        "gramas": 100.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p104",
+    "nome": "Ervilha refogada com tofu",
+    "refeicoes": [
+      "almoco",
+      "lanche"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a126",
+        "gramas": 120.0
+      },
+      {
+        "alimentoId": "a47",
+        "gramas": 100.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
+    ]
+  },
+  {
+    "id": "p105",
+    "nome": "Ensopado de lentilha com abobrinha",
+    "refeicoes": [
+      "almoco",
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a46",
+        "gramas": 300.0
+      },
+      {
+        "alimentoId": "a90",
+        "gramas": 100.0
+      },
+      {
+        "alimentoId": "a98",
+        "gramas": 20.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": []
+  },
+  {
+    "id": "p106",
+    "nome": "Sopa de feijão fradinho com couve-flor",
+    "refeicoes": [
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a42",
+        "gramas": 260.0
+      },
+      {
+        "alimentoId": "a104",
+        "gramas": 100.0
+      },
+      {
+        "alimentoId": "a98",
+        "gramas": 20.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": []
+  },
+  {
+    "id": "p107",
+    "nome": "Tofu em cubos com repolho refogado",
+    "refeicoes": [
+      "almoco",
+      "jantar"
+    ],
+    "tipo": "vegano",
+    "itens": [
+      {
+        "alimentoId": "a47",
+        "gramas": 180.0
+      },
+      {
+        "alimentoId": "a109",
+        "gramas": 120.0
+      },
+      {
+        "alimentoId": "a98",
+        "gramas": 15.0
+      },
+      {
+        "alimentoId": "a115",
+        "gramas": 5.0
+      }
+    ],
+    "contemAlergenos": [
+      "soja"
     ]
   }
 ];

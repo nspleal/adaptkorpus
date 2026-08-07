@@ -9,7 +9,7 @@
  * - `id` numérico da planilha vira `a{n}` / `p{n}` — ids PRESERVADOS, gaps permitidos (dedupe).
  * - `rotulo_amigavel` = vocabulário oficial do cofre (exibição); `nome` clínico TACO permanece.
  * - "NA"/"Tr"/vazio → 0 nos macros; `contemAlergenos` é sempre RECOMPUTADO dos ingredientes.
- * - VALIDA TUDO antes de escrever (hard-fail): contagens 167/96/363 · tipos 35/29/32 · ids únicos ·
+ * - VALIDA TUDO antes de escrever (hard-fail): contagens 167/107/404 · tipos 46/29/32 · ids únicos ·
  *   refs válidas · rótulo 100% e único · Δ=0 (macros do prato = Σ paleta×gramas, tolerância de
  *   arredondamento da planilha) · tipo recomputado por alérgenos = planilha · Atwater ≤ 12%.
  * - Emissão determinística no MESMO estilo dos arquivos v1 (floats sempre com decimal, chaves
@@ -31,7 +31,16 @@ if (!paletaPath || !pratosPath) {
 }
 
 // ── contagens esperadas (handoff-pratos-v2 + dedupe 2026-07-01) ────────────────────────────
-const ESPERADO = { foods: 167, recipes: 96, ingredientes: 363, tipos: { vegano: 35, vegetariano: 29, onivoro: 32 } };
+// 🔒 Atualizadas em 2026-08-06 pela leva de importação dos 11 pratos veganos (p97–p107):
+//   pratos 96 → 107 · ingredientes 363 → 404 · vegano 35 → 46.
+// Enquanto o autor não fizer o merge das abas da planilha-entrega na `pratos-V2.xlsx`,
+// regenerar daqui FALHA ALTO — de propósito: é o que impede a regeneração de APAGAR os 11
+// em silêncio. A falha é o guard, não um bug.
+//
+// ⚠️ 404, não 405: a prosa do handoff diz "42 linhas" de composição, mas a tabela tem 41
+// (97–100:4 · 101:3 · 102:3 · 103:4 · 104:3 · 105–107:4 = 41). O Δ=0 fecha com as 41 —
+// os dados estão certos; o parêntese é que estava um a mais. Reportado ao autor.
+const ESPERADO = { foods: 167, recipes: 107, ingredientes: 404, tipos: { vegano: 46, vegetariano: 29, onivoro: 32 } };
 
 // ── vocabulários planilha → app ────────────────────────────────────────────────────────────
 const GRUPO = {
@@ -304,7 +313,7 @@ const cabecalho = (tipo) => `/**
  * GERADO a partir dos dados do autor (xlsx) — NÃO editar à mão. Regenerar:
  *   node scripts/gerar-seed.mjs <paleta-V2-limpa.xlsx> <pratos-V2.xlsx>
  * Fonte: cofre (banco-alimentos V2 limpa + pratos V2, 2026-07-01). Validado Δ=0
- * (167 alimentos · 96 pratos · 363 ingredientes · tipos 35/29/32 · Atwater ≤12%).
+ * (167 alimentos · 107 pratos · 404 ingredientes · tipos 46/29/32 · Atwater ≤12%).
  */
 import type { ${tipo} } from './types';
 
