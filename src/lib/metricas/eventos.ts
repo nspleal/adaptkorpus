@@ -44,6 +44,8 @@ export const TIPOS_EVENTO = [
   'tecnica_elegivel',
   'tecnica_ativada',
   'tecnica_feedback',
+  /** 💰 Leva H (2026-08-06) — escolha/mudança do teto de custo. Migration 0013. */
+  'orcamento_escolhido',
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -57,6 +59,11 @@ export interface PayloadPorEvento {
   sessao_iniciada: { sessao_id: string; data_agendada: string; semana_ciclo: number };
   sessao_concluida: { sessao_id: string; duracao_real_min: number; exercicios_feitos: number; exercicios_planejados: number };
   exercicio_substituido: { de_id: string; para_id: string; motivo: string };
+  /**
+   * 💰 `valor`: 'baixo' | 'medio' | 'alto' | 'nenhum'. `nenhum` distingue "não quis escolher"
+   * de "quis sem restrição" (`alto`) — é a diferença que a leitura de adoção precisa.
+   */
+  orcamento_escolhido: { valor: string };
   refeicao_marcada: { refeicao: string; seguiu: boolean };
   cardio_registrado: { modalidade: string; minutos: number; origem: string };
   /** `tipo`: 'troca' | 'banimento'. Sem nome de exercício em texto — só ids do catálogo. */
@@ -87,6 +94,8 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
   sessao_iniciada: ['sessao_id', 'data_agendada', 'semana_ciclo'],
   sessao_concluida: ['sessao_id', 'duracao_real_min', 'exercicios_feitos', 'exercicios_planejados'],
   exercicio_substituido: ['de_id', 'para_id', 'motivo'],
+  /** 💰 Só o valor escolhido — preferência de montagem, nada de saúde, nada de dinheiro. */
+  orcamento_escolhido: ['valor'],
   refeicao_marcada: ['refeicao', 'seguiu'],
   cardio_registrado: ['modalidade', 'minutos', 'origem'],
   preferencia_criada: ['tipo', 'de_id', 'para_id'],

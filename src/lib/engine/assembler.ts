@@ -18,6 +18,7 @@
  */
 import { macrosDePrato } from '../data/nutrition';
 import { ESCALA_PORCAO } from './constants';
+import { custoOrdena, nivelCustoPrato, somaCustoPrato, tetosEmOrdem, type Orcamento } from './orcamento';
 import type {
   Alergeno,
   Food,
@@ -47,6 +48,12 @@ export interface RestricoesUsuario {
    * relógio) — o motor recebe só a lista já resolvida.
    */
   excluirPratoIds?: string[];
+  /**
+   * Orçamento (pedido nº 11 do beta). TETO, NUNCA ALVO: prefere a faixa e SOBE quando o piso
+   * de proteína ou a janela de kcal não fecham. Ausente/`alto` = comportamento de hoje, byte
+   * a byte — o custo nem entra na ordenação (cofre §`orcamento`, DF 2026-07-26).
+   */
+  orcamento?: Orcamento | null;
 }
 
 export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
@@ -154,6 +161,10 @@ export function montarCardapioDia(
     .slice()
     .sort(porId);
 
+  // Orçamento: ausente = `alto` = sem restrição (ninguém ganha limite que não pediu).
+  const orcamento: Orcamento = restricoes.orcamento ?? 'alto';
+  const ordenaPorCusto = custoOrdena(orcamento);
+
   const macrosCache = new Map<string, RecipeMacros>();
   const macros = (r: Recipe): RecipeMacros => {
     let m = macrosCache.get(r.id);
@@ -164,8 +175,9 @@ export function montarCardapioDia(
     return m;
   };
 
-  const porRefeicao = (ref: Refeicao): Recipe[] =>
-    elegiveis.filter((r) => r.refeicoes.includes(ref));
+  const porRefeicaoDe = (lista: readonly Recipe[], ref: Refeicao): Recipe[] =>
+    lista.filter((r) => r.refeicoes.includes(ref));
+  const porRefeicao = (ref: Refeicao): Recipe[] => porRefeicaoDe(elegiveis, ref);
 
   const faltando = REFEICOES_OBRIGATORIAS.filter((ref) => porRefeicao(ref).length === 0);
   if (faltando.length > 0) {
@@ -193,7 +205,10 @@ export function montarCardapioDia(
     const alvoKcal = plano.kcalAlvo, alvoProt = plano.macros.proteinaG;
     const { minKcal, maxKcal } = plano.janela;
 
-    interface Melhor { ci: number; ai: number; ji: number; li: number; escala: number; dev: number; protDev: number; chave: string | null }
+    interface Melhor { ci: number; ai: number; ji: number; li: number; escala: number; dev: number; protDev: number; custo: number; chave: string | null }
+    // Σ de custo por prato, pré-computada por lista (a soma do conjunto é a soma das partes).
+    const kC = cafes.map(somaCustoPrato), kA = almocos.map(somaCustoPrato), kJ = jantares.map(somaCustoPrato);
+    const kL = lanches.map((l) => (l ? somaCustoPrato(l) : 0));
     let geral: Melhor | null = null;
     let naJanela: Melhor | null = null;
 
@@ -205,13 +220,22 @@ export function montarCardapioDia(
     };
     // Substitui `b` só se o candidato for ESTRITAMENTE melhor (mesma semântica de
     // compararCandidatos(cand, melhor) < 0 da versão ingênua).
-    const melhorDe = (b: Melhor | null, ci: number, ai: number, ji: number, li: number, escala: number, dev: number, protDev: number): Melhor => {
-      if (!b) return { ci, ai, ji, li, escala, dev, protDev, chave: null };
-      if (dev !== b.dev) return dev < b.dev ? { ci, ai, ji, li, escala, dev, protDev, chave: null } : b;
-      if (protDev !== b.protDev) return protDev < b.protDev ? { ci, ai, ji, li, escala, dev, protDev, chave: null } : b;
+    /**
+     * 🔒 CADEIA DE PRECEDÊNCIA TRAVADA (cofre §Ordem de precedência; error-hunt 2026-08-01):
+     *   menor desvio calórico → macros (proteína) → CUSTO → chave final sobre o conjunto.
+     * O custo NUNCA sobe acima dos macros: as duas ordens produzem cardápios diferentes, e a
+     * posição foi decidida por DF — trocá-la é reabrir decisão travada.
+     * Com `orcamento = alto` (ou ausente) `ordenaPorCusto` é falso e a cadeia fica idêntica à
+     * de antes desta leva, byte a byte.
+     */
+    const melhorDe = (b: Melhor | null, ci: number, ai: number, ji: number, li: number, escala: number, dev: number, protDev: number, custo: number): Melhor => {
+      if (!b) return { ci, ai, ji, li, escala, dev, protDev, custo, chave: null };
+      if (dev !== b.dev) return dev < b.dev ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
+      if (protDev !== b.protDev) return protDev < b.protDev ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
+      if (ordenaPorCusto && custo !== b.custo) return custo < b.custo ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
       const chave = chaveDe(ci, ai, ji, li);
       if (b.chave === null) b.chave = chaveDe(b.ci, b.ai, b.ji, b.li);
-      return chave < b.chave ? { ci, ai, ji, li, escala, dev, protDev, chave } : b;
+      return chave < b.chave ? { ci, ai, ji, li, escala, dev, protDev, custo, chave } : b;
     };
 
     for (let ci = 0; ci < cafes.length; ci++) {
@@ -237,8 +261,9 @@ export function montarCardapioDia(
             const kcal = kcalBase * escala;
             const dev = Math.abs(kcal - alvoKcal);
             const protDev = Math.abs(protBase * escala - alvoProt);
-            geral = melhorDe(geral, ci, ai, ji, li, escala, dev, protDev);
-            if (kcal >= minKcal && kcal <= maxKcal) naJanela = melhorDe(naJanela, ci, ai, ji, li, escala, dev, protDev);
+            const custo = kC[ci]! + kA[ai]! + kJ[ji]! + (l ? kL[li]! : 0);
+            geral = melhorDe(geral, ci, ai, ji, li, escala, dev, protDev, custo);
+            if (kcal >= minKcal && kcal <= maxKcal) naJanela = melhorDe(naJanela, ci, ai, ji, li, escala, dev, protDev, custo);
           }
         }
       }
@@ -275,11 +300,47 @@ export function montarCardapioDia(
     const f = lista.filter((r) => !indesejado(r));
     return f.length > 0 ? f : lista; // relaxa por slot quando esvazia
   };
-  const lanchesBase = porRefeicao('lanche');
-  let busca = procurar(preferir(porRefeicao('cafe')), preferir(porRefeicao('almoco')), preferir(porRefeicao('jantar')), [null, ...preferir(lanchesBase)]);
-  if (!busca.melhorGeral && temPreferencia) {
-    // as listas filtradas não fecharam um trio distinto → relaxa as preferências por completo.
-    busca = procurar(porRefeicao('cafe'), porRefeicao('almoco'), porRefeicao('jantar'), [null, ...lanchesBase]);
+  const buscarEm = (lista: readonly Recipe[]) => {
+    const lanchesBase = porRefeicaoDe(lista, 'lanche');
+    let b = procurar(preferir(porRefeicaoDe(lista, 'cafe')), preferir(porRefeicaoDe(lista, 'almoco')), preferir(porRefeicaoDe(lista, 'jantar')), [null, ...preferir(lanchesBase)]);
+    if (!b.melhorGeral && temPreferencia) {
+      // as listas filtradas não fecharam um trio distinto → relaxa as preferências por completo.
+      b = procurar(porRefeicaoDe(lista, 'cafe'), porRefeicaoDe(lista, 'almoco'), porRefeicaoDe(lista, 'jantar'), [null, ...lanchesBase]);
+    }
+    return b;
+  };
+
+  /**
+   * 🔴 RELAXAMENTO POR NÍVEL — o coração do "teto, não alvo".
+   *
+   * Tenta fechar o dia no teto preferido; se o piso de proteína ou a janela de kcal não
+   * fecharem, sobe o teto UM NÍVEL PARA O DIA INTEIRO e re-monta. Nunca prato a prato:
+   * relaxar por prato tornaria o resultado dependente da ordem de busca e quebraria o
+   * determinismo travado.
+   *
+   * 🔑 O predicado de "fechou" lê `plano.macros.proteinaPisoG` — a MESMA constante que a
+   * substituição usa como trava dura (substituicao.ts). Uma constante, duas superfícies:
+   * montar e substituir não podem discordar sobre o que é piso de proteína.
+   */
+  const pisoProteina = plano.macros.proteinaPisoG;
+  let busca = buscarEm(elegiveis);
+  for (const teto of tetosEmOrdem(orcamento)) {
+    if (teto >= 3) { busca = buscarEm(elegiveis); break; }
+    const noTeto = elegiveis.filter((r) => nivelCustoPrato(r) <= teto);
+    const tentativa = buscarEm(noTeto);
+    /**
+     * ⚠️ A COMPARAÇÃO É NA PRECISÃO EXIBIDA, e isso não é frouxidão — é o único jeito
+     * bem-posto de comparar. O montador MIRA a proteína (`protDev` acima), então quando o
+     * alvo COINCIDE com o piso ele converge por baixo (95,999858 para 96). Um `>= piso`
+     * estrito nunca seria satisfeito nesse caso, e o relaxamento subiria ao teto 3 SEMPRE —
+     * "teto, não alvo" viraria "sempre o mais caro", silenciosamente. Medido nesta leva.
+     *
+     * A régua é a precisão em que o app mostra proteína: gramas inteiras. Um déficit invisível
+     * na tela não é déficit; um déficit real (89,7 para um piso de 96) continua reprovando.
+     */
+    const fechou = tentativa.melhorNaJanela !== null
+      && Math.round(tentativa.melhorNaJanela.totais.proteinaG) >= Math.round(pisoProteina);
+    if (fechou) { busca = tentativa; break; }
   }
   const { melhorNaJanela, melhorGeral } = busca;
 

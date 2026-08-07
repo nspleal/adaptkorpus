@@ -81,10 +81,55 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
 
 /* ════════════════════ Preferências alimentares ════════════════════ */
 
-export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, onAddFood, onRemoveFood, contexto }: {
+/**
+ * 💰 Seletor de ORÇAMENTO (leva H — pedido nº 11 do beta).
+ *
+ * 🔒 COPY TRAVADA PELA DF (2026-07-26): teto, não alvo. É proibido exibir R$, prometer
+ * economia em dinheiro, dizer "cardápio barato" ou qualquer número de preço — o dado é uma
+ * FAIXA relativa curada, com arbitrariedade declarada, e não sustenta afirmação monetária.
+ * A explicação existe UMA vez, aqui; quando o teto relaxa para fechar a meta o app não se
+ * desculpa nem alardeia — o cardápio simplesmente sai. Ausência não fala.
+ */
+export function Orcamento({ valor, onEscolher }: {
+  valor: 'baixo' | 'medio' | 'alto' | null;
+  onEscolher: (v: 'baixo' | 'medio' | 'alto' | null) => void;
+}) {
+  const OPCOES: { id: 'baixo' | 'medio' | 'alto' | null; t: string }[] = [
+    { id: null, t: 'Sem preferência' },
+    { id: 'baixo', t: 'Mais em conta' },
+    { id: 'medio', t: 'Intermediário' },
+    { id: 'alto', t: 'Tanto faz' },
+  ];
+  const pill = (on: boolean): CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', padding: '9px 14px', borderRadius: 999, fontSize: '.88rem', cursor: 'pointer', transition: 'all .18s ease',
+    ...(on
+      ? { fontWeight: 700, background: 'rgba(189,255,0,.14)', border: '1.5px solid rgba(189,255,0,.55)', color: '#BDFF00' }
+      : { fontWeight: 600, background: 'rgba(234,229,219,.04)', border: '1.5px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.7)' }),
+  });
+  return (
+    <div style={{ background: 'rgba(234,229,219,.025)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: '18px 19px', marginTop: 15 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={{ fontSize: '1.02rem', fontWeight: 700 }}>Orçamento</span>
+        <span style={{ fontSize: '.66rem', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.72)', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.18)', borderRadius: 999, padding: '3px 9px' }}>Preferência</span>
+      </div>
+      <p style={{ margin: '0 0 14px', fontSize: '.9rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.5 }}>
+        Priorizamos os itens de menor custo; usamos um mais caro só quando precisa para fechar a sua meta. Sem preferência, nada muda no seu cardápio.
+      </p>
+      <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+        {OPCOES.map((o) => (
+          <button key={o.id ?? 'nenhum'} type="button" onClick={() => onEscolher(o.id)} aria-pressed={valor === o.id} style={pill(valor === o.id)}>{o.t}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, onAddFood, onRemoveFood, contexto, orcamento, onOrcamento }: {
   alergias: Alergeno[]; onToggleAlergia: (a: Alergeno) => void;
   naoCurto: string[]; onAddFood: (id: string) => void; onRemoveFood: (id: string) => void;
   contexto: 'onboarding' | 'editar';
+  orcamento?: 'baixo' | 'medio' | 'alto' | null;
+  onOrcamento?: (v: 'baixo' | 'medio' | 'alto' | null) => void;
 }) {
   const alergiasSet = new Set(alergias);
   const pill = (on: boolean): CSSProperties => ({
@@ -130,6 +175,9 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
             nível do PRATO e NÃO alimenta o "não curto" (nível do alimento) — sinais separados. */}
         {contexto === 'editar' && <p style={{ margin: '13px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Isto é sobre <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>ingredientes</strong>. Cansou de uma receita específica? Use <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>&quot;Cansei deste prato&quot;</strong> no card do prato (aba Dieta) — ele descansa da rotação e volta sozinho.</p>}
       </div>
+
+      {/* 💰 Orçamento — mesma superfície das demais preferências de montagem (handoff §A entrada). */}
+      {onOrcamento && <Orcamento valor={orcamento ?? null} onEscolher={onOrcamento} />}
     </div>
   );
 }

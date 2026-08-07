@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
+import type { Orcamento } from '@/lib/engine/orcamento';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type RegistroPeso, type SessaoHistorico } from '@/lib/treino-historico';
@@ -64,6 +65,11 @@ export interface PerfilResumo {
   treinoDias: Weekday[];
   /** "Alimentos que não curto" — IDs da paleta curada (preferência relaxável no motor). */
   naoCurto: string[];
+  /**
+   * 💰 Leva H — orçamento da dieta (pedido nº 11 do beta). TETO, NUNCA ALVO. Ausente = `alto`
+   * = sem restrição: ninguém ganha limite que não pediu (cofre §`orcamento`, DF 2026-07-26).
+   */
+  orcamento?: Orcamento | null;
   /** Exercícios FAVORITOS (⭐ V8.2, DF #12): o montador os prefere sempre que couberem
    *  (isentos da variedade; filtros duros intactos). Espelho positivo do "não gosto". */
   favoritos?: string[];
@@ -443,6 +449,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
   // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
   function recalcular(novo: PerfilResumo) {
+    /**
+     * 💰 Leva H — o evento do ORÇAMENTO, na VIRADA do estado (não a cada render, não a cada
+     * salvamento). Sem ele a adoção da feature é impossível de ler. Payload = só o valor
+     * escolhido; `nenhum` distingue "não quis" de "quis sem restrição" (`alto`), que é a
+     * diferença que a leitura precisa. Migration 0013 (o CHECK rejeitaria em silêncio).
+     */
+    if ((novo.orcamento ?? null) !== (perfil.orcamento ?? null)) {
+      registrarEvento('orcamento_escolhido', { valor: novo.orcamento ?? 'nenhum' });
+    }
     /**
      * 🎛️ v3 · Bloco B — os eventos do FOCO, emitidos na virada do estado (não a cada render).
      *

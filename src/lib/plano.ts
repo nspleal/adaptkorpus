@@ -62,6 +62,9 @@ export function recomputarPlano(
     alergenos: perfil.alergenos, preferencia: perfil.preferencia,
     excluirAlimentoIds: perfil.naoCurto ?? [],
     excluirPratoIds: pratosCansadosAtivos(perfil.pratosCansados),
+    // 💰 Leva H: a escolha da tela chega ao montador por aqui — mesmo caminho das demais
+    // preferências de montagem. Ausente = `alto` (resolvido no motor).
+    orcamento: perfil.orcamento ?? null,
   };
   return {
     dieta: gerarDieta(perfilU, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes }),

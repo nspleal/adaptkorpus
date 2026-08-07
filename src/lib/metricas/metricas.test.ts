@@ -81,10 +81,10 @@ describe('🔴 DENYLIST — nenhuma chave de saúde ou PII entra em payload', ()
 });
 
 describe('🔒 os eventos declarados, e só eles', () => {
-  it('a lista é exatamente a das specs (7 da Leva C2 + 2 do v3 · Bloco A)', () => {
+  it('a lista é exatamente a das specs (7 da Leva C2 + 5 do v3 + 1 da leva H)', () => {
     expect([...TIPOS_EVENTO].sort()).toEqual([
       'app_aberto', 'cardio_registrado', 'exercicio_substituido',
-      'foco_ativado', 'foco_encerrado', 'plano_gerado',
+      'foco_ativado', 'foco_encerrado', 'orcamento_escolhido', 'plano_gerado',
       'preferencia_criada', 'preferencia_recusada',
       'refeicao_marcada', 'sessao_concluida', 'sessao_iniciada',
       'tecnica_ativada', 'tecnica_elegivel', 'tecnica_feedback',
@@ -340,8 +340,16 @@ describe('🔒 retenção — os dois prazos, com precisão', () => {
    * descrição e a retenção). Apagar a DESCRIÇÃO inteira ainda casava pelo parágrafo da
    * retenção: o guard provava que o assunto existe, nunca que a página o DESCREVE.
    */
+  /**
+   * ⚠️ ACHADO DE 2026-08-06: esta lista tinha só os 7 atos da Leva C2, e por isso NÃO acusou
+   * quando o v3 acrescentou 5 eventos (preferência, foco, técnicas) sem tocar a página — a
+   * página ficou defasada por três levas. A regra do descompasso (2026-07-27) vale nas DUAS
+   * direções: tratamento novo sem página é o mesmo defeito que página sem tratamento.
+   * Evento novo ⇒ ato novo AQUI e na `/privacidade`, no mesmo commit.
+   */
   it('a `/privacidade` descreve os eventos, um a um (não são anônimos)', () => {
-    for (const ato of ['abre o app', 'gera um plano', 'inicia e conclui', 'troca um exercício', 'marca uma refeição', 'registra um cardio']) {
+    for (const ato of ['abre o app', 'gera um plano', 'inicia e conclui', 'troca um exercício', 'marca uma refeição', 'registra um cardio',
+      'preferências de treino', 'grupo em foco', 'técnica avançada', 'limite de orçamento']) {
       expect(priv, `a página não cita "${ato}"`).toMatch(new RegExp(ato, 'i'));
     }
     expect(priv).toMatch(/nunca são enviados a terceiros/i);

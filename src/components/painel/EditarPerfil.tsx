@@ -119,6 +119,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>(inicial.preferencia ?? '');
   const [alergias, setAlergias] = useState<Alergeno[]>(inicial.alergenos);
   const [naoCurto, setNaoCurto] = useState<string[]>(inicial.naoCurto ?? []);
+  // 💰 Leva H — orçamento. `null` = sem preferência = `alto` no motor.
+  const [orcamento, setOrcamento] = useState<'baixo' | 'medio' | 'alto' | null>(inicial.orcamento ?? null);
   // Favoritos (⭐ V8.2): edição local como o "não gosto" — persiste no Salvar. Remover é
   // reversível por toast (4,5 s; sair da tela = confirma, como o Cancelar descarta tudo).
   const [favoritos, setFavoritos] = useState<string[]>(inicial.favoritos ?? []);
@@ -178,7 +180,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       sexo, idade: i, alturaCm: a, pesoKg: pz, objetivo, nivelAtividade: atividade,
       nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [],
       diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
-      preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos,
+      preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos, orcamento,
       // 🎛️ v3 · Bloco A: as trocas ficam intactas; só a lista de banidos é editável aqui.
       preferencias: { trocas: inicial.preferencias?.trocas ?? [], banidos },
       // Só vira foco quando o par está completo — meio foco não é foco.
@@ -291,7 +293,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{PADROES.map((o) => <div key={o.id || 'oni'} onClick={() => setPadrao(o.id)} style={{ ...card, minWidth: 120, flex: 1, ...(padrao === o.id ? cardOn : {}) }}><div style={{ fontSize: '.98rem', fontWeight: 700 }}>{o.t}</div><div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.6)' }}>{o.d}</div></div>)}</div>
           </div>
 
-          <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="editar" />
+          <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="editar" orcamento={orcamento} onOrcamento={setOrcamento} />
 
           {/* Espelho POSITIVO do bloco acima (V8.2 — mesma família de preferências). */}
           <MeusFavoritos
