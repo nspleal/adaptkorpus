@@ -108,6 +108,39 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
 };
 
 /**
+ * 🔒 A DESCRIÇÃO PÚBLICA de cada evento — o trecho que a `/privacidade` precisa conter.
+ *
+ * ⚠️ POR QUE ESTE MAPA EXISTE, e por que é `Record<TipoEvento, …>`. O guard da página era uma
+ * LISTA LITERAL dos 7 atos originais: quando o v3 acrescentou 5 eventos, a lista seguiu verde
+ * e a página ficou defasada por três levas. Consertá-la para a contagem nova só re-armaria a
+ * mesma doença — lista própria de guard é uma TERCEIRA cópia da verdade.
+ *
+ * Aqui a enumeração DERIVA do registro canônico: tipo novo sem descrição NÃO COMPILA (o
+ * `Record` exige exaustividade), e descrição sem correspondência na página derruba a suíte.
+ * A regra do descompasso (2026-07-27) passa a valer por construção, nas duas direções.
+ *
+ * Vários eventos compartilham o mesmo trecho de propósito: a página fala em ATOS da pessoa,
+ * não em nomes internos de evento (iniciar e concluir sessão é um ato só para quem lê).
+ */
+export const DESCRICAO_PUBLICA: Readonly<Record<TipoEvento, string>> = {
+  app_aberto: 'abre o app',
+  plano_gerado: 'gera um plano',
+  sessao_iniciada: 'inicia e conclui',
+  sessao_concluida: 'inicia e conclui',
+  exercicio_substituido: 'troca um exercício',
+  refeicao_marcada: 'marca uma refeição',
+  cardio_registrado: 'registra um cardio',
+  preferencia_criada: 'preferências de treino',
+  preferencia_recusada: 'preferências de treino',
+  foco_ativado: 'grupo em foco',
+  foco_encerrado: 'grupo em foco',
+  tecnica_elegivel: 'técnica avançada',
+  tecnica_ativada: 'técnica avançada',
+  tecnica_feedback: 'esforço dela',
+  orcamento_escolhido: 'limite de orçamento',
+};
+
+/**
  * 🔴 DENYLIST — chaves que NUNCA podem estar num payload de telemetria.
  *
  * Cofre: *"Peso · IMC · resposta do gate · condição de saúde · dor/sintoma · texto livre de

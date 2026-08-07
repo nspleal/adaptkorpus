@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  CHAVES_PERMITIDAS, DENYLIST_SAUDE, RETENCAO_EVENTOS_MESES, TIPOS_EVENTO,
+  CHAVES_PERMITIDAS, DENYLIST_SAUDE, DESCRICAO_PUBLICA, RETENCAO_EVENTOS_MESES, TIPOS_EVENTO,
   chaveProibida, montarPayload, normalizarChave,
 } from './eventos';
 
@@ -341,17 +341,27 @@ describe('🔒 retenção — os dois prazos, com precisão', () => {
    * retenção: o guard provava que o assunto existe, nunca que a página o DESCREVE.
    */
   /**
-   * ⚠️ ACHADO DE 2026-08-06: esta lista tinha só os 7 atos da Leva C2, e por isso NÃO acusou
-   * quando o v3 acrescentou 5 eventos (preferência, foco, técnicas) sem tocar a página — a
-   * página ficou defasada por três levas. A regra do descompasso (2026-07-27) vale nas DUAS
-   * direções: tratamento novo sem página é o mesmo defeito que página sem tratamento.
-   * Evento novo ⇒ ato novo AQUI e na `/privacidade`, no mesmo commit.
+   * ⚠️ ACHADO DE 2026-08-06, e o conserto de CLASSE. Este guard era uma LISTA LITERAL dos 7
+   * atos da Leva C2 — por isso não acusou quando o v3 acrescentou 5 eventos sem tocar a
+   * página, que ficou defasada por três levas. Atualizar a lista para a contagem nova apenas
+   * re-armaria a doença; a lista própria era uma TERCEIRA cópia da verdade.
+   *
+   * Agora a enumeração DERIVA do registro canônico (`TIPOS_EVENTO` → `DESCRICAO_PUBLICA`, a
+   * mesma fonte que o CHECK do banco espelha). Evento novo sem descrição não compila; evento
+   * descrito sem estar na página cai aqui.
    */
-  it('a `/privacidade` descreve os eventos, um a um (não são anônimos)', () => {
-    for (const ato of ['abre o app', 'gera um plano', 'inicia e conclui', 'troca um exercício', 'marca uma refeição', 'registra um cardio',
-      'preferências de treino', 'grupo em foco', 'técnica avançada', 'limite de orçamento']) {
-      expect(priv, `a página não cita "${ato}"`).toMatch(new RegExp(ato, 'i'));
-    }
+  it('a `/privacidade` descreve os eventos, um a um (derivado do registro canônico)', () => {
+    const faltando = TIPOS_EVENTO
+      .filter((t) => !new RegExp(DESCRICAO_PUBLICA[t], 'i').test(priv))
+      .map((t) => `${t} → "${DESCRICAO_PUBLICA[t]}"`);
+    expect(faltando, `a /privacidade não descreve:\n${faltando.join('\n')}`).toEqual([]);
+  });
+
+  it('toda descrição pública pertence a um evento que existe (sem cópia órfã)', () => {
+    expect(Object.keys(DESCRICAO_PUBLICA).sort()).toEqual([...TIPOS_EVENTO].sort());
+  });
+
+  it('a página mantém as promessas de tratamento', () => {
     expect(priv).toMatch(/nunca são enviados a terceiros/i);
     expect(priv).toMatch(/Nada de saúde entra nesses registros/i);
     expect(priv).toMatch(/saem no seu export e na exclusão de conta/i);
