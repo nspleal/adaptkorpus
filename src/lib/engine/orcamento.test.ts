@@ -162,9 +162,12 @@ describe('🔴 aceite 5 — zero mudança com alto/sem escolha', () => {
     }
     return out;
   };
+  // ⏱️ 36 montagens completas sobre o catálogo real (~4 s) contra o limite padrão de 5 s —
+  // passava por pouco e estourou com a máquina carregada. Folga explícita: teste no fio do
+  // limite é falha intermitente esperando a hora, e falha intermitente ensina a ignorar vermelho.
   it('`alto` e "sem campo" produzem cardápios idênticos', () => {
     expect(assinatura('alto')).toEqual(assinatura(undefined));
-  });
+  }, 30_000);
   it('com `alto` o custo nem participa da ordenação', () => {
     expect(custoOrdena('alto')).toBe(false);
     expect(custoOrdena(undefined)).toBe(false);

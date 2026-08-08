@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
 import type { Orcamento } from '@/lib/engine/orcamento';
+import { Orcamento as SeletorOrcamento, ROTULO_ORCAMENTO } from '@/components/perfil/DiasEPreferencias';
 import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type RegistroPeso, type SessaoHistorico } from '@/lib/treino-historico';
@@ -586,6 +587,23 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     aplicarRotacao({ ...perfil, pratosCansados: perfil.pratosCansados.filter((c) => c.id !== pratoId) });
   }
 
+  /**
+   * 💰 Mini-leva de DESCOBRIBILIDADE — a porta do orçamento na própria aba Dieta.
+   *
+   * 🔑 DUAS PORTAS, UM ESTADO: esta e a de Editar perfil escrevem o MESMO `perfil.orcamento`
+   * e leem dele. Exibições divergentes entre as duas seriam "duas verdades para o mesmo
+   * número" — a classe que o cofre já nomeou.
+   *
+   * Usa `aplicarRotacao` (recomputa só a dieta) e NÃO `recalcular`: aquele termina com
+   * `setAba('hoje')`, o que jogaria a pessoa para fora da tela onde ela acabou de escolher.
+   * O evento sai aqui porque a virada de estado é aqui.
+   */
+  function mudarOrcamento(v: Orcamento | null) {
+    if ((v ?? null) === (perfil.orcamento ?? null)) return; // sem virada, sem evento
+    registrarEvento('orcamento_escolhido', { valor: v ?? 'nenhum' });
+    aplicarRotacao({ ...perfil, orcamento: v });
+  }
+
   function gerarOpcoesPrato(idx: number, excluir: string[]): OpcaoPrato[] {
     if (!dieta.plano || !cardTotais) return [];
     const item = cardItens[idx]!;
@@ -1122,7 +1140,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'dieta' && modoDiario && (
           <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
         )}
-        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} />}
+        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
           <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
@@ -1403,12 +1421,13 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
 
 /* ════════════════════ Dieta ════════════════════ */
 
-function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta }: {
+function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta, orcamento, onOrcamento }: {
   dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
   logs: Record<string, StatusRefeicao>; notes: Record<string, string>; dataHoje: string;
   onStatus: (id: string, s: StatusRefeicao) => void; onNote: (id: string, txt: string) => void;
   onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void; onDetalhe: (idx: number) => void;
   descanso: { id: string; nome: string; ate: string }[]; onTrazerDeVolta: (id: string) => void;
+  orcamento: Orcamento | null; onOrcamento: (v: Orcamento | null) => void;
 }) {
   const plano = dieta.plano!;
   return (
@@ -1453,6 +1472,12 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
           </div>
         </div>
       )}
+      {/* 💰 A PORTA na superfície que a spec nomeia ("preferências da dieta"). Renderizada
+          SEM condicional de propósito: a mini-leva nasceu porque um `{onOrcamento && …}`
+          apagou o controle do onboarding em silêncio. */}
+      <div style={{ marginTop: 22 }}>
+        <SeletorOrcamento valor={orcamento} onEscolher={onOrcamento} />
+      </div>
       <p style={{ margin: '18px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>O registro acompanha sua constância, não calorias. Os valores do cardápio são estimativas de uma base reconhecida de alimentos.</p>
       <p style={{ margin: '8px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Trocas respeitam suas alergias e seu padrão alimentar — sempre.</p>
     </div>
@@ -1628,7 +1653,10 @@ function Perfil({ perfil, onConta, onEditar, modoDiario }: {
               some do Editar perfil, mas o dado persistido não some sozinho). */}
           {!modoDiario && perfil.modoForca && perfil.nivelExperiencia !== 'iniciante' && linha('Modo força', 'Ativo — compostos a 6 reps')}
           {linha('Padrão alimentar', perfil.preferencia ? (perfil.preferencia === 'vegano' ? 'Vegano' : 'Vegetariano') : 'Onívoro')}
-          {linha('Alergias', perfil.alergenos.length ? perfil.alergenos.join(', ') : 'nenhuma', true)}
+          {linha('Alergias', perfil.alergenos.length ? perfil.alergenos.join(', ') : 'nenhuma')}
+          {/* 💰 O irmão que faltava. Vazio EXPLÍCITO como em "Alergias: nenhuma" — linha
+              omitida foi exatamente o que fez o controle parecer inexistente. */}
+          {linha('Orçamento', ROTULO_ORCAMENTO[perfil.orcamento ?? 'nenhum'], true)}
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

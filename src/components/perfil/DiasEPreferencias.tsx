@@ -90,15 +90,27 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
  * A explicação existe UMA vez, aqui; quando o teto relaxa para fechar a meta o app não se
  * desculpa nem alardeia — o cardápio simplesmente sai. Ausência não fala.
  */
+/**
+ * 🔒 FONTE ÚNICA dos rótulos do orçamento — usada pelo seletor (duas portas) E pelo resumo do
+ * Perfil. Rótulo duplicado seria "duas verdades para o mesmo número" na sua forma mais barata:
+ * a mesma escolha lida com nomes diferentes em telas diferentes.
+ */
+export const ROTULO_ORCAMENTO = {
+  nenhum: 'Sem preferência',
+  baixo: 'Mais em conta',
+  medio: 'Intermediário',
+  alto: 'Tanto faz',
+} as const;
+
 export function Orcamento({ valor, onEscolher }: {
   valor: 'baixo' | 'medio' | 'alto' | null;
   onEscolher: (v: 'baixo' | 'medio' | 'alto' | null) => void;
 }) {
   const OPCOES: { id: 'baixo' | 'medio' | 'alto' | null; t: string }[] = [
-    { id: null, t: 'Sem preferência' },
-    { id: 'baixo', t: 'Mais em conta' },
-    { id: 'medio', t: 'Intermediário' },
-    { id: 'alto', t: 'Tanto faz' },
+    { id: null, t: ROTULO_ORCAMENTO.nenhum },
+    { id: 'baixo', t: ROTULO_ORCAMENTO.baixo },
+    { id: 'medio', t: ROTULO_ORCAMENTO.medio },
+    { id: 'alto', t: ROTULO_ORCAMENTO.alto },
   ];
   const pill = (on: boolean): CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', padding: '9px 14px', borderRadius: 999, fontSize: '.88rem', cursor: 'pointer', transition: 'all .18s ease',
@@ -128,8 +140,14 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
   alergias: Alergeno[]; onToggleAlergia: (a: Alergeno) => void;
   naoCurto: string[]; onAddFood: (id: string) => void; onRemoveFood: (id: string) => void;
   contexto: 'onboarding' | 'editar';
-  orcamento?: 'baixo' | 'medio' | 'alto' | null;
-  onOrcamento?: (v: 'baixo' | 'medio' | 'alto' | null) => void;
+  /**
+   * 💰 OBRIGATÓRIAS de propósito. Eram opcionais, e o render era `{onOrcamento && …}`: o
+   * onboarding não passava a prop e o controle sumia em SILÊNCIO — sem erro, sem aviso, sem
+   * teste vermelho. Prop opcional que governa render é uma superfície que pode desaparecer
+   * por esquecimento. Agora esquecer não compila.
+   */
+  orcamento: 'baixo' | 'medio' | 'alto' | null;
+  onOrcamento: (v: 'baixo' | 'medio' | 'alto' | null) => void;
 }) {
   const alergiasSet = new Set(alergias);
   const pill = (on: boolean): CSSProperties => ({
@@ -177,7 +195,7 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
       </div>
 
       {/* 💰 Orçamento — mesma superfície das demais preferências de montagem (handoff §A entrada). */}
-      {onOrcamento && <Orcamento valor={orcamento ?? null} onEscolher={onOrcamento} />}
+      <Orcamento valor={orcamento} onEscolher={onOrcamento} />
     </div>
   );
 }

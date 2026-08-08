@@ -103,6 +103,9 @@ export default function Onboarding() {
   const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasPadrao(3));
   const [tempo, setTempo] = useState(45);
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>('');
+  // 💰 Orçamento no funil: OPCIONAL, default "sem preferência" (= `alto` no motor). Nenhum
+  // campo obrigatório novo — `canCont()` não olha para isto.
+  const [orcamento, setOrcamento] = useState<'baixo' | 'medio' | 'alto' | null>(null);
   const [alergias, setAlergias] = useState<Alergeno[]>([]);
   const [naoCurto, setNaoCurto] = useState<string[]>([]);
   const toggleDia = (w: Weekday) => setTreinoDias((p) => (p.includes(w) ? p.filter((x) => x !== w) : [...p, w].sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))));
@@ -147,10 +150,10 @@ export default function Onboarding() {
     const parse = perfilSchema.safeParse({ sexo, pesoKg: peso, alturaCm: altura, idade, nivelAtividade: atividade, objetivo, flagsSaude: flags, preferenciaAlimentar: padrao || null, alergenos: alergias });
     if (!consent.success || !parse.success) { setErro('Confira seus dados antes de gerar.'); return; }
     const p = parse.data;
-    const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto };
+    const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto, orcamento };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
+    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], orcamento, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
@@ -229,7 +232,7 @@ export default function Onboarding() {
                 {step === 4 && <StepCards titulo="Seu nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} />}
                 {step === 5 && <StepCards titulo="Sua experiência de treino" sub="É diferente do seu dia a dia — aqui é há quanto tempo você treina de forma consistente." opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} />}
                 {step === 6 && <Step6 {...{ local, setLocal, equipsCasa, toggleEquip, limparEquips: () => setEquipsCasa([]), treinoDias, toggleDia, tempo, setTempo }} />}
-                {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood }} />}
+                {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood, orcamento, setOrcamento }} />}
               </div>
             </div>
 
@@ -393,9 +396,11 @@ function Step6({ local, setLocal, equipsCasa, toggleEquip, limparEquips, treinoD
   );
 }
 
-function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood }: {
+function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood, orcamento, setOrcamento }: {
   padrao: '' | 'vegetariano' | 'vegano'; setPadrao: (v: '' | 'vegetariano' | 'vegano') => void;
   alergias: Alergeno[]; toggleAlergia: (a: Alergeno) => void; naoCurto: string[]; addFood: (id: string) => void; removeFood: (id: string) => void;
+  /** 💰 Opcional: default `null` = "sem preferência". `canCont()` não olha para isto. */
+  orcamento: 'baixo' | 'medio' | 'alto' | null; setOrcamento: (v: 'baixo' | 'medio' | 'alto' | null) => void;
 }) {
   return (
     <div>
@@ -409,7 +414,7 @@ function Step7({ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, 
         ))}
       </div>
       <p style={{ margin: '0 0 22px', fontSize: '.85rem', color: 'rgba(234,229,219,.5)' }}>Respeitamos isso à risca — nunca sugerimos algo fora do seu padrão.</p>
-      <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="onboarding" />
+      <PreferenciasAlimentares alergias={alergias} onToggleAlergia={toggleAlergia} naoCurto={naoCurto} onAddFood={addFood} onRemoveFood={removeFood} contexto="onboarding" orcamento={orcamento} onOrcamento={setOrcamento} />
     </div>
   );
 }
