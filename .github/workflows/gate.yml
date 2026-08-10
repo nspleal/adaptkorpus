@@ -1,0 +1,73 @@
+name: Gate
+
+# O gate de qualidade do app, rodando a MESMA sequência que a CLAUDE.md manda:
+#
+#     npm run typecheck && npm run lint && npm test && npm run build
+#
+# 🔴 POR QUE ESTE ARQUIVO EXISTE (2026-08-08). Até hoje o repo tinha UM workflow, e ele
+# empacotava — 120 execuções empacotando, zero segundo testando. O único lugar onde o
+# vermelho podia aparecer era o relatório de quem fez o trabalho, e isso não é verificação:
+# é confiança. Auto-relato não é gate.
+#
+# ────────────────────────────────────────────────────────────────────────────────────────
+# 🔒 O QUE ESTE GATE COBRE — E O QUE NÃO COBRE
+#
+# COBRE: tipos (tsc) · lint (eslint) · a suíte inteira (vitest, incluindo os guards
+# estáticos de copy, de telemetria e de descobribilidade) · o build de produção do Next.
+#
+# NÃO COBRE, e isto é declarado de propósito — cobertura parcial não declarada é pior que
+# ausência, porque o verde passa a afirmar mais do que mede:
+#   · SMOKES DE BROWSER (Playwright). Os aceites de call site — "a escolha na tela chega ao
+#     motor", "o prato novo é exibido", "o controle é encontrável na aba Dieta" — são
+#     rodados À MÃO na sessão de desenvolvimento, contra um servidor de dev. O gate verde
+#     NÃO afirma nada sobre eles.
+#   · MIGRATIONS. São aplicadas pela mão do autor no SQL Editor do Supabase, na ordem
+#     travada (aplicar → conferir → promover). O gate não vê o banco e não sabe se o CHECK
+#     de `eventos` está em dia. Evento novo sem migration continua falhando EM SILÊNCIO em
+#     produção — o gate não protege contra isso.
+#   · O DEPLOY. Quem publica é a Vercel, a partir de `main`. Este gate não bloqueia deploy.
+# ────────────────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um push novo na mesma ref cancela o anterior — não faz sentido gastar minuto testando
+# um commit que já foi superado.
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest # 1× de multiplicador (windows seria 2×, macos 10×)
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # 🔑 Passos SEPARADOS de propósito: o `&&` da CLAUDE.md para no primeiro erro, e
+      # steps separados fazem o mesmo — com a vantagem de o log dizer QUAL etapa caiu.
+      # Nenhum tem `continue-on-error`: verde aqui significa que os quatro passaram.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npm run build

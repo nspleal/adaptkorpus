@@ -1,16 +1,20 @@
 name: Pacote portátil (Windows)
 
 # Constrói, na nuvem, um pacote portátil do app com o Node EMBUTIDO e publica como
-# Release (mesma estratégia do PIRAXIS). O autor baixa o .zip, extrai e dá duplo-clique —
-# sem instalar nada. Roda a cada push de código na branch (ignora mudanças só de docs).
+# Release (a ESTRATÉGIA veio do PIRAXIS; o workflow é deste app — usa
+# `packaging/portable-launcher.bat` e o `output: 'standalone'` do next.config).
+# O autor baixa o .zip, extrai e dá duplo-clique — sem instalar nada.
+#
+# 🔒 SOB DEMANDA desde 2026-08-08. Antes rodava a CADA push da branch: 120 execuções em
+# `windows-latest`, ~3 min cada, e Windows tem multiplicador 2× de minutos — ~824 minutos
+# faturáveis empacotando um app que já é servido pela Vercel. A capacidade continua aqui,
+# intacta; o que saiu foi o gatilho automático. Custo em regime: zero.
+#
+# Para gerar um pacote: aba Actions → "Pacote portátil (Windows)" → "Run workflow".
+# O Release reusa a tag `portatil-windows`, então o link do autor nunca muda.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [claude/evokorpus-app-dev-9in0hs]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
 
 permissions:
   contents: write
