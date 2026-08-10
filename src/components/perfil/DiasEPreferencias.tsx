@@ -99,7 +99,13 @@ export const ROTULO_ORCAMENTO = {
   nenhum: 'Sem preferência',
   baixo: 'Mais em conta',
   medio: 'Intermediário',
-  alto: 'Tanto faz',
+  /**
+   * 🔒 DF 2026-08-10: era "Tanto faz". Os outros rótulos descrevem o RESULTADO; só este
+   * descrevia a ATITUDE de quem escolhe. "Sem limite" descreve comportamento e é o
+   * vocabulário da própria spec (`alto` = sem restrição). Mudou só o rótulo — o valor
+   * interno `alto` não foi tocado, e a telemetria guarda o valor, nunca o rótulo.
+   */
+  alto: 'Sem limite',
 } as const;
 
 export function Orcamento({ valor, onEscolher }: {
@@ -125,7 +131,7 @@ export function Orcamento({ valor, onEscolher }: {
         <span style={{ fontSize: '.66rem', fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.72)', background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.18)', borderRadius: 999, padding: '3px 9px' }}>Preferência</span>
       </div>
       <p style={{ margin: '0 0 14px', fontSize: '.9rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.5 }}>
-        Priorizamos os itens de menor custo; usamos um mais caro só quando precisa para fechar a sua meta. Sem preferência, nada muda no seu cardápio.
+        Priorizamos os itens de menor custo; usamos um mais caro só quando precisa para fechar a sua meta. Com <strong style={{ color: 'rgba(234,229,219,.8)', fontWeight: 600 }}>Sem preferência</strong> ou <strong style={{ color: 'rgba(234,229,219,.8)', fontWeight: 600 }}>Sem limite</strong>, seu cardápio fica como está hoje.
       </p>
       <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
         {OPCOES.map((o) => (

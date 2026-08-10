@@ -312,8 +312,25 @@ describe('🔒 copy do orçamento — sem dinheiro, sem promessa', () => {
     const src = fonteUI('src/components/perfil/DiasEPreferencias.tsx');
     expect(src, 'a explicação do teto sumiu').toMatch(/menor custo/i);
     expect(src, 'não diz que sobe quando precisa — viraria promessa de "só o barato"').toMatch(/s[óo] quando precisa/i);
-    // "Sem preferência, nada muda" é a promessa que o aceite 5 prova.
-    expect(src).toMatch(/Sem prefer[êe]ncia, nada muda/i);
+    /**
+     * 🔒 DF 2026-08-10. A medição do aceite 5 mostrou que `alto` e "sem preferência" produzem
+     * cardápios IDÊNTICOS (0/18, byte a byte) — a diferença é só de registro (null = nunca
+     * escolheu · alto = considerou e declinou o teto), útil para telemetria e irrelevante
+     * para quem come. Os quatro botões ficam, mas a copy não pode sugerir que "Sem limite"
+     * faz algo que "Sem preferência" não faz: a frase tem de cobrir os DOIS.
+     */
+    /**
+     * ⚠️ Escopado à FRASE, não ao arquivo. A primeira versão afirmava `src.includes('Sem
+     * limite')` sobre o arquivo inteiro — e passava por causa da DEFINIÇÃO do rótulo em
+     * `ROTULO_ORCAMENTO`, não da explicação. Uma mutação que reduzia a frase a um só botão
+     * sobrevivia. O guard tem de olhar onde a promessa é feita.
+     */
+    const i = src.indexOf('Priorizamos os itens de menor custo');
+    expect(i, 'a explicação do teto sumiu — reancore este guard').toBeGreaterThan(-1);
+    const frase = src.slice(i, src.indexOf('</p>', i));
+    expect(frase, 'a promessa de inércia sumiu').toMatch(/cardápio fica como está hoje/i);
+    for (const rotulo of ['Sem preferência', 'Sem limite'])
+      expect(frase.includes(rotulo), `a explicação não cobre "${rotulo}" — a copy passa a sugerir diferença que não existe`).toBe(true);
   });
 
   it('o seletor não promete resultado nem usa superlativo', () => {

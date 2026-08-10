@@ -94,10 +94,39 @@ describe('🔒 as portas do orçamento escrevem e leem o MESMO estado', () => {
     expect(dias, 'o seletor deixou de usar a fonte única').toMatch(/t: ROTULO_ORCAMENTO\./);
     // e nenhum dos dois redigita um rótulo à mão
     for (const [nome, src] of [['Painel', painel], ['DiasEPreferencias', dias]] as const) {
-      const literais = (src.match(/'(Mais em conta|Intermediário|Tanto faz|Sem preferência)'/g) ?? []).length;
+      const literais = (src.match(/'(Mais em conta|Intermediário|Sem limite|Sem preferência)'/g) ?? []).length;
       const permitido = nome === 'DiasEPreferencias' ? 4 : 0; // só a definição da constante
       expect(literais, `${nome}: ${literais} rótulo(s) redigitado(s) fora da fonte única`).toBeLessThanOrEqual(permitido);
     }
+  });
+});
+
+/**
+ * 🔴 O RÓTULO NÃO VAZA PARA A TELEMETRIA (DF 2026-08-10).
+ *
+ * O payload de `orcamento_escolhido` guarda o VALOR INTERNO ('baixo'|'medio'|'alto'|'nenhum'),
+ * nunca o texto do botão. Se o rótulo vazasse, um rename de copy — como o de "Tanto faz" para
+ * "Sem limite" — partiria a série histórica em duas sem ninguém perceber, e ainda exigiria
+ * migration para um ajuste que é só de tela. Este guard é o que torna renomear rótulo uma
+ * mudança barata e reversível.
+ */
+describe('🔒 o rótulo não vaza para o payload do evento', () => {
+  const painel = fonte('src/components/painel/Painel.tsx');
+
+  it('os call sites do evento passam o valor interno, não o rótulo', () => {
+    const chamadas = [...painel.matchAll(/registrarEvento\('orcamento_escolhido',([^)]*)\)/g)].map((m) => m[1]!);
+    expect(chamadas.length, 'nenhum call site do evento encontrado').toBeGreaterThan(0);
+    for (const args of chamadas) {
+      expect(args, `payload sem o valor interno: ${args}`).toMatch(/orcamento|\bv\b/);
+      expect(args, `o RÓTULO vazou para o payload: ${args}`).not.toMatch(/ROTULO_ORCAMENTO/);
+      for (const rotulo of ['Mais em conta', 'Intermediário', 'Sem limite', 'Sem preferência'])
+        expect(args.includes(rotulo), `rótulo "${rotulo}" literal no payload`).toBe(false);
+    }
+  });
+
+  it('o vocabulário do payload é fechado e independe da copy', () => {
+    // 'nenhum' distingue "não quis escolher" de `alto` ("considerou e declinou o teto").
+    expect(painel).toMatch(/valor: (novo\.orcamento|v) \?\? 'nenhum'/);
   });
 });
 
