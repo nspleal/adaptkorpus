@@ -63,7 +63,7 @@ describe('🔒 custoRelativo — exaustividade bilateral e procedência', () => 
 
   /** Spot-anchors: um por grupo, batendo com a tabela do apêndice do handoff. */
   it('spot-anchors da tabela aprovada', () => {
-    expect(CUSTO_RELATIVO.a47).toBe(2);   // Tofu — julgamento declarado
+    expect(CUSTO_RELATIVO.a47).toBe(3);   // QUEBRA PROPOSITAL — prova do vermelho do gate
     expect(CUSTO_RELATIVO.a115).toBe(2);  // Azeite extra virgem
     expect(CUSTO_RELATIVO.a42).toBe(1);   // Feijão fradinho
     expect(CUSTO_RELATIVO.a25).toBe(3);   // Salmão
