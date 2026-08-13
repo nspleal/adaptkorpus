@@ -19,7 +19,8 @@ import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDo
 import { avisoPausaVisivel } from '@/lib/pausa-reconhecida';
 import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
-import { aplicarFoco, aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
+import { aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
+import { medirEntregaDoFoco } from '@/lib/foco-entrega';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -463,52 +464,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       registrarEvento('orcamento_escolhido', { valor: novo.orcamento ?? 'nenhum' });
     }
     /**
-     * 🎛️ v3 · Bloco B — os eventos do FOCO, emitidos na virada do estado (não a cada render).
-     *
-     * 🔑 `entrega` é o campo que faz o evento valer: 'volume' quando havia folga até o MRV,
-     * 'ordem' quando o grupo já estava no topo. É ele que diz se o teto duro morde na
-     * população real ou só na teoria — e sem isso o default declarado nunca vira evidência.
+     * 🎛️ v3 · Bloco B — a RECUSA do foco de core, decidida ANTES do recompute (é ela que
+     * muda o `novo`). Os eventos `foco_ativado` saem DEPOIS, medidos do plano montado —
+     * leva A2 do v4 (handoff-motor-volume-v4-2026-08-12).
      */
     const focoAntes = perfil.foco;
     let focoDepois = novo.foco;
-    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
-      if (focoDepois.grupo === 'core') {
-        /**
-         * 🔒 FOCO DE CORE (DF 2026-08-05): mecânica de SÉRIES NOS SLOTS EXISTENTES, com teto
-         * de séries por exercício do nível.
-         *
-         * 🔴 **Sem folga ⇒ RECUSA EXPLICADA, nunca entrega vazia.** Core tem tipicamente 1
-         * slot por sessão, então cair para `'ordem'` — como fazem os outros grupos — seria
-         * INERTE, e entrega inerte é sucesso simulado. Por isso o foco não é salvo: guardar
-         * um foco que não faz nada é a mesma mentira, guardada.
-         */
-        const slots = rotinaDias.flatMap((d) => d.slots).filter((sl) => sl.exercicio.grupoPrimario === 'core');
-        const efeito = aplicarFocoCore({
-          nSlotsCore: slots.length,
-          seriesCoreAtuais: slots.reduce((a, sl) => a + (sl.series ?? 0), 0),
-          alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
-          nivel: novo.nivelExperiencia,
-          objetivo: novo.objetivo,
-        });
-        if (!efeito.aceita) {
-          registrarEvento('preferencia_recusada', { tipo: 'foco_core', motivo: efeito.motivo ?? 'core_sem_folga', de_id: 'core', para_id: focoDepois.compensa });
-          setAvisoFoco(efeito.explicacao ?? null);
-          focoDepois = undefined;
-          novo = { ...novo, foco: undefined };
-        } else {
-          // 🔒 Para core, `entrega` é SEMPRE 'volume' — 'ordem' nunca é entregue, logo nunca emitido.
-          registrarEvento('foco_ativado', { grupo: 'core', compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
-          setAvisoFoco(null);
-        }
-      } else {
-        const efeito = aplicarFoco({
-          alvoBase: seriesSemanaisDoGrupo(focoDepois.grupo),
-          alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
-          nivel: novo.nivelExperiencia,
-          objetivo: novo.objetivo,
-        });
-        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.deltaAplicado });
-        setAvisoFoco(null);
+    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo && focoDepois.grupo === 'core') {
+      /**
+       * 🔒 FOCO DE CORE (DF 2026-08-05): mecânica de SÉRIES NOS SLOTS EXISTENTES, com teto
+       * de séries por exercício do nível.
+       *
+       * 🔴 **Sem folga ⇒ RECUSA EXPLICADA, nunca entrega vazia.** Core tem tipicamente 1
+       * slot por sessão, então cair para `'ordem'` — como fazem os outros grupos — seria
+       * INERTE, e entrega inerte é sucesso simulado. Por isso o foco não é salvo: guardar
+       * um foco que não faz nada é a mesma mentira, guardada.
+       */
+      const slots = rotinaDias.flatMap((d) => d.slots).filter((sl) => sl.exercicio.grupoPrimario === 'core');
+      const efeito = aplicarFocoCore({
+        nSlotsCore: slots.length,
+        seriesCoreAtuais: slots.reduce((a, sl) => a + (sl.series ?? 0), 0),
+        alvoCompensaBase: seriesSemanaisDoGrupo(focoDepois.compensa),
+        nivel: novo.nivelExperiencia,
+        objetivo: novo.objetivo,
+      });
+      if (!efeito.aceita) {
+        registrarEvento('preferencia_recusada', { tipo: 'foco_core', motivo: efeito.motivo ?? 'core_sem_folga', de_id: 'core', para_id: focoDepois.compensa });
+        setAvisoFoco(efeito.explicacao ?? null);
+        focoDepois = undefined;
+        novo = { ...novo, foco: undefined };
       }
     }
     if (focoAntes && !focoDepois) {
@@ -537,6 +521,23 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       setEncaminhamento(nd.gate.motivos ?? []);
       window.scrollTo(0, 0);
       return;
+    }
+    /**
+     * 🔴 TELEMETRIA HONESTA DO FOCO — leva A2 do v4 (handoff-motor-volume-v4-2026-08-12).
+     *
+     * O defeito medido: `entrega`/`delta` saíam de `aplicarFoco` sobre o ALVO — e o alvo é
+     * truncado pela distribuição (`n_slots × sMax`), então o evento dizia `volume` com o
+     * plano idêntico. Agora os dois campos são MEDIDOS do plano montado, contra o
+     * contrafactual exato (o MESMO perfil novo, sem o foco) — `medirEntregaDoFoco`. Se nada
+     * mudou, o evento NÃO dispara: a ausência é o dado honesto.
+     */
+    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
+      const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg });
+      const efeito = medirEntregaDoFoco(nt, ntSemFoco, focoDepois.grupo);
+      if (efeito) {
+        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.delta });
+        setAvisoFoco(null);
+      }
     }
     setEncaminhamento(null);
     onPerfilChange?.(novo);
@@ -692,7 +693,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
-    marcar(`e${d}-${s}`); setModal(null);
+    /**
+     * 🔒 O selo "trocado" deriva DO PLANO, não do registro da preferência (armadilha 3 do
+     * handoff-motor-volume-v4): antes o `marcar` era incondicional, e o selo acendia mesmo
+     * quando o montador não aplicava a troca — o selo mentia exatamente no caso em que o
+     * defeito do fio escondia tudo. Agora só acende se o slot de fato mudou.
+     */
+    if (nt.rotina?.dias[d]?.slots[s]?.exercicio.id !== deId) marcar(`e${d}-${s}`);
+    setModal(null);
   }
   /**
    * 🎛️ v3 · Bloco A — *"não quero mais Y"*: o gatilho da B5 servido por PREFERÊNCIA.
