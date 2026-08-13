@@ -58,14 +58,15 @@ export default function Reembolso() {
 
       <SecaoLegal id="s-quando" titulo="Quando houver cobrança">
         <Paragrafo mb>
-          Quando existir plano pago, esta página passa a descrever a política de reembolso — e ela
-          será publicada <Forte>antes</Forte> de qualquer cobrança, nunca depois.
+          Nada nesta seção vale hoje — não há cobrança. Quando existir plano pago, esta página passa
+          a descrever a política, e ela será publicada <Forte>antes</Forte> da primeira cobrança, nunca
+          depois.
         </Paragrafo>
         <Paragrafo mb>O texto final ainda está em revisão. O que falta definir:</Paragrafo>
         <Lista mb>
           <ItemLista>Prazo para pedir: <AValidar>prazo</AValidar></ItemLista>
           <ItemLista>Quanto volta: <AValidar>percentual e regra de proporcionalidade</AValidar></ItemLista>
-          <ItemLista>Em quanto tempo cai: <AValidar>prazo de estorno</AValidar></ItemLista>
+          <ItemLista>Em quanto tempo o valor volta: <AValidar>prazo</AValidar></ItemLista>
           <ItemLista ultimo>Como pedir: <AValidar>canal</AValidar></ItemLista>
         </Lista>
         <Paragrafo>
