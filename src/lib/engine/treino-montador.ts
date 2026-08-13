@@ -24,7 +24,7 @@ import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
-import { aplicarFoco, aplicarFocoCore, focoVigente, mev, ordenarComFoco } from './trilhos';
+import { aplicarFoco, aplicarFocoCore, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao } from './trilhos';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
@@ -357,8 +357,10 @@ export function montarRotina(
     const sMin = prescricao.seriesPorExercicio.min;
     const sMax = prescricao.seriesPorExercicio.max;
     const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
-    for (const d of diasTreino) {
-      for (const s of d.slots) {
+    /** Dia de cada slot — o teto de séries do grupo NA SESSÃO precisa saber onde o slot mora. */
+    const diaDoSlot = new Map<SlotExercicio, number>();
+    for (let di = 0; di < diasTreino.length; di += 1) {
+      for (const s of diasTreino[di]!.slots) {
         // 🔒 `grupoPrimario` é NULLABLE (DF 2026-07-27): cardio/corpo-inteiro não são grupo
         // muscular e não têm volume-alvo por grupo — ficam fora da rampa, por definição.
         const g = s.exercicio.grupoPrimario;
@@ -366,6 +368,7 @@ export function montarRotina(
         const arr = porGrupo.get(g) ?? [];
         arr.push(s);
         porGrupo.set(g, arr);
+        diaDoSlot.set(s, di);
       }
     }
 
@@ -454,6 +457,17 @@ export function montarRotina(
       const base = n * sMin;
       const tetoGrupo = n * sMax;
       const series = slots.map(() => sMin);
+      /**
+       * 🔢 v4 — O TETO DE SÉRIES DO GRUPO NA SESSÃO GANHA O CALL SITE (handoff B1.4).
+       * `tetoSeriesGrupoNaSessao` existia desde o v3 e nenhuma linha de produção a chamava
+       * (defeito E5 da medição: a "nota de coerência aritmética" da §1.2 nunca saiu do
+       * documento). A frequência é a REAL do grupo nesta semana (nº de dias com slot dele),
+       * não a constante — full-body 3× divide por 3.
+       */
+      const diasDoGrupo = new Set(slots.map((s) => diaDoSlot.get(s) ?? 0)).size;
+      const tetoSessao = tetoSeriesGrupoNaSessao(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo, Math.max(1, diasDoGrupo));
+      const noDia = new Map<number, number>();
+      for (const s of slots) noDia.set(diaDoSlot.get(s) ?? 0, (noDia.get(diaDoSlot.get(s) ?? 0) ?? 0) + sMin);
       if (alvo > base) {
         // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
         // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
@@ -462,10 +476,16 @@ export function montarRotina(
         }
         let extra = Math.min(alvo, tetoGrupo) - base;
         let i = 0;
-        while (extra > 0) {
-          if (series[i]! < sMax) {
+        let travas = 0;
+        while (extra > 0 && travas < n) {
+          const dia = diaDoSlot.get(slots[i]!) ?? 0;
+          if (series[i]! < sMax && (noDia.get(dia) ?? 0) < tetoSessao) {
             series[i]!++;
+            noDia.set(dia, (noDia.get(dia) ?? 0) + 1);
             extra--;
+            travas = 0;
+          } else {
+            travas++;
           }
           i = (i + 1) % n;
         }

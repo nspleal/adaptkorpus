@@ -173,33 +173,64 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     return tot;
   }
 
-  it('aceitação: volume/grupo sobe do piso ao topo da banda em 5 semanas e NUNCA ultrapassa o topo', () => {
+  /**
+   * 🔻 FÓRMULA ATUALIZADA no v4 (2026-08-13): entrou o TETO DE SÉRIES DO GRUPO NA SESSÃO
+   * (`tetoSeriesGrupoNaSessao` — a "nota de coerência aritmética" da §1.2, que existia sem
+   * call site desde o v3). O alvo entregue agora respeita também `Σ_dias min(slots_dia ×
+   * sMax, tetoSessão)` — um grupo com 3 slots num dia só não carrega mais que o teto da
+   * sessão, mesmo que `n × sMax` coubesse.
+   */
+  it('aceitação: volume/grupo sobe do piso ao teto ALCANÇÁVEL em 5 semanas e NUNCA ultrapassa o topo', () => {
     // Avançado/massa: banda 16–20, séries/exercício 3–4.
     const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 });
     const presc = prescreverTreino(p, avaliarGateTreino(p));
     const banda = presc.volumePorGrupoSemana;
     const porSemana = SEMANAS.map((s) => totalPorGrupo(rotinaSemana(s)));
+    // Slots POR DIA do grupo (a fórmula do teto alcançável precisa do layout, não só do n).
+    const layout = (grupo: string) => {
+      const r = rotinaSemana(1);
+      return r.dias.map((d) => d.slots.filter((s) => s.exercicio.grupoPrimario === grupo).length).filter((n) => n > 0);
+    };
     for (const [grupo, { slots }] of porSemana[0]!) {
+      const porDia = layout(grupo);
+      const tetoSessao = Math.ceil(banda.max / Math.max(1, porDia.length));
+      const tetoAlcancavel = porDia.reduce((a, n) => a + Math.min(n * presc.seriesPorExercicio.max, tetoSessao), 0);
       const base = slots * presc.seriesPorExercicio.min;
-      const teto = slots * presc.seriesPorExercicio.max;
-      const alvos = SEMANAS.map((s) => Math.min(Math.max(banda.min + (s - 1), base), Math.min(banda.max, teto)));
+      const alvos = SEMANAS.map((s) => Math.min(Math.max(banda.min + (s - 1), base), Math.min(banda.max, tetoAlcancavel)));
       const totais = porSemana.map((m) => m.get(grupo)!.series);
-      expect(totais, `grupo ${grupo}`).toEqual(alvos);
+      expect(totais, `grupo ${grupo} (layout ${porDia.join('+')})`).toEqual(alvos);
       for (const t of totais) expect(t).toBeLessThanOrEqual(banda.max); // nunca ultrapassa o topo
       for (let i = 1; i < totais.length; i++) expect(totais[i]!).toBeGreaterThanOrEqual(totais[i - 1]!); // monotônico
     }
   });
 
-  it('grupos com slots suficientes ATINGEM o topo da banda na semana 5 (interm./massa: peito → 16)', () => {
-    // Avançado/massa (topo 20) exigiria ≥ 5 slots/grupo/semana — estruturalmente fora dos
-    // splits atuais (limite honesto, registrado no handoff). Interm./massa (topo 16) atinge.
+  it('grupos com slots suficientes ATINGEM o topo da banda na semana 5 (interm./massa: 16)', () => {
+    // 🔻 v4: "suficiente" agora considera também o teto da SESSÃO (§1.2, nota de coerência):
+    // o grupo alcança o topo quando o layout por dia comporta — n × sMax sozinho não basta.
     const over: Partial<PerfilTreino> = { nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 90 };
     const p = perfil(over);
     const presc = prescreverTreino(p, avaliarGateTreino(p));
-    const sem5 = totalPorGrupo(rotinaSemana(5, over));
-    const atingiveis = [...sem5.entries()].filter(([, v]) => v.slots * presc.seriesPorExercicio.max >= presc.volumePorGrupoSemana.max);
-    expect(atingiveis.length).toBeGreaterThan(0); // o cenário tem grupos com teto ≥ topo
-    for (const [, v] of atingiveis) expect(v.series).toBe(presc.volumePorGrupoSemana.max); // 16
+    const r5 = rotinaSemana(5, over);
+    const topo = presc.volumePorGrupoSemana.max;
+    const porGrupo = new Map<string, number[]>();
+    for (const d of r5.dias) {
+      for (const s of d.slots) {
+        const g = s.exercicio.grupoPrimario;
+        if (g == null) continue;
+        const arr = porGrupo.get(g) ?? r5.dias.map(() => 0);
+        const di = r5.dias.indexOf(d);
+        arr[di] = (arr[di] ?? 0) + 1;
+        porGrupo.set(g, arr);
+      }
+    }
+    const sem5 = totalPorGrupo(r5);
+    const atingiveis = [...porGrupo.entries()].filter(([, dias]) => {
+      const comSlot = dias.filter((n) => n > 0);
+      const tetoSessao = Math.ceil(topo / Math.max(1, comSlot.length));
+      return comSlot.reduce((a, n) => a + Math.min(n * presc.seriesPorExercicio.max, tetoSessao), 0) >= topo;
+    });
+    expect(atingiveis.length).toBeGreaterThan(0); // o cenário tem grupos com teto alcançável ≥ topo
+    for (const [g] of atingiveis) expect(sem5.get(g)!.series, g).toBe(topo); // 16
   });
 
   it('toda série por slot fica dentro de seriesPorExercicio {min..max}', () => {
