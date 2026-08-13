@@ -57,7 +57,23 @@ const rel = (p: string) => p.slice(process.cwd().length + 1);
  *    mais forte** (bloco §changelog abaixo) — *capacidade anunciada e depois removida precisa
  *    da entrada que a retrata*. A promessa não é apagada; é **respondida**.
  */
-const FORA_DO_CRITERIO = ['src/app/termos/page.tsx', 'src/app/changelog/page.tsx'];
+const FORA_DO_CRITERIO = ['src/app/termos/page.tsx', 'src/app/changelog/page.tsx', 'src/app/reembolso/page.tsx'];
+
+/**
+ * 🔒 A TERCEIRA EXCEÇÃO — `/reembolso`, DF do autor de 2026-08-11 (desfaz a de 2026-08-01).
+ *
+ * ⚠️ O comentário acima diz que lista de exceção que cresce é guard morrendo devagar, e ele
+ * está certo. Por isso esta entrada NÃO é uma isenção: é uma TROCA. O léxico genérico não
+ * consegue distinguir *"a página que promete estorno"* de *"a página chamada Reembolso que
+ * nega haver cobrança"* — medido: os matches eram o nome do componente (`function
+ * Reembolso()`), o `title` da metadata, a chave `page="reembolso"` e o `titulo`. Nenhum é
+ * promessa; todos são estrutura.
+ *
+ * Em troca da saída do léxico genérico, a página entra no bloco DEDICADO logo abaixo, que é
+ * MAIS ESTRITO que o léxico: proíbe nominalmente a copy antiga (a que o cofre marca como
+ * "não usar") e exige que os números legais estejam em placeholder visível. Isenção que só
+ * tira é buraco; isenção que troca por régua mais dura é escopo.
+ */
 
 describe('🔒 ① nenhuma tela de produto promete devolução de dinheiro', () => {
   /**
@@ -124,17 +140,24 @@ describe('🔒 ② nenhuma tela linka para rota que não existe', () => {
   it('anti-vacuidade: o detector reprova um href inventado e aprova um real', () => {
     const rotaExisteTeste = (h: string) => existsSync(join(APP, h, 'page.tsx'));
     expect(rotaExisteTeste('/faq')).toBe(true);
-    expect(rotaExisteTeste('/reembolso'), 'a rota removida ainda está em disco').toBe(false);
     expect(rotaExisteTeste('/rota-que-nunca-existiu')).toBe(false);
   });
 
-  it('🔴 a casca institucional não oferece mais a rota removida — nem no tipo', () => {
-    const shell = semComentarios(readFileSync(join(process.cwd(), 'src/components/legal/InstitucionalShell.tsx'), 'utf8'));
-    // O tipo é a porta: tirar só o item do array deixaria a chave viva e a próxima linha
-    // que a usasse compilaria.
-    expect(shell, 'a chave voltou ao PageKey').not.toMatch(/'reembolso'/);
-    expect(shell).not.toMatch(/href: '\/reembolso'/);
-  });
+  /**
+   * 🔒 REMOVIDO EM 2026-08-11, pela DF do autor que devolve `/reembolso` ao ar.
+   *
+   * Saíram daqui DUAS asserções, e as duas eram ancoradas no NOME da rota — não no critério:
+   *   · `expect(rotaExisteTeste('/reembolso')).toBe(false)` — "a rota removida ainda está em
+   *     disco". A rota voltou por decisão; afirmar que ela não existe passou a ser falso.
+   *   · o bloco *"a casca institucional não oferece mais a rota removida — nem no tipo"*, que
+   *     exigia `PageKey` sem `'reembolso'` e nenhum `href: '/reembolso'`. A casca voltou a
+   *     oferecê-la, também por decisão.
+   *
+   * ⚠️ O que NÃO saiu, e é a maior parte deste arquivo: o léxico de promessa (①) e a varredura
+   * de link órfão (②) continuam valendo para todas as telas. A documentação do topo dizia que
+   * o guard era "ancorado no CRITÉRIO, não no caminho `/reembolso`" — era verdade para ① e ②,
+   * e falso para estas duas. Ficam registradas aqui em vez de sumirem do diff.
+   */
 });
 
 /**
@@ -150,8 +173,70 @@ describe('🔒 as exceções declaradas seriam REPROVADAS pelo critério', () =>
     expect(/garantia de \d+ dias?/i.test(src), 'o changelog não casa mais o léxico — a exceção virou decoração').toBe(true);
   });
 
-  it('a lista de exceções não cresceu', () => {
-    expect(FORA_DO_CRITERIO).toEqual(['src/app/termos/page.tsx', 'src/app/changelog/page.tsx']);
+  it('a lista de exceções é exatamente esta — e cada uma tem seu par', () => {
+    expect(FORA_DO_CRITERIO).toEqual([
+      'src/app/termos/page.tsx',      // pauta jurídica única
+      'src/app/changelog/page.tsx',   // par: §changelog, a retratação datada
+      'src/app/reembolso/page.tsx',   // par: §reembolso, o bloco dedicado (DF 2026-08-11)
+    ]);
+  });
+});
+
+/**
+ * 🔒 §reembolso — A RÉGUA QUE SUBSTITUI O ① NA PÁGINA QUE VOLTOU (DF 2026-08-11).
+ *
+ * 🔑 Por que a página sai do léxico genérico: medido, os matches eram ESTRUTURA, não promessa
+ * — `function Reembolso()`, `title: 'Reembolso · Evokorpus'`, `page="reembolso"`,
+ * `titulo="Reembolso"`. Um léxico que proíbe a palavra proíbe a página de ter nome.
+ *
+ * ⚠️ Este é o par que sustenta a exceção, e ele é MAIS ESTRITO que o léxico: proíbe
+ * nominalmente a copy que o cofre marca como "não usar", exige a negação da cobrança e exige
+ * que todo número legal esteja em placeholder visível. Sem ele, `FORA_DO_CRITERIO` viraria
+ * isenção em branco — e isenção em branco é onde o defeito volta a morar.
+ */
+describe('🔒 reembolso — a página existe, e diz que hoje não há cobrança', () => {
+  const src = () => semComentarios(readFileSync(join(APP, 'reembolso/page.tsx'), 'utf8'));
+
+  it('afirma, sem rodeio, que não há cobrança hoje', () => {
+    const s = src();
+    expect(s, 'a página não nega a cobrança — sem isso ela volta a ser promessa órfã')
+      .toMatch(/n[ãa]o cobra nada|n[ãa]o h[áa] cobran[çc]a/i);
+    expect(s, 'não diz que não há o que reembolsar').toMatch(/n[ãa]o h[áa] reembolso a pedir|n[ãa]o h[áa] pagamento/i);
+  });
+
+  /** 🔴 A copy de 01/08, nominalmente proibida. É o texto que o cofre marca como "não usar". */
+  it('a copy retirada em 2026-08-01 NÃO voltou', () => {
+    const s = src();
+    const PROIBIDO: readonly [RegExp, string][] = [
+      [/garantia de \d+ dias?/i, 'título "Garantia de N dias"'],
+      [/devolvemos o dinheiro|dinheiro de volta/i, 'promessa de devolução'],
+      [/pe[çc]a o reembolso|pedir o reembolso/i, 'passo "Peça o reembolso"'],
+      [/assinatura\s*(→|->|&rarr;)\s*reembolso/i, 'caminho "Assinatura → Reembolso"'],
+      [/estorno em at[ée]|em at[ée] \d+ dias? [úu]te/i, 'prazo de estorno prometido'],
+      [/mesmo meio de pagamento/i, 'devolução pelo meio de pagamento'],
+      [/sem perguntas|sem multa/i, 'promessa de cancelamento sem atrito'],
+    ];
+    for (const [re, oque] of PROIBIDO) expect(re.test(s), `a copy de 01/08 voltou: ${oque}`).toBe(false);
+  });
+
+  /**
+   * 🔑 Números legais só entram como placeholder VISÍVEL. O handoff é explícito: prazo,
+   * percentual e condições são peça jurídica — não se inventa número. Um dígito solto numa
+   * frase de prazo é promessa, mesmo sem querer.
+   */
+  it('nenhum prazo ou percentual literal — só `AValidar`', () => {
+    const s = src();
+    expect(s, 'a página não usa placeholder visível para o que falta').toMatch(/<AValidar>/);
+    const corpo = s.slice(s.indexOf('<LegalLayout'));
+    expect(corpo, 'prazo em dias literal na página').not.toMatch(/\b\d+\s*dias?\b/i);
+    expect(corpo, 'percentual literal na página').not.toMatch(/\d+\s*%/);
+    expect(corpo, 'valor em dinheiro na página').not.toMatch(/R\$/);
+  });
+
+  it('e a rota está de fato em disco, alcançável pela casca', () => {
+    expect(existsSync(join(APP, 'reembolso/page.tsx')), 'a rota não existe').toBe(true);
+    const shell = semComentarios(readFileSync(join(process.cwd(), 'src/components/legal/InstitucionalShell.tsx'), 'utf8'));
+    expect(shell, 'a chave não voltou ao PageKey').toMatch(/'reembolso'/);
   });
 });
 
