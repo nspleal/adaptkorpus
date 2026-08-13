@@ -1,13 +1,20 @@
 /**
- * Montador de rotina de treino (Bloco B) — v1 determinístico.
- * Fonte: parametros-motor-treino-evokorpus §"Passo 3".
+ * Montador de rotina de treino — v4: ALOCADOR POR VOLUME (leva B do
+ * handoff-motor-volume-v4-2026-08-12; substitui o alocador por lista de padrões do v1).
+ *
+ * Fonte: parametros-motor-treino-evokorpus §"Passo 3" + §1.2 (bandas de volume) + DFs
+ * ①②③ de 2026-08-12 (contagem ponderada · cobertura · divisões).
  *
  * Garantias (travadas na spec):
  *  - dias de força = min(dias_disponíveis, teto do nível); excedente → cardio/recuperação;
- *  - split por dias; cada padrão/grupo ≥ 2×/sem quando há ≥ 2 dias;
- *  - puxar ≥ empurrar (saúde do ombro); dobradiça presente; core 2–3×; cardio por objetivo;
- *  - seleção respeita equipamento/local + dificuldade liberada; nº de exercícios cabe no tempo;
- *  - determinístico (ordena por tier↑ depois id; rotaciona p/ variar).
+ *  - slots do dia = orçamento de TEMPO (`orcamentoSlotsDoDia`); cada slot vai ao grupo com
+ *    maior DÉFICIT PONDERADO do template do dia (`alocarSemana`);
+ *  - puxar ≥ empurrar (saúde do ombro); dobradiça presente; core 2–3×/semana;
+ *  - pequenos com ≥ 1 exercício direto/semana (DF②); lombar/antebraço só por indireto;
+ *  - seleção respeita equipamento/local + dificuldade liberada + banimentos/trocas (v3);
+ *  - as SÉRIES continuam vindo da rampa do mesociclo (`alvoDaSemana`) — o alocador muda
+ *    onde elas moram, não a progressão (armadilha 7 do handoff);
+ *  - determinístico (ordena por tier↑ depois id; rotaciona por grupo p/ variar).
  */
 import { dificuldadesLiberadas } from './treino';
 import { exercicioDisponivel } from './equipamento';
@@ -17,7 +24,8 @@ import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
-import { aplicarFoco, aplicarFocoCore, focoVigente, ordenarComFoco } from './trilhos';
+import { aplicarFoco, aplicarFocoCore, focoVigente, mev, ordenarComFoco } from './trilhos';
+import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -30,45 +38,6 @@ export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
   return ['casa_sem', 'casa_com', 'academia'];
 }
 
-interface DiaSpec {
-  nome: string;
-  padroes: PadraoMovimento[];
-}
-
-const FB: PadraoMovimento[] = ['empurrar', 'puxar', 'agachar', 'dobradica_quadril', 'core'];
-const UPPER: PadraoMovimento[] = ['empurrar', 'puxar', 'isolado', 'core'];
-const LOWER: PadraoMovimento[] = ['agachar', 'dobradica_quadril', 'core'];
-const PUSH: PadraoMovimento[] = ['empurrar', 'isolado', 'core'];
-const PULL: PadraoMovimento[] = ['puxar', 'isolado', 'core'];
-const LEGS: PadraoMovimento[] = ['agachar', 'dobradica_quadril', 'core'];
-
-/** Split por dias de força agendados (3 dias depende do nível). */
-function montarSplit(diasForca: number, nivel: PerfilTreino['nivelExperiencia']): { split: string; dias: DiaSpec[] } {
-  switch (diasForca) {
-    case 1:
-      return { split: 'Full-body', dias: [{ nome: 'Full-body', padroes: FB }] };
-    case 2:
-      return { split: 'Full-body ×2', dias: [{ nome: 'Full-body A', padroes: FB }, { nome: 'Full-body B', padroes: FB }] };
-    case 3:
-      return nivel === 'iniciante'
-        ? { split: 'Full-body ×3', dias: [{ nome: 'Full-body A', padroes: FB }, { nome: 'Full-body B', padroes: FB }, { nome: 'Full-body C', padroes: FB }] }
-        : { split: 'Upper / Lower / Full', dias: [{ nome: 'Upper', padroes: UPPER }, { nome: 'Lower', padroes: LOWER }, { nome: 'Full-body', padroes: FB }] };
-    case 4:
-      return { split: 'Upper / Lower ×2', dias: [{ nome: 'Upper A', padroes: UPPER }, { nome: 'Lower A', padroes: LOWER }, { nome: 'Upper B', padroes: UPPER }, { nome: 'Lower B', padroes: LOWER }] };
-    case 5:
-      return { split: 'PPL + Upper/Lower', dias: [{ nome: 'Push', padroes: PUSH }, { nome: 'Pull', padroes: PULL }, { nome: 'Legs', padroes: LEGS }, { nome: 'Upper', padroes: UPPER }, { nome: 'Lower', padroes: LOWER }] };
-    default: // 6
-      return { split: 'Push / Pull / Legs ×2', dias: [{ nome: 'Push A', padroes: PUSH }, { nome: 'Pull A', padroes: PULL }, { nome: 'Legs A', padroes: LEGS }, { nome: 'Push B', padroes: PUSH }, { nome: 'Pull B', padroes: PULL }, { nome: 'Legs B', padroes: LEGS }] };
-  }
-}
-
-/** Tempo estimado por exercício (s) = séries × (execução ~40s + descanso). */
-function tempoPorExercicioSeg(p: PrescricaoFITT): number {
-  return p.seriesPorExercicio.min * (40 + p.descansoCompostoSeg.min);
-}
-
-/** Padrões fundamentais (puxar SEMPRE antes de empurrar → sustenta puxar ≥ empurrar). */
-const FUNDAMENTAIS: PadraoMovimento[] = ['puxar', 'empurrar', 'agachar', 'dobradica_quadril'];
 /** Core: invariante 2–3×/semana (travado na spec). */
 const CORE_MIN = 2;
 const CORE_MAX = 3;
@@ -141,7 +110,7 @@ export function montarRotina(
   perfil: PerfilTreino,
   exercises: readonly Exercise[],
   /**
-   * Exercícios FAVORITOS do usuário (DF #12, 2026-07-04): preferidos no slot cujo padrão
+   * Exercícios FAVORITOS do usuário (DF #12, 2026-07-04): preferidos no slot cujo grupo
    * servem e ISENTOS da variedade B5 — aparecem em toda sessão em que couberem. Respeitam
    * os filtros duros (equipamento + dificuldade — favoritar NÃO fura o nível: acima do
    * liberado nem entra no pool), nunca furam as invariantes e não adicionam slot.
@@ -192,212 +161,128 @@ export function montarRotina(
     .slice()
     .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-  // Índice de rotação por padrão (varia exercícios entre os dias). Favoritos ficam num
-  // trilho próprio, ISENTOS da rotação (DF #12): preenchem primeiro, todo dia que couber,
-  // em ordem estável (o pool já vem em tier↑, id) — determinístico, sem estado escondido.
-  const porPadrao = new Map<PadraoMovimento, Exercise[]>();       // não-favoritos (rotacionam)
-  const favsPorPadrao = new Map<PadraoMovimento, Exercise[]>();   // favoritos (fixos)
-  for (const e of pool) {
-    const alvo = favoritosEfetivos.has(e.id) ? favsPorPadrao : porPadrao;
-    const arr = alvo.get(e.padraoMovimento) ?? [];
-    arr.push(e);
-    alvo.set(e.padraoMovimento, arr);
-  }
-  const cursor = new Map<PadraoMovimento, number>();
-  function escolher(padrao: PadraoMovimento, usadosDia: Set<string>): Exercise | null {
-    // 1) favoritos do padrão, todo dia, sem repetir no MESMO dia (dois slots iguais no dia
-    //    ainda variam); a variedade entre sessões não se aplica a eles.
-    for (const f of favsPorPadrao.get(padrao) ?? []) {
-      if (!usadosDia.has(f.id)) { usadosDia.add(f.id); return f; }
+  // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
+  const divisao = perfil.divisaoPreferida ?? 'auto';
+  const { split, dias: templates } = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
+  const budgetPorDia = orcamentoSlotsDoDia(perfil.tempoPorSessaoMin);
+
+  /**
+   * Alvo PONDERADO de planejamento por grupo = TOPO da banda do nível/objetivo. O topo, e
+   * não o alvo da semana, para a ESTRUTURA ficar estável no ciclo inteiro (mesmos slots,
+   * mesmos dias — só as séries rampam; é a mesma razão do sPlan do orçamento de tempo).
+   * Lombar/antebraço ficam FORA (DF②: só por indireto — alvo direto seria número inventado).
+   */
+  const banda = prescricao.volumePorGrupoSemana;
+  const alvoPonderado = new Map<GrupoPrimario, number>();
+  for (const g of [...GRUPOS_GRANDES, ...GRUPOS_PEQUENOS_PISO, 'core' as GrupoPrimario]) alvoPonderado.set(g, banda.max);
+  /**
+   * 🎛️ v4 — FOCO COMO BOOST DE DÉFICIT, CONDICIONADO À ENTREGA (handoff B1.6).
+   *
+   * O boost só existe quando o foco TEM série a entregar nesta semana (`deltaAplicado > 0`
+   * do MESMO `aplicarFoco` que decide as séries): aí o grupo focado ganha prioridade de
+   * déficit no planejamento (mira `banda.max + delta`) e o slot extra dá espaço para o
+   * delta materializar em vez de morrer truncado por `n × sMax` — o defeito medido.
+   *
+   * 🔴 Quando o delta da semana é ZERO (grupo no MRV — semana 5), o boost NÃO acontece:
+   * mover slot sem série a entregar mudaria o volume de OUTROS grupos por truncamento e
+   * quebraria o invariante travado "o volume total da semana não cresce; o foco
+   * redistribui". Quem está no topo ganha ORDEM, e ordem não mexe em slot.
+   * Core fica fora (DF 2026-08-05: mecânica própria, slots intocados por construção).
+   */
+  if (foco && foco.grupo !== 'core' && semanaCiclo && !semanaCiclo.retomada && semanaCiclo.semana !== 6) {
+    const fb = semanaCiclo.feedbackGrupos;
+    const efeito = aplicarFoco({
+      alvoBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.grupo) ?? 'ok'),
+      alvoCompensaBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.compensa) ?? 'ok'),
+      nivel: perfil.nivelExperiencia,
+      objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
+    });
+    if (efeito.deltaAplicado > 0) {
+      // O boost é quantizado ao SLOT (sMax) MAIS um slot de folga: o slot extra que o
+      // grupo focado ganha credita `sMax` no próprio déficit, então sem a folga o grupo
+      // volta a perder a rodada seguinte para quem não foi focado — medido: com folga de
+      // só `delta`, o 5º slot do peito nunca vinha e o delta morria truncado por `n×sMax`.
+      const sMax = prescricao.seriesPorExercicio.max;
+      alvoPonderado.set(foco.grupo, banda.max + Math.ceil(efeito.deltaAplicado / sMax) * sMax + sMax);
     }
-    // 2) rotação normal sobre os não-favoritos (comportamento original).
-    const arr = porPadrao.get(padrao);
-    if (!arr || arr.length === 0) return null;
-    const i = cursor.get(padrao) ?? 0;
-    cursor.set(padrao, i + 1);
-    return arr[i % arr.length]!;
   }
 
-  const { split, dias: spec } = montarSplit(diasForca, perfil.nivelExperiencia);
+  const tetoPequenos = divisao === 'prioridades' ? PEQUENOS_TETO_DIRETO_PRIORIDADES : PEQUENOS_TETO_DIRETO;
+  const diasAlocados = alocarSemana({
+    templates,
+    budgetPorDia,
+    pool,
+    favoritos: favoritosEfetivos,
+    alvoPonderado,
+    seriesPlanejamento: prescricao.seriesPorExercicio.max,
+    tetoSlotsSemana: (g) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
+    coreMin: CORE_MIN,
+    coreMax: CORE_MAX,
+  });
 
-  // --- Orçamento de tempo + descanso efetivo do composto -------------------
-  // v1: custo = séries mín × (execução ~40 s + descanso mín).
-  // v2 (semana passada): custo ESTÁVEL no ciclo inteiro, dimensionado p/ o pior caso da
-  // rampa (evita a rotina encolher no meio do ciclo), e o teto do descanso do composto
-  // sobe p/ ~180 s QUANDO o tempo permite (v2 §5) — i.e., só se não reduzir o nº de
-  // exercícios que o descanso base comportaria (tempo é o limitante; cobertura > descanso).
+  const diasTreino: DiaTreino[] = diasAlocados.map((d) => ({
+    nome: d.nome,
+    slots: d.slots.map((s) => ({
+      // O padrão do slot é o do EXERCÍCIO escolhido (o template agora é de grupos): tudo
+      // que lê `slot.padrao` (classe de descanso, faixa de reps, ordem do foco) continua
+      // coerente com o exercício de fato prescrito.
+      padrao: s.exercicio.padraoMovimento,
+      exercicio: s.exercicio,
+      // Badge (B5, DF 2026-07-04): acende p/ TODO favorito DECLARADO que entrou no plano
+      // (preferidos de troca e recentes da retomada usam o trilho, não a badge).
+      ...(favoritos.has(s.exercicio.id) ? { incluidoPorPreferencia: true } : {}),
+    })),
+  }));
+
+  // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
+  // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
+  // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
+  // depois COMPOSTO até 90 s; cobertura > descanso). A mecânica de descanso por classe
+  // (armadilha 2 do handoff) fica intocada — muda só quem pede a degradação.
   let descansoEfetivo: Faixa = prescricao.descansoCompostoSeg;
-  /**
-   * 🔒 ORÇAMENTO DE TEMPO — SOMA ITEM A ITEM (cofre §🕐 Bloco 3, DF 2026-07-31).
-   *
-   * O que saiu: `cap(rest) = tempo / (sPlan × (40 + média_da_faixa))` — **um** descanso
-   * multiplicado pelo total de séries. Com descansos diferentes por exercício essa conta
-   * erra nas DUAS direções: subestima a sessão cheia de composto e superestima a de
-   * acessório. O erro é invisível — a sessão só "não fecha" na vida real.
-   *
-   * O que entrou: cada padrão do dia custa `sPlan × (40 + descanso da CLASSE dele)`, e o dia
-   * recebe padrões enquanto a soma couber. Um dia de composto passa a comportar menos
-   * exercícios que um de acessório, que é o ponto.
-   *
-   * ⚠️ Aqui a estimativa usa a classe do PADRÃO, não do exercício — na hora do orçamento os
-   * exercícios ainda não foram escolhidos. O valor definitivo por slot é calculado depois da
-   * escolha (`descansoDoExercicio`), que é quem enxerga pliométrico e força pesada.
-   */
-  const capDiaPorTempo: number[] = [];
-  /**
-   * Nível de degradação REALMENTE usado em cada dia (0/1/2). Distinto de "coube ou não":
-   * um dia que fechou cedendo só o ISOLADO fica no nível 1, e os compostos dele mantêm a
-   * faixa cheia. Passar 2 direto rebaixaria composto sem necessidade — cobertura > descanso,
-   * mas só o mínimo necessário de descanso é cedido.
-   */
-  const nivelDegradacaoDia: (0 | 1 | 2)[] = [];
+  const nivelDegradacaoDia: (0 | 1 | 2)[] = diasTreino.map(() => 0);
   if (semanaCiclo) {
-    const banda = prescricao.volumePorGrupoSemana;
     const sPlan = Math.min(
       prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
       prescricao.seriesPorExercicio.max,
     );
     /**
-     * 🔴 O RIR-ALVO DA SEMANA DO MESOCICLO (conserto 2026-08-04, item 2 do lote).
-     *
-     * O defeito medido: o fallback era `prescricao.rir.min` — uma CONSTANTE. `rirAlvoSemana`
-     * só é preenchido pela retomada (`aplicarRetomada`), então fora da rampa o deslocamento
-     * por RIR recebia sempre o mesmo número e o descanso NUNCA se movia dentro da faixa.
-     * Resultado em produção: **2 valores** (composto 180 · isolado 120, os TOPOS das duas
-     * faixas) idênticos da semana 1 à 5 — exatamente o *"o tempo de descanso sempre ser o
-     * mesmo"* que a spec §🕐 existe para consertar.
-     *
-     * `rirAlvoDaSemana` já existia, exportada e testada — e **nenhuma linha de produção a
-     * chamava**. A leva B construiu a função e não a ligou. 🔑 A precedência fica: a rampa
-     * (`rirAlvoSemana`) vence, como antes; sem ela, manda a semana do ciclo.
+     * 🔴 O RIR-ALVO DA SEMANA DO MESOCICLO (conserto 2026-08-04, item 2 do lote): a rampa
+     * (`rirAlvoSemana`) vence; sem ela, manda a semana do ciclo — nunca a constante.
      */
     const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
     const semanaRampa = semanaCiclo.retomada?.semana ?? null;
     const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
 
-    /** Custo de UM slot deste padrão, com o descanso da classe já degradado ao nível dado. */
-    const custoSlot = (padrao: PadraoMovimento, nivelDegradacao: 0 | 1 | 2): number =>
-      sPlan * (40 + descansoDoPadrao(padrao, {
+    const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number =>
+      slots.reduce((soma, s) => soma + sPlan * (40 + descansoDoPadrao(s.padrao, {
         rirAlvo,
         modoForca: prescricao.modoForca === true,
         semanaRampa,
-        degradacao: nivelDegradacao,
-      }));
-
-    /** Quantos padrões deste dia cabem no orçamento, no nível de degradação dado. */
-    const cabem = (padroes: readonly PadraoMovimento[], nivel: 0 | 1 | 2): number => {
-      let soma = 0;
-      let n = 0;
-      for (const p of padroes) {
-        const c = custoSlot(p, nivel);
-        if (soma + c > orcamentoSeg) break;
-        soma += c;
-        n += 1;
-      }
-      return Math.max(1, n); // ao menos 1 exercício — sessão vazia não é resposta
-    };
+        degradacao: nivel,
+      })), 0);
 
     /**
-     * 🔒 Ordem de degradação (regra 3): cede ISOLADO até 60 s, depois COMPOSTO até 90 s, e
-     * só então o nº de exercícios. Nunca se corta exercício para dar descanso mais longo aos
-     * outros — cobertura > descanso.
-     *
      * 🟡 EXCEÇÃO NOMEADA, durante a rampa: o piso do FIT é INVIOLÁVEL, então não há
-     * degradação e quem cede é o nº de exercícios. Inversão consciente: na rampa o volume já
-     * está cortado 50–70% (sobra tempo) e a rampa É feature de segurança — o risco
-     * documentado é rabdomiólise, não desconforto.
+     * degradação (o volume da retomada já está cortado 50–70% — sobra tempo).
      */
-    for (const d of spec) {
-      const alvo = d.padroes.length;
-      let n = cabem(d.padroes, 0);
+    for (let i = 0; i < diasTreino.length; i += 1) {
+      if (semanaRampa != null) break;
+      const slots = diasTreino[i]!.slots;
       let nivel: 0 | 1 | 2 = 0;
-      if (n < alvo && semanaRampa == null) {
-        const n1 = cabem(d.padroes, 1);       // cede ISOLADO → 60 s
-        if (n1 > n) { n = n1; nivel = 1; }
-        if (n < alvo) {
-          const n2 = cabem(d.padroes, 2);     // só então cede COMPOSTO → 90 s
-          if (n2 > n) { n = n2; nivel = 2; }
-        }
-      }
-      capDiaPorTempo.push(n);
-      nivelDegradacaoDia.push(nivel);
+      while (nivel < 2 && custoDia(slots, nivel) > orcamentoSeg) nivel = (nivel + 1) as 1 | 2;
+      nivelDegradacaoDia[i] = nivel;
     }
 
     /**
      * O `descansoEfetivo` da SEMANA virou LEGADO — quem manda agora é o `descansoSeg` de
      * cada slot. Ele fica exposto para a chamada v1 (sem `semanaCiclo`) e para a UI antiga.
-     *
-     * ⚠️ A sensibilidade ao tempo é preservada de propósito: o teto de 180 s só sobe quando
-     * TODOS os dias couberam com a faixa cheia. Sem esta condição, uma sessão de 30 min
-     * anunciaria 180 s enquanto o orçamento reservou menos — "tempo é o limitante" é regra
-     * do v2 §5, e ela não morre só porque o cálculo mudou de forma.
+     * O teto de 180 s só sobe quando TODOS os dias couberam com a faixa cheia (v2 §5).
      */
     const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
     const coubeCheio = nivelDegradacaoDia.every((n) => n === 0);
     if (elegivel180 && coubeCheio) descansoEfetivo = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
   }
-  const maxExercicios = semanaCiclo
-    ? Math.max(...capDiaPorTempo, 1)
-    : Math.max(1, Math.floor((perfil.tempoPorSessaoMin * 60) / tempoPorExercicioSeg(prescricao)));
-
-  // --- Alocador semanal de padrões -----------------------------------------
-  // Distribui os padrões pelos dias (respeitando o template e a capacidade por tempo),
-  // garantindo por construção: dobradiça presente, puxar ≥ empurrar, e core ∈ [2,3].
-  const temPool = (p: PadraoMovimento) => (porPadrao.get(p)?.length ?? 0) + (favsPorPadrao.get(p)?.length ?? 0) > 0;
-  // 🔒 Cap POR DIA: com a soma por item cada dia tem seu próprio limite, porque a
-  // composição (quantos compostos × quantos acessórios) muda o custo. Antes era um escalar
-  // igual para todos — a origem exata do erro "subestima composto, superestima acessório".
-  const capDia = spec.map((d, i) => Math.min(d.padroes.length, capDiaPorTempo[i] ?? maxExercicios));
-  const capTotal = capDia.reduce((a, b) => a + b, 0);
-  const escolhidos: PadraoMovimento[][] = spec.map(() => []);
-  let alocados = 0;
-  const conta = (p: PadraoMovimento) => escolhidos.reduce((n, arr) => n + arr.filter((x) => x === p).length, 0);
-
-  /** Coloca 1 slot do padrão no melhor dia. Guarda: empurrar nunca ultrapassa puxar. */
-  function place(pat: PadraoMovimento): boolean {
-    if (alocados >= capTotal || !temPool(pat)) return false;
-    if (pat === 'empurrar' && conta('empurrar') >= conta('puxar')) return false; // puxar ≥ empurrar
-    const cands = spec
-      .map((d, i) => ({ i, d }))
-      .filter(({ i, d }) => d.padroes.includes(pat) && escolhidos[i]!.length < capDia[i]!);
-    if (cands.length === 0) return false;
-    cands.sort((a, b) => {
-      const aTem = escolhidos[a.i]!.includes(pat) ? 1 : 0;
-      const bTem = escolhidos[b.i]!.includes(pat) ? 1 : 0;
-      if (aTem !== bTem) return aTem - bTem; // prefere dia sem esse padrão (espalha)
-      if (escolhidos[a.i]!.length !== escolhidos[b.i]!.length) return escolhidos[a.i]!.length - escolhidos[b.i]!.length;
-      return a.i - b.i;
-    });
-    escolhidos[cands[0]!.i]!.push(pat);
-    alocados++;
-    return true;
-  }
-
-  // 1) Presença dos fundamentais (puxar antes de empurrar).
-  for (const pat of FUNDAMENTAIS) place(pat);
-  // 2) Core até o piso de 2× (invariante).
-  while (conta('core') < CORE_MIN && place('core')) {
-    /* repete */
-  }
-  // 3) Frequência: fundamentais + isolado; core só até o teto de 3×. Até encher.
-  let progrediu = true;
-  while (alocados < capTotal && progrediu) {
-    progrediu = false;
-    for (const pat of FUNDAMENTAIS) progrediu = place(pat) || progrediu;
-    progrediu = place('isolado') || progrediu;
-    if (conta('core') < CORE_MAX) progrediu = place('core') || progrediu;
-  }
-
-  const diasTreino: DiaTreino[] = spec.map((d, i) => {
-    const slots: SlotExercicio[] = [];
-    const usadosDia = new Set<string>(); // favoritos não repetem no MESMO dia
-    for (const padrao of escolhidos[i]!) {
-      const ex = escolher(padrao, usadosDia);
-      // Badge (B5, DF 2026-07-04): acende p/ TODO favorito que entrou no plano.
-      if (ex) slots.push({ padrao, exercicio: ex, ...(favoritos.has(ex.id) ? { incluidoPorPreferencia: true } : {}) });
-    }
-    return { nome: d.nome, slots };
-  });
 
   /**
    * 🎛️ v3 · Bloco B — A ORDEM DO FOCO, aplicada com os exercícios já escolhidos.
@@ -405,12 +290,17 @@ export function montarRotina(
    * 🔴 **Dentro da classe, sempre.** *"Vem primeiro na sessão"* sem a qualificação inverteria
    * composto → isolado quando o foco fosse num músculo pequeno, e fatigar o bíceps antes das
    * puxadas é **pré-exaustão** — técnica avançada que a seção vizinha decidiu não prescrever
-   * por default. O conserto teria criado de graça o que a outra seção proíbe.
+   * por default.
    *
    * 🟢 Vale para TODO MUNDO, inclusive para quem não tem folga de volume: é justamente o que
    * o foco entrega a quem já está no MRV.
+   *
+   * 🔴 EXCETO CORE (DF 2026-08-05): a mecânica do core é SÓ séries nos slots existentes —
+   * `ordem` não existe para core (reordenar 1 slot/sessão é inerte, e entrega inerte é
+   * sucesso simulado). Reordenar aqui também quebraria o aceite travado "recusa ⇒ plano
+   * INALTERADO".
    */
-  if (foco) {
+  if (foco && foco.grupo !== 'core') {
     for (const dia of diasTreino) {
       dia.slots = ordenarComFoco(dia.slots, foco.grupo, {
         classe: (sl) => (sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto'),
@@ -422,8 +312,7 @@ export function montarRotina(
   /**
    * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
    * o valor vem de `descansoDoExercicio` — que enxerga o que o padrão não mostra:
-   * `tipo: 'pliometrico'` (o e151 é `padraoMovimento: cardio` e mesmo assim tem descanso) e
-   * o override de força pesada (só composto COM carga).
+   * `tipo: 'pliometrico'` e o override de força pesada (só composto COM carga).
    *
    * A UI passa a EXIBIR este número. A média `round((min+max)/2)` que ela calculava sai —
    * ela matava o deslocamento por RIR em silêncio.
@@ -447,19 +336,6 @@ export function montarRotina(
           semanaRampa, degradacao,
         });
         if (exato == null) return s; // cardio: não há série a descansar
-        /**
-         * 🔻 O teto por PADRÃO saiu daqui (correções 1.3/1.4, 2026-07-31).
-         *
-         * Ele era o valor efetivamente exibido — o `min` fazia dele o limitante em todos os
-         * casos — e o padrão **não enxerga classe**: `POTENCIA` (o `e151` é
-         * `padrao: 'cardio'`) e força pesada eram cortados no piso do composto. Era por isso
-         * que a força pesada ia a 90 s.
-         *
-         * Agora quem degrada é `descansoDoExercicio`, que conhece a classe. O orçamento
-         * segue usando `descansoDoPadrao` para PLANEJAR (é o que existe antes da escolha), e
-         * os dois compartilham o mesmo `degradar` — a divergência que resta é justamente a
-         * que as correções mandam preservar: onde a classe real pede mais, ela recebe mais.
-         */
         return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG) };
       });
     }
@@ -473,9 +349,11 @@ export function montarRotina(
   const ret = semanaCiclo?.retomada;
   if (semanaCiclo && (ret || semanaCiclo.semana !== 6)) {
     const { semana, feedbackGrupos } = semanaCiclo;
+    // A banda da ALOCAÇÃO vem da prescrição — como a do orçamento de tempo acima. Uma
+    // banda literal em qualquer um dos dois pontos seria número solto fora do cofre.
+    const banda = prescricao.volumePorGrupoSemana;
     const sMin = prescricao.seriesPorExercicio.min;
     const sMax = prescricao.seriesPorExercicio.max;
-    const banda = prescricao.volumePorGrupoSemana;
     const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
     for (const d of diasTreino) {
       for (const s of d.slots) {
@@ -532,7 +410,7 @@ export function montarRotina(
       let alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
       // 🎛️ v3 · Bloco B — FOCO: +2–4 séries no grupo focado, compensadas 1:1 em outro, e
       // 🔴 NUNCA acima do MRV (teto duro). Quem já está no topo não ganha volume — ganha
-      // ORDEM, aplicada mais abaixo, DENTRO DA CLASSE.
+      // ORDEM, aplicada mais acima, DENTRO DA CLASSE.
       if (foco && (grupo === foco.grupo || grupo === foco.compensa)) {
         const baseFocado = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
         const baseCompensa = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
@@ -551,10 +429,9 @@ export function montarRotina(
           const slotsCompensa = porGrupo.get(foco.compensa)?.length ?? 0;
           /**
            * ⚠️ EFETIVO nos DOIS lados, não só no core. O alvo do grupo é truncado pela
-           * distribuição em `n × sMax`: o peito com 2 slots fica em 6 mesmo com alvo 7. Usar o
-           * alvo cru do compensador fazia o 1:1 virar NOMINAL — o core ganhava a série e o
-           * compensador não perdia nenhuma, porque já estava no próprio teto. Medido: total
-           * 37 → 38 com o foco ligado, contra a copy que promete que o total não muda.
+           * distribuição em `n × sMax`: usar o alvo cru faria o 1:1 virar NOMINAL — o core
+           * ganharia a série e o compensador não perderia nenhuma, porque já estava no
+           * próprio teto.
            */
           const seriesCoreAtuais = Math.min(baseFocado, slotsCore * sMax);
           const seriesCompensaAtuais = Math.min(baseCompensa, slotsCompensa * sMax);
@@ -573,15 +450,15 @@ export function montarRotina(
       }
       const n = slots.length;
       const base = n * sMin;
-      const teto = n * sMax;
+      const tetoGrupo = n * sMax;
       const series = slots.map(() => sMin);
       if (alvo > base) {
         // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
         // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
-        if (alvo > teto && teto >= banda.min) {
-          avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${teto}.`);
+        if (alvo > tetoGrupo && tetoGrupo >= banda.min) {
+          avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${tetoGrupo}.`);
         }
-        let extra = Math.min(alvo, teto) - base;
+        let extra = Math.min(alvo, tetoGrupo) - base;
         let i = 0;
         while (extra > 0) {
           if (series[i]! < sMax) {
@@ -608,8 +485,24 @@ export function montarRotina(
   if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
     avisos.push('Atenção: core fora da faixa de 2–3×/semana.');
   }
-  if (maxExercicios < 3) {
+  if (budgetPorDia <= 3) {
     avisos.push('Tempo por sessão curto: priorizamos os exercícios fundamentais.');
+  }
+
+  /**
+   * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este
+   * grupo foi coberto?" — vira verificação. Grupo GRANDE abaixo do MEV em contagem
+   * PONDERADA (direto 1,0 + secundário 0,5) ⇒ aviso honesto. Fora da retomada (lá o
+   * volume baixo é a feature) e só com séries decididas (ramo do ciclo).
+   */
+  if (semanaCiclo && !ret && semanaCiclo.semana !== 6) {
+    const ponderado = creditoPonderadoDaSemana(diasTreino.flatMap((d) => d.slots));
+    const piso = mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo);
+    for (const g of GRUPOS_GRANDES) {
+      if ((ponderado.get(g) ?? 0) < piso) {
+        avisos.push(`Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
+      }
+    }
   }
 
   return {

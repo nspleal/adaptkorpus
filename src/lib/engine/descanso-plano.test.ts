@@ -53,10 +53,21 @@ function plano(s: number, over: Partial<PerfilTreino> = {}) {
 const distintos = (dias: ReturnType<typeof plano>) =>
   [...new Set(dias.flatMap((d) => d.slots.map((s) => s.descansoSeg)).filter((v): v is number => v != null))].sort((a, b) => a - b);
 
+/**
+ * 🔻 FIXTURES MOVIDAS PARA ORÇAMENTO FOLGADO (120 min) — leva B do v4, 2026-08-13.
+ *
+ * O alocador por volume dá 6 slots a 60 min (antes: ~3,5), e 6 exercícios × ~4 séries com
+ * descanso no TOPO da faixa (180 s na semana 5) não cabem em 60 min por aritmética — a
+ * degradação travada (regra 3: cobertura > descanso) passa a agir nas semanas altas, POR
+ * CIMA da posição por RIR. A REGRA que estes dois testes provam (posição na faixa segue o
+ * RIR da semana) não mudou uma linha — o que mudou é onde ela fica visível sem a
+ * degradação por cima: num orçamento que comporta a semana 5 cheia. A degradação em
+ * orçamento apertado tem prova própria no aceite 5, abaixo (intacto).
+ */
 describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', () => {
   it('🔴 semana 1 × semana 5: o mesmo plano entrega descansos diferentes', () => {
-    const s1 = distintos(plano(1));
-    const s5 = distintos(plano(5));
+    const s1 = distintos(plano(1, { tempoPorSessaoMin: 120 }));
+    const s5 = distintos(plano(5, { tempoPorSessaoMin: 120 }));
     // Antes do conserto os dois conjuntos eram [120, 180] — byte-idênticos.
     expect(s1, `semana 1 e semana 5 emitem o mesmo conjunto: ${s1.join(',')}`).not.toEqual(s5);
     // E a direção é a da spec: longe da falha (RIR 3) → piso; perto (RIR 1) → topo.
@@ -72,7 +83,7 @@ describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', ()
   it('a posição na faixa segue o RIR-alvo da semana, classe a classe', () => {
     // Composto 120–180 · Isolado/core 60–120 (spec §🕐, tabela das classes).
     const porSemana = (s: number) => {
-      const slots = plano(s).flatMap((d) => d.slots);
+      const slots = plano(s, { tempoPorSessaoMin: 120 }).flatMap((d) => d.slots);
       return {
         composto: [...new Set(slots.filter((x) => x.classe === 'COMPOSTO').map((x) => x.descansoSeg))],
         isolado: [...new Set(slots.filter((x) => x.classe === 'ISOLADO').map((x) => x.descansoSeg))],

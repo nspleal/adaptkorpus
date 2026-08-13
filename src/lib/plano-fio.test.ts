@@ -45,14 +45,19 @@ describe('🔴 pares discriminantes — cada campo do fio muda o plano', () => {
     expect(com.split(/[|,]/), `${alvo} banido continua no plano`).not.toContain(alvo);
   });
 
-  it('trocar ("prefiro X") põe o preferido no plano', () => {
-    // e22 (puxar) está no plano base; e47 (puxar, mesmo padrão) não está.
+  it('trocar ("prefiro X") põe o preferido no plano', async () => {
+    // O par é DERIVADO do plano (não fixado): `de` = um exercício do plano; `para` = outro
+    // do MESMO padrão, elegível, fora do plano. Fixar ids quebrava a cada mudança de
+    // alocador sem medir nada.
+    const { EXERCISES_SEED } = await import('@/lib/data/seed');
     const sem = plano(BASE);
-    expect(sem.split(/[|,]/)).toContain('e22');
-    expect(sem.split(/[|,]/)).not.toContain('e47');
-    const com = plano({ ...BASE, preferencias: { trocas: [{ de: 'e22', para: 'e47' }], banidos: [] } });
-    expect(com.split(/[|,]/), 'o preferido não entrou').toContain('e47');
-    expect(com.split(/[|,]/), 'o preterido não saiu').not.toContain('e22');
+    const ids = new Set(sem.split(/[|,]/));
+    const de = EXERCISES_SEED.find((e) => ids.has(e.id))!;
+    const para = EXERCISES_SEED.find((e) => !ids.has(e.id) && e.padraoMovimento === de.padraoMovimento && e.local === 'academia' && e.nivel !== 'avancado');
+    expect(para, 'não há candidato de troca fora do plano — fixture impossível').toBeDefined();
+    const com = plano({ ...BASE, preferencias: { trocas: [{ de: de.id, para: para!.id }], banidos: [] } });
+    expect(com.split(/[|,]/), `o preferido ${para!.id} não entrou`).toContain(para!.id);
+    expect(com.split(/[|,]/), `o preterido ${de.id} não saiu`).not.toContain(de.id);
   });
 
   it('foco em grupo muda o plano (ao menos a ordem, dentro da classe)', () => {

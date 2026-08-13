@@ -4,9 +4,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "emagrecimento",
   "slots": [
-    2,
-    2,
-    2,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -14,9 +14,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 10 min — faixa em que o cap LIMITA 1`] = `
 {
   "slots": [
-    2,
-    2,
-    2,
+    3,
+    3,
+    3,
   ],
   "tempo": 10,
 }
@@ -26,9 +26,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "massa",
   "slots": [
-    2,
-    2,
-    2,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -47,9 +47,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 20 min — faixa em que o cap LIMITA 1`] = `
 {
   "slots": [
-    4,
-    4,
-    4,
+    3,
+    3,
+    3,
   ],
   "tempo": 20,
 }
@@ -58,9 +58,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 25 min — faixa em que o cap LIMITA 1`] = `
 {
   "slots": [
-    5,
-    5,
-    5,
+    4,
+    4,
+    4,
   ],
   "tempo": 25,
 }
@@ -70,9 +70,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "saude",
   "slots": [
-    1,
-    1,
-    1,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -80,10 +80,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    1,
-    1,
-    1,
-    1,
+    3,
+    3,
+    3,
+    3,
   ],
   "tempo": 10,
 }
@@ -92,10 +92,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 15 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    1,
-    1,
-    1,
-    1,
+    3,
+    3,
+    3,
+    3,
   ],
   "tempo": 15,
 }
@@ -104,10 +104,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 20 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    2,
-    2,
-    2,
-    2,
+    3,
+    3,
+    3,
+    3,
   ],
   "tempo": 20,
 }
@@ -116,10 +116,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 25 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
-    3,
-    3,
-    3,
+    4,
+    4,
+    4,
+    4,
   ],
   "tempo": 25,
 }
@@ -128,10 +128,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 30 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
-    3,
-    3,
-    3,
+    4,
+    4,
+    4,
+    4,
   ],
   "tempo": 30,
 }
@@ -140,10 +140,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 30 min por sessão 1`] = `
 {
   "slots": [
-    3,
-    3,
-    3,
-    3,
+    4,
+    4,
+    4,
+    4,
   ],
   "tempo": 30,
 }
@@ -152,10 +152,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 45 min por sessão 1`] = `
 {
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    5,
+    5,
+    5,
+    5,
   ],
   "tempo": 45,
 }
@@ -164,10 +164,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 60 min por sessão 1`] = `
 {
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
   "tempo": 60,
 }
@@ -176,10 +176,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 75 min por sessão 1`] = `
 {
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    7,
+    7,
+    7,
+    7,
   ],
   "tempo": 75,
 }
@@ -188,10 +188,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 90 min por sessão 1`] = `
 {
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    7,
+    7,
+    7,
+    7,
   ],
   "tempo": 90,
 }
@@ -199,19 +199,19 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força em sessão curta — o piso de 180 s da força pesada custa exercício 1`] = `
 [
-  1,
-  1,
-  1,
-  1,
+  3,
+  3,
+  3,
+  3,
 ]
 `;
 
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força ligado (composto a 6RM) — o caminho do teto de 180 s 1`] = `
 [
-  4,
-  3,
-  4,
-  3,
+  6,
+  6,
+  6,
+  6,
 ]
 `;
 
@@ -219,10 +219,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "nivel": "avancado",
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -231,9 +231,9 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "nivel": "iniciante",
   "slots": [
-    5,
-    5,
-    5,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -242,10 +242,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "nivel": "intermediario",
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -254,10 +254,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "emagrecimento",
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -266,10 +266,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "massa",
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -278,10 +278,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "objetivo": "saude",
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    5,
   ],
 }
 `;
@@ -290,10 +290,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "semana": 1,
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -302,10 +302,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "semana": 3,
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -314,10 +314,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "semana": 5,
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
@@ -326,21 +326,21 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 {
   "semana": 6,
   "slots": [
-    4,
-    3,
-    4,
-    3,
+    6,
+    6,
+    6,
+    6,
   ],
 }
 `;
 
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > sessão de 30 min, avançado (o caso mais apertado) 1`] = `
 [
-  3,
-  3,
-  3,
-  3,
-  3,
+  4,
+  4,
+  4,
+  4,
+  4,
 ]
 `;
 
@@ -377,7 +377,7 @@ exports[`📸 caracterização — o estimador de HOJE é cego à composição d
 exports[`📸 caracterização — o estimador de HOJE é cego à composição da sessão > descanso efetivo — massa, 30 min (o teto de 180 s depende do tempo) 1`] = `
 {
   "descanso": {
-    "max": 180,
+    "max": 120,
     "min": 90,
   },
   "tempo": 30,
@@ -414,20 +414,20 @@ exports[`📸 caracterização — o estimador de HOJE é cego à composição d
 exports[`📸 caracterização — o estimador de HOJE é cego à composição da sessão > o divisor do cap não depende de quais exercícios caíram na sessão 1`] = `
 [
   {
+    "compostos": 2,
+    "slots": 5,
+  },
+  {
     "compostos": 4,
-    "slots": 4,
+    "slots": 5,
   },
   {
-    "compostos": 3,
-    "slots": 3,
+    "compostos": 4,
+    "slots": 5,
   },
   {
-    "compostos": 3,
-    "slots": 4,
-  },
-  {
-    "compostos": 3,
-    "slots": 3,
+    "compostos": 4,
+    "slots": 5,
   },
 ]
 `;

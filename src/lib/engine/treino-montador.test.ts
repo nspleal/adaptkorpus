@@ -269,18 +269,24 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
    * guiada exibe `slot.descansoSeg` (o valor exato do motor) e esta faixa só serve de
    * fallback da chamada v1, sem `semanaCiclo`.
    */
+  /**
+   * 🔻 CARACTERIZAÇÃO ATUALIZADA DE NOVO (leva B do v4, 2026-08-13) — e desta vez o 180 s
+   * dos 30 min MORRE, que era o achado reportado em 2026-08-04: `elegivel180 && coubeCheio`
+   * afirmava que 180 s cabia num orçamento calculado a 120 s. Com o alocador por volume a
+   * sessão de 30 min carrega 4 slots e NÃO fecha na faixa cheia → degradação → `coubeCheio`
+   * é false e o campo v1 fica honesto (120). Aos 90 min (7 slots, semana 1) segue fechando.
+   */
   it('descanso do composto: o teto de 180 s do campo v1 depende do orçamento ter fechado', () => {
     const longo = rotinaSemana(1, { tempoPorSessaoMin: 90 });
     expect(longo.semana?.descansoCompostoSeg.max).toBe(180);
     const curto = rotinaSemana(1, { tempoPorSessaoMin: 30 });
-    expect(curto.semana?.descansoCompostoSeg.max).toBe(180);
-    // 🔑 O que o usuário VÊ na semana 1 é o piso da classe, não este teto — a prova que
-    // impede a caracterização de ser lida como "o app mostra 180 s aos 30 min".
-    // ⚠️ Filtrar por `padrao !== 'isolado'` estava ERRADO: `core` também não é 'isolado' e
-    // mesmo assim é da classe ISOLADO (60 s). O critério é a CLASSE, não o nome do padrão.
+    expect(curto.semana?.descansoCompostoSeg.max).toBe(120); // sobre-afirmação de 2026-08-04, morta
+    // 🔑 O que o usuário VÊ aos 30 min é o valor DEGRADADO por classe (regra 3 — cede
+    // ISOLADO a 60 s, depois COMPOSTO a 90 s): a tela não promete o que o orçamento não
+    // reservou. ⚠️ O critério é a CLASSE, não o nome do padrão (`core` é classe ISOLADO).
     const COMPOSTOS = new Set(['agachar', 'dobradica_quadril', 'empurrar', 'puxar']);
     const slots = curto.dias.flatMap((d) => d.slots);
-    expect(slots.filter((s) => COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 120), 'semana 1 = piso do composto').toBe(true);
+    expect(slots.filter((s) => COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 120 || s.descansoSeg === 90), 'composto: piso da faixa ou degradado a 90').toBe(true);
     expect(slots.filter((s) => !COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 60), 'semana 1 = piso do isolado/core').toBe(true);
   });
 

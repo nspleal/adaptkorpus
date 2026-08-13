@@ -228,20 +228,24 @@ describe('🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composiçã
    * `sPlan × (40 + um_descanso)` — igual para qualquer mistura. Agora cada padrão custa o
    * descanso da SUA classe, então um dia de composto e um de acessório divergem.
    */
-  it('dia de composto custa mais que dia de acessório (com a fórmula antiga seriam iguais)', () => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 60 });
-    const custo = (d: (typeof r.dias)[number]) =>
-      d.slots.reduce((n, s) => n + (s.series ?? 1) * (40 + (s.descansoSeg ?? 0)), 0);
+  /**
+   * 🔻 REESCRITO no v4 (2026-08-13): comparar CUSTO por slot na saída deixou de
+   * discriminar — a degradação por dia aperta justamente o dia caro, igualando os custos
+   * finais (que é o objetivo dela). A prova de que a estimativa enxerga a composição
+   * mudou de face: no MESMO orçamento, o dia carregado de composto DEGRADA o descanso e o
+   * dia leve não. Com a fórmula antiga (um descanso × total), os dois degradariam juntos.
+   * Fixture por sondagem: 4d/75min/semana 5 — Lower A (composto-pesado) cai a 90 s;
+   * Upper A (com isolados) mantém o topo (180 s).
+   */
+  it('no mesmo orçamento, o dia carregado de composto degrada e o leve não', () => {
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 75 }, 5);
     const compostos = (d: (typeof r.dias)[number]) => d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').length;
+    const descansoComposto = (d: (typeof r.dias)[number]) => Math.max(...d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').map((s) => s.descansoSeg ?? 0));
     const ordenados = [...r.dias].sort((a, b) => compostos(b) - compostos(a));
     const maisComposto = ordenados[0]!;
     const menosComposto = ordenados[ordenados.length - 1]!;
-    // Se todos os dias tiverem a mesma composição, o caso não é discriminante — sinalize.
-    expect(compostos(maisComposto)).toBeGreaterThanOrEqual(compostos(menosComposto));
-    if (compostos(maisComposto) > compostos(menosComposto)) {
-      expect(custo(maisComposto) / Math.max(1, maisComposto.slots.length))
-        .toBeGreaterThan(custo(menosComposto) / Math.max(1, menosComposto.slots.length));
-    }
+    expect(compostos(maisComposto), 'caso não discriminante — composições iguais').toBeGreaterThan(compostos(menosComposto));
+    expect(descansoComposto(maisComposto), 'o dia pesado não cedeu descanso').toBeLessThan(descansoComposto(menosComposto));
   });
 
   it('o custo por slot acompanha a classe (composto ≥ acessório, sempre)', () => {
@@ -291,12 +295,13 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
    * os snapshots contam SLOTS, não os valores de descanso sob degradação.
    */
   it('degradação nível 1: o ACESSÓRIO vai ao piso e o COMPOSTO fica intacto', () => {
-    // ⚠️ 45 min / semana 5 achado por sondagem: é onde o nível 1 BASTA. Em 20 min o dia
-    // precisa do nível 2 (composto também cede a 90 s) e o caso deixa de discriminar a
-    // ORDEM — foi por isso que "inverter a ordem" sobrevivia às primeiras versões.
-    // Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela faixa: na semana 1
-    // (RIR 3) ele JÁ é 60 s pelo deslocamento e degradar fica indistinguível.
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 45, nivelExperiencia: 'intermediario' }, 5);
+    // ⚠️ Fixture RE-SONDADA para o alocador v4 (2026-08-13): com 6–7 slots por dia, os
+    // 45 min passaram a exigir nível 2 em todos os dias e o caso parou de discriminar a
+    // ORDEM. A sondagem nova achou 90 min / semana 5: o Upper A (7 slots) fecha no nível 1
+    // — acessório a 60 s, composto INTACTO no topo (180 s). A ordem invertida rebaixaria o
+    // composto a 90 aqui. Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela
+    // faixa: na semana 1 (RIR 3) ele JÁ é 60 s e degradar fica indistinguível.
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 90, nivelExperiencia: 'intermediario' }, 5);
     const diaDegradado = r.dias.find((d) =>
       d.slots.some((x) => (x.padrao === 'isolado' || x.padrao === 'core') && x.descansoSeg === 60));
     expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();
@@ -385,23 +390,30 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
   });
 });
 
-describe('🔒 o cap é POR DIA — dias de composição diferente cabem coisas diferentes', () => {
+describe('🔒 o orçamento é POR DIA — dias de composição diferente saem diferentes', () => {
   /**
-   * Antes o cap era um escalar igual para todos os dias: a origem exata do erro
-   * "subestima a sessão de composto, superestima a de acessório". Com a soma por item cada
-   * dia tem seu próprio limite.
-   *
-   * ⚠️ Caso achado por sondagem: em Full-body ×N todos os dias têm o MESMO template, então
-   * escalar e por-dia coincidem e a mutação sobrevive. É o split Upper/Lower/Full, com
-   * composições diferentes, que discrimina — 3 dias, 25 min.
+   * 🔻 REESCRITO para o alocador v4 (2026-08-13). O cap por soma-de-itens morreu de
+   * propósito: o nº de slots vem da tabela f(tempo) do handoff (igual para todos os dias).
+   * O que continua POR DIA — e é o que este teste agora prova — são as DUAS saídas que
+   * dependem da composição do dia:
+   *  · a CONTAGEM ainda difere quando o déficit de um dia se esgota antes do orçamento
+   *    (o dia não é inflado para bater a tabela);
+   *  · a DEGRADAÇÃO é decidida dia a dia: o dia carregado de composto cede descanso, o dia
+   *    que cabe na faixa cheia não cede nada.
+   * Fixture por sondagem: 4 dias / 75 min / semana 5 — Upper A degrada (90 s) e Lower B
+   * fecha inteiro (180 s), com contagens 7/7/7/6.
    */
-  it('Upper / Lower / Full: os três dias NÃO recebem a mesma contagem', () => {
-    const p = perfil({ diasDisponiveis: 3, tempoPorSessaoMin: 25, nivelExperiencia: 'intermediario' });
-    const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
+  it('4d/75min/sem.5: a contagem segue a tabela f(tempo) e a DEGRADAÇÃO varia por dia', () => {
+    const p = perfil({ diasDisponiveis: 4, tempoPorSessaoMin: 75, nivelExperiencia: 'intermediario' });
+    const opc: OpcoesSemana = { semana: 5, feedbackGrupos: new Map() };
     const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
-    expect(r.split).toBe('Upper / Lower / Full');
-    const contagens = r.dias.map((d) => d.slots.length);
-    expect(new Set(contagens).size, `todos os dias com a mesma contagem: ${contagens}`).toBeGreaterThan(1);
+    expect(r.split).toBe('Upper / Lower ×2');
+    // v4: o nº de slots é a tabela do handoff (75 min → 7), igual para todos os dias…
+    for (const d of r.dias) expect(d.slots.length, d.nome).toBe(7);
+    // …e o que varia POR DIA é a degradação: o dia que não cabe cede descanso, o que cabe
+    // fica no topo da faixa. (Com um nível único para a semana, os dois seriam iguais.)
+    const compostoDoDia = r.dias.map((d) => Math.max(...d.slots.filter((s) => !['isolado', 'core'].includes(s.padrao)).map((s) => s.descansoSeg ?? 0)));
+    expect(new Set(compostoDoDia).size, `todos os dias com o mesmo descanso de composto: ${compostoDoDia}`).toBeGreaterThan(1);
   });
 });
 
