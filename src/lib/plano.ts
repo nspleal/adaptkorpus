@@ -54,6 +54,19 @@ export function recomputarPlano(
     diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
     // Modo força (v2 §4): preset opt-in — o motor ignora p/ iniciante.
     ...(perfil.modoForca ? { modoForca: true } : {}),
+    /**
+     * 🔴 O FIO DO v3 (leva A do v4 — handoff-motor-volume-v4-2026-08-12).
+     *
+     * O defeito medido em 2026-08-12: este era o ÚNICO ponto do app que constrói um
+     * `PerfilTreino`, e ele não repassava `preferencias` nem `foco` — o montador lê os dois
+     * (`treino-montador.ts`), então banir/trocar/focar gravava no perfil, emitia telemetria
+     * e NÃO MUDAVA O PLANO. Os controles do v3 ficaram 8 dias no ar, inertes.
+     * (`tecnicasAvancadas` não entra aqui de propósito: o motor não o lê — o portão de
+     * elegibilidade é recalculado na UI; o campo é só persistido.)
+     */
+    ...(perfil.preferencias ? { preferencias: perfil.preferencias } : {}),
+    ...(perfil.foco ? { foco: perfil.foco } : {}),
+    ...(perfil.divisaoPreferida ? { divisaoPreferida: perfil.divisaoPreferida } : {}),
   };
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
   // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é

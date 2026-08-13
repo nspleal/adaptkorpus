@@ -44,6 +44,21 @@ export interface PreferenciasPerfil {
   deloadAte?: PerfilResumo['deloadAte'];
   modoForca?: PerfilResumo['modoForca'];
   reconhecidoEm?: PerfilResumo['reconhecidoEm'];
+  /**
+   * 🔴 O FIO DO v3 — leva A do v4 (handoff-motor-volume-v4-2026-08-12). Os campos abaixo
+   * existiam no `PerfilResumo` e NÃO eram mapeados — o save os apagava do servidor, e o
+   * boot server-first apagava o cache local em seguida. O jsonb do 0005 absorve as chaves
+   * novas sem migration (P0.1 verificado: `preferencias jsonb`, não colunas).
+   *
+   * ⚠️ Nome `preferenciasTreino` de propósito: o bloco jsonb inteiro já se chama
+   * `preferencias` no banco; repetir o nome DENTRO dele criaria `preferencias.preferencias`,
+   * ilegível em telemetria, suporte e export LGPD.
+   */
+  preferenciasTreino?: PerfilResumo['preferencias'];
+  foco?: PerfilResumo['foco'];
+  tecnicasAvancadas?: PerfilResumo['tecnicasAvancadas'];
+  orcamento?: PerfilResumo['orcamento'];
+  divisaoPreferida?: PerfilResumo['divisaoPreferida'];
 }
 
 /** Subconjunto de colunas de `public.profile` derivado do `PerfilResumo`. */
@@ -97,6 +112,12 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       ...(p.deloadAte != null ? { deloadAte: p.deloadAte } : {}),
       ...(p.modoForca != null ? { modoForca: p.modoForca } : {}),
       ...(p.reconhecidoEm != null ? { reconhecidoEm: p.reconhecidoEm } : {}),
+      // 🔴 O fio do v3 (leva A do v4): gravar o que a leitura devolve, campo a campo.
+      ...(p.preferencias != null ? { preferenciasTreino: p.preferencias } : {}),
+      ...(p.foco != null ? { foco: p.foco } : {}),
+      ...(p.tecnicasAvancadas != null ? { tecnicasAvancadas: p.tecnicasAvancadas } : {}),
+      ...(p.orcamento != null ? { orcamento: p.orcamento } : {}),
+      ...(p.divisaoPreferida != null ? { divisaoPreferida: p.divisaoPreferida } : {}),
     },
   };
 }
@@ -153,6 +174,12 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     ...(pref.deloadAte != null ? { deloadAte: pref.deloadAte } : {}),
     ...(pref.modoForca != null ? { modoForca: pref.modoForca } : {}),
     ...(pref.reconhecidoEm != null ? { reconhecidoEm: pref.reconhecidoEm } : {}),
+    // 🔴 O fio do v3 (leva A do v4): inverso fiel do bloco de escrita acima.
+    ...(pref.preferenciasTreino != null ? { preferencias: pref.preferenciasTreino } : {}),
+    ...(pref.foco != null ? { foco: pref.foco } : {}),
+    ...(pref.tecnicasAvancadas != null ? { tecnicasAvancadas: pref.tecnicasAvancadas } : {}),
+    ...(pref.orcamento != null ? { orcamento: pref.orcamento } : {}),
+    ...(pref.divisaoPreferida != null ? { divisaoPreferida: pref.divisaoPreferida } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,
       renal: row.renal,

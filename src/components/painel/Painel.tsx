@@ -48,7 +48,7 @@ import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefe
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
-  CardapioItem, DiaTreino, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
+  CardapioItem, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 import { chaveLocal } from '@/lib/escopo-local';
@@ -85,6 +85,9 @@ export interface PerfilResumo {
   preferencias?: PreferenciasTreino;
   /** 🎛️ v3 · Bloco B — o grupo em foco (1 por vez, janela de 4–6 semanas). */
   foco?: FocoGrupo;
+  /** 🎛️ v4 · DF③ (2026-08-12) — divisão preferida (`auto` | `superior-inferior` |
+   *  `prioridades`). Ausente = `auto`. Persistida na leva A; consumida pelo alocador (leva B). */
+  divisaoPreferida?: DivisaoPreferida;
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];

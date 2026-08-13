@@ -11,6 +11,15 @@ import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
+/**
+ * 🎛️ v4 · DF③ (2026-08-12) — a divisão de treino como ESCOLHA do usuário:
+ *  · `auto` (default) — o padrão por dias disponíveis (o comportamento de sempre);
+ *  · `superior-inferior` — força Sup/Inf onde os dias permitirem;
+ *  · `prioridades` — divisão por prioridades (ex.: dia de braços completo).
+ * Ausente ≡ `auto`.
+ */
+export type DivisaoPreferida = 'auto' | 'superior-inferior' | 'prioridades';
+
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
 export type ComportamentoTreino = 'ROTEAR' | 'RESTRINGIR' | 'PERMITIR';
 
@@ -42,6 +51,8 @@ export interface PerfilTreino {
   diasDisponiveis: number;
   /** Tempo por sessão em minutos. */
   tempoPorSessaoMin: number;
+  /** 🎛️ v4 · DF③ — divisão preferida. Ausente = `auto` (padrão por dias disponíveis). */
+  divisaoPreferida?: DivisaoPreferida;
   /**
    * Modo força (preset opt-in, v2 — cofre parametros-motor-treino §"v2 — decisões travadas",
    * DF 2026-07-08): alvo FIXO de 6 reps nos compostos com carga, progride só por carga (→ 6RM).

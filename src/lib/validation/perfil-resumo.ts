@@ -6,6 +6,16 @@
  */
 import { z } from 'zod';
 
+/**
+ * 🔴 Grupos primários (12 valores anatômicos — DF 2026-07-27). Espelho de `GrupoPrimario`
+ * (`data/types.ts`); o zod não deriva de union TS, então a lista vive aqui e o teste do fio
+ * (`plano-fio.test.ts`) trava a igualdade com a fonte.
+ */
+const grupoPrimario = z.enum([
+  'antebraco', 'biceps', 'core', 'costas', 'gluteos', 'lombar',
+  'ombros', 'panturrilha', 'peito', 'posterior', 'quadriceps', 'triceps',
+]);
+
 export const perfilResumoSchema = z.object({
   sexo: z.enum(['masculino', 'feminino']),
   idade: z.coerce.number().int().min(18, '18+').max(100),
@@ -38,6 +48,30 @@ export const perfilResumoSchema = z.object({
   // reconhecimento. 🔴 Motive-free por LGPD — nunca motivo, sintoma ou data de volta;
   // um campo que gravasse "doente" seria dado de saúde (categoria sensível).
   reconhecidoEm: z.string().datetime().optional(),
+  /**
+   * 🔴 O FIO DO v3 — leva A do v4 (handoff-motor-volume-v4-2026-08-12).
+   *
+   * Estes campos existiam no `PerfilResumo` e NÃO estavam declarados aqui — e zod descarta
+   * chave não declarada. Consequência medida (relatorio-medicao-v3-2026-08-12): o PUT do
+   * perfil os apagava no servidor, e o boot server-first (`app/page.tsx`) sobrescrevia o
+   * cache local com o perfil sem eles. Banimento, troca, foco, técnicas e orçamento
+   * morriam no primeiro reload com backend vivo.
+   */
+  preferencias: z.object({
+    trocas: z.array(z.object({ de: z.string(), para: z.string() })),
+    banidos: z.array(z.string()),
+  }).optional(),
+  foco: z.object({
+    grupo: grupoPrimario,
+    compensa: grupoPrimario,
+    semana: z.number().int().min(1),
+  }).optional(),
+  tecnicasAvancadas: z.boolean().optional(),
+  // 💰 Leva H — teto de custo da dieta. `null` ≡ ausente (sem restrição); o vocabulário é o
+  // interno ('baixo'|'medio'|'alto'), nunca o rótulo de tela (DF 2026-08-10).
+  orcamento: z.enum(['baixo', 'medio', 'alto']).nullable().optional(),
+  // 🎛️ v4 · DF③ — divisão preferida (leva B consome; a persistência entra já na leva A).
+  divisaoPreferida: z.enum(['auto', 'superior-inferior', 'prioridades']).optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
     renal: z.boolean(),
