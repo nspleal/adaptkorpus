@@ -241,6 +241,42 @@ describe('🔒 reembolso — a página existe, e diz que hoje não há cobrança
 });
 
 /**
+ * 🔒 A CASCA INSTITUCIONAL OFERECE AS ROTAS QUE EXISTEM (DF 2026-08-11).
+ *
+ * 🔑 O inverso da varredura de 01/08, e a mesma família de erro: aquela procurava quem ainda
+ * linkava para uma página morta; esta procura quem DEVERIA linkar para uma página viva e não
+ * linka. Foi assim que `/faq` e `/changelog` ficaram fora do cabeçalho por mais de um mês —
+ * entraram como rota na V6.1 e a navegação nunca foi atualizada.
+ *
+ * O critério não é a lista de hoje: é que toda rota institucional em disco esteja no NAV. Rota
+ * nova sem entrada no cabeçalho derruba isto — que é exatamente o que faltou em 02/07.
+ */
+describe('🔒 toda rota institucional aparece no cabeçalho', () => {
+  const shell = () => semComentarios(readFileSync(join(process.cwd(), 'src/components/legal/InstitucionalShell.tsx'), 'utf8'));
+  /** As institucionais: páginas de conteúdo público, fora do funil e fora do app logado. */
+  const INSTITUCIONAIS = ['termos', 'privacidade', 'aviso', 'faq', 'reembolso', 'suporte', 'changelog'];
+
+  it('as institucionais existem em disco', () => {
+    const faltando = INSTITUCIONAIS.filter((r) => !existsSync(join(APP, r, 'page.tsx')));
+    expect(faltando, `rota(s) na lista que não existem: ${faltando.join(', ')}`).toEqual([]);
+  });
+
+  it('🔴 cada uma tem entrada no NAV — não só no rodapé', () => {
+    const s = shell();
+    const nav = s.slice(s.indexOf('const NAV'), s.indexOf('const FOOTER'));
+    const fora = INSTITUCIONAIS.filter((r) => !nav.includes(`href: '/${r}'`));
+    expect(fora, `no disco mas fora do cabeçalho: ${fora.join(', ')}`).toEqual([]);
+  });
+
+  it('anti-vacuidade: o detector reprovaria uma rota ausente do NAV', () => {
+    const s = shell();
+    const nav = s.slice(s.indexOf('const NAV'), s.indexOf('const FOOTER'));
+    expect(nav.includes("href: '/rota-que-nunca-existiu'")).toBe(false);
+    expect(nav.includes("href: '/termos'")).toBe(true);
+  });
+});
+
+/**
  * 🔒 §changelog — O CRITÉRIO QUE SUBSTITUI O ① NO LOG DATADO (DF 2026-08-01).
  *
  * 🔑 O changelog não pode ser cobrado por "não prometer": ele **registra o que foi

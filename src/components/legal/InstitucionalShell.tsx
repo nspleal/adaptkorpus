@@ -18,17 +18,29 @@ import { temSessao, useTemSessao } from '@/lib/session';
 // segue marcado como "não usar" no cofre; o que voltou é copy nova.
 type PageKey = 'termos' | 'privacidade' | 'aviso' | 'suporte' | 'ebook' | 'faq' | 'changelog' | 'reembolso';
 
+/**
+ * 🔒 O CABEÇALHO ESTAVA DESATUALIZADO DESDE 2026-07-02. O shell nasceu em 30/06 com cinco
+ * links; `/faq` e `/changelog` entraram como rotas na V6.1 (02/07) e foram para o RODAPÉ,
+ * mas nunca para o NAV. `/reembolso` volta em 11/08 (DF do autor) e entra nos dois.
+ *
+ * ⚠️ O achado do inventário do cofre dizia "as três faltam no shell"; medido, faltavam só no
+ * NAV — `/faq` e `/changelog` já estavam no FOOTER. Registrado no relatório do lote.
+ */
 const NAV: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos', href: '/termos' },
   { key: 'privacidade', label: 'Privacidade', href: '/privacidade' },
   { key: 'aviso', label: 'Aviso', href: '/aviso' },
+  { key: 'faq', label: 'FAQ', href: '/faq' },
+  { key: 'reembolso', label: 'Reembolso', href: '/reembolso' },
   { key: 'suporte', label: 'Suporte', href: '/suporte' },
+  { key: 'changelog', label: 'Changelog', href: '/changelog' },
 ];
 const FOOTER: { key: PageKey; label: string; href: string }[] = [
   { key: 'termos', label: 'Termos de Uso', href: '/termos' },
   { key: 'privacidade', label: 'Política de Privacidade', href: '/privacidade' },
   { key: 'aviso', label: 'Aviso', href: '/aviso' },
   { key: 'faq', label: 'Perguntas frequentes', href: '/faq' },
+  { key: 'reembolso', label: 'Reembolso', href: '/reembolso' },
   { key: 'suporte', label: 'Suporte', href: '/suporte' },
   { key: 'changelog', label: 'Changelog', href: '/changelog' },
   { key: 'ebook', label: 'Ebook', href: '/ebook' },
