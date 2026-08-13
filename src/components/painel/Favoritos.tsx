@@ -233,3 +233,42 @@ const pill = (ativo: boolean): CSSProperties => ({
   color: ativo ? '#BDFF00' : 'rgba(234,229,219,.8)',
   fontWeight: 600, fontSize: '.86rem', padding: '8px 14px', borderRadius: 999, cursor: 'pointer', minHeight: 40,
 });
+
+/**
+ * 🎛️ v4 · DF③ (2026-08-12) — A DIVISÃO DE TREINO COMO ESCOLHA.
+ *
+ * 🔒 Copy honesta, sem promessa de resultado: cada opção diz o que MUDA na montagem, não o
+ * que ela "entrega". `auto` é o default declarado — quem nunca tocar aqui continua com o
+ * padrão por dias disponíveis (ninguém ganha divisão que não pediu).
+ *
+ * ⚠️ Prioridades tem template travado para 4 dias de treino (o exemplo do autor); nos
+ * demais a montagem cai no padrão por dias — e a copy avisa, em vez de fingir.
+ */
+export const ROTULO_DIVISAO: Record<'auto' | 'superior-inferior' | 'prioridades', string> = {
+  'auto': 'Automática',
+  'superior-inferior': 'Superior / Inferior',
+  'prioridades': 'Por prioridades',
+};
+
+export function SeletorDivisao({ divisao, onDivisao }: {
+  divisao: 'auto' | 'superior-inferior' | 'prioridades';
+  onDivisao: (d: 'auto' | 'superior-inferior' | 'prioridades') => void;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: '.8rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Divisão de treino</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>
+        Como os grupos se distribuem pelos seus dias. {divisao === 'prioridades'
+          ? 'Dias por tema (ex.: peito+ombros num dia, braços completos noutro). Vale com 4 dias de treino; com outra agenda, a montagem automática assume.'
+          : divisao === 'superior-inferior'
+            ? 'Dias de parte de cima e dias de parte de baixo, alternados conforme a sua agenda.'
+            : 'O app escolhe pela sua agenda: corpo inteiro com poucos dias, superior/inferior com mais.'}
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {(Object.keys(ROTULO_DIVISAO) as Array<keyof typeof ROTULO_DIVISAO>).map((d) => (
+          <button key={d} type="button" onClick={() => onDivisao(d)} aria-pressed={divisao === d} style={pill(divisao === d)}>{ROTULO_DIVISAO[d]}</button>
+        ))}
+      </div>
+    </div>
+  );
+}

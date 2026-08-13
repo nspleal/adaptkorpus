@@ -36,8 +36,10 @@ export const GRUPOS_SO_INDIRETO: readonly GrupoPrimario[] = ['lombar', 'antebrac
 /** Piso direto dos pequenos (DF②: "1–2 exercícios/semana") e teto que o acompanha. */
 export const PEQUENOS_PISO_DIRETO = 1;
 export const PEQUENOS_TETO_DIRETO = 2;
+/** Nas prioridades o usuário COMPROU o dia de braços (ex. do autor: 3 bíceps + 3 tríceps,
+ *  além do dia de costas+bíceps) — o teto semanal acompanha a escolha. */
 /** Na divisão por prioridades o dia de braços do autor pede 2–3 por grupo (aceite B). */
-export const PEQUENOS_TETO_DIRETO_PRIORIDADES = 3;
+export const PEQUENOS_TETO_DIRETO_PRIORIDADES = 5;
 
 /**
  * 🔒 Orçamento de slots do dia = f(tempo) — handoff B1.1, substituindo o
@@ -162,6 +164,12 @@ export interface ArgsAlocacao {
   /** Invariante própria do core (2–3 slots/semana — travada). */
   coreMin: number;
   coreMax: number;
+  /**
+   * Prioridades (DF③): o dia por tema preenche até o orçamento MESMO sem déficit — o
+   * usuário comprou o tema do dia, e o crédito indireto vindo de outros dias não pode
+   * esvaziá-lo. Fora das prioridades o dia para quando os déficits acabam.
+   */
+  preencherAteOrcamento?: boolean;
 }
 
 /** Um dia comporta reservar um acessório além do core? (≥ 3 slots livres p/ os grandes —
@@ -269,6 +277,9 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * semanal segue verificado no montador.
    */
   function colocar(diaIdx: number, g: GrupoPrimario, usadosDia: Set<string>): boolean {
+    // O teto de slots diretos vale por QUALQUER porta (rodadas, reservas, preenchimento):
+    // sem esta checagem aqui, a reserva do piso furava o teto dos pequenos.
+    if ((slotsDiretos.get(g) ?? 0) >= args.tetoSlotsSemana(g)) return false;
     // Garantia da cadeia posterior: enquanto a semana não tem dobradiça, os grupos que ela
     // serve preferem um exercício de dobradiça (a invariante vinha de graça no alocador
     // velho, que montava por padrão; aqui ela vira preferência explícita).
@@ -341,6 +352,25 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     for (let d = 0; d < templates.length; d += 1) {
       const cap = budgetPorDia - reservasDoDia(d);
       if (dias[d]!.slots.length >= cap) continue;
+      if (args.preencherAteOrcamento) {
+        /**
+         * PRIORIDADES (DF③): o dia é POR TEMA — o usuário o comprou, e o crédito indireto
+         * vindo de outros dias não pode esvaziá-lo. Os grupos do tema se BALANCEIAM dentro
+         * do dia (menos slots neste dia primeiro; empate pela ordem do template), até o
+         * orçamento. Lombar/antebraço seguem a nota do autor ("antebraço só se houver
+         * déficit") — e com a DF② eles nunca têm alvo direto, então nunca entram.
+         */
+        const noDia = (g: GrupoPrimario) => dias[d]!.slots.filter((s) => s.grupo === g).length;
+        const tema = templates[d]!.grupos
+          .filter((g) => g !== 'core' && temPool(g)
+            && (slotsDiretos.get(g) ?? 0) < args.tetoSlotsSemana(g)
+            && (!(GRUPOS_SO_INDIRETO as readonly string[]).includes(g) || deficit(g) > 0))
+          .sort((a, b) => noDia(a) - noDia(b) || templates[d]!.grupos.indexOf(a) - templates[d]!.grupos.indexOf(b));
+        for (const g of tema) {
+          if (colocar(d, g, usadosPorDia[d]!)) break;
+        }
+        continue;
+      }
       /**
        * 🔒 DF②: "GRANDES na banda + pequenos com PISO direto". Os grandes disputam a banda
        * por déficit; os pequenos têm o piso garantido por RESERVA (passo 1b) e só disputam

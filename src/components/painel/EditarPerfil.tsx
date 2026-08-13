@@ -3,12 +3,12 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { PerfilResumo } from './Painel';
 import { gerarTreino } from '@/lib/engine';
-import type { ComportamentoGate, NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
+import type { ComportamentoGate, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, Sexo } from '@/lib/engine';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
-import { ExerciciosBanidos, GrupoEmFoco, MeusFavoritos, ToastDesfazer } from './Favoritos';
+import { ExerciciosBanidos, GrupoEmFoco, MeusFavoritos, SeletorDivisao, ToastDesfazer } from './Favoritos';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 
 /**
@@ -130,6 +130,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   // 1:1 o "foco" seria aumento geral de volume com outro nome.
   const [focoGrupo, setFocoGrupo] = useState<string | null>(inicial.foco?.grupo ?? null);
   const [focoCompensa, setFocoCompensa] = useState<string | null>(inicial.foco?.compensa ?? null);
+  // 🎛️ v4 · DF③ (2026-08-12) — a divisão de treino como escolha: auto (padrão por dias) ·
+  // superior-inferior · prioridades. Persistida no perfil; o alocador a lê como entrada.
+  const [divisao, setDivisao] = useState<DivisaoPreferida>(inicial.divisaoPreferida ?? 'auto');
   const [removidoFav, setRemovidoFav] = useState<{ id: string; idx: number } | null>(null);
   const [confirmar, setConfirmar] = useState(false);
 
@@ -190,6 +193,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
       tecnicasAvancadas: tecnicasLiberadas ? tecnicas : false,
+      // 🎛️ v4 · DF③ — `auto` não se grava: ausência JÁ significa o padrão por dias, e
+      // gravar o default criaria duas grafias para o mesmo estado.
+      divisaoPreferida: divisao === 'auto' ? undefined : divisao,
     });
   }
 
@@ -310,6 +316,10 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             onFoco={(g) => { setFocoGrupo(g); if (g === null) setFocoCompensa(null); }}
             onCompensa={setFocoCompensa}
           />
+
+          {/* 🎛️ v4 · DF③ — a DIVISÃO como escolha. Render INCONDICIONAL (regra da
+              descobribilidade: controle atrás de condição some em silêncio). */}
+          <SeletorDivisao divisao={divisao} onDivisao={setDivisao} />
 
           <ExerciciosBanidos
             banidos={banidos}

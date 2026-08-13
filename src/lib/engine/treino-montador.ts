@@ -218,6 +218,8 @@ export function montarRotina(
     tetoSlotsSemana: (g) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
     coreMin: CORE_MIN,
     coreMax: CORE_MAX,
+    // DF③: o dia por tema das prioridades preenche até o orçamento (o usuário o comprou).
+    preencherAteOrcamento: divisao === 'prioridades',
   });
 
   const diasTreino: DiaTreino[] = diasAlocados.map((d) => ({
