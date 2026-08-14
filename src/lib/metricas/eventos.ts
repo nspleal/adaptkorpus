@@ -46,6 +46,14 @@ export const TIPOS_EVENTO = [
   'tecnica_feedback',
   /** 💰 Leva H (2026-08-06) — escolha/mudança do teto de custo. Migration 0013. */
   'orcamento_escolhido',
+  /**
+   * 🧭 EDITOR GUIADO (2026-08-13) — migration 0014. `aviso_risco_mostrado` é o EVENTO
+   * ADVERSO da leva: a DF① decidiu que aviso não trava, e sem medir quantos aparecem (e
+   * quantos são ignorados no salvamento) a decisão nunca vira evidência.
+   */
+  'editor_aberto',
+  'treino_custom_salvo',
+  'aviso_risco_mostrado',
 ] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
@@ -85,6 +93,15 @@ export interface PayloadPorEvento {
    * por eficácia — o que precisa ser vigiado é o custo em esforço percebido.
    */
   tecnica_feedback: { tecnica: string; esforco: string };
+  /** 🧭 `origem`: 'plano' (editou o gerado) | 'vazio' (montou do zero). O denominador. */
+  editor_aberto: { origem: string };
+  /**
+   * 🔑 `avisos_ativos` é o campo que dá sentido aos outros dois: sem ele não se distingue
+   * "montou bem" de "montou contra todos os avisos" — e a DF① fica sem evidência de efeito.
+   */
+  treino_custom_salvo: { dias: number; exercicios: number; avisos_ativos: number };
+  /** `codigo`: vocabulário fechado de `engine/critico.ts`. `contexto`: 'editor' | 'plano'. */
+  aviso_risco_mostrado: { codigo: string; contexto: string };
 }
 
 /** As chaves permitidas de cada evento — derivadas da spec, usadas para PODAR o payload. */
@@ -105,6 +122,10 @@ export const CHAVES_PERMITIDAS: Readonly<Record<TipoEvento, readonly string[]>> 
   tecnica_elegivel: ['sessoes', 'nivel'],
   tecnica_ativada: ['tecnica', 'exercicio_id'],
   tecnica_feedback: ['tecnica', 'esforco'],
+  // 🧭 Editor guiado: só contagens e vocabulário fechado — nada de nome de exercício.
+  editor_aberto: ['origem'],
+  treino_custom_salvo: ['dias', 'exercicios', 'avisos_ativos'],
+  aviso_risco_mostrado: ['codigo', 'contexto'],
 };
 
 /**
@@ -138,6 +159,10 @@ export const DESCRICAO_PUBLICA: Readonly<Record<TipoEvento, string>> = {
   tecnica_ativada: 'técnica avançada',
   tecnica_feedback: 'esforço dela',
   orcamento_escolhido: 'limite de orçamento',
+  // 🧭 A página fala em ATOS: montar o próprio treino é um só, com o aviso que ele mostra.
+  editor_aberto: 'monta o próprio treino',
+  treino_custom_salvo: 'monta o próprio treino',
+  aviso_risco_mostrado: 'monta o próprio treino',
 };
 
 /**

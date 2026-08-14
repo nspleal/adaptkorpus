@@ -81,14 +81,26 @@ describe('🔴 DENYLIST — nenhuma chave de saúde ou PII entra em payload', ()
 });
 
 describe('🔒 os eventos declarados, e só eles', () => {
-  it('a lista é exatamente a das specs (7 da Leva C2 + 5 do v3 + 1 da leva H)', () => {
+  it('a lista é exatamente a das specs (7 da Leva C2 + 5 do v3 + 1 da leva H + 3 do editor)', () => {
     expect([...TIPOS_EVENTO].sort()).toEqual([
-      'app_aberto', 'cardio_registrado', 'exercicio_substituido',
+      'app_aberto', 'aviso_risco_mostrado', 'cardio_registrado', 'editor_aberto',
+      'exercicio_substituido',
       'foco_ativado', 'foco_encerrado', 'orcamento_escolhido', 'plano_gerado',
       'preferencia_criada', 'preferencia_recusada',
       'refeicao_marcada', 'sessao_concluida', 'sessao_iniciada',
-      'tecnica_ativada', 'tecnica_elegivel', 'tecnica_feedback',
+      'tecnica_ativada', 'tecnica_elegivel', 'tecnica_feedback', 'treino_custom_salvo',
     ]);
+  });
+
+  /**
+   * 🧭 EDITOR GUIADO (2026-08-13): o par uso × EVENTO ADVERSO desta leva. A DF① decidiu que
+   * o aviso NÃO trava — `aviso_risco_mostrado` + `avisos_ativos` no salvamento são o que
+   * transforma essa decisão em evidência (quantos veem o risco, quantos salvam mesmo assim).
+   */
+  it('editor: mede quem CHEGA, quem SALVA e o risco que apareceu', () => {
+    expect(CHAVES_PERMITIDAS.editor_aberto).toEqual(['origem']);
+    expect(CHAVES_PERMITIDAS.treino_custom_salvo).toEqual(['dias', 'exercicios', 'avisos_ativos']);
+    expect(CHAVES_PERMITIDAS.aviso_risco_mostrado).toEqual(['codigo', 'contexto']);
   });
 
   it('v3 · Bloco A: o par uso × EVENTO ADVERSO — medir só o caminho feliz não mede nada', () => {

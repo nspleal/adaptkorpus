@@ -64,7 +64,7 @@ export default function Privacidade() {
             anônimos: são da conta da pessoa. É o inverso exato do descompasso de 2026-07-27
             (quando a página descrevia o que NÃO ocorria) e igualmente inexato. Copy do
             cofre, `metricas-de-produto-evokorpus`. */}
-        <Paragrafo>Registramos <Forte>eventos de uso da sua conta</Forte> — quando você abre o app, gera um plano, inicia e conclui uma sessão, troca um exercício, marca uma refeição, registra um cardio, ajusta suas preferências de treino (trocas e exercícios que não quer mais), escolhe ou encerra um grupo em foco, usa uma técnica avançada e responde sobre o esforço dela, ou define um limite de orçamento para a dieta. Servem para saber se o app está ajudando de verdade. <Forte>Ficam no nosso banco, nunca são enviados a terceiros</Forte>, e saem no seu export e na exclusão de conta. <Forte>Nada de saúde entra nesses registros.</Forte></Paragrafo>
+        <Paragrafo>Registramos <Forte>eventos de uso da sua conta</Forte> — quando você abre o app, gera um plano, inicia e conclui uma sessão, troca um exercício, marca uma refeição, registra um cardio, ajusta suas preferências de treino (trocas e exercícios que não quer mais), escolhe ou encerra um grupo em foco, usa uma técnica avançada e responde sobre o esforço dela, define um limite de orçamento para a dieta, ou monta o próprio treino. Servem para saber se o app está ajudando de verdade. <Forte>Ficam no nosso banco, nunca são enviados a terceiros</Forte>, e saem no seu export e na exclusão de conta. <Forte>Nada de saúde entra nesses registros.</Forte></Paragrafo>
       </SecaoLegal>
 
       <SecaoLegal id="s-minimizacao" titulo="Minimização, base legal e consentimento">

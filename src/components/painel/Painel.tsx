@@ -45,6 +45,7 @@ import CargasHistorico from './CargasHistorico';
 import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
+import SeletorExercicio from './SeletorExercicio';
 import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
@@ -279,6 +280,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [banimentoTexto, setBanimentoTexto] = useState<string | null>(null);
   /** 🎛️ v3.1: a recusa EXPLICADA do foco de core (sem folga de séries). */
   const [avisoFoco, setAvisoFoco] = useState<string | null>(null);
+  /**
+   * 🔎 DF③ — o seletor compartilhado aberto a partir do TROCAR ("ver a biblioteca
+   * completa"). Guarda o slot de destino; `null` = fechado.
+   */
+  const [biblioteca, setBiblioteca] = useState<{ d: number; s: number } | null>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
@@ -738,6 +744,24 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
   }
 
+  /**
+   * 🔎 "Trazer de volta" — o inverso de `banirExercicio`, a um toque no seletor (antes só
+   * existia no Editar perfil). Sem recusa possível: desfazer um banimento nunca fura trilho.
+   */
+  function desbanirExercicio(id: string) {
+    const prefsAtuais = perfil.preferencias ?? PREFERENCIAS_VAZIAS;
+    if (!prefsAtuais.banidos.includes(id)) return;
+    const novoPerfil = {
+      ...perfil,
+      preferencias: { ...prefsAtuais, banidos: prefsAtuais.banidos.filter((x) => x !== id) },
+    };
+    setPerfil(novoPerfil);
+    onPerfilChange?.(novoPerfil);
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+  }
+
   /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */
   function seriesSemanaisDoGrupo(grupo: string): number {
     let n = 0;
@@ -1172,7 +1196,26 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
-      {modal && <ModalTroca modal={modal} recusaTexto={recusa} onFechar={() => { setRecusa(null); setModal(null); }} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} />}
+      {modal && <ModalTroca modal={modal} recusaTexto={recusa} onFechar={() => { setRecusa(null); setModal(null); }} onAplicarPrato={aplicarPrato} onMaisPrato={maisVariedadePrato} onAplicarPorcao={aplicarPorcao} onAplicarEx={aplicarEx} onMaisEx={maisVariedadeEx} onBiblioteca={(d, s) => { setRecusa(null); setModal(null); setBiblioteca({ d, s }); }} />}
+      {/* 🔎 DF③ — a mesma peça do editor, aberta pelo TROCAR. A escolha passa por
+          `aplicarEx`, que é quem consulta os trilhos: a biblioteca inteira NÃO é atalho
+          para furar preservação/equipamento/nível — é só uma lista maior para escolher. */}
+      {biblioteca && rotinaDias[biblioteca.d]?.slots[biblioteca.s] && (
+        <SeletorExercicio
+          exercises={EXERCISES_SEED}
+          ctx={{
+            equipamento: perfil.equipamento,
+            equipamentosCasa: perfil.equipamentosCasa,
+            nivelExperiencia: perfil.nivelExperiencia,
+            favoritos: favoritosSet,
+            banidos: new Set(perfil.preferencias?.banidos ?? []),
+          }}
+          grupoInicial={rotinaDias[biblioteca.d]!.slots[biblioteca.s]!.exercicio.grupoPrimario ?? null}
+          onEscolher={(ex) => { const { d, s } = biblioteca; setBiblioteca(null); aplicarEx(d, s, ex); }}
+          onDesbanir={(id) => desbanirExercicio(id)}
+          onFechar={() => setBiblioteca(null)}
+        />
+      )}
       {detalhe?.tipo === 'prato' && cardItens[detalhe.idx] && (
         <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
       )}
@@ -1722,13 +1765,15 @@ function EncaminhamentoEdicao({ motivos, onRevisar, onManter }: { motivos: strin
 
 /* ════════════════════ Modal (fiel) ════════════════════ */
 
-function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx }: {
+function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato, onAplicarPorcao, onAplicarEx, onMaisEx, onBiblioteca }: {
   /** 🎛️ v3 · Bloco A: a explicação da preferência recusada (null = nenhuma recusa). */
   recusaTexto?: string | null;
   modal: NonNullable<Modal>; onFechar: () => void;
   onAplicarPrato: (idx: number, o: OpcaoPrato) => void; onMaisPrato: () => void;
   onAplicarPorcao: (idx: number, f: number) => void;
   onAplicarEx: (d: number, s: number, ex: Exercise) => void; onMaisEx: () => void;
+  /** 🔎 DF③ — a SEGUNDA PORTA do seletor: "ver a biblioteca completa" (só em exercício). */
+  onBiblioteca?: (d: number, s: number) => void;
 }) {
   let titulo = 'Trocar'; let sub = ''; let showMore = false; let onMore = () => {};
   const opcoes: { chave: string; nome: string; detalhe?: string; onClick: () => void }[] = [];
@@ -1782,6 +1827,14 @@ function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato,
           <button onClick={onMore} className="modal-more" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: 'rgba(189,255,0,.1)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', fontWeight: 700, fontSize: '.94rem', padding: 13, borderRadius: 13, cursor: 'pointer' }}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M4 5v5h5M20 19v-5h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /><path d="M19 9a7.5 7.5 0 00-13-2.5L4 10M5 15a7.5 7.5 0 0013 2.5L20 14" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>
             Não gostei de nenhuma — gerar mais variedade
+          </button>
+        )}
+        {/* 🔎 DF③ (2026-08-13) — a segunda porta do seletor. Fica ABAIXO das sugestões: o
+            caminho curto (3 equivalentes, filtro duro de preservação) continua sendo o
+            default; a biblioteca inteira é a saída de quem quer escolher por conta. */}
+        {modal.tipo === 'exercicio' && onBiblioteca && (
+          <button onClick={() => onBiblioteca(modal.d, modal.s)} style={{ width: '100%', marginTop: 10, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.9rem', padding: 12, borderRadius: 12, cursor: 'pointer' }}>
+            Ver a biblioteca completa
           </button>
         )}
       </div>
