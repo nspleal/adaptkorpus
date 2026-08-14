@@ -170,6 +170,12 @@ export interface ArgsAlocacao {
   templates: readonly TemplateDia[];
   /** Slots que cabem no dia (f do tempo por sessão). */
   budgetPorDia: number;
+  /**
+   * 🔒 Degrau ② da cascata do foco (DF 2026-08-14): UM slot sai do compensador e entra no
+   * focado, **dentro de um dia que os dois dividem** — slots não atravessam dias. Quem decide
+   * se isto acontece é `decidirFoco`, no montador; aqui só se executa a troca já autorizada.
+   */
+  transferirSlot?: { de: GrupoPrimario; para: GrupoPrimario };
   /** Pool JÁ filtrado (equipamento + nível + banidos/preteridos), ordenado (tier↑, id). */
   pool: readonly Exercise[];
   /** Favoritos efetivos (favoritos + preferidos de troca + recentes da retomada). */
@@ -498,6 +504,34 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
         registrar(d, gDob, e, usadosPorDia[d]!);
         break busca;
       }
+    }
+  }
+
+  /**
+   * ── Passo 5b: TRANSFERÊNCIA DE SLOT do foco (degrau ② da cascata, DF 2026-08-14).
+   *
+   * O slot muda de mão DENTRO de um dia que os dois grupos dividem — é a única troca
+   * possível, porque o orçamento de slots é por DIA. Sem esta trava, a 1ª tentativa tirou o
+   * slot de quem dividia o dia com o focado (glúteos) e zerou o grupo, enquanto o
+   * compensador que o usuário nomeou (peito, que treina noutro dia) ficava intocado.
+   */
+  if (args.transferirSlot) {
+    const { de, para } = args.transferirSlot;
+    for (let d = 0; d < dias.length; d += 1) {
+      if (!templates[d]!.grupos.includes(para)) continue;
+      const idx = [...dias[d]!.slots.keys()].reverse().find((i) => dias[d]!.slots[i]!.grupo === de);
+      if (idx == null) continue;
+      const e = escolher(para, usadosPorDia[d]!);
+      if (!e) continue;
+      const sai = dias[d]!.slots[idx]!;
+      slotsDiretos.set(sai.grupo, (slotsDiretos.get(sai.grupo) ?? 1) - 1);
+      contaPadrao.set(sai.exercicio.padraoMovimento, (contaPadrao.get(sai.exercicio.padraoMovimento) ?? 1) - 1);
+      dias[d]!.slots[idx] = { grupo: para, exercicio: e, favorito: favoritos.has(e.id) };
+      usadosPorDia[d]!.add(e.id);
+      creditar(e);
+      slotsDiretos.set(para, (slotsDiretos.get(para) ?? 0) + 1);
+      contaPadrao.set(e.padraoMovimento, (contaPadrao.get(e.padraoMovimento) ?? 0) + 1);
+      break;
     }
   }
 

@@ -145,10 +145,12 @@ describe('trilho 7 — tetos de volume: banda e IRV entram na alocação', () =>
   const mont = semComentarios('src/lib/engine/treino-montador.ts');
 
   it('a alocação da rampa usa `prescricao.volumePorGrupoSemana`', () => {
-    // Duas ocorrências: a do orçamento de TEMPO e a da ALOCAÇÃO. As duas têm de vir da
-    // prescrição — uma banda literal aqui seria número solto fora do cofre.
+    // 🔒 O CRITÉRIO é "toda banda vem da prescrição", não uma contagem: quem lê a banda são
+    // o orçamento de TEMPO, a ALOCAÇÃO e — desde a cascata do foco (2026-08-14) — a decisão
+    // do degrau. Travar o número em 2 fazia o guard falhar por um call site NOVO e legítimo,
+    // que é ruído; o que não pode aparecer é banda literal, e disso cuida a linha abaixo.
     const n = [...mont.matchAll(/const banda = prescricao\.volumePorGrupoSemana;/g)].length;
-    expect(n, 'a banda deixou de vir da prescrição em algum dos dois pontos').toBe(2);
+    expect(n, 'a banda deixou de vir da prescrição em algum ponto').toBeGreaterThanOrEqual(2);
     expect(/const banda = \{\s*min:\s*\d/.test(mont), 'banda de volume virou literal').toBe(false);
   });
 

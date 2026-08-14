@@ -60,10 +60,24 @@ describe('🔴 pares discriminantes — cada campo do fio muda o plano', () => {
     expect(com.split(/[|,]/), `o preterido ${de.id} não saiu`).not.toContain(de.id);
   });
 
-  it('foco em grupo muda o plano (ao menos a ordem, dentro da classe)', () => {
-    const sem = plano(BASE);
-    const com = plano({ ...BASE, foco: { grupo: 'peito', compensa: 'costas', semana: 1 } });
-    expect(com, 'o foco não chegou ao montador — plano idêntico').not.toBe(sem);
+  /**
+   * 🔴 Este teste NASCEU FRACO e deixou um defeito passar por 2 dias (medição 2026-08-14).
+   * Ele afirmava `expect(com).not.toBe(sem)` — "o plano DIFERE" —, e isso era satisfeito
+   * pelo COMPENSADOR perdendo série sozinho, enquanto o focado não ganhava nada e o volume
+   * sumia da semana. O teste passava exatamente enquanto o bug vivia.
+   *
+   * O que ele afirma agora é o FIO, que é o que ele sempre quis provar: o foco chega ao
+   * montador. A ENTREGA (focado sobe · total conserva · nenhum terceiro muda) é do
+   * `foco-entrega-real.test.ts`, com as três asserções da DF.
+   */
+  it('o foco CHEGA ao montador (o fio) — a entrega é medida no guard próprio', () => {
+    const p = { ...BASE, foco: { grupo: 'peito' as const, compensa: 'ombros' as const, semana: 1 } };
+    const parsed = perfilResumoSchema.safeParse(p);
+    expect(parsed.success, 'o foco não passou no zod da rota').toBe(true);
+    if (!parsed.success) return;
+    const linha = perfilParaLinha(parsed.data as never) as unknown as Record<string, unknown>;
+    const volta = linhaParaPerfil({ ...linha, id: 'u1' } as never);
+    expect(volta.foco, 'o foco não sobreviveu ao round-trip do banco').toEqual(p.foco);
   });
 
   it('divisaoPreferida chega ao PerfilTreino (fio pronto para a leva B)', () => {

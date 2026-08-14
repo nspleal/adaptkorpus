@@ -24,8 +24,8 @@ import { temCarga } from './equipamento';
 import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio, descansoDoPadrao } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
-import { aplicarFoco, aplicarFocoCore, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao } from './trilhos';
-import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
+import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco } from './trilhos';
+import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -135,6 +135,14 @@ export function montarRotina(
   // apagada do perfil: se a pessoa recuperar o equipamento, ela volta a valer sozinha.
   /** 🎛️ v3 · Bloco B — o foco vigente (fora da janela de 4–6 semanas, não existe). */
   const foco = focoVigente(perfil.foco) ? perfil.foco : undefined;
+  /**
+   * 🔒 Declarados AQUI, antes de qualquer uso: o caminho do editor guiado chama `montarSaida`
+   * antes do bloco de alocação, e o pipeline é compartilhado pelos dois produtores.
+   * `compensadorValido` = o compensador só vale se DIVIDIR DIA com o focado (perfil herdado
+   * cai no degrau ③, com a tela pedindo para reescolher).
+   */
+  let decisaoFoco: DecisaoFoco | null = null;
+  let compensadorValido: GrupoPrimario | null = null;
   const prefs = preferenciasEfetivas(
     { exercises, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia },
     preferencias,
@@ -189,23 +197,14 @@ export function montarRotina(
    * redistribui". Quem está no topo ganha ORDEM, e ordem não mexe em slot.
    * Core fica fora (DF 2026-08-05: mecânica própria, slots intocados por construção).
    */
-  if (foco && foco.grupo !== 'core' && semanaCiclo && !semanaCiclo.retomada && semanaCiclo.semana !== 6) {
-    const fb = semanaCiclo.feedbackGrupos;
-    const efeito = aplicarFoco({
-      alvoBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.grupo) ?? 'ok'),
-      alvoCompensaBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.compensa) ?? 'ok'),
-      nivel: perfil.nivelExperiencia,
-      objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
-    });
-    if (efeito.deltaAplicado > 0) {
-      // O boost é quantizado ao SLOT (sMax) MAIS um slot de folga: o slot extra que o
-      // grupo focado ganha credita `sMax` no próprio déficit, então sem a folga o grupo
-      // volta a perder a rodada seguinte para quem não foi focado — medido: com folga de
-      // só `delta`, o 5º slot do peito nunca vinha e o delta morria truncado por `n×sMax`.
-      const sMax = prescricao.seriesPorExercicio.max;
-      alvoPonderado.set(foco.grupo, banda.max + Math.ceil(efeito.deltaAplicado / sMax) * sMax + sMax);
-    }
-  }
+  /**
+   * 🔒 O FOCO NÃO MEXE MAIS NO ALVO DA ALOCAÇÃO (cascata, DF 2026-08-14).
+   *
+   * O boost de déficit que vivia aqui subia o alvo do focado e o slot extra saía de QUEM
+   * TIVESSE menos déficit — medido: `ombros −4 séries, −1 slot` num plano onde o usuário
+   * pediu "mais costas, menos peito". A alocação agora roda NEUTRA, e a cascata decide
+   * depois, com os números reais na mão (`decidirFoco`): só o par focado ↔ compensador muda.
+   */
 
   /**
    * 🧭 O DESENHO DO USUÁRIO (editor guiado, DF② 2026-08-13) — quando existe, ele SUBSTITUI
@@ -248,19 +247,86 @@ export function montarRotina(
   }
 
   const tetoPequenos = divisao === 'prioridades' ? PEQUENOS_TETO_DIRETO_PRIORIDADES : PEQUENOS_TETO_DIRETO;
-  const diasAlocados = alocarSemana({
+  const argsAloc = {
     templates,
     budgetPorDia,
     pool,
     favoritos: favoritosEfetivos,
     alvoPonderado,
     seriesPlanejamento: prescricao.seriesPorExercicio.max,
-    tetoSlotsSemana: (g) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
+    tetoSlotsSemana: (g: GrupoPrimario) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
     coreMin: CORE_MIN,
     coreMax: CORE_MAX,
     // DF③: o dia por tema das prioridades preenche até o orçamento (o usuário o comprou).
     preencherAteOrcamento: divisao === 'prioridades',
-  });
+  };
+  let diasAlocados = alocarSemana(argsAloc);
+
+  /**
+   * 🔒 A CASCATA DO FOCO, DECIDIDA COM OS NÚMEROS REAIS (DF 2026-08-14).
+   *
+   * Duas passadas de propósito: a 1ª aloca NEUTRA (o foco não mexe em déficit), e só então
+   * existem os números que a decisão precisa — quantos slots cada lado tem de fato. Se a
+   * cascata parar no degrau ② (slot), a 2ª passada refaz a alocação com a transferência
+   * autorizada. Decidir antes de alocar era o que fazia o motor cobrar de terceiros.
+   */
+  compensadorValido = foco && compensadoresPossiveis(templates.map((t) => t.grupos), foco.grupo).includes(foco.compensa)
+    ? foco.compensa
+    : null;
+
+  if (foco && foco.grupo !== 'core' && semanaCiclo && !semanaCiclo.retomada && semanaCiclo.semana !== 6) {
+    const banda = prescricao.volumePorGrupoSemana;
+    const sMaxAloc = prescricao.seriesPorExercicio.max;
+    const sMinAloc = prescricao.seriesPorExercicio.min;
+    const fb = semanaCiclo.feedbackGrupos;
+    const efeito = aplicarFoco({
+      alvoBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.grupo) ?? 'ok'),
+      alvoCompensaBase: alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.compensa) ?? 'ok'),
+      nivel: perfil.nivelExperiencia,
+      objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
+    });
+    const contar = (g: GrupoPrimario) => diasAlocados.flatMap((d) => d.slots).filter((s) => s.grupo === g).length;
+    const ehPequeno = (g: GrupoPrimario) => (GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g);
+    const nFoc = contar(foco.grupo);
+    const alvoFoc = alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.grupo) ?? 'ok');
+    const alvoComp = alvoDaSemana(banda, semanaCiclo.semana, fb?.get(foco.compensa) ?? 'ok');
+    const nComp = compensadorValido ? contar(compensadorValido) : 0;
+    decisaoFoco = decidirFoco({
+      delta: efeito.deltaAplicado,
+      focado: {
+        slots: nFoc,
+        series: Math.min(alvoFoc, nFoc * sMaxAloc),
+        // 🔑 O teto é o do PORTE: banda do nível para grande; 2 exercícios diretos para
+        // pequeno. Aplicar a banda de 15–16 a uma panturrilha era o erro medido.
+        tetoSeries: ehPequeno(foco.grupo) ? PEQUENOS_TETO_DIRETO * sMaxAloc : banda.max,
+        tetoSlots: ehPequeno(foco.grupo) ? tetoPequenos : Number.POSITIVE_INFINITY,
+      },
+      compensador: compensadorValido
+        ? {
+            slots: nComp,
+            series: Math.min(alvoComp, nComp * sMaxAloc),
+            /**
+             * 🔑 O piso é o do PORTE do compensador, e nunca acima do que ele cabe.
+             *  · pequeno: o piso é o dele (`n × sMin`) — usar a MEV de GRANDE aqui era o mesmo
+             *    erro que o autor apontou do outro lado: tríceps com 4 séries ficaria
+             *    "abaixo do piso 13" para sempre e jamais poderia ceder;
+             *  · grande: a MEV, mas limitada pela capacidade real (`n × sMax`) — ombros com 3
+             *    slots cabe 12 e a MEV é 13; exigir 13 o congelaria como inelegível.
+             * Cada slot já carrega `sMin`, então abaixo de `n × sMin` a cessão some na
+             * distribuição e o 1:1 viraria nominal — esse é o piso duro dos dois portes.
+             */
+            pisoSeries: ehPequeno(compensadorValido)
+              ? nComp * sMinAloc
+              : Math.max(nComp * sMinAloc, Math.min(banda.min, nComp * sMaxAloc)),
+            pisoSlots: ehPequeno(compensadorValido) ? PEQUENOS_PISO_DIRETO : 1,
+          }
+        : null,
+      sMax: sMaxAloc,
+    });
+    if (decisaoFoco.moveSlot && compensadorValido) {
+      diasAlocados = alocarSemana({ ...argsAloc, transferirSlot: { de: compensadorValido, para: foco.grupo } });
+    }
+  }
 
   /**
    * 🔒 O PIPELINE COMPARTILHADO — tudo o que vem DEPOIS de saber quais exercícios entram:
@@ -422,21 +488,12 @@ export function montarRotina(
        * 🔒 A conta agora é feita UMA vez, aqui, e nos dois lados: o que o focado ganha DEPOIS
        * do truncamento é exatamente o que o compensador cede. Ganho zero ⇒ cessão zero.
        */
-      const nSlots = (g: GrupoPrimario) => porGrupo.get(g)?.length ?? 0;
-      let cedidoPeloCompensador = 0;
-      let entregueAoFocado = 0;
-      if (foco && foco.grupo !== 'core' && !ret && semana !== 6) {
-        const baseFoc = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
-        const baseComp = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
-        const efeito = aplicarFoco({
-          alvoBase: baseFoc, alvoCompensaBase: baseComp,
-          nivel: perfil.nivelExperiencia, objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
-        });
-        const tetoFoc = nSlots(foco.grupo) * sMax;
-        entregueAoFocado = Math.max(0, Math.min(efeito.alvoFocado, tetoFoc) - Math.min(baseFoc, tetoFoc));
-        // O compensador cede o MENOR entre o que a spec pediu e o que o focado recebeu.
-        cedidoPeloCompensador = Math.min(baseComp - efeito.alvoCompensado, entregueAoFocado);
-      }
+      /**
+       * 🔒 As séries seguem a DECISÃO DA CASCATA — fonte única (DF 2026-08-14). O que o
+       * focado ganha é exatamente o que o compensador cede, e o degrau já garantiu que a
+       * conta fecha sem cobrar de terceiros.
+       */
+      const movidoPeloFoco = decisaoFoco?.series ?? 0;
 
       // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
       // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
@@ -514,12 +571,23 @@ export function montarRotina(
               pisoCompensa: slotsCompensa * sMin,
             });
             alvo = grupo === 'core' ? efeito.alvoCore : efeito.alvoCompensado;
+          } else if (grupo === foco.compensa && compensadorValido !== foco.compensa) {
+            // Compensador que não divide dia com o focado (perfil herdado): a cascata caiu no
+            // degrau ③ e ele NÃO cede nada. A tela pede para reescolher — o motor não escolhe
+            // outro por baixo dos panos.
+            alvo = baseCompensa;
+          } else if (grupo === foco.grupo) {
+            alvo = baseFocado + movidoPeloFoco;
           } else {
-            const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo });
-            // 🔒 B1a: o focado mira o alvo da spec; o compensador cede APENAS o que foi
-            // entregue de fato (pré-computado acima). Sem isto o 1:1 é nominal — e a medição
-            // de 2026-08-14 mostrou o volume sumindo da semana.
-            alvo = grupo === foco.grupo ? efeito.alvoFocado : baseCompensa - cedidoPeloCompensador;
+            /**
+             * ⚠️ EFETIVO, não bruto — a mesma lição já travada no ramo do core: o alvo do
+             * compensador é truncado por `n × sMax`, então descontar do BRUTO não tira série
+             * nenhuma quando ele já está no próprio teto. Medido: tríceps (1 slot, 4 séries,
+             * alvo bruto 15) "cedia" 1 e continuava com 4 — o 1:1 virava nominal e o total
+             * da semana CRESCIA, contra a promessa da tela.
+             */
+            const efetivoCompensa = Math.min(baseCompensa, slots.length * sMax);
+            alvo = efetivoCompensa - movidoPeloFoco;
           }
         }
         const n = slots.length;

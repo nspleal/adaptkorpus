@@ -85,11 +85,34 @@ describe('🔴 aceite B — av/massa/4d (o perfil do autor na medição)', () =>
     expect(ponderado.get('peito') ?? 0).toBeGreaterThanOrEqual(16);
   });
 
-  it('🔑 par discriminante do defeito original: foco em peito muda o PLANO (séries, não só ordem)', () => {
+  /**
+   * 🔑 O par discriminante deste perfil MUDOU DE FORMA com a cascata (DF 2026-08-14), e o
+   * motivo é medido: em avançado/4d a banda é 16–20, mas cada grupo cabe 3–4 slots × 4 = 12–16
+   * séries — ou seja, **todo candidato a compensador já está no próprio piso**. Ceder o
+   * empurraria abaixo dele, e a cascata proíbe (⓪ nenhum terceiro paga, ② o compensador não
+   * fura o piso). A entrega correta aqui é ORDEM.
+   *
+   * ⚠️ A versão anterior afirmava "peito ganha série" e passava porque o motor cobrava de
+   * quem tivesse menos déficit — `ombros −4` num plano onde ninguém pediu isso. Trocar a
+   * asserção não é afrouxar: o que ela afirma agora é mais forte (conserva E ninguém de fora
+   * é cobrado), e a prova de ENTREGA vive em `foco-entrega-real.test.ts`, num perfil onde o
+   * compensador tem de fato o que ceder.
+   */
+  it('🔑 foco onde ninguém pode ceder: o plano CONSERVA e nenhum terceiro é cobrado', () => {
     const semFoco = plano(perfil({ nivelExperiencia: 'avancado' }), 3);
-    const comFoco = plano(perfil({ nivelExperiencia: 'avancado', foco: { grupo: 'peito', compensa: 'quadriceps', semana: 1 } }), 3);
-    const seriesPeito = (r: typeof semFoco) => r.dias.flatMap((d) => d.slots).filter((s) => s.exercicio.grupoPrimario === 'peito').reduce((a, s) => a + (s.series ?? 0), 0);
-    expect(seriesPeito(comFoco), 'o foco não moveu uma série').toBeGreaterThan(seriesPeito(semFoco));
+    const comFoco = plano(perfil({ nivelExperiencia: 'avancado', foco: { grupo: 'peito', compensa: 'biceps', semana: 1 } }), 3);
+    const soma = (r: typeof semFoco) => r.dias.flatMap((d) => d.slots).reduce((a, s) => a + (s.series ?? 0), 0);
+    expect(soma(comFoco), 'o volume da semana vazou').toBe(soma(semFoco));
+    const porGrupo = (r: typeof semFoco) => {
+      const m = new Map<string, number>();
+      for (const d of r.dias) for (const s of d.slots) {
+        const g = s.exercicio.grupoPrimario; if (g) m.set(g, (m.get(g) ?? 0) + (s.series ?? 0));
+      }
+      return m;
+    };
+    const a = porGrupo(semFoco); const b = porGrupo(comFoco);
+    const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => (a.get(g) ?? 0) !== (b.get(g) ?? 0));
+    expect(mexidos, `cobrou de quem não estava no foco: ${mexidos.join(', ')}`).toEqual([]);
   });
 });
 
