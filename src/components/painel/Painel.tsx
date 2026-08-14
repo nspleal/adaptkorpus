@@ -56,6 +56,7 @@ import type {
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 import { chaveLocal } from '@/lib/escopo-local';
+import { useAbaVoltavel, useCamadaVoltavel, useVoltarDoNavegador } from '@/lib/usar-voltar';
 
 /**
  * Painel (área logada) — porte FIEL do Evokorpus App.dc.html (estilos inline exatos +
@@ -189,6 +190,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return a && ABAS_VALIDAS.has(a) ? a : 'hoje';
   });
   useEffect(() => { try { window.localStorage.setItem(chaveLocal('evk_aba'), aba); } catch { /* noop */ } }, [aba]);
+  /**
+   * 🔴 O VOLTAR DO NAVEGADOR (pedido-ui-biblioteca-e-voltar-2026-08-13, item 2). `irAbaHist`
+   * troca a aba EMPILHANDO a anterior, então o Voltar refaz o caminho visitado em vez de
+   * saltar para fora de `/app`. Todo caminho de troca de aba passa por aqui — um `setAba`
+   * solto seria um buraco por onde o defeito volta.
+   */
+  useVoltarDoNavegador();
+  const irAbaHist = useAbaVoltavel<Aba>(aba, setAba);
   const [vista, setVista] = useState<null | 'compras'>(null);
   const [editando, setEditando] = useState(false);
   const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);
@@ -427,7 +436,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     aplicarNovoHistorico(registrarSessao(r)); // carimba data + persiste (evk_treinos)
     setFeedback((p) => ({ ...p, ...r.feedback }));
     setSessaoDia(null);
-    setAba('progresso');
+    irAbaHist('progresso');
     window.scrollTo(0, 0);
   }
 
@@ -565,7 +574,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setTrocados(new Set());
     setMostrarC(nd.gate.comportamento === 'RESTRINGIR' || nd.gate.comportamento === 'PISAR');
     setEditando(false);
-    setAba('hoje');
+    irAbaHist('hoje');
     window.scrollTo(0, 0);
   }
 
@@ -1093,7 +1102,26 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     cardioMin: registrosCardioSemana.filter((r) => r.dataISO === hojeISO()).reduce((m, r) => m + r.minutos, 0),
     refeicoesRegistradas: refeicoesDia.filter((r) => registro.logs[r]).length,
   };
-  const irAba = (id: Aba) => { setVista(null); setAba(id); };
+  /**
+   * 🪟 AS CAMADAS (aceite 2a): enquanto uma está aberta, o Voltar do navegador a FECHA em vez
+   * de sair do app. Registradas todas juntas e por CRITÉRIO — "tudo que se sobrepõe ao painel
+   * é camada" — para nenhuma sobreposição nova nascer fora da regra. A ordem aqui não importa:
+   * a pilha ordena por instante de abertura, então o Voltar sempre fecha a de cima.
+   */
+  useCamadaVoltavel(menu, () => setMenu(false), 'menu');
+  useCamadaVoltavel(vista === 'compras', () => setVista(null), 'compras');
+  useCamadaVoltavel(editando, () => setEditando(false), 'editar-perfil');
+  useCamadaVoltavel(registrando, () => setRegistrando(false), 'registrar-treino');
+  useCamadaVoltavel(registrandoCardio, () => { setCardioPre(null); setRegistrandoCardio(false); }, 'registrar-cardio');
+  useCamadaVoltavel(sessaoDia !== null, () => setSessaoDia(null), 'sessao-guiada');
+  useCamadaVoltavel(editorDias !== null, () => setEditorDias(null), 'editor-guiado');
+  useCamadaVoltavel(biblioteca !== null, () => setBiblioteca(null), 'biblioteca');
+  useCamadaVoltavel(modal !== null, () => { setRecusa(null); setModal(null); }, 'troca');
+  useCamadaVoltavel(detalhe !== null, () => { setBanimentoTexto(null); setDetalhe(null); }, 'detalhe');
+  useCamadaVoltavel(detalheSessao !== null, () => setDetalheSessao(null), 'detalhe-sessao');
+  useCamadaVoltavel(encaminhamento !== null, () => setEncaminhamento(null), 'encaminhamento');
+
+  const irAba = (id: Aba) => { setVista(null); irAbaHist(id); };
 
   // Edição entrou em zona clínica (ROTEAR) → encaminhamento (tela cheia, fail-safe).
   // Não aplicamos o plano nem mexemos na sessão: o plano válido anterior segue intacto.
@@ -1140,7 +1168,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           onCalibrar={calibrarExercicios}
           onCancelar={() => setRegistrando(false)}
           onSalvar={salvarTreinoManual}
-          onVerHistorico={() => { setRegistrando(false); setAba('historico'); window.scrollTo(0, 0); }}
+          onVerHistorico={() => { setRegistrando(false); irAbaHist('historico'); window.scrollTo(0, 0); }}
         />
       </div>
     );
@@ -1196,7 +1224,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                 <button onClick={() => { router.push('/conta'); }} style={menuBtn(false)}>Conta e meus dados</button>
                 {/* Lista de compras é parte do CARDÁPIO — some em modo diário (sem cadeado,
                     sem item desabilitado: o item simplesmente não existe). */}
-                {!modoDiario && <button onClick={() => { setVista('compras'); setAba('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>}
+                {!modoDiario && <button onClick={() => { setVista('compras'); irAbaHist('dieta'); setMenu(false); }} style={menuBtn(false)}>Lista de compras</button>}
                 <button onClick={onSair} style={menuBtn(true)}>Sair</button>
               </div>
             )}
@@ -1240,14 +1268,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <SuaSemana
               treinoDias={perfil.treinoDias}
               sessoesNomes={rotinaDias.map((d) => d.nome)}
-              onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : setAba('treino'))}
+              onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : irAbaHist('treino'))}
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
               diaExcedente={diaExcedente}
               diasCardio={treino.rotina?.diasCardio ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : setAba('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não
@@ -1309,11 +1337,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               objetivo={perfil.objetivo}
               retomadaAtiva={retomada != null}
               modoDiario={modoDiario}
-              onVerTreino={() => { setAba('treino'); window.scrollTo(0, 0); }}
+              onVerTreino={() => { irAbaHist('treino'); window.scrollTo(0, 0); }}
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesosKg} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : setAba('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesosKg} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : irAbaHist('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 

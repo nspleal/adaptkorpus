@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, EASE } from '@/components/auth/ui';
@@ -13,6 +13,27 @@ export default function LoginPage() {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+
+  /**
+   * 🔴 LOGADO NÃO REENCONTRA O LOGIN (pedido-ui-biblioteca-e-voltar-2026-08-13, aceite 2d).
+   * Quem já tem sessão e cai aqui pelo histórico volta ao app com `replace` — sem criar
+   * entrada nova, senão o próximo Voltar traria a pessoa de volta para cá em looping.
+   *
+   * 🔒 A pergunta é feita à sessão de AUTH (`getSession()` — lê o storage local, sem rede),
+   * a MESMA fonte que o middleware usa para proteger `/app` (`src/middleware.ts:92`). Usar o
+   * cache de perfil (`temSessao()`) daria falso positivo com perfil velho e conta deslogada:
+   * mandaria para `/app`, o middleware devolveria para cá, e o par ficaria em ping-pong.
+   */
+  useEffect(() => {
+    if (!supabaseConfigurado()) return;
+    let vivo = true;
+    void (async () => {
+      const { createClient } = await import('@/lib/supabase/client');
+      const { data } = await createClient().auth.getSession();
+      if (vivo && data.session) router.replace('/app');
+    })();
+    return () => { vivo = false; };
+  }, [router]);
 
   async function entrar() {
     setErro(null);
