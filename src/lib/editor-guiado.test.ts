@@ -79,7 +79,8 @@ describe('🔒 DF① — o aviso NÃO trava', () => {
 
 describe('🔒 DF② — o editor mexe em EXERCÍCIOS, nunca em prescrição', () => {
   it('não há campo de série, rep ou RIR editável', () => {
-    // O editor lê `seriesPadrao` só para a ESTIMATIVA de tempo do crítico — nunca a escreve.
+    // O editor NÃO estima séries: a prévia vem do motor (`preverPlano`). Aqui se prova só
+    // que não existe edição de prescrição na tela.
     expect(/onChange[^;]{0,120}(series|reps|rir)/i.test(editor), 'apareceu edição de prescrição').toBe(false);
     expect(/setSeries|setReps|setRir/i.test(editor), 'apareceu estado de prescrição no editor').toBe(false);
   });
@@ -89,11 +90,23 @@ describe('🔒 DF② — o editor mexe em EXERCÍCIOS, nunca em prescrição', (
     // 🔑 Nada de séries/descanso no que vai para o perfil — senão a pessoa congela fora dos
     // consertos futuros do motor (a lição do v3 · Bloco A).
     // ⚠️ Janela COLADA no corpo da função (até o `}` que a fecha): 500 chars soltos
-    // entravam na assinatura do componente, onde `seriesPadrao` existe legitimamente —
-    // falso positivo por âncora larga, o erro que esta suíte já pagou antes.
+    // entravam na assinatura do componente e davam falso positivo — âncora larga, o erro
+    // que esta suíte já pagou antes.
     const i = editor.indexOf('export function paraRotinaCustom');
     const corpo = editor.slice(i, editor.indexOf('\n}', i));
     expect(/\bseries\b|descanso/i.test(corpo), 'a persistência passou a guardar prescrição').toBe(false);
+  });
+
+  /**
+   * 🔑 A PRÉVIA É O MOTOR, não uma estimativa. Defeito achado no aceite 3 e consertado: com
+   * um número fixo de séries, 5 exercícios de peito apareciam "abaixo do mínimo" enquanto o
+   * plano salvo entregaria 16 — o crítico mentindo sobre o número que ele existe para
+   * explicar.
+   */
+  it('o placar do editor vem do motor (preverPlano), nunca de séries chutadas', () => {
+    expect(editor, 'o editor voltou a estimar séries por conta própria').not.toMatch(/seriesPadrao/);
+    expect(editor).toMatch(/const previsto = preverPlano\(dias\)/);
+    expect(painel, 'a prévia não usa o mesmo recompute do salvamento').toMatch(/function preverPlano[\s\S]{0,400}recomputarPlano\(\{ \.\.\.perfil, rotinaCustom \}/);
   });
 
   it('o crítico permanece no plano JÁ SALVO, no mesmo componente (faixa compacta)', () => {

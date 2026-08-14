@@ -803,6 +803,23 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     window.scrollTo(0, 0);
   }
 
+  /**
+   * 🔑 A PRÉVIA do editor: roda o MOTOR sobre o desenho em construção e devolve os dias
+   * com as séries/descanso que o plano salvo teria. Nada de estimativa paralela — é o
+   * mesmo `recomputarPlano` do salvamento, só que sem persistir.
+   */
+  function preverPlano(dias: readonly DiaEditavel[]) {
+    const rotinaCustom = paraRotinaCustom(dias);
+    if (rotinaCustom.dias.length === 0) return [];
+    const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    return (nt.rotina?.dias ?? []).map((d) => ({
+      nome: d.nome,
+      exercicios: d.slots.map((s) => s.exercicio),
+      series: d.slots.map((s) => s.series ?? prescricao?.seriesPorExercicio.min ?? 1),
+      descansoSeg: d.slots.map((s) => s.descansoSeg ?? prescricao?.descansoCompostoSeg.min ?? 90),
+    }));
+  }
+
   /** "Voltar ao recomendado" = apagar o campo, e SÓ ele. O gerador recomputa na hora. */
   function voltarAoRecomendado() {
     const novoPerfil = { ...perfil, rotinaCustom: undefined };
@@ -1254,7 +1271,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             nivel={perfil.nivelExperiencia}
             objetivo={prescricao.objetivoEfetivo ?? perfil.objetivo}
             tempoPorSessaoMin={perfil.tempoPorSessaoMin}
-            seriesPadrao={prescricao.seriesPorExercicio.min}
+            preverPlano={preverPlano}
             temCustom={!!perfil.rotinaCustom}
             onSalvar={salvarTreinoCustom}
             onCancelar={() => setEditorDias(null)}

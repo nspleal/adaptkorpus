@@ -54,7 +54,7 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
 }
 
 export default function EditorTreino({
-  inicial, ctxSeletor, exercises, nivel, objetivo, tempoPorSessaoMin, seriesPadrao,
+  inicial, ctxSeletor, exercises, nivel, objetivo, tempoPorSessaoMin, preverPlano,
   onSalvar, onCancelar, onVoltarAoRecomendado, temCustom, onDesbanir, onAvisoMostrado,
 }: {
   inicial: DiaEditavel[];
@@ -63,7 +63,18 @@ export default function EditorTreino({
   nivel: NivelExperiencia;
   objetivo: Objetivo;
   tempoPorSessaoMin: number;
-  seriesPadrao: number;
+  /**
+   * 🔑 A PRÉVIA REAL, não uma estimativa. Recebe o desenho em construção e devolve o que o
+   * MOTOR produziria com ele — séries e descanso incluídos.
+   *
+   * ⚠️ Isto nasceu de um defeito medido no próprio aceite 3: a 1ª versão pintava o placar
+   * com um número fixo de séries por exercício, e o motor atribui outra coisa (ele
+   * distribui o alvo da banda pelos slots, clampado em `n × sMax`). Resultado: 5 exercícios
+   * de peito apareciam como "10 ⚪ abaixo do mínimo" enquanto o plano salvo entregaria 16 —
+   * o crítico mentiria justamente sobre o número que ele existe para explicar. A regra da
+   * casa vale aqui como no resto: **não estime o que dá para calcular com a função real.**
+   */
+  preverPlano: (dias: readonly DiaEditavel[]) => DiaDoEditor[];
   onSalvar: (dias: DiaEditavel[], avaliacao: Avaliacao) => void;
   onCancelar: () => void;
   onVoltarAoRecomendado: () => void;
@@ -78,13 +89,15 @@ export default function EditorTreino({
   const [confirmarVolta, setConfirmarVolta] = useState(false);
 
   const avaliacao = useMemo<Avaliacao>(() => {
-    const paraCritico: DiaDoEditor[] = dias.map((d) => ({ nome: d.nome, exercicios: d.exercicios }));
-    return avaliarSemana(paraCritico, {
+    // A prévia vem do MOTOR (mesmo caminho do plano salvo); os dias com exercício mantêm a
+    // ordem, então os índices de dia da semana acompanham por posição.
+    const previsto = preverPlano(dias);
+    const comExercicio = dias.filter((d) => d.exercicios.length > 0);
+    return avaliarSemana(previsto, {
       nivel, objetivo, tempoPorSessaoMin,
-      diasDaSemanaIdx: dias.map((d) => d.weekdayIdx),
-      seriesPadrao,
+      diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),
     });
-  }, [dias, nivel, objetivo, tempoPorSessaoMin, seriesPadrao]);
+  }, [dias, nivel, objetivo, tempoPorSessaoMin, preverPlano]);
 
   const total = dias.reduce((n, d) => n + d.exercicios.length, 0);
 
