@@ -6,10 +6,25 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
+import { barreiraDados } from '@/lib/auth/guard';
+import { criarRateLimit } from '@/lib/rate-limit';
+import { payloadCabe } from '@/lib/validation/api';
 import { linhaComConsentimentos, linhaParaPerfil, perfilParaLinha, type ProfileRow } from '@/lib/persistencia/perfil-profile';
 import { consentimentosSchema, perfilResumoSchema } from '@/lib/validation/perfil-resumo';
 import { recomputarPlano } from '@/lib/plano';
 import type { PerfilResumo } from '@/components/painel/Painel';
+
+/**
+ * 🔴 OS DOIS GUARDS QUE FALTAVAM NESTA ROTA (auditoria de segurança 2026-08-14).
+ *
+ * `dados/*` e `lgpd/*` ganharam limitador na auditoria de 2026-07-29 e ESTA escapou —
+ * justamente a escrita mais cara do app: upsert de `profile` + desativa os `plans` ativos +
+ * DOIS inserts permanentes por save. Sem teto, um laço autenticado engorda `plans` sem fim.
+ *
+ * 30 em 5 min é folgado para o uso real (salvar o perfil é ato deliberado; "Editar perfil →
+ * recalcular" em rajada não passa de alguns por minuto) e fecha o laço automatizado.
+ */
+const limitador = criarRateLimit({ limite: 30, janelaMs: 5 * 60_000 });
 
 export const runtime = 'nodejs';
 
@@ -28,7 +43,17 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   const ctx = await contextoUsuario();
   if (ctx instanceof NextResponse) return ctx;
+  const barra = barreiraDados(ctx.user.id, limitador);
+  if (barra) return barra;
   const body = (await req.json().catch(() => null)) as { perfil?: unknown; consentimentos?: unknown } | null;
+  /**
+   * 🔒 TETO DE BYTES antes do zod (flanco declarado no cofre em 2026-08-13, Passo 0.2 do
+   * editor guiado). O schema limita CAMPOS conhecidos, não o TAMANHO do que chega: o perfil
+   * carrega jsonb livre (`rotinaCustom`, `preferencias`) e sem teto o corpo entra inteiro no
+   * `profile` e é copiado de novo no snapshot de `plans` — o mesmo dado inflado, duas vezes.
+   * Mesmo `payloadCabe`/64KB das outras rotas: uma régua só para todas.
+   */
+  if (!payloadCabe(body)) return NextResponse.json({ error: 'payload_grande' }, { status: 413 });
   const parsed = perfilResumoSchema.safeParse(body?.perfil);
   if (!parsed.success) return NextResponse.json({ error: 'entrada inválida' }, { status: 400 });
   const perfil = parsed.data as PerfilResumo;
