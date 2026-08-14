@@ -409,6 +409,35 @@ export function montarRotina(
         }
       }
 
+      /**
+       * 🔴 B1a — O COMPENSADOR SÓ CEDE O QUE O FOCADO DE FATO RECEBE (medição 2026-08-14).
+       *
+       * O defeito medido: `aplicarFoco` decide um alvo para cada lado, e o laço abaixo os
+       * aplicava INDEPENDENTEMENTE. Só que o alvo do focado é truncado pelos slots que ele
+       * tem (`n × sMax`) — e o do compensador não era. Com foco em panturrilha (1 slot, teto
+       * 4 séries, já saturado) o resultado medido foi: **peito −1, panturrilha +0, total da
+       * semana 90 → 89**. O 1:1 travado na spec ("o foco redistribui; o total não cresce")
+       * virava vazamento: o volume sumia do plano.
+       *
+       * 🔒 A conta agora é feita UMA vez, aqui, e nos dois lados: o que o focado ganha DEPOIS
+       * do truncamento é exatamente o que o compensador cede. Ganho zero ⇒ cessão zero.
+       */
+      const nSlots = (g: GrupoPrimario) => porGrupo.get(g)?.length ?? 0;
+      let cedidoPeloCompensador = 0;
+      let entregueAoFocado = 0;
+      if (foco && foco.grupo !== 'core' && !ret && semana !== 6) {
+        const baseFoc = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
+        const baseComp = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
+        const efeito = aplicarFoco({
+          alvoBase: baseFoc, alvoCompensaBase: baseComp,
+          nivel: perfil.nivelExperiencia, objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
+        });
+        const tetoFoc = nSlots(foco.grupo) * sMax;
+        entregueAoFocado = Math.max(0, Math.min(efeito.alvoFocado, tetoFoc) - Math.min(baseFoc, tetoFoc));
+        // O compensador cede o MENOR entre o que a spec pediu e o que o focado recebeu.
+        cedidoPeloCompensador = Math.min(baseComp - efeito.alvoCompensado, entregueAoFocado);
+      }
+
       // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
       // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
       // Além dele valem os dois guarda-corpos da regra FIT: frequência máxima por GRUPO na
@@ -487,7 +516,10 @@ export function montarRotina(
             alvo = grupo === 'core' ? efeito.alvoCore : efeito.alvoCompensado;
           } else {
             const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo });
-            alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
+            // 🔒 B1a: o focado mira o alvo da spec; o compensador cede APENAS o que foi
+            // entregue de fato (pré-computado acima). Sem isto o 1:1 é nominal — e a medição
+            // de 2026-08-14 mostrou o volume sumindo da semana.
+            alvo = grupo === foco.grupo ? efeito.alvoFocado : baseCompensa - cedidoPeloCompensador;
           }
         }
         const n = slots.length;
