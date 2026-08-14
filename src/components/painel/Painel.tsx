@@ -21,6 +21,7 @@ import { descansoDoExercicio, rotuloDescanso } from '@/lib/engine/descanso';
 import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasTreino } from '@/lib/engine/preferencias';
 import { aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
 import { medirEntregaDoFoco } from '@/lib/foco-entrega';
+import { fraseDoFoco } from '@/lib/foco-copy';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -1259,6 +1260,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                 é salvo, e a pessoa precisa saber POR QUE o que ela pediu não valeu: recusa
                 silenciosa e aplicação silenciosa são o mesmo defeito. Sem vermelho — pedir
                 foco no core é legítimo, só não cabe hoje. */}
+            {/* 🔒 B2 — O RAMO DO FOCO, DITO (DF 2026-08-14). Sai do PLANO (`rotina.foco`), não de
+                um recompute paralelo: é a mesma decisão que o motor tomou, sem segunda conta.
+                Trocar o foco e não ver nada é indistinguível de quebrado — foi isso que
+                transformou o 1º teste do autor em ambiguidade. */}
+            {fraseDoFoco(treino.rotina) && (
+              <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'rgba(189,255,0,.07)', border: '1px solid rgba(189,255,0,.22)', borderRadius: 14, padding: '13px 15px', marginBottom: 14 }}>
+                <span aria-hidden style={{ fontSize: '.95rem', lineHeight: 1.5 }}>🎯</span>
+                <p style={{ margin: 0, flex: 1, fontSize: '.88rem', lineHeight: 1.55, color: 'rgba(234,229,219,.86)' }}>{fraseDoFoco(treino.rotina)}</p>
+              </div>
+            )}
             {avisoFoco && (
               <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: '14px 16px', marginBottom: 18 }}>
                 <p style={{ margin: 0, flex: 1, fontSize: '.9rem', lineHeight: 1.55, color: 'rgba(234,229,219,.82)' }}>{avisoFoco}</p>

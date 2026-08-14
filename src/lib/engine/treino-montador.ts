@@ -670,6 +670,10 @@ export function montarRotina(
       diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio),
       split,
       dias: diasTreino,
+      // 🔒 B2: o ramo que agiu vai junto do plano — a tela não recalcula nem adivinha.
+      ...(foco && decisaoFoco
+        ? { foco: { grupo: foco.grupo, compensa: foco.compensa, degrau: decisaoFoco.degrau, motivo: decisaoFoco.motivo, series: decisaoFoco.series } }
+        : {}),
       cardio: prescricao.cardio,
       avisos,
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.

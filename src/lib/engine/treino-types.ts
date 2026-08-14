@@ -7,7 +7,7 @@ import type { PreferenciasTreino } from './preferencias';
 import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
-import type { EquipamentoCasa, EquipamentoDisp, Exercise, PadraoMovimento } from '../data/types';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
@@ -246,6 +246,19 @@ export interface RotinaSemanal {
   diasCardio: DiaCardio[];
   cardio: CardioPrescricao;
   avisos: string[];
+  /**
+   * 🔒 B2 — QUAL RAMO DO FOCO AGIU (DF 2026-08-14). A tela DIZ o degrau; trocar o foco e não
+   * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em
+   * ambiguidade. Ausente quando não há foco vigente.
+   */
+  foco?: {
+    grupo: GrupoPrimario;
+    compensa: GrupoPrimario;
+    degrau: 'serie' | 'slot' | 'ordem';
+    motivo: 'folga' | 'slot_do_compensador' | 'delta_zero' | 'sem_dia_comum' | 'compensador_no_piso' | 'focado_no_teto';
+    /** Séries que mudaram de mão (0 no degrau `ordem`). */
+    series: number;
+  };
   /** Metadados do mesociclo (v2) — ausente em chamadas v1 (sem semana). */
   semana?: {
     numero: SemanaCiclo;
