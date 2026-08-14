@@ -1,6 +1,8 @@
 'use client';
 
 import { type CSSProperties, type ReactNode } from 'react';
+import { secundariosDe } from '@/lib/engine/secundarios';
+import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import type { CardapioItem } from '@/lib/engine';
 import type { Alergeno, Exercise, Food } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
@@ -79,7 +81,21 @@ export function DetalheExercicio({ ex, onFechar, onTrocar, onBanir, banidoTexto,
         <Campo k="Nível" v={NIVEL_LABEL[ex.nivel] ?? ex.nivel} />
         <Campo k="Tipo" v={TIPO_LABEL[ex.tipo] ?? ex.tipo} />
         <Campo k="Equipamento" v={ex.equipamentoDetalhe ?? '—'} />
-        <div style={{ padding: '9px 0', gridColumn: '1 / -1' }}><div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)', marginBottom: 2 }}>Músculos trabalhados</div><div style={{ fontSize: '.9rem', fontWeight: 600 }}>{ex.grupoMuscular}</div></div>
+        {/* 🔒 C1 — PRIMÁRIO em destaque, SECUNDÁRIOS nomeados (DF do autor, 2026-08-14: o
+            usuário deve ver "pega bíceps também"). Os secundários vêm de `secundariosDe`, a
+            normalização do v4 — a mesma que o motor usa para contar volume ponderado. É isso
+            que explica por que um exercício conta para mais de um grupo no placar. */}
+        <div style={{ padding: '9px 0', gridColumn: '1 / -1' }}>
+          <div style={{ fontSize: '.74rem', color: 'rgba(234,229,219,.45)', marginBottom: 2 }}>Músculos trabalhados</div>
+          <div style={{ fontSize: '.9rem', fontWeight: 600 }}>
+            {ex.grupoPrimario ? (ROTULO_GRUPO[ex.grupoPrimario] ?? ex.grupoMuscular) : ex.grupoMuscular}
+            {secundariosDe(ex).length > 0 && (
+              <span style={{ fontWeight: 500, color: 'rgba(234,229,219,.6)' }}>
+                {' · também '}{secundariosDe(ex).map((g) => (ROTULO_GRUPO[g] ?? g).toLowerCase()).join(', ')}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
       <div style={secCap}>Como fazer</div>
       <p style={{ margin: '0 0 22px', fontSize: '.92rem', color: 'rgba(234,229,219,.82)', lineHeight: 1.55 }}>{ex.comoFazer}</p>

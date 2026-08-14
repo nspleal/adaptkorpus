@@ -22,6 +22,7 @@ import { avaliarBanimento, avaliarTroca, PREFERENCIAS_VAZIAS, type PreferenciasT
 import { aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
 import { medirEntregaDoFoco } from '@/lib/foco-entrega';
 import { fraseDoFoco } from '@/lib/foco-copy';
+import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -1595,6 +1596,16 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+                          {/* 🔒 C1 — O GRUPO MUSCULAR NO CARD (pedido do autor, 2026-08-14):
+                              *"acho bom colocar do lado de cada exercício que grupo muscular
+                              ele aborda"*. O card mostrava só o PADRÃO (EMPURRAR/ISOLADO), que
+                              é vocabulário do motor, não do usuário. O grupo vem primeiro e em
+                              destaque; o padrão fica como informação secundária. Os
+                              SECUNDÁRIOS ("pega bíceps também") vivem no detalhe, que é onde
+                              cabe explicar por que um exercício conta para mais de um grupo. */}
+                          {efetivo.grupoPrimario && (
+                            <span style={{ ...kicker, color: 'rgba(189,255,0,.75)' }}>{ROTULO_GRUPO[efetivo.grupoPrimario] ?? efetivo.grupoPrimario}</span>
+                          )}
                           <span style={{ ...kicker, color: 'rgba(234,229,219,.4)' }}>{PADRAO_LABEL[sl.padrao] ?? sl.padrao}</span>
                           {/* Badge "Favorito" (B5): todo favorito que entrou no plano. */}
                           {sl.incluidoPorPreferencia && <BadgeFavorito />}
