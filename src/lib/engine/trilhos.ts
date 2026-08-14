@@ -261,3 +261,116 @@ export function aplicarFocoCore(args: {
     alvoCompensado: args.alvoCompensaBase - deltaAplicado,
   };
 }
+
+// ── 🔒 O FOCO EM CASCATA (DF do autor, 2026-08-14) ───────────────────────────
+
+/** Em que degrau o foco parou. A tela DIZ qual foi (B2) — silêncio é indistinguível de quebrado. */
+export type DegrauFoco = 'serie' | 'slot' | 'ordem';
+
+export type MotivoFoco =
+  /** Coube na folga dos slots que o grupo já tem — o degrau fino. */
+  | 'folga'
+  /** O focado estava saturado; um slot veio do compensador, que divide o dia. */
+  | 'slot_do_compensador'
+  /** Semana de delta 0 (1, 4, 5): a spec manda não mover volume. */
+  | 'delta_zero'
+  /** Focado saturado e o compensador não divide dia com ele (perfil herdado). */
+  | 'sem_dia_comum'
+  /** O compensador não pode ceder sem furar o próprio piso. */
+  | 'compensador_no_piso'
+  /** O focado já está no teto do seu porte. */
+  | 'focado_no_teto';
+
+export interface DecisaoFoco {
+  degrau: DegrauFoco;
+  /** Séries que mudam de mão. 0 no degrau `ordem`. */
+  series: number;
+  /** `true` só no degrau `slot`: um slot sai do compensador e entra no focado. */
+  moveSlot: boolean;
+  motivo: MotivoFoco;
+}
+
+export interface LadoFoco {
+  /** Slots diretos do grupo nesta semana. */
+  slots: number;
+  /** Séries que o grupo tem HOJE, antes do foco. */
+  series: number;
+}
+
+/**
+ * 🔒 A CASCATA — tenta do mais fino ao mais grosso e para no primeiro que couber.
+ *
+ * Nasceu da medição de 2026-08-14, que derrubou as três saídas isoladas: mover slot para um
+ * delta de 1 série erra por 4 (a granularidade do slot); não mover nunca mata a entrega de
+ * todo grupo saturado; e aceitar desvio quebraria a promessa escrita na tela.
+ *
+ *  ⓪ **NENHUM TERCEIRO PAGA** — atravessa todos os degraus. Só o par focado ↔ compensador
+ *    muda. Se a conta só fechar cobrando de quem o usuário não nomeou, desce um degrau. É o
+ *    conserto do `ombros −4` medido: o motor cobrava de um grupo fora do foco, calado.
+ *  ① **SÉRIE**, na folga dos slots que o grupo já tem. Conserva exato. Degrau do GRANDE.
+ *  ② **SLOT**, só do compensador e só de quem DIVIDE O DIA — slots não atravessam dias, e foi
+ *    isso que zerou glúteos na 1ª tentativa. Degrau do PEQUENO (piso 1 → 2 diretos).
+ *  ③ **ORDEM** — não coube nenhum; o focado vem primeiro entre os do mesmo tipo, e a tela diz.
+ *
+ * PURA: recebe números, devolve decisão. Quem tem o plano (montador) fornece os lados.
+ */
+export function decidirFoco(args: {
+  /** O que `aplicarFoco` quer mover nesta semana (0 nas semanas 1, 4 e 5). */
+  delta: number;
+  focado: LadoFoco & {
+    /** Teto de séries do porte: banda do nível (grande) ou `slots × sMax` do piso 2 (pequeno). */
+    tetoSeries: number;
+    /** Teto de slots diretos do porte. */
+    tetoSlots: number;
+  };
+  /** `null` quando o compensador não existe ou não divide dia com o focado. */
+  compensador: (LadoFoco & { pisoSeries: number; pisoSlots: number }) | null;
+  sMax: number;
+}): DecisaoFoco {
+  const { delta, focado, compensador, sMax } = args;
+
+  // ⓪ A spec manda não mover volume nesta semana. Mover slot aqui daria +sMax onde o alvo é 0.
+  if (delta <= 0) return { degrau: 'ordem', series: 0, moveSlot: false, motivo: 'delta_zero' };
+
+  // ① SÉRIE — cabe na folga que o focado já tem, e o compensador cede sem furar o piso?
+  const capacidadeFocado = Math.min(focado.tetoSeries, focado.slots * sMax);
+  const folgaFocado = capacidadeFocado - focado.series;
+  if (compensador && folgaFocado >= delta && compensador.series - delta >= compensador.pisoSeries) {
+    return { degrau: 'serie', series: delta, moveSlot: false, motivo: 'folga' };
+  }
+
+  // ② SLOT — o focado está saturado. Um slot inteiro muda de mão, 1:1 em slot E em série.
+  if (compensador) {
+    const focadoCabeMaisUmSlot = focado.slots + 1 <= focado.tetoSlots;
+    const compensadorPodeCeder =
+      compensador.slots - 1 >= compensador.pisoSlots &&
+      compensador.series - sMax >= compensador.pisoSeries;
+    if (focadoCabeMaisUmSlot && compensadorPodeCeder) {
+      return { degrau: 'slot', series: sMax, moveSlot: true, motivo: 'slot_do_compensador' };
+    }
+    // Por que não coube — a tela precisa do motivo certo, não de um genérico.
+    if (!focadoCabeMaisUmSlot) return { degrau: 'ordem', series: 0, moveSlot: false, motivo: 'focado_no_teto' };
+    return { degrau: 'ordem', series: 0, moveSlot: false, motivo: 'compensador_no_piso' };
+  }
+
+  // ③ ORDEM — sem compensador elegível (não divide dia / perfil herdado).
+  return { degrau: 'ordem', series: 0, moveSlot: false, motivo: 'sem_dia_comum' };
+}
+
+/**
+ * Os grupos que PODEM compensar um foco: os que dividem ao menos um dia com o focado, no
+ * plano vigente. 🔒 A UI deriva a lista DAQUI, nunca de uma lista fixa — em PPL×2 focar
+ * panturrilha oferece quadríceps/posterior/glúteos e nunca peito, porque peito treina noutro
+ * dia e um slot dele não tem como virar slot de perna.
+ */
+export function compensadoresPossiveis(
+  diasComGrupos: readonly (readonly GrupoPrimario[])[],
+  focado: GrupoPrimario,
+): GrupoPrimario[] {
+  const juntos = new Set<GrupoPrimario>();
+  for (const dia of diasComGrupos) {
+    if (!dia.includes(focado)) continue;
+    for (const g of dia) if (g !== focado && g !== 'core') juntos.add(g);
+  }
+  return [...juntos].sort();
+}
