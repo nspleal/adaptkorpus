@@ -72,6 +72,18 @@ export const perfilResumoSchema = z.object({
   orcamento: z.enum(['baixo', 'medio', 'alto']).nullable().optional(),
   // 🎛️ v4 · DF③ — divisão preferida (leva B consome; a persistência entra já na leva A).
   divisaoPreferida: z.enum(['auto', 'superior-inferior', 'prioridades']).optional(),
+  /**
+   * 🧭 Editor guiado — o desenho do usuário. Limites de forma são TRAVA DE TAMANHO, não
+   * regra de treino: 7 dias, 20 exercícios por dia e id curto. O que é bom ou ruim para o
+   * treino é dito pelo CRÍTICO (aviso que não trava — DF①), nunca recusado na borda.
+   */
+  rotinaCustom: z.object({
+    origem: z.literal('usuario'),
+    dias: z.array(z.object({
+      nome: z.string().max(60),
+      exercicioIds: z.array(z.string().max(24)).max(20),
+    })).max(7),
+  }).optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
     renal: z.boolean(),

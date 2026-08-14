@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties, type ReactNode, useRef } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
@@ -33,7 +33,7 @@ import DiaDaDieta from './DiaDaDieta';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
-import type { Weekday } from '@/lib/semana';
+import { ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
@@ -46,11 +46,13 @@ import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
+import EditorTreino, { PainelCritico, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
+import { avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
-  CardapioItem, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, Sexo,
+  CardapioItem, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, RotinaCustom, Sexo,
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 import { chaveLocal } from '@/lib/escopo-local';
@@ -90,6 +92,11 @@ export interface PerfilResumo {
   /** 🎛️ v4 · DF③ (2026-08-12) — divisão preferida (`auto` | `superior-inferior` |
    *  `prioridades`). Ausente = `auto`. Persistida na leva A; consumida pelo alocador (leva B). */
   divisaoPreferida?: DivisaoPreferida;
+  /**
+   * 🧭 EDITOR GUIADO (2026-08-13) — o desenho do usuário (só ids por dia, ~380 bytes).
+   * Ausente = o gerador monta. "Voltar ao recomendado" apaga este campo, e só ele.
+   */
+  rotinaCustom?: RotinaCustom;
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -285,6 +292,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * completa"). Guarda o slot de destino; `null` = fechado.
    */
   const [biblioteca, setBiblioteca] = useState<{ d: number; s: number } | null>(null);
+  /** 🧭 Editor guiado aberto? `null` = fechado. */
+  const [editorDias, setEditorDias] = useState<DiaEditavel[] | null>(null);
   const [dataHoje, setDataHoje] = useState('');
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
@@ -762,6 +771,50 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setRotinaDias(nt.rotina?.dias ?? []);
   }
 
+  /**
+   * 🧭 EDITOR GUIADO — abrir, salvar e voltar ao recomendado.
+   *
+   * 🔒 DF② — o que se PERSISTE é só o desenho (ids por dia): séries/RIR/descanso continuam
+   * do motor a cada recompute, e o plano custom progride igual ao gerado. Guardar o plano
+   * inteiro congelaria a pessoa fora de todo conserto futuro do motor.
+   */
+  function abrirEditor() {
+    const origem = perfil.rotinaCustom ? 'plano' : rotinaDias.length > 0 ? 'plano' : 'vazio';
+    registrarEvento('editor_aberto', { origem });
+    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? []));
+  }
+
+  function salvarTreinoCustom(dias: DiaEditavel[], avaliacao: Avaliacao) {
+    const rotinaCustom = paraRotinaCustom(dias);
+    registrarEvento('treino_custom_salvo', {
+      dias: rotinaCustom.dias.length,
+      exercicios: rotinaCustom.dias.reduce((n, d) => n + d.exercicioIds.length, 0),
+      // 🔑 O campo que dá sentido aos outros: quantos avisos estavam na tela no salvamento.
+      // A DF① decidiu que aviso não trava — isto é o que torna a decisão auditável.
+      avisos_ativos: avaliacao.avisos.length,
+    });
+    const novoPerfil = { ...perfil, rotinaCustom };
+    setPerfil(novoPerfil);
+    onPerfilChange?.(novoPerfil);
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    setEditorDias(null);
+    window.scrollTo(0, 0);
+  }
+
+  /** "Voltar ao recomendado" = apagar o campo, e SÓ ele. O gerador recomputa na hora. */
+  function voltarAoRecomendado() {
+    const novoPerfil = { ...perfil, rotinaCustom: undefined };
+    setPerfil(novoPerfil);
+    onPerfilChange?.(novoPerfil);
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    setTreino(nt);
+    setRotinaDias(nt.rotina?.dias ?? []);
+    setEditorDias(null);
+    window.scrollTo(0, 0);
+  }
+
   /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */
   function seriesSemanaisDoGrupo(grupo: string): number {
     let n = 0;
@@ -780,6 +833,30 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   };
 
   const prescricao = treino.prescricao;
+
+  /**
+   * 🧭 DF② — o crítico do plano JÁ SALVO. Só existe para o plano custom: o do gerador sai
+   * dentro das faixas por construção, e criticá-lo seria o app discutindo consigo mesmo.
+   */
+  const criticoCustom: Avaliacao | null = useMemo(() => {
+    if (!perfil.rotinaCustom || rotinaDias.length === 0 || !prescricao) return null;
+    return avaliarSemana(
+      rotinaDias.map((d) => ({
+        nome: d.nome,
+        exercicios: d.slots.map((s) => s.exercicio),
+        series: d.slots.map((s) => s.series ?? prescricao.seriesPorExercicio.min),
+        descansoSeg: d.slots.map((s) => s.descansoSeg ?? prescricao.descansoCompostoSeg.min),
+      })),
+      {
+        nivel: perfil.nivelExperiencia,
+        objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
+        tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+        diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
+        seriesPadrao: prescricao.seriesPorExercicio.min,
+      },
+    );
+  }, [perfil, rotinaDias, prescricao]);
+
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
 
@@ -1159,8 +1236,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não
             recebe meta". Sem este ramo, o usuário em ROTEAR veria a aba Treino VAZIA e não
             teria onde registrar — o oposto do que a spec pede. */}
-        {!vista && aba === 'treino' && (prescricao
-          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} />
+        {/* 🧭 O EDITOR toma a tela inteira quando aberto. 🔒 P0.3: ele só existe DENTRO do
+            ramo `prescricao` — em ROTEAR (modo diário) `prescricao` é null, a TreinoTab não
+            renderiza, e o editor é inalcançável pelo MESMO mecanismo das demais superfícies
+            de treino (nenhuma checagem nova a manter em dia). */}
+        {!vista && aba === 'treino' && prescricao && editorDias && (
+          <EditorTreino
+            inicial={editorDias}
+            exercises={EXERCISES_SEED}
+            ctxSeletor={{
+              equipamento: perfil.equipamento,
+              equipamentosCasa: perfil.equipamentosCasa,
+              nivelExperiencia: perfil.nivelExperiencia,
+              favoritos: favoritosSet,
+              banidos: new Set(perfil.preferencias?.banidos ?? []),
+            }}
+            nivel={perfil.nivelExperiencia}
+            objetivo={prescricao.objetivoEfetivo ?? perfil.objetivo}
+            tempoPorSessaoMin={perfil.tempoPorSessaoMin}
+            seriesPadrao={prescricao.seriesPorExercicio.min}
+            temCustom={!!perfil.rotinaCustom}
+            onSalvar={salvarTreinoCustom}
+            onCancelar={() => setEditorDias(null)}
+            onVoltarAoRecomendado={voltarAoRecomendado}
+            onDesbanir={desbanirExercicio}
+            onAvisoMostrado={(codigos) => { for (const codigo of codigos) registrarEvento('aviso_risco_mostrado', { codigo, contexto: 'editor' }); }}
+          />
+        )}
+        {!vista && aba === 'treino' && !editorDias && (prescricao
+          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoCustom={criticoCustom} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
@@ -1364,7 +1468,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoCustom }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -1372,6 +1476,13 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   onIniciar: (d: number) => void; onDetalhe: (d: number, s: number) => void; onRegistrarTreino: () => void;
   /** "Fiquei doente" (Bloco 4): aviso "Pausa reconhecida" — já resolvido pela precedência. */
   avisoPausa: boolean; onReconhecerPausa: () => void;
+  /** 🧭 Editor guiado — a porta "Montar meu treino" (só existe onde há prescrição). */
+  onMontar: () => void;
+  /**
+   * 🧭 DF② — o crítico PERMANECE visível no plano custom, não só na montagem. `null` quando
+   * o plano é do gerador (nada a criticar: ele já sai dentro das faixas por construção).
+   */
+  criticoCustom: Avaliacao | null;
   /** Cardio (Bloco 1): a seção da semana mora na aba Treino, como o design desenhou. */
   cardio: {
     registros: readonly RegistroCardioDatado[]; meta: MetaCardio | null;
@@ -1388,8 +1499,14 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
           <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios</span>
           {/* Entrada A2 do registro manual (handoff): no header da aba Treino. */}
           <button onClick={onRegistrarTreino} className="evk-registrar" style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
+          {/* 🧭 A porta do EDITOR (pedido nº 5). Render incondicional dentro da aba — a
+              regra da descobribilidade de 2026-08-08: controle atrás de condição some. */}
+          <button onClick={onMontar} style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Montar meu treino</button>
         </div>
       </div>
+      {/* 🧭 DF② — a faixa compacta do crítico no plano JÁ SALVO: os avisos ativos + 1
+          recomendação, no mesmo componente do editor. */}
+      {criticoCustom && <PainelCritico avaliacao={criticoCustom} compacto />}
       {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
           mesma de quem não avisou (nada avançou, nada foi remarcado). */}
       {avisoPausa && <AvisoPausaReconhecida />}

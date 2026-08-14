@@ -207,6 +207,46 @@ export function montarRotina(
     }
   }
 
+  /**
+   * 🧭 O DESENHO DO USUÁRIO (editor guiado, DF② 2026-08-13) — quando existe, ele SUBSTITUI
+   * a alocação e **nada mais muda**: descanso por classe, ordem do foco, rampa de séries,
+   * retomada, invariantes e guard de cobertura rodam exatamente como no plano gerado. É o
+   * que a DF② pede — *"igual ao motor normal, a única diferença é que foi o usuário que
+   * fez o treino"* — e é o que evita um segundo pipeline para manter em dia.
+   *
+   * 🔒 Os filtros DUROS continuam valendo sobre a escolha do usuário: id fora do pool
+   * (banido depois, equipamento perdido, acima do nível) é ignorado na geração e o plano
+   * sai correto — o mesmo tratamento que a preferência que "deixou de caber" recebe desde
+   * o v3, sem apagar nada do que a pessoa guardou.
+   */
+  const custom = perfil.rotinaCustom;
+  if (custom && custom.dias.length > 0) {
+    const porId = new Map(pool.map((e) => [e.id, e]));
+    const diasUsuario = custom.dias
+      .map((d) => ({
+        nome: d.nome,
+        slots: d.exercicioIds
+          .map((id) => porId.get(id))
+          .filter((e): e is Exercise => e != null && e.padraoMovimento !== 'cardio')
+          .map((e) => ({
+            padrao: e.padraoMovimento,
+            exercicio: e,
+            ...(favoritos.has(e.id) ? { incluidoPorPreferencia: true } : {}),
+          })),
+      }))
+      .filter((d) => d.slots.length > 0);
+    if (diasUsuario.length > 0) {
+      // 🔒 O teto de sessões de força do NÍVEL continua valendo (trilho da §1.2). Quando
+      // morde, o excedente é dito — nunca cortado em silêncio.
+      const cortados = diasUsuario.slice(diasForca);
+      const mantidos = diasUsuario.slice(0, diasForca);
+      if (cortados.length > 0) {
+        avisos.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
+      }
+      return montarSaida(mantidos, 'Meu treino');
+    }
+  }
+
   const tetoPequenos = divisao === 'prioridades' ? PEQUENOS_TETO_DIRETO_PRIORIDADES : PEQUENOS_TETO_DIRETO;
   const diasAlocados = alocarSemana({
     templates,
@@ -222,6 +262,323 @@ export function montarRotina(
     preencherAteOrcamento: divisao === 'prioridades',
   });
 
+  /**
+   * 🔒 O PIPELINE COMPARTILHADO — tudo o que vem DEPOIS de saber quais exercícios entram:
+   * degradação de descanso por dia, ordem do foco, descanso definitivo por slot, rampa de
+   * séries (mesociclo ou retomada), invariantes e guard de cobertura.
+   *
+   * 🔑 Ele é uma função porque há DOIS produtores de `dias` — o alocador v4 e o desenho do
+   * usuário (editor guiado) — e a DF② manda que o segundo receba exatamente o mesmo
+   * tratamento do primeiro. Um `if` no meio do corpo criaria o "ramo especial" que a DF
+   * proíbe, e o segundo pipeline envelheceria sozinho.
+   */
+  function montarSaida(diasTreino: DiaTreino[], split: string): RotinaSemanal {
+    // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
+    // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
+    // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
+    // depois COMPOSTO até 90 s; cobertura > descanso). A mecânica de descanso por classe
+    // (armadilha 2 do handoff) fica intocada — muda só quem pede a degradação.
+    let descansoEfetivo: Faixa = prescricao.descansoCompostoSeg;
+    const nivelDegradacaoDia: (0 | 1 | 2)[] = diasTreino.map(() => 0);
+    if (semanaCiclo) {
+      const sPlan = Math.min(
+        prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
+        prescricao.seriesPorExercicio.max,
+      );
+      /**
+       * 🔴 O RIR-ALVO DA SEMANA DO MESOCICLO (conserto 2026-08-04, item 2 do lote): a rampa
+       * (`rirAlvoSemana`) vence; sem ela, manda a semana do ciclo — nunca a constante.
+       */
+      const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
+      const semanaRampa = semanaCiclo.retomada?.semana ?? null;
+      const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+
+      const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number =>
+        slots.reduce((soma, s) => soma + sPlan * (40 + descansoDoPadrao(s.padrao, {
+          rirAlvo,
+          modoForca: prescricao.modoForca === true,
+          semanaRampa,
+          degradacao: nivel,
+        })), 0);
+
+      /**
+       * 🟡 EXCEÇÃO NOMEADA, durante a rampa: o piso do FIT é INVIOLÁVEL, então não há
+       * degradação (o volume da retomada já está cortado 50–70% — sobra tempo).
+       */
+      for (let i = 0; i < diasTreino.length; i += 1) {
+        if (semanaRampa != null) break;
+        const slots = diasTreino[i]!.slots;
+        let nivel: 0 | 1 | 2 = 0;
+        while (nivel < 2 && custoDia(slots, nivel) > orcamentoSeg) nivel = (nivel + 1) as 1 | 2;
+        nivelDegradacaoDia[i] = nivel;
+      }
+
+      /**
+       * O `descansoEfetivo` da SEMANA virou LEGADO — quem manda agora é o `descansoSeg` de
+       * cada slot. Ele fica exposto para a chamada v1 (sem `semanaCiclo`) e para a UI antiga.
+       * O teto de 180 s só sobe quando TODOS os dias couberam com a faixa cheia (v2 §5).
+       */
+      const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
+      const coubeCheio = nivelDegradacaoDia.every((n) => n === 0);
+      if (elegivel180 && coubeCheio) descansoEfetivo = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
+    }
+
+    /**
+     * 🎛️ v3 · Bloco B — A ORDEM DO FOCO, aplicada com os exercícios já escolhidos.
+     *
+     * 🔴 **Dentro da classe, sempre.** *"Vem primeiro na sessão"* sem a qualificação inverteria
+     * composto → isolado quando o foco fosse num músculo pequeno, e fatigar o bíceps antes das
+     * puxadas é **pré-exaustão** — técnica avançada que a seção vizinha decidiu não prescrever
+     * por default.
+     *
+     * 🟢 Vale para TODO MUNDO, inclusive para quem não tem folga de volume: é justamente o que
+     * o foco entrega a quem já está no MRV.
+     *
+     * 🔴 EXCETO CORE (DF 2026-08-05): a mecânica do core é SÓ séries nos slots existentes —
+     * `ordem` não existe para core (reordenar 1 slot/sessão é inerte, e entrega inerte é
+     * sucesso simulado). Reordenar aqui também quebraria o aceite travado "recusa ⇒ plano
+     * INALTERADO".
+     */
+    if (foco && foco.grupo !== 'core') {
+      for (const dia of diasTreino) {
+        dia.slots = ordenarComFoco(dia.slots, foco.grupo, {
+          classe: (sl) => (sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto'),
+          grupo: (sl) => sl.exercicio.grupoPrimario ?? null,
+        });
+      }
+    }
+
+    /**
+     * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
+     * o valor vem de `descansoDoExercicio` — que enxerga o que o padrão não mostra:
+     * `tipo: 'pliometrico'` e o override de força pesada (só composto COM carga).
+     *
+     * A UI passa a EXIBIR este número. A média `round((min+max)/2)` que ela calculava sai —
+     * ela matava o deslocamento por RIR em silêncio.
+     */
+    if (semanaCiclo) {
+      // Mesma derivação do orçamento (ver o bloco acima): a rampa vence; senão, a semana do ciclo.
+      const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
+      const semanaRampa = semanaCiclo.retomada?.semana ?? null;
+      for (let i = 0; i < diasTreino.length; i += 1) {
+        const dia = diasTreino[i]!;
+        // A degradação aplicada no orçamento vale para os slots deste dia: se o dia coube só
+        // com ISOLADO em 60 s, é 60 s que a pessoa vê — a tela não pode prometer o que o
+        // orçamento não reservou.
+        const degradacao: 0 | 1 | 2 = semanaRampa != null ? 0 : (nivelDegradacaoDia[i] ?? 0);
+        dia.slots = dia.slots.map((s) => {
+          // 🔒 1.3/1.4: a degradação entra AQUI, onde a classe é conhecida. O teto por padrão
+          // não enxerga POTENCIA nem força pesada e cortaria os dois no piso do composto.
+          const exato = descansoDoExercicio({
+            exercicio: s.exercicio, rirAlvo,
+            modoForca: prescricao.modoForca === true,
+            semanaRampa, degradacao,
+          });
+          if (exato == null) return s; // cardio: não há série a descansar
+          return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG) };
+        });
+      }
+    }
+
+    // --- Rampa de volume por grupo (v2 §1, DF 2026-07-08) ---------------------
+    // Distribui o volume-alvo da SEMANA (dentro da banda da tabela 1.2 — sem tabela nova)
+    // pelos slots de cada grupoPrimario, em round-robin determinístico na ordem (dia, slot),
+    // clampado a seriesPorExercicio {min..max}. Semana 6 NÃO anota séries: o deload usa o
+    // mecanismo existente (aplicarDeload + corte de séries na sessão) — evita corte duplo.
+    const ret = semanaCiclo?.retomada;
+    if (semanaCiclo && (ret || semanaCiclo.semana !== 6)) {
+      const { semana, feedbackGrupos } = semanaCiclo;
+      // A banda da ALOCAÇÃO vem da prescrição — como a do orçamento de tempo acima. Uma
+      // banda literal em qualquer um dos dois pontos seria número solto fora do cofre.
+      const banda = prescricao.volumePorGrupoSemana;
+      const sMin = prescricao.seriesPorExercicio.min;
+      const sMax = prescricao.seriesPorExercicio.max;
+      const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
+      /** Dia de cada slot — o teto de séries do grupo NA SESSÃO precisa saber onde o slot mora. */
+      const diaDoSlot = new Map<SlotExercicio, number>();
+      for (let di = 0; di < diasTreino.length; di += 1) {
+        for (const s of diasTreino[di]!.slots) {
+          // 🔒 `grupoPrimario` é NULLABLE (DF 2026-07-27): cardio/corpo-inteiro não são grupo
+          // muscular e não têm volume-alvo por grupo — ficam fora da rampa, por definição.
+          const g = s.exercicio.grupoPrimario;
+          if (g == null) continue;
+          const arr = porGrupo.get(g) ?? [];
+          arr.push(s);
+          porGrupo.set(g, arr);
+          diaDoSlot.set(s, di);
+        }
+      }
+
+      // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
+      // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
+      // Além dele valem os dois guarda-corpos da regra FIT: frequência máxima por GRUPO na
+      // semana e teto de séries por slot (IRV ≤ 30 com carga · 3 séries sem carga).
+      if (ret) {
+        const fMax = freqMaxPorGrupo(ret.semana);
+        const alvoGrupo = volumeDaRetomada(ret.volumeReferencia, ret.fator);
+        const descartar = new Set<SlotExercicio>();
+        for (const grupo of [...porGrupo.keys()].sort()) {
+          const todos = porGrupo.get(grupo)!;
+          // Frequência por grupo/padrão: o excedente sai (os últimos dias cedem primeiro).
+          const slots = todos.slice(0, Number.isFinite(fMax) ? fMax : todos.length);
+          for (const s of todos.slice(slots.length)) descartar.add(s);
+          const n = slots.length;
+          if (n === 0) continue;
+          const tetoSlot = slots.map((s) => {
+            const comCarga = temCarga(s.exercicio);
+            const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
+            // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
+            // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).
+            return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
+          });
+          const series = slots.map(() => 1); // piso operacional: 1 série por exercício
+          let restante = Math.max(0, alvoGrupo - n);
+          let i = 0;
+          let travas = 0;
+          while (restante > 0 && travas < n) {
+            if (series[i]! < tetoSlot[i]!) { series[i]!++; restante--; travas = 0; } else { travas++; }
+            i = (i + 1) % n;
+          }
+          slots.forEach((s, k) => { s.series = series[k]!; });
+        }
+        if (descartar.size > 0) {
+          for (const d of diasTreino) d.slots = d.slots.filter((s) => !descartar.has(s));
+          avisos.push(`Retomada: frequência por grupo limitada a ${fMax}×/semana nesta fase.`);
+        }
+        avisos.push('Retomada: volume reduzido nesta semana — o peso de cada série continua o mesmo.');
+      } else
+      for (const grupo of [...porGrupo.keys()].sort()) {
+        const slots = porGrupo.get(grupo)!;
+        let alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
+        // 🎛️ v3 · Bloco B — FOCO: +2–4 séries no grupo focado, compensadas 1:1 em outro, e
+        // 🔴 NUNCA acima do MRV (teto duro). Quem já está no topo não ganha volume — ganha
+        // ORDEM, aplicada mais acima, DENTRO DA CLASSE.
+        if (foco && (grupo === foco.grupo || grupo === foco.compensa)) {
+          const baseFocado = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
+          const baseCompensa = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
+          const objetivoEfetivo = prescricao.objetivoEfetivo ?? perfil.objetivo;
+          if (foco.grupo === 'core') {
+            /**
+             * 🔒 FOCO DE CORE — mecânica PRÓPRIA (cofre §Foco de CORE, DF 2026-08-05): séries
+             * nos slots que já existem, com teto de **séries por exercício do nível** — não o
+             * MRV semanal. Frequência (2–3×/sem) e montagem de dias ficam intocadas por
+             * construção: nada neste caminho as toca.
+             *
+             * 🔴 Sem folga, o efeito é RECUSA — e aqui ela aparece como "não mexe em nada". A
+             * recusa EXPLICADA para a pessoa é emitida na borda (Painel), que é quem tem tela.
+             */
+            const slotsCore = porGrupo.get('core')?.length ?? 0;
+            const slotsCompensa = porGrupo.get(foco.compensa)?.length ?? 0;
+            /**
+             * ⚠️ EFETIVO nos DOIS lados, não só no core. O alvo do grupo é truncado pela
+             * distribuição em `n × sMax`: usar o alvo cru faria o 1:1 virar NOMINAL — o core
+             * ganharia a série e o compensador não perderia nenhuma, porque já estava no
+             * próprio teto.
+             */
+            const seriesCoreAtuais = Math.min(baseFocado, slotsCore * sMax);
+            const seriesCompensaAtuais = Math.min(baseCompensa, slotsCompensa * sMax);
+            const efeito = aplicarFocoCore({
+              nSlotsCore: slotsCore, seriesCoreAtuais, alvoCompensaBase: seriesCompensaAtuais,
+              nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo,
+              // 🔴 O piso real de quem compensa: cada slot já tem `sMin`, então abaixo de
+              // `n × sMin` a redução seria absorvida pela distribuição e o 1:1 viraria nominal.
+              pisoCompensa: slotsCompensa * sMin,
+            });
+            alvo = grupo === 'core' ? efeito.alvoCore : efeito.alvoCompensado;
+          } else {
+            const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo });
+            alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
+          }
+        }
+        const n = slots.length;
+        const base = n * sMin;
+        const tetoGrupo = n * sMax;
+        const series = slots.map(() => sMin);
+        /**
+         * 🔢 v4 — O TETO DE SÉRIES DO GRUPO NA SESSÃO GANHA O CALL SITE (handoff B1.4).
+         * `tetoSeriesGrupoNaSessao` existia desde o v3 e nenhuma linha de produção a chamava
+         * (defeito E5 da medição: a "nota de coerência aritmética" da §1.2 nunca saiu do
+         * documento). A frequência é a REAL do grupo nesta semana (nº de dias com slot dele),
+         * não a constante — full-body 3× divide por 3.
+         */
+        const diasDoGrupo = new Set(slots.map((s) => diaDoSlot.get(s) ?? 0)).size;
+        const tetoSessao = tetoSeriesGrupoNaSessao(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo, Math.max(1, diasDoGrupo));
+        const noDia = new Map<number, number>();
+        for (const s of slots) noDia.set(diaDoSlot.get(s) ?? 0, (noDia.get(diaDoSlot.get(s) ?? 0) ?? 0) + sMin);
+        if (alvo > base) {
+          // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
+          // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
+          if (alvo > tetoGrupo && tetoGrupo >= banda.min) {
+            avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${tetoGrupo}.`);
+          }
+          let extra = Math.min(alvo, tetoGrupo) - base;
+          let i = 0;
+          let travas = 0;
+          while (extra > 0 && travas < n) {
+            const dia = diaDoSlot.get(slots[i]!) ?? 0;
+            if (series[i]! < sMax && (noDia.get(dia) ?? 0) < tetoSessao) {
+              series[i]!++;
+              noDia.set(dia, (noDia.get(dia) ?? 0) + 1);
+              extra--;
+              travas = 0;
+            } else {
+              travas++;
+            }
+            i = (i + 1) % n;
+          }
+        }
+        slots.forEach((s, i) => {
+          s.series = series[i]!;
+        });
+      }
+    }
+
+    // Invariantes (verificação + aviso honesto, sem afrouxar segurança).
+    const contaPadrao = (p: PadraoMovimento) => diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
+    if (contaPadrao('puxar') < contaPadrao('empurrar')) {
+      avisos.push('Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).');
+    }
+    if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
+      avisos.push('Atenção: padrão de dobradiça/quadril (cadeia posterior) não foi coberto.');
+    }
+    if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
+      avisos.push('Atenção: core fora da faixa de 2–3×/semana.');
+    }
+    if (budgetPorDia <= 3) {
+      avisos.push('Tempo por sessão curto: priorizamos os exercícios fundamentais.');
+    }
+
+    /**
+     * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este
+     * grupo foi coberto?" — vira verificação. Grupo GRANDE abaixo do MEV em contagem
+     * PONDERADA (direto 1,0 + secundário 0,5) ⇒ aviso honesto. Fora da retomada (lá o
+     * volume baixo é a feature) e só com séries decididas (ramo do ciclo).
+     */
+    if (semanaCiclo && !ret && semanaCiclo.semana !== 6) {
+      const ponderado = creditoPonderadoDaSemana(diasTreino.flatMap((d) => d.slots));
+      const piso = mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo);
+      for (const g of GRUPOS_GRANDES) {
+        if ((ponderado.get(g) ?? 0) < piso) {
+          avisos.push(`Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
+        }
+      }
+    }
+
+    return {
+      diasForcaAgendados: diasForca,
+      diasCardioRecuperacao,
+      diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio),
+      split,
+      dias: diasTreino,
+      cardio: prescricao.cardio,
+      avisos,
+      // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
+      ...(semanaCiclo
+        ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
+        : {}),
+    };;
+  }
+
   const diasTreino: DiaTreino[] = diasAlocados.map((d) => ({
     nome: d.nome,
     slots: d.slots.map((s) => ({
@@ -236,308 +593,5 @@ export function montarRotina(
     })),
   }));
 
-  // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
-  // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
-  // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
-  // depois COMPOSTO até 90 s; cobertura > descanso). A mecânica de descanso por classe
-  // (armadilha 2 do handoff) fica intocada — muda só quem pede a degradação.
-  let descansoEfetivo: Faixa = prescricao.descansoCompostoSeg;
-  const nivelDegradacaoDia: (0 | 1 | 2)[] = diasTreino.map(() => 0);
-  if (semanaCiclo) {
-    const sPlan = Math.min(
-      prescricao.seriesPorExercicio.min + Math.ceil((banda.max - banda.min) / Math.max(1, prescricao.freqPorGrupoMin)),
-      prescricao.seriesPorExercicio.max,
-    );
-    /**
-     * 🔴 O RIR-ALVO DA SEMANA DO MESOCICLO (conserto 2026-08-04, item 2 do lote): a rampa
-     * (`rirAlvoSemana`) vence; sem ela, manda a semana do ciclo — nunca a constante.
-     */
-    const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
-    const semanaRampa = semanaCiclo.retomada?.semana ?? null;
-    const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
-
-    const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number =>
-      slots.reduce((soma, s) => soma + sPlan * (40 + descansoDoPadrao(s.padrao, {
-        rirAlvo,
-        modoForca: prescricao.modoForca === true,
-        semanaRampa,
-        degradacao: nivel,
-      })), 0);
-
-    /**
-     * 🟡 EXCEÇÃO NOMEADA, durante a rampa: o piso do FIT é INVIOLÁVEL, então não há
-     * degradação (o volume da retomada já está cortado 50–70% — sobra tempo).
-     */
-    for (let i = 0; i < diasTreino.length; i += 1) {
-      if (semanaRampa != null) break;
-      const slots = diasTreino[i]!.slots;
-      let nivel: 0 | 1 | 2 = 0;
-      while (nivel < 2 && custoDia(slots, nivel) > orcamentoSeg) nivel = (nivel + 1) as 1 | 2;
-      nivelDegradacaoDia[i] = nivel;
-    }
-
-    /**
-     * O `descansoEfetivo` da SEMANA virou LEGADO — quem manda agora é o `descansoSeg` de
-     * cada slot. Ele fica exposto para a chamada v1 (sem `semanaCiclo`) e para a UI antiga.
-     * O teto de 180 s só sobe quando TODOS os dias couberam com a faixa cheia (v2 §5).
-     */
-    const elegivel180 = prescricao.descansoCompostoSeg.max >= 120 || prescricao.modoForca === true;
-    const coubeCheio = nivelDegradacaoDia.every((n) => n === 0);
-    if (elegivel180 && coubeCheio) descansoEfetivo = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
-  }
-
-  /**
-   * 🎛️ v3 · Bloco B — A ORDEM DO FOCO, aplicada com os exercícios já escolhidos.
-   *
-   * 🔴 **Dentro da classe, sempre.** *"Vem primeiro na sessão"* sem a qualificação inverteria
-   * composto → isolado quando o foco fosse num músculo pequeno, e fatigar o bíceps antes das
-   * puxadas é **pré-exaustão** — técnica avançada que a seção vizinha decidiu não prescrever
-   * por default.
-   *
-   * 🟢 Vale para TODO MUNDO, inclusive para quem não tem folga de volume: é justamente o que
-   * o foco entrega a quem já está no MRV.
-   *
-   * 🔴 EXCETO CORE (DF 2026-08-05): a mecânica do core é SÓ séries nos slots existentes —
-   * `ordem` não existe para core (reordenar 1 slot/sessão é inerte, e entrega inerte é
-   * sucesso simulado). Reordenar aqui também quebraria o aceite travado "recusa ⇒ plano
-   * INALTERADO".
-   */
-  if (foco && foco.grupo !== 'core') {
-    for (const dia of diasTreino) {
-      dia.slots = ordenarComFoco(dia.slots, foco.grupo, {
-        classe: (sl) => (sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto'),
-        grupo: (sl) => sl.exercicio.grupoPrimario ?? null,
-      });
-    }
-  }
-
-  /**
-   * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
-   * o valor vem de `descansoDoExercicio` — que enxerga o que o padrão não mostra:
-   * `tipo: 'pliometrico'` e o override de força pesada (só composto COM carga).
-   *
-   * A UI passa a EXIBIR este número. A média `round((min+max)/2)` que ela calculava sai —
-   * ela matava o deslocamento por RIR em silêncio.
-   */
-  if (semanaCiclo) {
-    // Mesma derivação do orçamento (ver o bloco acima): a rampa vence; senão, a semana do ciclo.
-    const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
-    const semanaRampa = semanaCiclo.retomada?.semana ?? null;
-    for (let i = 0; i < diasTreino.length; i += 1) {
-      const dia = diasTreino[i]!;
-      // A degradação aplicada no orçamento vale para os slots deste dia: se o dia coube só
-      // com ISOLADO em 60 s, é 60 s que a pessoa vê — a tela não pode prometer o que o
-      // orçamento não reservou.
-      const degradacao: 0 | 1 | 2 = semanaRampa != null ? 0 : (nivelDegradacaoDia[i] ?? 0);
-      dia.slots = dia.slots.map((s) => {
-        // 🔒 1.3/1.4: a degradação entra AQUI, onde a classe é conhecida. O teto por padrão
-        // não enxerga POTENCIA nem força pesada e cortaria os dois no piso do composto.
-        const exato = descansoDoExercicio({
-          exercicio: s.exercicio, rirAlvo,
-          modoForca: prescricao.modoForca === true,
-          semanaRampa, degradacao,
-        });
-        if (exato == null) return s; // cardio: não há série a descansar
-        return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG) };
-      });
-    }
-  }
-
-  // --- Rampa de volume por grupo (v2 §1, DF 2026-07-08) ---------------------
-  // Distribui o volume-alvo da SEMANA (dentro da banda da tabela 1.2 — sem tabela nova)
-  // pelos slots de cada grupoPrimario, em round-robin determinístico na ordem (dia, slot),
-  // clampado a seriesPorExercicio {min..max}. Semana 6 NÃO anota séries: o deload usa o
-  // mecanismo existente (aplicarDeload + corte de séries na sessão) — evita corte duplo.
-  const ret = semanaCiclo?.retomada;
-  if (semanaCiclo && (ret || semanaCiclo.semana !== 6)) {
-    const { semana, feedbackGrupos } = semanaCiclo;
-    // A banda da ALOCAÇÃO vem da prescrição — como a do orçamento de tempo acima. Uma
-    // banda literal em qualquer um dos dois pontos seria número solto fora do cofre.
-    const banda = prescricao.volumePorGrupoSemana;
-    const sMin = prescricao.seriesPorExercicio.min;
-    const sMax = prescricao.seriesPorExercicio.max;
-    const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
-    /** Dia de cada slot — o teto de séries do grupo NA SESSÃO precisa saber onde o slot mora. */
-    const diaDoSlot = new Map<SlotExercicio, number>();
-    for (let di = 0; di < diasTreino.length; di += 1) {
-      for (const s of diasTreino[di]!.slots) {
-        // 🔒 `grupoPrimario` é NULLABLE (DF 2026-07-27): cardio/corpo-inteiro não são grupo
-        // muscular e não têm volume-alvo por grupo — ficam fora da rampa, por definição.
-        const g = s.exercicio.grupoPrimario;
-        if (g == null) continue;
-        const arr = porGrupo.get(g) ?? [];
-        arr.push(s);
-        porGrupo.set(g, arr);
-        diaDoSlot.set(s, di);
-      }
-    }
-
-    // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
-    // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
-    // Além dele valem os dois guarda-corpos da regra FIT: frequência máxima por GRUPO na
-    // semana e teto de séries por slot (IRV ≤ 30 com carga · 3 séries sem carga).
-    if (ret) {
-      const fMax = freqMaxPorGrupo(ret.semana);
-      const alvoGrupo = volumeDaRetomada(ret.volumeReferencia, ret.fator);
-      const descartar = new Set<SlotExercicio>();
-      for (const grupo of [...porGrupo.keys()].sort()) {
-        const todos = porGrupo.get(grupo)!;
-        // Frequência por grupo/padrão: o excedente sai (os últimos dias cedem primeiro).
-        const slots = todos.slice(0, Number.isFinite(fMax) ? fMax : todos.length);
-        for (const s of todos.slice(slots.length)) descartar.add(s);
-        const n = slots.length;
-        if (n === 0) continue;
-        const tetoSlot = slots.map((s) => {
-          const comCarga = temCarga(s.exercicio);
-          const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
-          // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
-          // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).
-          return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
-        });
-        const series = slots.map(() => 1); // piso operacional: 1 série por exercício
-        let restante = Math.max(0, alvoGrupo - n);
-        let i = 0;
-        let travas = 0;
-        while (restante > 0 && travas < n) {
-          if (series[i]! < tetoSlot[i]!) { series[i]!++; restante--; travas = 0; } else { travas++; }
-          i = (i + 1) % n;
-        }
-        slots.forEach((s, k) => { s.series = series[k]!; });
-      }
-      if (descartar.size > 0) {
-        for (const d of diasTreino) d.slots = d.slots.filter((s) => !descartar.has(s));
-        avisos.push(`Retomada: frequência por grupo limitada a ${fMax}×/semana nesta fase.`);
-      }
-      avisos.push('Retomada: volume reduzido nesta semana — o peso de cada série continua o mesmo.');
-    } else
-    for (const grupo of [...porGrupo.keys()].sort()) {
-      const slots = porGrupo.get(grupo)!;
-      let alvo = alvoDaSemana(banda, semana, feedbackGrupos?.get(grupo) ?? 'ok');
-      // 🎛️ v3 · Bloco B — FOCO: +2–4 séries no grupo focado, compensadas 1:1 em outro, e
-      // 🔴 NUNCA acima do MRV (teto duro). Quem já está no topo não ganha volume — ganha
-      // ORDEM, aplicada mais acima, DENTRO DA CLASSE.
-      if (foco && (grupo === foco.grupo || grupo === foco.compensa)) {
-        const baseFocado = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.grupo) ?? 'ok');
-        const baseCompensa = alvoDaSemana(banda, semana, feedbackGrupos?.get(foco.compensa) ?? 'ok');
-        const objetivoEfetivo = prescricao.objetivoEfetivo ?? perfil.objetivo;
-        if (foco.grupo === 'core') {
-          /**
-           * 🔒 FOCO DE CORE — mecânica PRÓPRIA (cofre §Foco de CORE, DF 2026-08-05): séries
-           * nos slots que já existem, com teto de **séries por exercício do nível** — não o
-           * MRV semanal. Frequência (2–3×/sem) e montagem de dias ficam intocadas por
-           * construção: nada neste caminho as toca.
-           *
-           * 🔴 Sem folga, o efeito é RECUSA — e aqui ela aparece como "não mexe em nada". A
-           * recusa EXPLICADA para a pessoa é emitida na borda (Painel), que é quem tem tela.
-           */
-          const slotsCore = porGrupo.get('core')?.length ?? 0;
-          const slotsCompensa = porGrupo.get(foco.compensa)?.length ?? 0;
-          /**
-           * ⚠️ EFETIVO nos DOIS lados, não só no core. O alvo do grupo é truncado pela
-           * distribuição em `n × sMax`: usar o alvo cru faria o 1:1 virar NOMINAL — o core
-           * ganharia a série e o compensador não perderia nenhuma, porque já estava no
-           * próprio teto.
-           */
-          const seriesCoreAtuais = Math.min(baseFocado, slotsCore * sMax);
-          const seriesCompensaAtuais = Math.min(baseCompensa, slotsCompensa * sMax);
-          const efeito = aplicarFocoCore({
-            nSlotsCore: slotsCore, seriesCoreAtuais, alvoCompensaBase: seriesCompensaAtuais,
-            nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo,
-            // 🔴 O piso real de quem compensa: cada slot já tem `sMin`, então abaixo de
-            // `n × sMin` a redução seria absorvida pela distribuição e o 1:1 viraria nominal.
-            pisoCompensa: slotsCompensa * sMin,
-          });
-          alvo = grupo === 'core' ? efeito.alvoCore : efeito.alvoCompensado;
-        } else {
-          const efeito = aplicarFoco({ alvoBase: baseFocado, alvoCompensaBase: baseCompensa, nivel: perfil.nivelExperiencia, objetivo: objetivoEfetivo });
-          alvo = grupo === foco.grupo ? efeito.alvoFocado : efeito.alvoCompensado;
-        }
-      }
-      const n = slots.length;
-      const base = n * sMin;
-      const tetoGrupo = n * sMax;
-      const series = slots.map(() => sMin);
-      /**
-       * 🔢 v4 — O TETO DE SÉRIES DO GRUPO NA SESSÃO GANHA O CALL SITE (handoff B1.4).
-       * `tetoSeriesGrupoNaSessao` existia desde o v3 e nenhuma linha de produção a chamava
-       * (defeito E5 da medição: a "nota de coerência aritmética" da §1.2 nunca saiu do
-       * documento). A frequência é a REAL do grupo nesta semana (nº de dias com slot dele),
-       * não a constante — full-body 3× divide por 3.
-       */
-      const diasDoGrupo = new Set(slots.map((s) => diaDoSlot.get(s) ?? 0)).size;
-      const tetoSessao = tetoSeriesGrupoNaSessao(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo, Math.max(1, diasDoGrupo));
-      const noDia = new Map<number, number>();
-      for (const s of slots) noDia.set(diaDoSlot.get(s) ?? 0, (noDia.get(diaDoSlot.get(s) ?? 0) ?? 0) + sMin);
-      if (alvo > base) {
-        // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
-        // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
-        if (alvo > tetoGrupo && tetoGrupo >= banda.min) {
-          avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${tetoGrupo}.`);
-        }
-        let extra = Math.min(alvo, tetoGrupo) - base;
-        let i = 0;
-        let travas = 0;
-        while (extra > 0 && travas < n) {
-          const dia = diaDoSlot.get(slots[i]!) ?? 0;
-          if (series[i]! < sMax && (noDia.get(dia) ?? 0) < tetoSessao) {
-            series[i]!++;
-            noDia.set(dia, (noDia.get(dia) ?? 0) + 1);
-            extra--;
-            travas = 0;
-          } else {
-            travas++;
-          }
-          i = (i + 1) % n;
-        }
-      }
-      slots.forEach((s, i) => {
-        s.series = series[i]!;
-      });
-    }
-  }
-
-  // Invariantes (verificação + aviso honesto, sem afrouxar segurança).
-  const contaPadrao = (p: PadraoMovimento) => diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
-  if (contaPadrao('puxar') < contaPadrao('empurrar')) {
-    avisos.push('Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).');
-  }
-  if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
-    avisos.push('Atenção: padrão de dobradiça/quadril (cadeia posterior) não foi coberto.');
-  }
-  if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
-    avisos.push('Atenção: core fora da faixa de 2–3×/semana.');
-  }
-  if (budgetPorDia <= 3) {
-    avisos.push('Tempo por sessão curto: priorizamos os exercícios fundamentais.');
-  }
-
-  /**
-   * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este
-   * grupo foi coberto?" — vira verificação. Grupo GRANDE abaixo do MEV em contagem
-   * PONDERADA (direto 1,0 + secundário 0,5) ⇒ aviso honesto. Fora da retomada (lá o
-   * volume baixo é a feature) e só com séries decididas (ramo do ciclo).
-   */
-  if (semanaCiclo && !ret && semanaCiclo.semana !== 6) {
-    const ponderado = creditoPonderadoDaSemana(diasTreino.flatMap((d) => d.slots));
-    const piso = mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo);
-    for (const g of GRUPOS_GRANDES) {
-      if ((ponderado.get(g) ?? 0) < piso) {
-        avisos.push(`Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
-      }
-    }
-  }
-
-  return {
-    diasForcaAgendados: diasForca,
-    diasCardioRecuperacao,
-    diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio),
-    split,
-    dias: diasTreino,
-    cardio: prescricao.cardio,
-    avisos,
-    // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
-    ...(semanaCiclo
-      ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
-      : {}),
-  };
+  return montarSaida(diasTreino, split);
 }

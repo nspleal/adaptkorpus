@@ -59,6 +59,8 @@ export interface PreferenciasPerfil {
   tecnicasAvancadas?: PerfilResumo['tecnicasAvancadas'];
   orcamento?: PerfilResumo['orcamento'];
   divisaoPreferida?: PerfilResumo['divisaoPreferida'];
+  /** 🧭 Editor guiado: só o DESENHO (ids por dia) — ~380 bytes, 171× abaixo do teto de 64 KB. */
+  rotinaCustom?: PerfilResumo['rotinaCustom'];
 }
 
 /** Subconjunto de colunas de `public.profile` derivado do `PerfilResumo`. */
@@ -118,6 +120,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       ...(p.tecnicasAvancadas != null ? { tecnicasAvancadas: p.tecnicasAvancadas } : {}),
       ...(p.orcamento != null ? { orcamento: p.orcamento } : {}),
       ...(p.divisaoPreferida != null ? { divisaoPreferida: p.divisaoPreferida } : {}),
+      ...(p.rotinaCustom != null ? { rotinaCustom: p.rotinaCustom } : {}),
     },
   };
 }
@@ -180,6 +183,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     ...(pref.tecnicasAvancadas != null ? { tecnicasAvancadas: pref.tecnicasAvancadas } : {}),
     ...(pref.orcamento != null ? { orcamento: pref.orcamento } : {}),
     ...(pref.divisaoPreferida != null ? { divisaoPreferida: pref.divisaoPreferida } : {}),
+    ...(pref.rotinaCustom != null ? { rotinaCustom: pref.rotinaCustom } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,
       renal: row.renal,

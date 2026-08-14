@@ -20,6 +20,24 @@ export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
  */
 export type DivisaoPreferida = 'auto' | 'superior-inferior' | 'prioridades';
 
+/**
+ * 🧭 A ROTINA MONTADA PELO USUÁRIO (editor guiado — DF② de 2026-08-13).
+ *
+ * 🔒 Guarda **só o desenho**: quais exercícios, em que dia, em que ordem. Séries, reps,
+ * RIR, descanso, rampa e deload continuam do MOTOR — literal do autor: *"igual ao motor
+ * normal, a única diferença é que foi o usuário que fez o treino"*. Guardar o plano inteiro
+ * congelaria a pessoa fora de todo conserto futuro do motor (a lição do v3 · Bloco A:
+ * *override não é só uma segunda verdade — é segunda verdade que envelhece sozinha*).
+ *
+ * 🔑 É por isso que ela cabe em ~380 bytes (medido, 6 dias × 7 slots) contra ~18 KB do
+ * plano serializado: o que se persiste é a DECISÃO, não o resultado dela.
+ */
+export interface RotinaCustom {
+  /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
+  origem: 'usuario';
+  dias: { nome: string; exercicioIds: string[] }[];
+}
+
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
 export type ComportamentoTreino = 'ROTEAR' | 'RESTRINGIR' | 'PERMITIR';
 
@@ -53,6 +71,12 @@ export interface PerfilTreino {
   tempoPorSessaoMin: number;
   /** 🎛️ v4 · DF③ — divisão preferida. Ausente = `auto` (padrão por dias disponíveis). */
   divisaoPreferida?: DivisaoPreferida;
+  /**
+   * 🧭 Editor guiado — o desenho do usuário. Ausente = o gerador monta (comportamento de
+   * sempre, byte a byte). Presente = o montador usa ESTES exercícios e o resto do pipeline
+   * (descanso, foco, rampa, retomada, avisos) roda **sem ramo especial**.
+   */
+  rotinaCustom?: RotinaCustom;
   /**
    * Modo força (preset opt-in, v2 — cofre parametros-motor-treino §"v2 — decisões travadas",
    * DF 2026-07-08): alvo FIXO de 6 reps nos compostos com carga, progride só por carga (→ 6RM).

@@ -67,6 +67,9 @@ export function recomputarPlano(
     ...(perfil.preferencias ? { preferencias: perfil.preferencias } : {}),
     ...(perfil.foco ? { foco: perfil.foco } : {}),
     ...(perfil.divisaoPreferida ? { divisaoPreferida: perfil.divisaoPreferida } : {}),
+    // 🧭 O desenho do editor guiado entra como ENTRADA do montador — mesmo trilho dos
+    // demais campos do perfil. Ausente = o gerador monta (comportamento de sempre).
+    ...(perfil.rotinaCustom ? { rotinaCustom: perfil.rotinaCustom } : {}),
   };
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
   // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é
