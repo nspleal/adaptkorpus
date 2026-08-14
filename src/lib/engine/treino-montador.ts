@@ -579,8 +579,38 @@ export function montarRotina(
     };;
   }
 
+  /**
+   * 🔴 O CORTE É DITO (pedido-casa-dia-curto-2026-08-13). Quando o inventário da pessoa não
+   * tem exercício para preencher um slot que o template pediu, o alocador já não engole o
+   * slot — ele o CONTA, e aqui o número vira frase.
+   *
+   * 🔒 Copy educacional e honesta: diz o QUE limitou (o inventário declarado) sem prometer
+   * resultado e **sem sugerir equipamento que a pessoa não marcou** — o app não vende, e
+   * inventar item de compra seria prescrição de consumo travestida de dica.
+   */
+  const porCatalogo = diasAlocados.filter((d) => d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo');
+  if (porCatalogo.length > 0) {
+    const quais = porCatalogo.map((d) => d.nome).join(', ');
+    avisos.push(`Seu equipamento disponível limita ${porCatalogo.length === 1 ? 'este dia' : 'estes dias'}: ${quais}. Com o que você marcou no perfil, não há exercício novo para acrescentar sem repetir o que já está lá.`);
+  }
+  /**
+   * A OUTRA causa, que existia em academia sem nunca ser dita (6 das 36 combinações da
+   * grade — `Pull B` fechando em 4 de 6): não falta exercício, faltou espaço na SEMANA. Dizer
+   * "equipamento" aqui seria falso; a frase nomeia o teto, que é a regra que de fato agiu.
+   */
+  const porTeto = diasAlocados.filter((d) => d.naoPreenchidos > 0 && d.motivoCurto === 'teto');
+  if (porTeto.length > 0) {
+    const quais = porTeto.map((d) => d.nome).join(', ');
+    avisos.push(`${porTeto.length === 1 ? 'Este dia ficou' : 'Estes dias ficaram'} mais curto${porTeto.length === 1 ? '' : 's'} de propósito: ${quais}. Os grupos deste dia já alcançaram o volume semanal previsto — acrescentar mais aqui tiraria espaço da recuperação.`);
+  }
+
   const diasTreino: DiaTreino[] = diasAlocados.map((d) => ({
     nome: d.nome,
+    // Quantos slots o template pediu e NENHUM grupo pôde preencher — o número que sustenta
+    // o aviso acima. Exposto para o guard poder ancorar no corte de fato, e não em "o dia
+    // veio abaixo do orçamento" (que também acontece por reserva não honrada, inclusive em
+    // academia, e não é corte por catálogo).
+    ...(d.naoPreenchidos > 0 ? { slotsNaoPreenchidos: d.naoPreenchidos } : {}),
     slots: d.slots.map((s) => ({
       // O padrão do slot é o do EXERCÍCIO escolhido (o template agora é de grupos): tudo
       // que lê `slot.padrao` (classe de descanso, faixa de reps, ordem do foco) continua

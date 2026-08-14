@@ -145,6 +145,21 @@ export interface SlotAlocado {
 export interface DiaAlocado {
   nome: string;
   slots: SlotAlocado[];
+  /**
+   * Slots que o template PEDIU e nenhum grupo do dia pôde preencher. 🔒 Existe para o corte
+   * ser DITO — a regra do pedido-casa-dia-curto: "slot pedido não morre em silêncio".
+   */
+  naoPreenchidos: number;
+  /**
+   * POR QUE o dia ficou curto — o montador precisa disso para não mentir a causa:
+   *  · `catalogo` — nenhum grupo-alvo do dia tem exercício no inventário da pessoa (é o
+   *    caso de casa/só peso do corpo: peito/ombros/tríceps só têm `empurrar`, e a invariante
+   *    `puxar ≥ empurrar` fecha a porta). Aí a copy fala de equipamento;
+   *  · `teto` — há exercício de sobra, mas os grupos do dia já bateram o teto SEMANAL de
+   *    slots diretos (academia/avançado/6d: `Pull B` fecha em 4 porque costas e bíceps já
+   *    encheram a semana). Aí falar de equipamento seria falso.
+   */
+  motivoCurto: 'catalogo' | 'teto' | null;
 }
 
 export interface ArgsAlocacao {
@@ -247,7 +262,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
 
   const slotsDiretos = new Map<GrupoPrimario, number>();
   const contaPadrao = new Map<PadraoMovimento, number>();
-  const dias: DiaAlocado[] = templates.map((t) => ({ nome: t.nome, slots: [] }));
+  const dias: DiaAlocado[] = templates.map((t) => ({ nome: t.nome, slots: [], naoPreenchidos: 0, motivoCurto: null }));
 
   const coreSlots = () => slotsDiretos.get('core') ?? 0;
   const podeReceber = (g: GrupoPrimario): boolean => {
@@ -379,10 +394,23 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
        */
       const elegiveis = templates[d]!.grupos.filter((g) => g !== 'core' && podeReceber(g));
       const grandes = elegiveis.filter((g) => (GRUPOS_GRANDES as readonly string[]).includes(g));
-      const candidatos = grandes.length > 0 ? grandes : elegiveis;
-      // argmax do déficit; empate resolve pela ordem do template (estável).
-      candidatos.sort((a, b) => deficit(b) - deficit(a) || templates[d]!.grupos.indexOf(a) - templates[d]!.grupos.indexOf(b));
-      for (const g of candidatos) {
+      const ordenar = (lista: GrupoPrimario[]) =>
+        [...lista].sort((a, b) => deficit(b) - deficit(a) || templates[d]!.grupos.indexOf(a) - templates[d]!.grupos.indexOf(b));
+      /**
+       * 🔴 SLOT PEDIDO NÃO MORRE EM SILÊNCIO (pedido-casa-dia-curto-2026-08-13).
+       *
+       * O defeito medido em CASA: os GRANDES do dia podiam falhar todos — pool do grupo
+       * vazio (em "só peso do corpo" ombros/bíceps/antebraço não têm UM exercício) ou o
+       * `escolher` bloqueado pela trava `puxar ≥ empurrar` (o pool de puxar tem 1 item, então
+       * o empurrar trava cedo) — e o slot simplesmente sumia: `Push A` com 1 de 3 pedidos.
+       *
+       * 🔒 O conserto é a CASCATA: grandes primeiro (a banda é deles), depois os pequenos do
+       * MESMO template. Fora do template não se procura — converter um dia de Push em
+       * full-body seria inventar uma divisão que o usuário não pediu; quando nem os pequenos
+       * preenchem, o corte é CONTADO e DITO pelo montador (nunca engolido).
+       */
+      const cascata = [...ordenar(grandes), ...ordenar(elegiveis.filter((g) => !grandes.includes(g)))];
+      for (const g of cascata) {
         if (colocar(d, g, usadosPorDia[d]!)) break;
       }
     }
@@ -498,6 +526,30 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
         contaPadrao.set(f.padraoMovimento, (contaPadrao.get(f.padraoMovimento) ?? 0) + 1);
       }
     }
+  }
+
+  /**
+   * 🔴 O corte REAL do dia, medido no fim (pedido-casa-dia-curto-2026-08-13).
+   *
+   * ⚠️ Contar as RODADAS que falharam superestima e foi descartado: uma rodada por déficit
+   * pode falhar e o slot ser preenchido depois pela reserva do pequeno ou do core —
+   * academia/avançado/6d/60min tem 3 rodadas falhas em `Pull B` e ainda assim fecha o dia
+   * cheio. O que o usuário vê — e o que o montador tem direito de DIZER — é o que sobrou
+   * vazio no fim: orçamento pedido menos entregue.
+   */
+  for (let d = 0; d < dias.length; d += 1) {
+    const falta = Math.max(0, budgetPorDia - dias[d]!.slots.length);
+    dias[d]!.naoPreenchidos = falta;
+    if (falta === 0) continue;
+    /**
+     * A causa, pela MESMA elegibilidade que o alocador usa (`podeReceber` = tem pool, está
+     * abaixo do teto semanal E ainda tem déficit) — não uma regra paralela:
+     *  · algum grupo do dia AINDA QUERIA volume e mesmo assim o slot ficou vazio ⇒ o que
+     *    faltou foi exercício disponível (`catalogo`);
+     *  · nenhum grupo do dia queria mais volume ⇒ o dia fechou porque a semana já está paga
+     *    (`teto`) — foi o que a medição de 2026-08-13 achou em academia.
+     */
+    dias[d]!.motivoCurto = templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
   }
 
   return dias;

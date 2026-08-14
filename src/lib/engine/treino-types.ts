@@ -201,6 +201,13 @@ export interface DiaTreino {
   /** Rótulo do dia (ex.: "Full-body", "Upper", "Push"). */
   nome: string;
   slots: SlotExercicio[];
+  /**
+   * 🔴 Slots que o template pediu e o catálogo disponível não pôde preencher
+   * (pedido-casa-dia-curto-2026-08-13). Ausente quando o dia fechou completo. Existe para
+   * que o corte seja AUDITÁVEL, não só dito em prosa: é neste número que o guard da grade
+   * de casa ancora, e é dele que sai o aviso "seu equipamento disponível limita este dia".
+   */
+  slotsNaoPreenchidos?: number;
 }
 
 /**
