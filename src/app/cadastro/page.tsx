@@ -68,11 +68,11 @@ export default function CadastroPage() {
             <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Entre no beta do Evokorpus. É <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>grátis durante os testes</strong> — sem cartão.</p>
 
             <div style={{ ...kicker, marginBottom: 15 }}>Sua conta</div>
-            <Campo label="Nome"><input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" style={inputAuth} /></Campo>
-            <Campo label="E-mail"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={inputAuth} /></Campo>
+            <Campo label="Nome"><input autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" style={inputAuth} /></Campo>
+            <Campo label="E-mail"><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={inputAuth} /></Campo>
             <Campo label="Senha" mb={8}>
               <div style={{ position: 'relative' }}>
-                <input type={showPw ? 'text' : 'password'} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
+                <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
                 <button onClick={() => setShowPw((s) => !s)} type="button" aria-label="Mostrar senha" style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: 'rgba(234,229,219,.5)', display: 'flex' }}><svg width={18} height={18} viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth={1.8} /><circle cx={12} cy={12} r={3} stroke="currentColor" strokeWidth={1.8} /></svg></button>
               </div>
             </Campo>

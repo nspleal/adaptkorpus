@@ -92,7 +92,7 @@ export default function RedefinirPage() {
                 <h1 style={{ margin: '0 0 8px', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-.02em' }}>Esqueceu a senha?</h1>
                 <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Informe seu e-mail e enviamos um link para criar uma nova senha.</p>
                 <label style={labelAuth}>E-mail</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={{ ...inputAuth, marginBottom: 22 }} />
+                <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={{ ...inputAuth, marginBottom: 22 }} />
                 {erro && <p style={{ margin: '0 0 12px', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}
                 <button onClick={enviarLink} disabled={carregando} className="hov-btn" style={{ ...btnNeon, opacity: carregando ? 0.6 : 1 }}>{carregando ? 'Enviando…' : 'Enviar link'}</button>
                 <p style={{ textAlign: 'center', margin: '18px 0 0', fontSize: '.9rem' }}>
@@ -124,7 +124,7 @@ export default function RedefinirPage() {
                 <p style={{ margin: '0 0 22px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Escolha uma senha forte que você não usa em outro lugar.</p>
                 <label style={labelAuth}>Nova senha</label>
                 <div style={{ position: 'relative', marginBottom: 8 }}>
-                  <input type={showPw ? 'text' : 'password'} value={npw} onChange={(e) => setNpw(e.target.value)} placeholder="Mínimo 8 caracteres" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
+                  <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={npw} onChange={(e) => setNpw(e.target.value)} placeholder="Mínimo 8 caracteres" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
                   <button onClick={() => setShowPw((v) => !v)} type="button" style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: 'rgba(234,229,219,.5)', display: 'flex' }}>
                     <svg width={18} height={18} viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth={1.8} /><circle cx={12} cy={12} r={3} stroke="currentColor" strokeWidth={1.8} /></svg>
                   </button>
@@ -138,7 +138,7 @@ export default function RedefinirPage() {
                   </div>
                 )}
                 <label style={{ ...labelAuth, margin: '8px 0 7px' }}>Confirmar nova senha</label>
-                <input type={showPw ? 'text' : 'password'} value={npw2} onChange={(e) => setNpw2(e.target.value)} placeholder="Repita a senha" style={inputAuth} />
+                <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={npw2} onChange={(e) => setNpw2(e.target.value)} placeholder="Repita a senha" style={inputAuth} />
                 {mismatch && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#E5484D' }}>As senhas não coincidem.</p>}
                 {match && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#16A34A' }}>As senhas coincidem.</p>}
                 {erro && <p style={{ margin: '12px 0 0', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}

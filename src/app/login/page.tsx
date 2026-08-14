@@ -66,12 +66,12 @@ export default function LoginPage() {
             <h1 style={{ margin: '0 0 6px', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-.02em' }}>Que bom te ver de novo.</h1>
             <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.6)', fontSize: '.96rem' }}>Entre para continuar de onde parou.</p>
             <label style={labelAuth}>E-mail</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={{ ...inputAuth, marginBottom: 18 }} />
+            <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" style={{ ...inputAuth, marginBottom: 18 }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
               <label style={{ ...labelAuth, marginBottom: 0 }}>Senha</label>
               <Link href="/redefinir" style={{ fontSize: '.82rem', color: '#BDFF00', textDecoration: 'none' }}>Esqueci minha senha</Link>
             </div>
-            <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') entrar(); }} placeholder="••••••••" style={{ ...inputAuth, marginBottom: erro ? 12 : 26 }} />
+            <input type="password" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') entrar(); }} placeholder="••••••••" style={{ ...inputAuth, marginBottom: erro ? 12 : 26 }} />
             {erro && <p style={{ margin: '0 0 18px', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}
             <button onClick={entrar} disabled={carregando} className="hov-btn" style={{ ...btnNeon, opacity: carregando ? 0.6 : 1, cursor: carregando ? 'wait' : 'pointer' }}>{carregando ? 'Entrando…' : 'Entrar'}</button>
           </div>
