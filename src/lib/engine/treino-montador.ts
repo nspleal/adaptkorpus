@@ -27,6 +27,7 @@ import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco } from './trilhos';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
+import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -88,7 +89,7 @@ export interface OpcoesSemana {
  * de cardio a pessoa já registrou nesta semana, e o montador é PURO — não vê histórico.
  * Ela vive onde o histórico está (`conteudoDoDiaExcedente`, chamado pelo Painel).
  */
-function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio']): DiaCardio[] {
+function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modalidade: ModalidadeCardio = MODALIDADE_PADRAO_DIA): DiaCardio[] {
   if (quantos < 1) return [];
   // 🔒 O PISO da faixa é o alvo (`min`), e é o mesmo número que `metaCardioSemanal` usa.
   // 🔒 A MESMA função do conteúdo do dia: divide, arredonda (empate p/ cima) e aplica o
@@ -97,7 +98,7 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio']): DiaC
   return Array.from({ length: quantos }, (_, i) => ({
     nome: quantos > 1 ? `Cardio ${i + 1}` : 'Cardio',
     padrao: 'cardio' as const,
-    modalidade: MODALIDADE_PADRAO_DIA,
+    modalidade,
     minutos: minutos != null && minutos > 0 ? minutos : null,
   }));
 }
@@ -158,7 +159,7 @@ export function montarRotina(
   const diasCardioRecuperacao = Math.max(0, dias - diasForca);
 
   if (diasForca === 0) {
-    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
+    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
   }
 
   // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
@@ -667,7 +668,7 @@ export function montarRotina(
     return {
       diasForcaAgendados: diasForca,
       diasCardioRecuperacao,
-      diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio),
+      diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito),
       split,
       dias: diasTreino,
       // 🔒 B2: o ramo que agiu vai junto do plano — a tela não recalcula nem adivinha.

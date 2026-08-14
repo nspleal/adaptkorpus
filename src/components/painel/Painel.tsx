@@ -124,6 +124,8 @@ export interface PerfilResumo {
    * 🔴 O motor NUNCA adiciona técnica sozinho — o flag só torna a escolha POSSÍVEL.
    */
   tecnicasAvancadas?: boolean;
+  /** 🏃 C2 — modalidade preferida de cardio (default `caminhada` quando ausente). */
+  cardioFavorito?: ModalidadeCardio;
   /** Carimbo ISO 8601 do "Fiquei doente" (Leva 2 · Bloco 4, DF 2026-07-27) — o RECONHECIMENTO
    *  da pausa, e nada mais. 🔴 O MOTOR NUNCA LÊ ESTE CAMPO (`engine-sem-reconhecido.test.ts`):
    *  quem avisa e quem some têm o mesmo comportamento. 🔴 Motive-free por LGPD — sem motivo,

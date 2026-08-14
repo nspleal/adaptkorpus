@@ -70,6 +70,8 @@ export function recomputarPlano(
     // 🧭 O desenho do editor guiado entra como ENTRADA do montador — mesmo trilho dos
     // demais campos do perfil. Ausente = o gerador monta (comportamento de sempre).
     ...(perfil.rotinaCustom ? { rotinaCustom: perfil.rotinaCustom } : {}),
+    // 🏃 C2: a modalidade escolhida alimenta o slot do dia excedente de cardio.
+    ...(perfil.cardioFavorito ? { cardioFavorito: perfil.cardioFavorito } : {}),
   };
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
   // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é

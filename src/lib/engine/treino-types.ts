@@ -83,6 +83,11 @@ export interface PerfilTreino {
    * Só intermediário/avançado — para iniciante o flag é IGNORADO (RIR ≥ 2 intacto).
    */
   modoForca?: boolean;
+  /**
+   * 🏃 C2 — modalidade preferida de cardio (DF: a spec já previa modalidade escolhida; o
+   * campo faltava). Ausente = `MODALIDADE_PADRAO_DIA` (caminhada), o default de sempre.
+   */
+  cardioFavorito?: ModalidadeCardio;
 }
 
 // --- Mesociclo (v2 — DF 2026-07-08) -----------------------------------------

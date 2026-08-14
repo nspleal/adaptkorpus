@@ -10,6 +10,7 @@ import { diasPadrao, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/components/perfil/DiasEPreferencias';
 import { ExerciciosBanidos, GrupoEmFoco, MeusFavoritos, SeletorDivisao, ToastDesfazer } from './Favoritos';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
+import { MODALIDADES_CARDIO, ROTULO_MODALIDADE, type ModalidadeCardio } from '@/lib/engine/cardio';
 
 /**
  * 🎛️ v3 · Bloco B — os grupos que podem receber foco.
@@ -104,6 +105,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
    * tela nunca decide sozinha quem pode.
    */
   const [tecnicas, setTecnicas] = useState(inicial.tecnicasAvancadas ?? false);
+  /** 🏃 C2 — modalidade preferida de cardio. `null` ≡ ausente = caminhada (o default da spec). */
+  const [cardioFav, setCardioFav] = useState<ModalidadeCardio | null>(inicial.cardioFavorito ?? null);
   const tecnicasLiberadas = elegibilidade({
     nivel: experiencia, sessoesResistidas, comportamentoGate, regressaoAtiva, ligado: true,
   }).elegivel;
@@ -193,6 +196,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
       tecnicasAvancadas: tecnicasLiberadas ? tecnicas : false,
+      ...(cardioFav ? { cardioFavorito: cardioFav } : {}),
       // 🎛️ v4 · DF③ — `auto` não se grava: ausência JÁ significa o padrão por dias, e
       // gravar o default criaria duas grafias para o mesmo estado.
       divisaoPreferida: divisao === 'auto' ? undefined : divisao,
@@ -317,6 +321,11 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             onCompensa={setFocoCompensa}
           />
 
+          {/* 🏃 C2 — CARDIO FAVORITO. A spec de cardio já previa modalidade escolhida (default
+              caminhada; as 6 do registro) — faltava só o campo. Ele alimenta o slot do dia
+              excedente. Render INCONDICIONAL, pela mesma regra da descobribilidade. */}
+          <CardioFavorito valor={cardioFav} onValor={setCardioFav} />
+
           {/* 🎛️ v4 · DF③ — a DIVISÃO como escolha. Render INCONDICIONAL (regra da
               descobribilidade: controle atrás de condição some em silêncio). */}
           <SeletorDivisao divisao={divisao} onDivisao={setDivisao} />
@@ -393,3 +402,34 @@ function Logo({ size }: { size: number }) {
     </svg>
   );
 }
+
+/**
+ * 🏃 C2 — a modalidade preferida de cardio (DF: a spec já a previa; faltava o campo).
+ * "Sem preferência" é opção EXPLÍCITA e é o default: escolher por omissão seria decidir
+ * pela pessoa, e a caminhada é o default do motor, não uma escolha dela.
+ */
+function CardioFavorito({ valor, onValor }: { valor: ModalidadeCardio | null; onValor: (v: ModalidadeCardio | null) => void }) {
+  return (
+    <div style={{ marginTop: 26 }}>
+      <div style={{ fontSize: '.95rem', fontWeight: 700, marginBottom: 4 }}>Cardio favorito</div>
+      <p style={{ margin: '0 0 12px', fontSize: '.85rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>
+        Quando sobrar um dia sem treino de força, ele entra com esta modalidade.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button type="button" onClick={() => onValor(null)} aria-pressed={valor === null} style={pilulaCardio(valor === null)}>Sem preferência</button>
+        {MODALIDADES_CARDIO.map((m) => (
+          <button key={m} type="button" onClick={() => onValor(valor === m ? null : m)} aria-pressed={valor === m} style={pilulaCardio(valor === m)}>
+            {ROTULO_MODALIDADE[m]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const pilulaCardio = (ativo: boolean): CSSProperties => ({
+  background: ativo ? 'rgba(189,255,0,.14)' : 'none',
+  border: `1px solid ${ativo ? 'rgba(189,255,0,.5)' : 'rgba(234,229,219,.18)'}`,
+  color: ativo ? '#BDFF00' : 'rgba(234,229,219,.8)',
+  fontWeight: 600, fontSize: '.85rem', padding: '9px 14px', borderRadius: 999, cursor: 'pointer',
+});

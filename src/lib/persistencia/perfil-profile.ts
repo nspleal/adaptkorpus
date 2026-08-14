@@ -56,6 +56,7 @@ export interface PreferenciasPerfil {
    */
   preferenciasTreino?: PerfilResumo['preferencias'];
   foco?: PerfilResumo['foco'];
+  cardioFavorito?: PerfilResumo['cardioFavorito'];
   tecnicasAvancadas?: PerfilResumo['tecnicasAvancadas'];
   orcamento?: PerfilResumo['orcamento'];
   divisaoPreferida?: PerfilResumo['divisaoPreferida'];
@@ -118,6 +119,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       ...(p.preferencias != null ? { preferenciasTreino: p.preferencias } : {}),
       ...(p.foco != null ? { foco: p.foco } : {}),
       ...(p.tecnicasAvancadas != null ? { tecnicasAvancadas: p.tecnicasAvancadas } : {}),
+      ...(p.cardioFavorito != null ? { cardioFavorito: p.cardioFavorito } : {}),
       ...(p.orcamento != null ? { orcamento: p.orcamento } : {}),
       ...(p.divisaoPreferida != null ? { divisaoPreferida: p.divisaoPreferida } : {}),
       ...(p.rotinaCustom != null ? { rotinaCustom: p.rotinaCustom } : {}),
@@ -181,6 +183,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     ...(pref.preferenciasTreino != null ? { preferencias: pref.preferenciasTreino } : {}),
     ...(pref.foco != null ? { foco: pref.foco } : {}),
     ...(pref.tecnicasAvancadas != null ? { tecnicasAvancadas: pref.tecnicasAvancadas } : {}),
+    ...(pref.cardioFavorito != null ? { cardioFavorito: pref.cardioFavorito } : {}),
     ...(pref.orcamento != null ? { orcamento: pref.orcamento } : {}),
     ...(pref.divisaoPreferida != null ? { divisaoPreferida: pref.divisaoPreferida } : {}),
     ...(pref.rotinaCustom != null ? { rotinaCustom: pref.rotinaCustom } : {}),
