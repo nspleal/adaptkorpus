@@ -1,5 +1,9 @@
 # Ficha de handoff — Motor de treino v2 (mesociclo + autorregulação)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 **Data:** 2026-07-08 · **Branch:** `claude/evokorpus-app-dev-9in0hs` · **Gate:** verde
 (typecheck · lint · **366 testes** · build). Fonte: cofre
 `wiki/outputs/handoff-motor-treino-v2-2026-07-08.md` + `parametros-motor-treino-evokorpus`

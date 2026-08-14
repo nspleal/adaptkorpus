@@ -1,5 +1,9 @@
 # Segurança & LGPD — postura do App Evokorpus
 
+> 📌 **DOCUMENTO VIVO** — referenciado por `CLAUDE.md` (princípio 5), `next.config.mjs` e `src/lib/session.ts`. Mantenha-o atualizado.
+> A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**
+> (repo `obsidian`, ver `CLAUDE.md`); aqui mora o que é específico deste repositório.
+
 Dado de saúde é **dado pessoal sensível** (LGPD, art. 11). A segurança é tratada como
 requisito de primeira classe, **por desenho** — não como camada posterior.
 

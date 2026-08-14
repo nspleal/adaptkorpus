@@ -276,4 +276,3 @@ const btnIcone: CSSProperties = {
 };
 
 /** Só para o teste de tipo do grupo — mantém o import de GrupoPrimario honesto. */
-export type GrupoDoPlacar = GrupoPrimario;

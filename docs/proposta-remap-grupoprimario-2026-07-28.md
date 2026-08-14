@@ -1,5 +1,9 @@
 # Proposta — remapeamento de `grupoPrimario` para 12 valores (Leva 2.1 · Bloco B)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > ✅ **RATIFICADO PELO COFRE E APLICADO em 2026-07-28.** `e97 → costas` · `e129 → gluteos` ·
 > `pernas` dissolvido — tudo como proposto.
 > ⚠️ **Uma exceção decidida NA SESSÃO DE CÓDIGO, não pelo cofre:** `e151` (Patinador) saiu de

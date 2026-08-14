@@ -1,5 +1,9 @@
 # Ficha de handoff — Leva 1B (relógio do mesociclo + aba Dieta no celular)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 **Data:** 2026-07-26 · **Branch:** `claude/evokorpus-app-dev-9in0hs` · **Gate:** verde
 (typecheck · lint · **396 testes** · build) + medição Playwright a 390/360 px.
 Fonte: cofre `outputs/plano-pos-feedback-beta-2026-07-26` §Complemento (Leva 1B) +

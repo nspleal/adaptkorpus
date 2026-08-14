@@ -1,5 +1,9 @@
 # Handoff — V7.2: Registro manual de treino + Chama dos 4 marcos
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `07c67dc`. Fontes: os dois pacotes do
 > Claude Design (`design_handoff_registro_e_contador_treino` + `design_handoff_chama_marcos`).

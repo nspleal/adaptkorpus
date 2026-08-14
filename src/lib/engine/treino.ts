@@ -202,11 +202,6 @@ export function progredirExercicio(
   return { acao: 'segura (mira fechar a faixa)', proximo: { ...estado, dificeisSeguidos: seguidos } };
 }
 
-// Guarda defensiva: o piso absoluto de reps (5) nunca é cruzado com carga.
-// A progressão acima reseta sempre a `faixa.min` (≥ 6), então isto é só documentação/asserção.
-export function repsRespeitaPisoAbsoluto(reps: number): boolean {
-  return reps >= PISO_ABSOLUTO_REPS;
-}
 
 /** Evento de treino: o feedback do exercício naquela sessão + a maior carga logada (se houve). */
 export interface EventoTreino {

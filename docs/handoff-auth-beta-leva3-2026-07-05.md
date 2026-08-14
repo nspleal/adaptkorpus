@@ -1,5 +1,9 @@
 # Handoff — Leva 3 (auth/beta): fundação de auth + gating + migration 0006
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 Data: 2026-07-05 · Branch: `claude/evokorpus-app-dev-9in0hs` · **Nada no cofre.**
 
 ## 0. ⚠️ Bloqueio de rede (impacta a verificação ao vivo)

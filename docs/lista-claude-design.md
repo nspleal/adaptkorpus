@@ -1,5 +1,9 @@
 # Lista para o Claude Design — 7 peças que faltam (não criei nada sem arte)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > Conforme combinado: estas peças precisam de **página/layout novo**, então **não implementei
 > nada visual** — você produz no Claude Design e me devolve o handoff estético (`.dc.html`),
 > que eu porto fielmente como nos V1–V5. Para cada peça: o que é, o que precisa ter, e as

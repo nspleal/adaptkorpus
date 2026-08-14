@@ -36,9 +36,13 @@ export const GRUPOS_SO_INDIRETO: readonly GrupoPrimario[] = ['lombar', 'antebrac
 /** Piso direto dos pequenos (DF②: "1–2 exercícios/semana") e teto que o acompanha. */
 export const PEQUENOS_PISO_DIRETO = 1;
 export const PEQUENOS_TETO_DIRETO = 2;
-/** Nas prioridades o usuário COMPROU o dia de braços (ex. do autor: 3 bíceps + 3 tríceps,
- *  além do dia de costas+bíceps) — o teto semanal acompanha a escolha. */
-/** Na divisão por prioridades o dia de braços do autor pede 2–3 por grupo (aceite B). */
+/**
+ * Nas prioridades o usuário COMPROU o dia de braços — o teto SEMANAL acompanha a escolha.
+ * O 5 é a soma do exemplo do autor: 3 bíceps no dia de braços + 2 no dia de costas+bíceps
+ * (`PRIORIDADES_4` lista bíceps em dois dias). ⚠️ Havia aqui um segundo doc-comment dizendo
+ * "2–3 por grupo" — número de UM dia, que não explica o teto da semana e contradizia este;
+ * saiu na auditoria de 2026-08-14 por não bater com o valor implementado.
+ */
 export const PEQUENOS_TETO_DIRETO_PRIORIDADES = 5;
 
 /**
@@ -351,7 +355,10 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     if (!temPool(g)) continue;
     const candidatosDia = diasComGrupoNoTemplate(g)
       .map((d) => ({ d, ocupadas: (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0) }))
-      .filter(({ ocupadas }) => budgetPorDia - ocupadas - 1 >= RESERVA_MINIMO_GRANDES)
+      // 🔒 O `- PEQUENOS_PISO_DIRETO` é o piso da DF② entrando na conta pelo NOME. Era um
+      // `- 1` cravado, com a constante da spec órfã ao lado: dois lugares para o mesmo
+      // número, e nada obrigando os dois a concordarem (auditoria 2026-08-14).
+      .filter(({ ocupadas }) => budgetPorDia - ocupadas - PEQUENOS_PISO_DIRETO >= RESERVA_MINIMO_GRANDES)
       .sort((a, b) => a.ocupadas - b.ocupadas || a.d - b.d);
     const alvo = candidatosDia[0];
     if (!alvo) continue;

@@ -1,5 +1,9 @@
 # Handoff — integrar o Motor de Exercícios no app (escadas + validação vs dados reais)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre** — escritor único é
 > a sessão local. Decisões novas voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`.
 > Fonte das travas: cofre `fontes/ranking-exercicios-evokorpus` §Escadas (DF 2026-07-03) +

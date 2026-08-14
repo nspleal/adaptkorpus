@@ -1,5 +1,9 @@
 # Arquitetura — App Evokorpus
 
+> 📌 **DOCUMENTO VIVO** — referenciado pelo `README.md`. Mantenha-o atualizado.
+> A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**
+> (repo `obsidian`, ver `CLAUDE.md`); aqui mora o que é específico deste repositório.
+
 ## Visão
 
 Frontend Next.js (PWA) + motor determinístico em TypeScript puro + Supabase (dados/auth) +

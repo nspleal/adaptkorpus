@@ -1,5 +1,9 @@
 # Handoff — Porte do front-end (protótipo V2) · Evokorpus app
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Para o cofre.** Resumo do que foi implementado no repo do app a partir do protótipo
 > estético **V2** (`V2_front_end_evoK.zip` → `design_handoff_evokorpus_completo/Evokorpus App.dc.html`).
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Tudo é **UI ligada ao motor determinístico real**

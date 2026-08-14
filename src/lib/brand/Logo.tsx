@@ -1,6 +1,13 @@
 /**
  * Símbolo "K Ascendente" e "K em Selo" — Evokorpus.
  *
+ * 🔒 ESTE ARQUIVO NÃO É CÓDIGO MORTO — é a FONTE CANÔNICA da marca (ratificado na auditoria
+ * de 2026-08-14). Nenhum componente o importa hoje: os ícones do app são PNG/SVG já gerados
+ * em `public/icons`. Ele fica porque a política do cofre é "nunca redesenhar de memória"
+ * (CLAUDE.md → Fidelidade visual): quando um ícone, favicon ou peça precisar ser regerado,
+ * a geometria sai DAQUI, não de uma descrição em prosa. Um varredor de código morto vai
+ * apontá-lo de novo — a resposta é esta linha, não o `rm`.
+ *
  * ⚠️ FIDELIDADE VISUAL (prioridade travada no cofre). A geometria abaixo é a
  * CONSTRUÇÃO CANÔNICA extraída de conceitos/identidade-de-marca-evokorpus
  * ("Construção canônica do símbolo (SVG)"). Não redesenhar de memória.

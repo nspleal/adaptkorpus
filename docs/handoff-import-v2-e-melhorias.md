@@ -1,5 +1,9 @@
 # Handoff — Import V2 (167+96) + melhorias adotadas no app
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `395b534` (dados V2) ·
 > `b159d14` (suporte real) · `789aedd` (offline + analytics).

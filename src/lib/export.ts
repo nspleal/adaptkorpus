@@ -17,7 +17,3 @@ export function baixarArquivo(nome: string, conteudo: string, mime = 'applicatio
   URL.revokeObjectURL(url);
 }
 
-/** Serializa um objeto de "meus dados" como JSON legível. */
-export function comoJson(dados: unknown): string {
-  return JSON.stringify(dados, null, 2);
-}

@@ -52,12 +52,6 @@ export function somaCustoPrato(receita: Recipe): number {
   return soma;
 }
 
-/** Σ de custo de um CONJUNTO de pratos — o valor que entra na ordenação do dia. */
-export function somaCustoConjunto(receitas: readonly Recipe[]): number {
-  let soma = 0;
-  for (const r of receitas) soma += somaCustoPrato(r);
-  return soma;
-}
 
 /**
  * Sequência de tetos a tentar, do preferido até 3 — o RELAXAMENTO POR NÍVEL.
@@ -81,9 +75,3 @@ export function custoOrdena(orcamento: Orcamento | undefined | null): boolean {
   return orcamento === 'baixo' || orcamento === 'medio';
 }
 
-/** Alimentos de um prato acima de um teto — usado só por diagnóstico/teste, nunca por filtro. */
-export function ingredientesAcimaDoTeto(receita: Recipe, teto: CustoRelativo, foodsById?: ReadonlyMap<string, Food>): string[] {
-  return receita.itens
-    .filter((it) => (CUSTO_RELATIVO[it.alimentoId] ?? 0) > teto)
-    .map((it) => foodsById?.get(it.alimentoId)?.nome ?? it.alimentoId);
-}

@@ -1,5 +1,9 @@
 # Handoff — Modelo de equipamento "2 níveis" implementado (Casa+checklist / Academia)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**; decisões/curadoria
 > voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`, commit `6923fbc`.
 > Fonte: DF 2026-07-04 (cofre log "modelo de equipamento: 2 níveis"). Determinismo, sem "IA",

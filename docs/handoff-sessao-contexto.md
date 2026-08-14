@@ -1,5 +1,9 @@
 # Handoff de contexto — App Evokorpus (front-end V1 + motor)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Para a próxima sessão:** lendo **só este arquivo + o git desta branch**, você consegue
 > continuar. Atualizado em 2026-06-30. Complementa `docs/handoff-cofre-2026-06-29.md`
 > (estado do motor) e `docs/api.md` (contrato das rotas).

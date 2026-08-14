@@ -1,5 +1,9 @@
 # Handoff — Porte de conteúdo/decisão do cofre → código (V6.3)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `ee85762`.
 > Portei os 5 itens que já estavam prontos no cofre. Fiel aos estilos/tokens; travas honradas.

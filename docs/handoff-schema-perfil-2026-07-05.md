@@ -1,5 +1,9 @@
 # Handoff — Schema de persistência do perfil (migration 0005 + mapeador), sem externo
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 Data: 2026-07-05 · Branch: `claude/evokorpus-app-dev-9in0hs` · **Nada no cofre.**
 
 Realiza as 2 decisões de engenharia que o autor travou (as lacunas de schema achadas ao mapear a

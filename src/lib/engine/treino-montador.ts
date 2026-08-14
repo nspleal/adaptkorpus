@@ -576,7 +576,7 @@ export function montarRotina(
       ...(semanaCiclo
         ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
         : {}),
-    };;
+    };
   }
 
   /**

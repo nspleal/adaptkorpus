@@ -1,5 +1,9 @@
 # Relatório — Auditoria de pontas soltas do front-end + integrações feitas
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre (obsidian).** Esta sessão (app, nuvem) **não escreve no cofre**.
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Commit desta entrega: `cfb750c`.
 > Contexto: varredura completa do front-end procurando botões/abas/links "soltos"

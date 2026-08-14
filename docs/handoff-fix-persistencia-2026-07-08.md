@@ -1,5 +1,9 @@
 # Ficha de handoff — Fix BLOQUEADOR: persistência resetava a cada visita + avatar
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 **Data:** 2026-07-08 · **Branch:** `claude/evokorpus-app-dev-9in0hs` (junto do motor v2 —
 promover à `main` juntos) · **Gate:** verde (typecheck · lint · **376 testes** · build) +
 smoke Playwright (registrar treino/peso → reload → persiste). Relatório de origem no cofre:

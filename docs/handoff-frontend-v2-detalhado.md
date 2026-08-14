@@ -1,5 +1,9 @@
 # Handoff detalhado — Porte do front-end (protótipo V2) · Evokorpus app
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Documento de insumo para o cofre (obsidian).** Esta sessão (Claude Code na nuvem, repo do
 > **app**) NÃO escreve no cofre — escritor único é a sessão local. Este arquivo reúne tudo que
 > foi feito, com detalhe suficiente para você arquivar como página(s) de fonte/decisão.

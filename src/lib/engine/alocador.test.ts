@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
-import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './alocador';
+import { creditoPonderadoDaSemana, orcamentoSlotsDoDia, GRUPOS_PEQUENOS_PISO, PEQUENOS_PISO_DIRETO } from './alocador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, SemanaCiclo } from './treino-types';
@@ -121,5 +121,39 @@ describe('🔒 a inversão morre: slots iniciante ≤ intermediário ≤ avança
         expect(m, `${dias}d/${tempo}min: intermediário ${m} > avançado ${a}`).toBeLessThanOrEqual(a);
       }
     }
+  });
+});
+
+/**
+ * 🔒 O PISO DIRETO DOS PEQUENOS (DF② — "1–2 exercícios/semana"), re-ancorado na auditoria
+ * de 2026-08-14. `PEQUENOS_PISO_DIRETO` existia como constante da spec e NINGUÉM a lia: o
+ * piso vivia como um `- 1` cravado no passo 1b. Duas cópias do mesmo número, livres para
+ * divergir — e nenhum teste exercitando o piso, então a divergência seria muda.
+ *
+ * O aceite abaixo falha contra o alocador VELHO (que não tinha reserva de pequenos: bíceps,
+ * tríceps e panturrilha ficavam a zero direto) e falha de novo se alguém baixar a reserva.
+ */
+describe('🔒 DF② — bíceps, tríceps e panturrilha têm piso DIRETO na semana', () => {
+  it('com orçamento que comporta, cada pequeno recebe ao menos PEQUENOS_PISO_DIRETO slot', () => {
+    for (const dias of [3, 4, 5, 6]) {
+      const r = plano(perfil({ diasDisponiveis: dias, tempoPorSessaoMin: 60 }));
+      const diretos = (g: string) => r.dias.flatMap((d) => d.slots).filter((s) => s.exercicio.grupoPrimario === g).length;
+      for (const g of GRUPOS_PEQUENOS_PISO) {
+        expect(diretos(g), `${dias}d/60min: ${g} com ${diretos(g)} slot(s) diretos`).toBeGreaterThanOrEqual(PEQUENOS_PISO_DIRETO);
+      }
+    }
+  });
+
+  /**
+   * PAR DISCRIMINANTE do piso: ele CEDE ao tempo, nunca o contrário (a reserva só existe
+   * onde sobram slots para os grandes). Sem este par, "piso sempre garantido" passaria — e
+   * seria uma regra diferente da que o cofre travou.
+   */
+  it('em tempo curto o piso cede: o dia de 20 min não sacrifica os grandes pelo acessório', () => {
+    const r = plano(perfil({ diasDisponiveis: 3, tempoPorSessaoMin: 20 }));
+    const slots = r.dias.flatMap((d) => d.slots);
+    expect(slots.length).toBeGreaterThan(0);
+    const pequenos = slots.filter((s) => (GRUPOS_PEQUENOS_PISO as readonly string[]).includes(s.exercicio.grupoPrimario ?? '')).length;
+    expect(pequenos, 'com 3 slots/dia o acessório não pode dominar a sessão').toBeLessThan(slots.length);
   });
 });

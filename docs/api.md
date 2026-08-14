@@ -1,5 +1,9 @@
 # API do backend — Evokorpus (rudimentar, Fase 0/1)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 Superfícies HTTP **finas** sobre o motor determinístico (`src/lib/engine`). Cada rota:
 **valida a entrada com zod (defesa na borda) → chama uma função pura do motor com a base
 curada do seed → devolve JSON**. Sem IA, sem rede, sem relógio no caminho — mesma entrada,

@@ -396,4 +396,3 @@ function BotaoTracejado({ onClick, children }: { onClick: () => void; children: 
   );
 }
 
-export const estiloOculto: CSSProperties = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' };

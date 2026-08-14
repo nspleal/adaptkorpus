@@ -1,5 +1,9 @@
 # Handoff — Lote de DFs 2026-07-04 implementado (V8 completo + substituição fiel + menores)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre** — escritor único é a
 > sessão local; decisões novas voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`.
 > Specs lidas do cofre em `9d57f39`: parametros-motor-treino (DF #11/#12/#13 + §Escada de

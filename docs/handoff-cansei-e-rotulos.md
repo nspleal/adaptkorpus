@@ -1,5 +1,9 @@
 # Handoff — "Cansei deste prato" (descanso de 21 dias) + export de rótulos
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
 > Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `91a9078`.
 > Implementa as decisões `## [2026-07-01] decision | App — "Cansei deste prato" (3 semanas) +

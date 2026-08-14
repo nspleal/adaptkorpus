@@ -217,11 +217,6 @@ export function rotuloAcessivelLinha(args: {
   return args.marca == null ? base : `${base}, referência ${args.marca} vezes`;
 }
 
-/** Região de cada grupo (o `<h3>` de seção e o modelo do §7 do handoff). */
-export const REGIAO_DE: Record<string, string> = Object.fromEntries(
-  REGIOES.flatMap((r) => r.grupos.map((g) => [g, r.titulo.toLowerCase()])),
-);
-
 const SIGLA_DOW = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'] as const;
 
 /** Quantos dias da semana corrente já passaram (1 = segunda … 7 = domingo). */

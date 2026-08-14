@@ -1,5 +1,9 @@
 # Situação — Pacotes de design V8 (muito-fácil/calibração · favoritos · escada)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > ⚠️ **SUPERSEDED (2026-07-05).** Documento histórico. Os bloqueadores **B1/B2/B3** listados aqui como
 > abertos **já foram implementados**: a calibração é gravada como evento `tipo:'calibracao'` no
 > histórico (`src/lib/treino-historico.ts`), a adoção de degrau existe ("Assumir este degrau" +

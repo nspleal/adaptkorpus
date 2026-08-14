@@ -22,9 +22,6 @@ export function historicoApp(): HistoricoApp {
   return instancia;
 }
 
-/** 🧪 Só para teste: descarta a instância de módulo. */
-export function _resetHistoricoApp(): void { instancia = null; }
-
 /**
  * Liga o `popstate` à pilha. Montado UMA vez, no painel.
  *

@@ -1,5 +1,9 @@
 # Handoff — Rodada de faxina (4 itens ratificados)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 Data: 2026-07-05 · Branch: `claude/evokorpus-app-dev-9in0hs` · Sem dependência externa. **Nada no cofre.**
 
 Os 4 itens vieram travados (DF 2026-07-04/05). Verificação: **#1 e #4 já estavam implementados e

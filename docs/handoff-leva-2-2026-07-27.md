@@ -1,5 +1,9 @@
 # Ficha de handoff — LEVA 2 (2026-07-27)
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > Para a sessão LOCAL arquivar no cofre. **Nada foi escrito no cofre por esta sessão**
 > (escritor único). Branch `claude/evokorpus-app-dev-9in0hs`, 4 commits, **não promovido**.
 

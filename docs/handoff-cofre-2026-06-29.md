@@ -11,6 +11,10 @@ status: active
 
 # App Evokorpus — estado de desenvolvimento e correções
 
+> ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
+> **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
+> momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
+
 > **Origem:** gerado pela sessão de desenvolvimento do **código** (repo `evokorpus`, branch
 > `claude/evokorpus-app-dev-9in0hs`) para você integrar ao cofre. Esta sessão **lê** o cofre
 > mas **não escreve** nele (regra de escritor único). Todos os números travados aqui vêm das

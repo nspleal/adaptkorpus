@@ -1,5 +1,9 @@
 # Como acessar, rodar e publicar o app
 
+> 📌 **DOCUMENTO VIVO** — referenciado pelo `README.md` (como configurar o Supabase). Mantenha-o atualizado.
+> A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**
+> (repo `obsidian`, ver `CLAUDE.md`); aqui mora o que é específico deste repositório.
+
 O código está no GitHub (`nspleal/evokorpus`), na branch de desenvolvimento
 **`claude/evokorpus-app-dev-9in0hs`**.
 
