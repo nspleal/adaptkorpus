@@ -178,7 +178,7 @@ function LinhaSessao({ r, leve }: { r: RegistroCardioDatado; leve: boolean }) {
 
 /* ═════════════════ A seção da semana ═════════════════ */
 
-export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin, objetivo, onRegistrar, prescritoMin }: {
+export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin, objetivo, onRegistrar, prescritoMin, diasDeForca = 0 }: {
   registros: readonly RegistroCardioDatado[];
   /** `null` = usuário roteado (registra, mas não recebe meta). */
   meta: MetaCardio | null;
@@ -188,6 +188,8 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
    * Ausente = sem dia de cardio emitido → cai na meta, como antes.
    */
   prescritoMin?: number;
+  /** 🔒 C3 — dias de FORÇA agendados. Com eles ocupando toda a agenda, não sobra dia de cardio. */
+  diasDeForca?: number;
   /** Chip da rampa, quando ativa — o MESMO das telas de treino (é o mesmo movimento). */
   retomada?: { semana: number; totalSemanas: number } | null;
   hojeISO: string;
@@ -230,9 +232,18 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
               </span>
               <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.45)' }}>{rotuloObjetivo}</span>
             </div>
-            {meta.tipo === 'sessoes'
-              ? <BlocosSessoes feitas={resumo.sessoesNaMeta} meta={meta} />
-              : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} prescrito={prescritoMin} />}
+            {/* 🔒 C3 — SEM DIA EXCEDENTE, a tela DESCREVE o arranjo (DF do autor, 2026-08-14).
+                Quando todos os dias oferecidos viraram treino de força e o objetivo ainda
+                prescreve cardio, o plano não deu dia nenhum de cardio — e o denominador caía
+                na META (150), fazendo o cartão dizer "0 de 150 min no seu plano". É a mesma
+                classe do defeito de 2026-08-01: **copy verdadeira que vira dívida do app
+                sobre dias que ele não deu**. Aqui não há o que medir contra: o app diz o
+                arranjo e deixa o registro à mão. Sem "Faltam X", sem tom de falha. */}
+            {(!prescritoMin || prescritoMin <= 0) && meta.tipo !== 'sessoes' && diasDeForca > 0
+              ? <SemDiaDeCardio diasDeForca={diasDeForca} />
+              : meta.tipo === 'sessoes'
+                ? <BlocosSessoes feitas={resumo.sessoesNaMeta} meta={meta} />
+                : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} prescrito={prescritoMin} />}
             {retomada && (
               <p style={{ ...apoio, margin: '12px 0 0' }}>
                 Sua meta está menor porque você está voltando. Ela sobe junto com o treino e volta ao normal quando a retomada terminar.
@@ -454,5 +465,25 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalida
 
       <button type="button" onClick={salvar} className="hov-btn" style={{ width: '100%', background: NEON, color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer', minHeight: 44 }}>{embutido ? 'Salvar e continuar' : 'Salvar registro'}</button>
     </div>
+  );
+}
+
+
+/**
+ * 🔒 C3 — o arranjo DESCRITO, quando não sobrou dia para o cardio (DF 2026-08-14).
+ *
+ * 🔴 O que esta tela NÃO faz, e é o ponto: não prescreve cardio em dia que a pessoa não
+ * ofereceu, não enfia cardio na sessão de força, não conta quanto "falta". A ausência de dia
+ * é um ARRANJO que ela escolheu ao dizer quantos dias tem — descrevê-lo é honesto; cobrá-lo
+ * seria o app cobrando o que ele mesmo não deu ("ausência não fala").
+ */
+function SemDiaDeCardio({ diasDeForca }: { diasDeForca: number }) {
+  return (
+    <p style={{ margin: 0, fontSize: '.92rem', lineHeight: 1.6, color: 'rgba(234,229,219,.78)' }}>
+      {diasDeForca === 1
+        ? 'Seu único dia está ocupado com treino de força'
+        : `Seus ${diasDeForca} dias estão ocupados com treino de força`}
+      {' — o cardio fica por sua conta esta semana. Se fizer, registre aqui embaixo: entra no seu histórico do mesmo jeito.'}
+    </p>
   );
 }

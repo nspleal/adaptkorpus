@@ -931,6 +931,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // 🔒 O denominador do cartão é o que o PLANO prescreve (DF 2026-08-01) — soma dos dias
     // de cardio emitidos pelo motor. Sem dia emitido, `undefined`: o cartão cai na meta.
     prescritoMin: (treino.rotina?.diasCardio ?? []).reduce((n, d) => n + (d.minutos ?? 0), 0) || undefined,
+    // 🔒 C3: com todos os dias oferecidos virando força, não sobra dia de cardio — e o cartão
+    // precisa DESCREVER esse arranjo em vez de cobrar uma meta que o plano não prescreveu.
+    diasDeForca: treino.rotina?.diasForcaAgendados ?? 0,
   };
   /**
    * 🔒 DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃). O motor conta esses dias desde
