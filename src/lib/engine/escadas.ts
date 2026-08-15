@@ -31,7 +31,15 @@ export const ESCADAS_DIFICULDADE: Readonly<Record<string, readonly Degrau[]>> = 
   empurrarHorizontal: [['e157'], ['e156'], ['e1'], ['e113'], ['e2'], ['e100']],
   empurrarVertical: [['e114']], // topo em peso corporal; acima → desenvolvimento COM carga
   agachar: [['e3'], ['e16', 'e160', 'e17'], ['e78'], ['e145']],
-  puxar: [['e116'], ['e22'], ['e21']],
+  // 🔒 DF do autor 2026-08-15 — a escada de puxar ganhou os degraus do meio que faltavam.
+  // Antes: e116 → e22 → e21, um salto de "remada na mesa" direto para "barra fixa", que em
+  // casa-sem simplesmente não tinha continuação. Agora a rampa de peso corporal é inteira,
+  // e o ramo da barra continua no fim: e165 ⟶ (com barra_fixa) e22 → e21.
+  // O ramo NÃO precisa de código: `filtrarDegrau` já devolve `null` quando o degrau inteiro
+  // é indisponível ("não pula degrau"), então em casa-sem o topo é e165 e com barra o
+  // caminho segue. 📌 e167/e168 ficam FORA da malha por decisão — são laterais do e116
+  // (mesma dificuldade), não degraus.
+  puxar: [['e116'], ['e166'], ['e164'], ['e165'], ['e22'], ['e21']],
   dobradicaGluteo: [['e57'], ['e58', 'e59'], ['e161']],
   dobradicaPosterior: [['e86'], ['e83']],
   coreFlexaoTronco: [['e4'], ['e149'], ['e85'], ['e115'], ['e88']],

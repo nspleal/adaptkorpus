@@ -162,10 +162,19 @@ describe('puxar × casa sem equipamento — a troca preserva o movimento', () =>
 });
 
 describe('escadas: o hint respeita o CHECKLIST ("barra fixa exige barra_fixa marcada")', () => {
-  it('e116 → e22 só com barra_fixa marcada', () => {
-    expect(sugerirProximaVariacao('e116', EXERCISES, 'casa', [])).toBeNull();
-    expect(sugerirProximaVariacao('e116', EXERCISES, 'casa', ['barra_fixa'])).toEqual(['e22']);
-    expect(sugerirProximaVariacao('e116', EXERCISES, 'casa', ['halteres'])).toBeNull();
+  // 🔒 2026-08-15: a REGRA é "o degrau que exige barra só vira hint com barra marcada", e
+  // ela não mudou. Mudou QUEM está na beira da travessia: com os degraus novos de peso
+  // corporal (`e166`/`e164`/`e165`), quem faz fronteira com o `e22` é o **e165**, não mais o
+  // `e116`. Ancorar no `e116` seria ancorar no arranjo de ontem; a fronteira é o critério.
+  it('e165 → e22 só com barra_fixa marcada (o degrau na beira da travessia)', () => {
+    expect(sugerirProximaVariacao('e165', EXERCISES, 'casa', [])).toBeNull();
+    expect(sugerirProximaVariacao('e165', EXERCISES, 'casa', ['barra_fixa'])).toEqual(['e22']);
+    expect(sugerirProximaVariacao('e165', EXERCISES, 'casa', ['halteres'])).toBeNull();
+  });
+
+  /** E o começo da escada não depende de equipamento nenhum — a rampa de casa-sem é inteira. */
+  it('e116 → e166 sem marcar nada: o ramo de peso corporal não pede implemento', () => {
+    expect(sugerirProximaVariacao('e116', EXERCISES, 'casa', [])).toEqual(['e166']);
   });
 
   it('e146 → e8 Roda abdominal só com roda_abdominal marcada', () => {
@@ -174,7 +183,9 @@ describe('escadas: o hint respeita o CHECKLIST ("barra fixa exige barra_fixa mar
   });
 
   it('retrocompat: chamadas sem checklist mantêm o comportamento antigo', () => {
-    expect(sugerirProximaVariacao('e116', EXERCISES, 'nenhum')).toBeNull();
-    expect(sugerirProximaVariacao('e116', EXERCISES, 'casa')).toEqual(['e22']);
+    // A regra da retrocompat: sem checklist, `casa` = casa LEGADA (acesso ao casa_com);
+    // `nenhum` = só peso corporal. Medida na travessia, que é onde ela significa algo.
+    expect(sugerirProximaVariacao('e165', EXERCISES, 'nenhum')).toBeNull();
+    expect(sugerirProximaVariacao('e165', EXERCISES, 'casa')).toEqual(['e22']);
   });
 });

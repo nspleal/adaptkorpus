@@ -63,11 +63,22 @@ describe('progressoDosExercicios (deriva o alvo do histórico)', () => {
     expect(prog.e7!.proximaVariacao).toEqual({ id: 'e146', nome: 'Prancha com toque no ombro' });
   });
 
-  it('escada respeita equipamento: e116 → chin-up (barra) some p/ casa-sem', () => {
+  // 🔒 2026-08-15: a regra é "o hint some quando o degrau exige equipamento que o usuário
+  // não tem" — medida no degrau que HOJE faz fronteira com a barra (`e165`). O `e116`
+  // deixou de servir de âncora: com a escada nova ele progride dentro do peso corporal.
+  it('escada respeita equipamento: e165 → chin-up (barra) some p/ casa-sem', () => {
+    const hist = [sessao('2026-07-01', [{ id: 'e165', fb: 'na_medida' }])];
+    const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
+    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'nenhum').e165!.proximaVariacao).toBeNull();
+    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'casa').e165!.proximaVariacao).toEqual({ id: 'e22', nome: 'Barra fixa supinada (chin-up)' });
+  });
+
+  /** E o hint de casa-sem existe de verdade agora: o e116 progride sem implemento nenhum. */
+  it('casa-sem TEM progressão de puxar: e116 → e166 (a rampa que a leva e164–e168 abriu)', () => {
     const hist = [sessao('2026-07-01', [{ id: 'e116', fb: 'na_medida' }])];
     const resolver = (id: string) => EXERCISES.find((e) => e.id === id);
-    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'nenhum').e116!.proximaVariacao).toBeNull();
-    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'casa').e116!.proximaVariacao).toEqual({ id: 'e22', nome: 'Barra fixa supinada (chin-up)' });
+    expect(progressoDosExercicios(hist, p, resolver, EXERCISES, 'nenhum').e116!.proximaVariacao)
+      .toEqual({ id: 'e166', nome: 'Remada invertida com cabo de vassoura' });
   });
 
   it('sem exercises/equipamento → proximaVariacao ausente (retrocompat)', () => {
