@@ -71,9 +71,25 @@ export function exercicioDisponivel(
  * leitura crua), **em silêncio**. Por isso são duas funções, a segunda derivada da primeira.
  */
 
-/** Tem carga externa? A leitura crua do equipamento — sem olhar a unidade de repetição. */
+/**
+ * "Peso corporal" pura — sozinha OU com uma ANOTAÇÃO de setup entre parênteses
+ * (`Peso corporal (mesa firme)`, `(2 cadeiras firmes)`, `(cabo de vassoura)`). O parêntese
+ * descreve COMO montar o exercício, não carga externa — não se progride em quilos numa
+ * remada na mesa; progride-se por variação (a escada) ou reps.
+ * 🔴 NÃO cobre `Peso corporal / Halteres` (a barra é ALTERNATIVA com carga — `e17`/`e152`):
+ * esses aceitam quilo de verdade e continuam `temCarga = true`.
+ */
+const RE_PESO_CORPORAL = /^Peso corporal( \(.*\))?$/;
+
+/**
+ * Tem carga externa? A leitura crua do equipamento — sem olhar a unidade de repetição.
+ * 🔒 Relação ESTRUTURAL, não igualdade (DF do autor 2026-08-15): a igualdade
+ * `!== 'Peso corporal'` dava falso-positivo para `Peso corporal (mesa firme)` e punha 7
+ * exercícios de puro peso corporal em `modo='carga'` — o app oferecia +peso onde não há
+ * peso. Ver guard `temCarga com anotação`.
+ */
 export function temCarga(ex: Exercise): boolean {
-  return (ex.equipamentoDetalhe ?? '') !== 'Peso corporal';
+  return !RE_PESO_CORPORAL.test(ex.equipamentoDetalhe ?? '');
 }
 
 /**

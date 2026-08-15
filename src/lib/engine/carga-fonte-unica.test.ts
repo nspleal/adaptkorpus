@@ -112,3 +112,48 @@ describe('as duas variantes são MESMO diferentes (não colapsar)', () => {
     }
   });
 });
+
+/**
+ * 🔒 `temCarga` com ANOTAÇÃO (DF do autor 2026-08-15) — o conserto do falso-positivo.
+ *
+ * `temCarga` era `equipamentoDetalhe !== 'Peso corporal'` (igualdade). `Peso corporal
+ * (mesa firme)` NÃO é igual à string exata → dava `true`, e 7 exercícios de puro peso
+ * corporal caíam em `modo='carga'` (`treino.ts:245`) — o app oferecia +peso onde não há
+ * peso, e `e168` (troca nº 1 do `e116`) estava nesse caminho quente.
+ *
+ * A regra travada: peso corporal é a string sozinha OU com uma anotação de SETUP entre
+ * parênteses. A barra `/ Halteres` é ALTERNATIVA com carga — não é anotação, e continua
+ * `temCarga = true`. É o par discriminante que separa este conserto do `startsWith` largo
+ * demais que viraria `e17`/`e152` para false (prescrição errada na direção oposta).
+ */
+describe('🔒 temCarga com anotação — peso corporal (…) NÃO é carga', () => {
+  const anotados = EXERCISES_SEED.filter((e) => {
+    const d = e.equipamentoDetalhe ?? '';
+    return d.startsWith('Peso corporal (') && d.endsWith(')');
+  });
+
+  it('existem exercícios com anotação de setup na base (senão o guard não guarda nada)', () => {
+    expect(anotados.length, 'nenhum "Peso corporal (…)": o falso-positivo não teria como aparecer').toBeGreaterThan(0);
+  });
+
+  it('TODO "Peso corporal (anotação)" tem temCarga FALSE — mata o falso-positivo da igualdade', () => {
+    for (const e of anotados) {
+      expect(temCarga(e), `${e.id} "${e.equipamentoDetalhe}"`).toBe(false);
+      // e a derivada segue: sem carga, sem carga progressível → modo peso_corporal.
+      expect(temCargaProgressivel(e), `${e.id}`).toBe(false);
+    }
+  });
+
+  /**
+   * 🔑 O PAR DISCRIMINANTE: a barra `/ Halteres` é carga de verdade. Uma implementação
+   * `startsWith('Peso corporal')` passaria em tudo acima e viraria estes dois para false —
+   * exatamente a prescrição errada oposta que a medição de 2026-08-15 barrou.
+   */
+  it('"Peso corporal / Halteres" (e17/e152) CONTINUA temCarga TRUE — barra é carga, não anotação', () => {
+    const duais = EXERCISES_SEED.filter((e) => (e.equipamentoDetalhe ?? '').includes('Peso corporal /'));
+    expect(duais.length, 'a base perdeu os duais — o par discriminante sumiu').toBeGreaterThan(0);
+    for (const e of duais) {
+      expect(temCarga(e), `${e.id} "${e.equipamentoDetalhe}" — a alternativa com halteres aceita quilo`).toBe(true);
+    }
+  });
+});
