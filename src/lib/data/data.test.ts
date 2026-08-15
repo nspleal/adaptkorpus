@@ -20,11 +20,15 @@ describe('integridade da base curada', () => {
   // Âncoras da V2 limpa (cofre: banco-alimentos §Expansão V2 + handoff-pratos-v2, 2026-07-01)
   // 🔒 2026-08-06: +11 pratos veganos (p97–p107, +41 ingredientes) — leva de importação.
   // 404 e não 405: a tabela de composição do handoff tem 41 linhas, não as 42 da prosa.
-  it('contagens da base (167 alimentos · 107 pratos · 404 ingredientes · 163 exercícios)', () => {
+  // 🔒 2026-08-15: 163 + 5 = 168 exercícios — a leva `e164`–`e168` (puxar de casa sem
+  // equipamento, curadoria do autor). O número aqui é ÂNCORA de curadoria: ele existe para
+  // que ninguém edite `exercises.ts` à mão sem que apareça. Ele quebrou nesta importação
+  // exatamente como devia, e só sobe junto com a leva que o justifica.
+  it('contagens da base (167 alimentos · 107 pratos · 404 ingredientes · 168 exercícios)', () => {
     expect(FOODS).toHaveLength(167);
     expect(RECIPES).toHaveLength(107);
     expect(RECIPES.reduce((n, r) => n + r.itens.length, 0)).toBe(404);
-    expect(EXERCISES).toHaveLength(163);
+    expect(EXERCISES).toHaveLength(168);
   });
 
   it('distribuição por tipo (vegano 46 · vegetariano 29 · onívoro 32)', () => {
@@ -35,7 +39,11 @@ describe('integridade da base curada', () => {
 
   // Âncoras do grupoPrimario (cofre: parametros-motor-substituicao §2, DF 2026-07-04 —
   // 1ª entrada da coluna de grupo muscular da A1, vocabulário normalizado de 18 valores).
-  it('grupoPrimario: 163/163 preenchidos com vocabulário fechado (18 valores)', () => {
+  // 🔑 Reescrito em 2026-08-15 como PROPRIEDADE, não como contagem: a regra é "TODO
+  // exercício está classificado", e ela vale para 163, 168 ou 500. A versão anterior
+  // ancorava `comGrupo === 151`, que quebra a cada importação legítima sem nada dizer
+  // sobre a regra — e cujo conserto é sempre trocar o número, o pior tipo de verde.
+  it('grupoPrimario: TODOS classificados — vocabulário fechado (12 valores) ou cardio', () => {
     const VOCAB = new Set([
       'antebraco', 'biceps', 'core', 'costas', 'gluteos', 'lombar',
       'ombros', 'panturrilha', 'peito', 'posterior', 'quadriceps', 'triceps',
@@ -50,8 +58,13 @@ describe('integridade da base curada', () => {
       expect(VOCAB.has(e.grupoPrimario), `${e.id}: "${e.grupoPrimario}" fora do vocabulário`).toBe(true);
     }
     const comGrupo = EXERCISES.filter((e) => e.grupoPrimario != null);
+    // Os 12 valores continuam TODOS em uso: nenhum some da base sem que se perceba.
     expect(new Set(comGrupo.map((e) => e.grupoPrimario)).size).toBe(12);
-    expect(comGrupo).toHaveLength(151);
+    // A propriedade: não existe exercício sem classificação. Um `grupoPrimario` esquecido
+    // numa importação nova cai aqui, seja qual for o tamanho da base.
+    const orfaos = EXERCISES.filter((e) => e.grupoPrimario == null && e.padraoMovimento !== 'cardio');
+    expect(orfaos.map((e) => e.id), 'exercício sem grupo e fora do cardio').toEqual([]);
+    // Âncora do CARDIO (independente do tamanho da base): são 12, e não cresce por acidente.
     expect(EXERCISES.filter((e) => e.grupoPrimario == null)).toHaveLength(12);
   });
 

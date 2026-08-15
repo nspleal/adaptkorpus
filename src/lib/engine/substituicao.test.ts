@@ -268,18 +268,25 @@ describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
     expect(lista).toEqual(['e11', 'e15', 'e10', 'e12', 'e13']);
   });
 
-  it('C4: trocar e116 Remada invertida (único puxar casa-sem) → VAZIO sinalizado honesto', () => {
-    // Gap conhecido do conteúdo (cofre §2 ⚠️): os +puxar casa-sem virão como ids 164+
-    // (NUNCA renumerar). Até lá, a UI sinaliza honestamente em vez de devolver
-    // empurrar/agachar (que não preservam nada — antes da DF isso era mascarado).
+  it('C4: trocar e116 Remada invertida em casa-sem → troca REAL, e ela é puxar', () => {
+    // 🔒 2026-08-15 — o gap do conteúdo fechou. O comentário anterior previa: "os +puxar
+    // casa-sem virão como ids 164+ (NUNCA renumerar)". Vieram: `e164`–`e168`. Até então a
+    // UI sinalizava vazio honesto; agora entrega troca — e a REGRA de sempre, a que este
+    // caso existe para proteger, é a mesma nos dois regimes: **preservação como filtro
+    // duro**. Nunca devolver empurrar/agachar no lugar de um puxar (o mascaramento que a
+    // DF 2026-07-04 matou).
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
       const r = substituirExercicio({ exercicioAtual: byId.get('e116')!, equipamento: 'nenhum', nivelExperiencia: nivel, exercises: EXERCISES });
-      expect(r.status).toBe('sinalizado');
-      expect(r.exercicio).toBeNull();
+      expect(r.status, `nível ${nivel}`).toBe('ok');
+      expect(r.exercicio, `nível ${nivel}: status ok com exercício nulo é vazio disfarçado`).not.toBeNull();
+      expect(r.exercicio!.padraoMovimento, `nível ${nivel} devolveu ${r.exercicio!.id}`).toBe('puxar');
     }
-    expect(listarSubstituicoesExercicio(
+    // E a lista inteira preserva o movimento — não só o primeiro colocado.
+    const lista = listarSubstituicoesExercicio(
       { exercicioAtual: byId.get('e116')!, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES }, 3,
-    )).toEqual([]);
+    );
+    expect(lista.length, 'lista vazia depois do fechamento do furo').toBeGreaterThan(0);
+    for (const s of lista) expect(s.exercicio!.padraoMovimento, s.exercicio!.id).toBe('puxar');
   });
 
   it('C1: trocar e1 Flexão (INI, casa-sem) → família flexao primeiro (e156, e157), depois e40', () => {
@@ -299,9 +306,11 @@ describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
     expect(ini.exercicio!.padraoMovimento).toBe('cardio');
   });
 
-  it('varredura 163×3×3: EXATAMENTE 3 vazios (o furo do e116) — igual ao motor standalone', () => {
-    // Assert duro de propósito: quando o conteúdo 164+ (puxar casa-sem) chegar, este teste
-    // quebra e força a revisão — o furo deve SUMIR, não crescer.
+  it('varredura 168×3×3: ZERO vazios — o furo do e116 fechou', () => {
+    // 🔒 Este teste fez exatamente o que prometia. O comentário anterior dizia: "quando o
+    // conteúdo 164+ (puxar casa-sem) chegar, este teste quebra e força a revisão — o furo
+    // deve SUMIR, não crescer". Em 2026-08-15 a leva `e164`–`e168` chegou, ele quebrou, e a
+    // revisão mediu: sumiu. O assert continua duro, agora do lado de zero.
     const vazios: string[] = [];
     for (const e of EXERCISES)
       for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
@@ -310,7 +319,7 @@ describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
           const r = substituirExercicio({ exercicioAtual: e, equipamento: eq, nivelExperiencia: nivel, exercises: EXERCISES });
           if (r.status === 'sinalizado') vazios.push(`${e.id}·${nivel}·${eq}`);
         }
-    expect(vazios).toEqual(['e116·iniciante·nenhum', 'e116·intermediario·nenhum', 'e116·avancado·nenhum']);
+    expect(vazios, `vazio reaberto: ${vazios.join(', ')}`).toEqual([]);
   });
 });
 

@@ -104,10 +104,24 @@ describe('INVARIANTE: casa+[] byte-idêntico ao antigo nenhum (rotina e trocas)'
   });
 });
 
-describe('o furo do e116 no modelo novo (puxar × casa)', () => {
-  it('casa+[] → continua VAZIO honesto (piso "nenhum" mantém 1 puxar, por decisão)', () => {
+/**
+ * 🔒 2026-08-15 — O FURO DO e116 FECHOU. A leva `e164`–`e168` (5 puxar de casa sem
+ * equipamento, curadoria do autor) deu ao `e116` companhia: casa-sem passa de 1 para 6
+ * exercícios de puxar. Estes testes nasceram dizendo "o furo deve SUMIR, não crescer" e
+ * quebraram nesta importação exatamente como projetado.
+ *
+ * 🔑 A regra que SOBREVIVE não é "há vazio" — é **a troca preserva o padrão de movimento**.
+ * Antes ela se manifestava como vazio honesto (nada de puxar para oferecer); agora se
+ * manifesta como uma troca real que continua sendo `puxar`. O que nunca pode acontecer, em
+ * nenhum dos dois regimes, é devolver um `empurrar` no lugar de um `puxar`.
+ */
+describe('puxar × casa sem equipamento — a troca preserva o movimento', () => {
+  it('casa+[] → o e116 agora TEM troca, e ela é puxar (nunca empurrar)', () => {
     const r = substituirExercicio({ exercicioAtual: byId('e116'), equipamento: 'casa', equipamentosCasa: [], nivelExperiencia: 'iniciante', exercises: EXERCISES });
-    expect(r.status).toBe('sinalizado');
+    expect(r.status).toBe('ok');
+    expect(r.exercicio, 'status ok sem exercício é vazio disfarçado').not.toBeNull();
+    expect(r.exercicio!.padraoMovimento, `devolveu ${r.exercicio!.id}`).toBe('puxar');
+    expect(r.exercicio!.id).not.toBe('e116');
   });
 
   it('barra_fixa marcada → o furo FECHA (e22 chin-up vira troca do e116)', () => {
@@ -117,7 +131,7 @@ describe('o furo do e116 no modelo novo (puxar × casa)', () => {
     expect(lista).toContain('e22');
   });
 
-  it('varredura casa+[]: EXATAMENTE os 3 vazios do e116 (assert duro preservado)', () => {
+  it('varredura casa+[]: ZERO vazios — o furo fechou (assert duro preservado)', () => {
     const vazios: string[] = [];
     for (const e of EXERCISES) {
       if (!exercicioDisponivel(e, 'casa', [])) continue; // usuário nem vê
@@ -126,7 +140,9 @@ describe('o furo do e116 no modelo novo (puxar × casa)', () => {
         if (r.status === 'sinalizado') vazios.push(`${e.id}·${nivel}`);
       }
     }
-    expect(vazios).toEqual(['e116·iniciante', 'e116·intermediario', 'e116·avancado']);
+    // O assert duro segue duro — só mudou de lado. Casa sem equipamento passou a ser um
+    // mundo COMPLETO para a troca, e qualquer regressão que reabra um vazio cai aqui.
+    expect(vazios, `vazio reaberto em casa+[]: ${vazios.join(', ')}`).toEqual([]);
   });
 
   it('varredura casa+TODOS: zero vazios (e o mesmo p/ academia)', () => {

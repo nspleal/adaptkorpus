@@ -135,23 +135,42 @@ describe('🔒 aceite 2 — preferência que fura trilho é RECUSADA COM EXPLICA
 
 describe('🔒 aceite 3 — banimento que esvaziaria o slot é RECUSADO', () => {
   /**
-   * 🔑 O caso real: `e116` (Remada invertida) é o único PUXAR de casa-sem-equipamento — o
-   * furo conhecido do catálogo. Banir ele deixaria o dia de puxar sem opção, e o vazio
-   * apareceria NO MEIO DO TREINO, não na hora do banimento.
+   * 🔑 A REGRA: banir o ÚLTIMO exercício de um movimento deixaria o dia sem opção, e o vazio
+   * apareceria NO MEIO DO TREINO, não na hora do banimento. Ela não mudou.
+   *
+   * 🔒 2026-08-15 — o que mudou foi o ARRANJO. Até a leva `e164`–`e168`, `e116` (Remada
+   * invertida) era o único puxar de casa-sem e bastava tentar bani-lo. Agora casa-sem tem 6
+   * puxar (3 no nível iniciante), então a regra só se manifesta depois de ESGOTAR o pool —
+   * e é assim que ela passa a ser testada. Ancorar em "banir e116 é recusado" seria ancorar
+   * no arranjo de ontem; ancorar em "o último é recusado" é ancorar no critério.
    */
   const ctxCasa = { exercises: EXERCISES, equipamento: 'nenhum' as const, nivelExperiencia: 'iniciante' as const };
+  /** Os puxar que o iniciante de casa-sem realmente enxerga. */
+  const PUXAR_CASA = EXERCISES.filter((e) => e.padraoMovimento === 'puxar' && e.local === 'casa_sem' && e.nivel === 'iniciante').map((e) => e.id);
 
-  it('o último exercício do movimento não pode ser banido', () => {
-    const v = avaliarBanimento(ctxCasa, 'e116');
+  it('o último exercício do movimento não pode ser banido — os anteriores, sim', () => {
+    expect(PUXAR_CASA.length, 'sem pool não há o que esgotar').toBeGreaterThan(1);
+    // Esgota o pool um a um: cada banimento antes do último é ACEITO...
+    for (let i = 0; i < PUXAR_CASA.length - 1; i += 1) {
+      const restante = EXERCISES.filter((e) => !PUXAR_CASA.slice(0, i).includes(e.id));
+      const v = avaliarBanimento({ ...ctxCasa, exercises: restante }, PUXAR_CASA[i]!);
+      expect(v.aceita, `${PUXAR_CASA[i]} recusado com ${PUXAR_CASA.length - i} puxar de pé`).toBe(true);
+    }
+    // ...e o ÚLTIMO é recusado, com o motivo e a explicação que a UI mostra.
+    const soUm = EXERCISES.filter((e) => !PUXAR_CASA.slice(0, -1).includes(e.id));
+    const v = avaliarBanimento({ ...ctxCasa, exercises: soUm }, PUXAR_CASA[PUXAR_CASA.length - 1]!);
     expect(v.aceita).toBe(false);
     expect(v.motivo).toBe('esvaziaria_o_treino');
     expect(v.explicacao ?? '').not.toBe('');
     expect(v.explicacao).toMatch(/último/i);
   });
 
-  it('o arranjo é real: e116 é mesmo o único puxar desse equipamento', () => {
-    const puxarCasa = EXERCISES.filter((e) => e.padraoMovimento === 'puxar' && e.local === 'casa_sem' && e.nivel === 'iniciante');
-    expect(puxarCasa.map((e) => e.id)).toEqual(['e116']);
+  it('o arranjo é real: casa-sem tem puxar de verdade, em mais de um nível', () => {
+    const puxarCasa = EXERCISES.filter((e) => e.padraoMovimento === 'puxar' && e.local === 'casa_sem');
+    // Não é uma contagem exata de propósito: a regra é "o dia de puxar em casa tem opção",
+    // e ela continua valendo se a curadoria trouxer o 7º. O piso é o que a leva entregou.
+    expect(puxarCasa.length, `puxar em casa-sem: ${puxarCasa.map((e) => e.id).join(',')}`).toBeGreaterThanOrEqual(6);
+    expect(new Set(puxarCasa.map((e) => e.nivel)).size, 'todos no mesmo nível: o avançado ficaria sem escada').toBeGreaterThan(1);
   });
 
   it('🟢 banir quando SOBRA opção é aceito — a trava não vira "nunca"', () => {
@@ -160,11 +179,14 @@ describe('🔒 aceite 3 — banimento que esvaziaria o slot é RECUSADO', () => 
   });
 
   it('o banimento recusado é IGNORADO na geração — o exercício continua no pool', () => {
-    const p = perfil({ equipamento: 'nenhum', nivelExperiencia: 'iniciante', diasDisponiveis: 3, preferencias: { trocas: [], banidos: ['e116'] } });
-    expect(ids(rotina(p)), 'o banimento recusado foi obedecido e o puxar sumiu').toContain('e116');
+    // Bane TODOS os puxar de casa-sem: os primeiros passam, o último é recusado — e um
+    // banimento recusado não pode ser obedecido por baixo dos panos na hora de montar.
+    const ultimo = PUXAR_CASA[PUXAR_CASA.length - 1]!;
+    const p = perfil({ equipamento: 'nenhum', nivelExperiencia: 'iniciante', diasDisponiveis: 3, preferencias: { trocas: [], banidos: [...PUXAR_CASA] } });
+    expect(ids(rotina(p)), `o banimento recusado foi obedecido e o puxar sumiu (esperava ${ultimo})`).toContain(ultimo);
   });
 
-  it('🔒 a invariante dos 3 conjuntos vazios NÃO cresce com preferências', () => {
+  it('🔒 preferências NÃO abrem conjunto vazio novo', () => {
     // A mesma varredura da substituição: banir o que se pode banir não cria vazio novo.
     const banidos = ['e9', 'e11'];
     const vazios: string[] = [];
@@ -174,9 +196,11 @@ describe('🔒 aceite 3 — banimento que esvaziaria o slot é RECUSADO', () => 
           const r = substituirExercicio({ exercicioAtual: e, equipamento: eq, nivelExperiencia: nivel, exercises: EXERCISES.filter((x) => !banidos.includes(x.id)) });
           if (r.status === 'sinalizado') vazios.push(`${e.id}·${nivel}·${eq}`);
         }
-    // e9/e11 são compostos de empurrar com muitos pares: banir os dois não abre buraco novo
-    // além do furo conhecido do e116 (3 combinações) e dos próprios banidos, que saem da base.
-    expect(vazios.filter((v) => v.startsWith('e116·')).length).toBe(3);
+    // e9/e11 são compostos de empurrar com muitos pares: banir os dois não abre buraco
+    // nenhum. 🔒 2026-08-15: antes esta linha tolerava as 3 combinações do furo do e116;
+    // com a leva `e164`–`e168` o furo fechou e a asserção passou a ser a mais forte
+    // possível — ZERO vazios. Ela é o guard de regressão do fechamento.
+    expect(vazios, `preferências abriram vazio: ${vazios.join(', ')}`).toEqual([]);
   });
 });
 

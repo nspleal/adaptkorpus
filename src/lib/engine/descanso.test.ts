@@ -21,13 +21,26 @@ const porId = (id: string): Exercise => {
 
 describe('Bloco 1 — classe do exercício', () => {
   /** 🔒 Aceite 8: o fallback é INALCANÇÁVEL. Varre a biblioteca inteira. */
-  it('os 163 mapeiam para uma classe conhecida, e a partição é 73/74/3/13', () => {
+  it('os 168 mapeiam para uma classe conhecida, e a partição é 78/74/3/13', () => {
     const conta: Record<ClasseDescanso, number> = { COMPOSTO: 0, ISOLADO: 0, POTENCIA: 0, NAO_SE_APLICA: 0 };
     for (const e of EXERCISES) conta[classeDeDescanso(e)] += 1;
-    expect(EXERCISES).toHaveLength(163);
+    expect(EXERCISES).toHaveLength(168);
     // Partição MEDIDA sobre o seed real (cofre §🕐), não estimada.
-    expect(conta).toEqual({ COMPOSTO: 73, ISOLADO: 74, POTENCIA: 3, NAO_SE_APLICA: 13 });
-    expect(conta.COMPOSTO + conta.ISOLADO + conta.POTENCIA + conta.NAO_SE_APLICA).toBe(163);
+    // 🔒 2026-08-15: 73 → 78 COMPOSTO. Os 5 são a leva `e164`–`e168` (puxar de casa) e o
+    // delta é INTEIRO em COMPOSTO — as outras três classes não se moveram.
+    expect(conta).toEqual({ COMPOSTO: 78, ISOLADO: 74, POTENCIA: 3, NAO_SE_APLICA: 13 });
+    expect(conta.COMPOSTO + conta.ISOLADO + conta.POTENCIA + conta.NAO_SE_APLICA).toBe(168);
+  });
+
+  /**
+   * 🔑 O delta de partição, nomeado. Sem isto, "73 → 78" é um número que se conserta
+   * trocando o número: cinco exercícios poderiam ter caído em ISOLADO e outros cinco
+   * migrado para COMPOSTO, com a mesma soma. Aqui cada um dos cinco é dito pelo id.
+   */
+  it('os 5 novos (e164–e168) são COMPOSTO — é isso que move a partição', () => {
+    for (const id of ['e164', 'e165', 'e166', 'e167', 'e168']) {
+      expect(classeDeDescanso(porId(id)), `${id}`).toBe('COMPOSTO');
+    }
   });
 
   /**
