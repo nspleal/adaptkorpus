@@ -224,6 +224,20 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   }
   const temPool = (g: GrupoPrimario) => (porGrupo.get(g)?.length ?? 0) + (favPorGrupo.get(g)?.length ?? 0) > 0;
 
+  /** Algum exercício de `puxar` disponível para este grupo? */
+  const temPuxar = (g: GrupoPrimario) =>
+    (porGrupo.get(g) ?? []).some((x) => x.padraoMovimento === 'puxar')
+    || (favPorGrupo.get(g) ?? []).some((x) => x.padraoMovimento === 'puxar');
+  /** O dia SÓ consegue colocar `empurrar`? (é ele que a trava mata quando chega cedo) */
+  const soEmpurrar = (d: number) => {
+    const alvo = templates[d]!.grupos.filter((g) => g !== 'core' && temPool(g));
+    if (alvo.length === 0) return false;
+    return alvo.every((g) => {
+      const opcoes = [...(porGrupo.get(g) ?? []), ...(favPorGrupo.get(g) ?? [])];
+      return opcoes.length > 0 && opcoes.every((x) => x.padraoMovimento === 'empurrar');
+    });
+  };
+
   const cursor = new Map<GrupoPrimario, number>();
   /**
    * Próximo exercício do grupo: favoritos primeiro (sem repetir no dia), depois rotação.
@@ -370,12 +384,61 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     if (!alvo) continue;
     reservaPequeno.set(alvo.d, [...(reservaPequeno.get(alvo.d) ?? []), g]);
   }
+  /**
+   * ── Passo 1c: RESERVA de PUXAR (DF do autor, 2026-08-15) ────────────────────────────
+   *
+   * 🔴 O defeito que fecha, medido depois de importar os 5 puxar de casa: o dia de `Pull`
+   * consumia todos, e o `Push` — primeiro da lista — tentava ANTES de o Pull repor `puxar`
+   * naquela rodada. A trava `puxar ≥ empurrar` o bloqueava toda vez e ele terminava com
+   * **ZERO exercícios** (casa-vazio/avançado/5d). Em casa sem equipamento 100% de
+   * peito/ombros/tríceps é `empurrar`, então o dia inteiro morria.
+   *
+   * 🔒 RESERVA, NUNCA CRÉDITO. A primeira tentativa foi um lookahead — liberar `empurrar`
+   * contra o `puxar` que os dias seguintes *poderiam* colocar. Medido: matou os dias vazios
+   * (2 → 0) e **quebrou a invariante em 45 combinações**, inclusive em academia, que não
+   * tinha defeito nenhum. Promessa não cumprida vira invariante violada no fim da semana, e
+   * `puxar ≥ empurrar` é saúde do ombro: não tem tolerância.
+   * Aqui o `puxar` é COLOCADO antes das rodadas. Quando o dia só-de-empurrar chega, a conta
+   * já está paga — nada é liberado contra o que ainda não existe.
+   *
+   * BOUND: reserva-se um `puxar` por dia só-de-empurrar (é o que a demanda exige), nunca
+   * mais, e só onde existe dia que consiga colocá-lo. Se não couber, o dia encurta — e o
+   * corte é DITO pelo montador, como já é regra.
+   */
+  const usadosPorDia: Set<string>[] = templates.map(() => new Set<string>());
+  const reservaPuxar = new Set<number>();
+  const quantosSoEmpurrar = templates.map((_, d) => d).filter(soEmpurrar).length;
+  if (quantosSoEmpurrar > 0) {
+    const diasQuePodemPuxar = templates
+      .map((t, d) => ({ d, t }))
+      .filter(({ d, t }) => !soEmpurrar(d) && t.grupos.some((g) => g !== 'core' && temPuxar(g)))
+      .map(({ d }) => d);
+    for (const d of diasQuePodemPuxar.slice(0, quantosSoEmpurrar)) {
+      // Só reserva onde ainda sobra orçamento para os grandes do dia — mesma regra do 1b:
+      // em tempo curto a reserva cede ao tempo, nunca o contrário.
+      const ocupadas = (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
+      if (budgetPorDia - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
+      reservaPuxar.add(d);
+    }
+  }
+
+  /**
+   * ── Passo 1d: o `puxar` reservado ENTRA, antes das rodadas de déficit ────────────────
+   * É o que torna a reserva real: o slot está colocado quando o dia só-de-empurrar chega.
+   */
+  for (const d of reservaPuxar) {
+    const grupoPuxar = templates[d]!.grupos.find((g) => g !== 'core' && temPuxar(g) && podeReceber(g));
+    if (!grupoPuxar) continue;
+    const e = escolher(grupoPuxar, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'puxar' });
+    if (!e || e.padraoMovimento !== 'puxar') continue;
+    registrar(d, grupoPuxar, e, usadosPorDia[d]!);
+  }
+
   const reservasDoDia = (d: number) => (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
 
   // ── Passo 2: rodadas — cada dia recebe 1 slot por vez, pelo MAIOR déficit ──
   // Round-robin entre os dias (e não dia a dia até encher) para a trava do empurrar
   // enxergar a semana inteira: o puxar do dia de Pull libera o empurrar do dia de Push.
-  const usadosPorDia: Set<string>[] = templates.map(() => new Set<string>());
   for (let rodada = 0; rodada < budgetPorDia; rodada += 1) {
     for (let d = 0; d < templates.length; d += 1) {
       const cap = budgetPorDia - reservasDoDia(d);
