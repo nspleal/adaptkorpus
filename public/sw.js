@@ -17,7 +17,7 @@
  * confere quando reproduzido offline. Network-first renova a cópia a cada visita online.
  * Para invalidar tudo, suba a VERSAO.
  */
-const VERSAO = 'v1';
+const VERSAO = 'v2';
 const CACHE_ESTATICO = `evk-static-${VERSAO}`;
 const CACHE_PAGINAS = `evk-pages-${VERSAO}`;
 
