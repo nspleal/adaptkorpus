@@ -26,6 +26,7 @@ import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco } from './trilhos';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
+import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
@@ -657,10 +658,14 @@ export function montarRotina(
      */
     if (semanaCiclo && !ret && semanaCiclo.semana !== 6) {
       const ponderado = creditoPonderadoDaSemana(diasTreino.flatMap((d) => d.slots));
-      const piso = mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo);
+      const objetivoEf = prescricao.objetivoEfetivo ?? perfil.objetivo;
+      const piso = mev(perfil.nivelExperiencia, objetivoEf);
       for (const g of GRUPOS_GRANDES) {
         if ((ponderado.get(g) ?? 0) < piso) {
-          avisos.push(`Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
+          // Catálogo-limitado (não alcança nem no teto, e um item do checklist fecha) ⇒ a
+          // frase que aponta o equipamento mínimo. Senão (orçamento/estrutural) ⇒ a de sempre.
+          const cat = classificarCoberturaCatalogo(exercises, g, perfil.nivelExperiencia, objetivoEf, perfil.equipamento, perfil.equipamentosCasa);
+          avisos.push(cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
         }
       }
     }
