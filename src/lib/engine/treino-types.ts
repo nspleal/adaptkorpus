@@ -7,6 +7,7 @@ import type { PreferenciasTreino } from './preferencias';
 import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
+import type { ResultadoDuracao } from './duracao-sessao';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
@@ -271,4 +272,15 @@ export interface RotinaSemanal {
     /** Descanso do composto EFETIVO da rotina (teto ~180 s quando o tempo permite — v2 §5). */
     descansoCompostoSeg: Faixa;
   };
+  /**
+   * 🔒 C1 — CERTIFICAÇÃO de duração do plano gerado, uma entrada por dia de força, pela fórmula
+   * canônica (`avaliarDuracaoSessao`). A autoridade sobre "cabe no tempo?" é ESTA, não a tabela
+   * de slots. Ausente em chamadas v1 sem séries/descanso materializados. Apresentação = C4.
+   */
+  duracaoDias?: ResultadoDuracao[];
+  /**
+   * 🔒 C1 (override do autor 2026-08-20) — nem o menor plano com cobertura coube no tempo: o
+   * shortfall é DITO, nunca escondido. O motor não emite o plano excedente como se fosse conforme.
+   */
+  duracaoIncompativel?: boolean;
 }

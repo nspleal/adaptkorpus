@@ -36,7 +36,7 @@ export interface SlotParaDuracao {
 }
 
 /** Execução por série do exercício: hold para os isométricos, 40 s (proxy v1) para os demais. */
-function execucaoDoExercicio(ex: Exercise, nivel: NivelExperiencia): ExecucaoResistida {
+export function execucaoResistidaDe(ex: Exercise, nivel: NivelExperiencia): ExecucaoResistida {
   if (repUnitDe(ex.id) === 'segundos') {
     const hold = faixaSegundos(ex.id, nivel)?.min ?? PISO_HOLD_SEG;
     return { tipo: 'ISOMETRIA', holdSegundosPorSerie: hold };
@@ -64,7 +64,7 @@ export function itensResistidosDeSlots(
       tipo: 'RESISTIDO',
       series: s.series,
       descansoEntreSeriesSeg: s.descansoSeg,
-      execucao: execucaoDoExercicio(s.exercicio, nivel),
+      execucao: execucaoResistidaDe(s.exercicio, nivel),
       tecnica: { tipo: 'SEM_TECNICA' },
     });
   });

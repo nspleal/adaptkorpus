@@ -27,10 +27,12 @@ import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco } from './trilhos';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
+import { avaliarDuracaoSessao } from './duracao-sessao';
+import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
-import type { DiaCardio, Faixa, FeedbackGrupo, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
@@ -70,6 +72,12 @@ export interface OpcoesSemana {
      */
     exerciciosRecentes?: ReadonlySet<string>;
   };
+  /**
+   * 🔒 C1 — usado APENAS pela recursão interna do reduce-to-fit (override do autor 2026-08-20):
+   * substitui o teto de slots por dia da tabela `orcamentoSlotsDoDia`. Presente ⇒ é uma
+   * tentativa de redução (não re-reduz, evita recursão infinita). Não faz parte da API pública.
+   */
+  budgetSlotsOverride?: number;
 }
 
 /**
@@ -102,6 +110,27 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modal
     modalidade,
     minutos: minutos != null && minutos > 0 ? minutos : null,
   }));
+}
+
+/**
+ * 🔒 C1 — piso de slots por dia da tabela `orcamentoSlotsDoDia` (o degrau ≤20 min). Abaixo
+ * disto a cobertura (core, puxar≥empurrar, dobradiça) não se sustenta; é o "menor plano com
+ * cobertura" do override 2. Se nem ele couber, o motor devolve incompatibilidade estruturada.
+ */
+const BUDGET_MIN_COBERTURA = 3;
+
+/** 🔒 C1 §6 — um dia estoura o LIMITE OPERACIONAL (B+480) mesmo com o descanso no piso? */
+export function precisaReduzir(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): boolean {
+  return rotina.dias.some((d) => {
+    const r = avaliarDuracaoResistida(d.slots, nivel, orcamentoSeg);
+    return r.estadoCalculo === 'CALCULADO'
+      && (r.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL' || r.estadoLimite === 'LIMITE_INDETERMINADO');
+  });
+}
+
+/** 🔒 C1 §5.5 — anexa a certificação canônica por dia ao plano final (autoridade do "cabe?"). */
+function certificarDuracao(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): RotinaSemanal {
+  return { ...rotina, duracaoDias: rotina.dias.map((d) => avaliarDuracaoResistida(d.slots, nivel, orcamentoSeg)) };
 }
 
 /**
@@ -174,7 +203,12 @@ export function montarRotina(
   // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
   const divisao = perfil.divisaoPreferida ?? 'auto';
   const { split, dias: templates } = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
-  const budgetPorDia = orcamentoSlotsDoDia(perfil.tempoPorSessaoMin);
+  // 🔒 C1 — o teto de slots vem da tabela f(tempo), MAS o reduce-to-fit (override 2) pode pedir
+  // menos slots reexecutando o alocador; aí o override manda (nunca acima da tabela).
+  const budgetPorDia = Math.min(
+    semanaCiclo?.budgetSlotsOverride ?? Number.POSITIVE_INFINITY,
+    orcamentoSlotsDoDia(perfil.tempoPorSessaoMin),
+  );
 
   /**
    * Alvo PONDERADO de planejamento por grupo = TOPO da banda do nível/objetivo. O topo, e
@@ -361,13 +395,22 @@ export function montarRotina(
       const semanaRampa = semanaCiclo.retomada?.semana ?? null;
       const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
 
-      const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number =>
-        slots.reduce((soma, s) => soma + sPlan * (40 + descansoDoPadrao(s.padrao, {
-          rirAlvo,
-          modoForca: prescricao.modoForca === true,
-          semanaRampa,
-          degradacao: nivel,
-        })), 0);
+      // 🔒 C1 §5.4 — a estimativa de PLANEJAMENTO não mantém aritmética própria: projeta itens
+      // (séries = sPlan, execução por tipo, descanso por padrão no nível de degradação) e chama
+      // a MESMA fórmula canônica, usando a MAX da faixa (o pior caso de ocupação do dia). Ela
+      // decide só a DEGRADAÇÃO; a CERTIFICAÇÃO do plano final roda sobre as séries/descansos reais.
+      const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number => {
+        const itens = slots.map((s) => ({
+          tipo: 'RESISTIDO' as const,
+          series: sPlan,
+          descansoEntreSeriesSeg: descansoDoPadrao(s.padrao, {
+            rirAlvo, modoForca: prescricao.modoForca === true, semanaRampa, degradacao: nivel,
+          }),
+          execucao: execucaoResistidaDe(s.exercicio, perfil.nivelExperiencia),
+          tecnica: { tipo: 'SEM_TECNICA' as const },
+        }));
+        return avaliarDuracaoSessao({ itens }).duracaoMaximaEstimadaSegundos ?? Number.POSITIVE_INFINITY;
+      };
 
       /**
        * 🟡 EXCEÇÃO NOMEADA, durante a rampa: o piso do FIT é INVIOLÁVEL, então não há
@@ -733,5 +776,23 @@ export function montarRotina(
     })),
   }));
 
-  return montarSaida(diasTreino, split);
+  const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+  const rotina = certificarDuracao(montarSaida(diasTreino, split), perfil.nivelExperiencia, orcamentoSeg);
+
+  // 🔒 C1 §5.5/§6 (override do autor 2026-08-20): o gerador reavaliou o PLANO FINAL pela fórmula
+  // canônica (acima). Se um dia ainda estoura o limite operacional (B+480) mesmo com o descanso
+  // no piso, REDUZ exercícios reexecutando o alocador completo com menos slots — cobertura,
+  // equipamento e puxar≥empurrar preservados pelo próprio alocador (não se apaga o último slot).
+  // `budgetSlotsOverride` presente ⇒ esta já é uma tentativa de redução: não re-reduz.
+  if (semanaCiclo?.budgetSlotsOverride != null) return rotina;
+  if (semanaCiclo && precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg)) {
+    for (let b = budgetPorDia - 1; b >= BUDGET_MIN_COBERTURA; b -= 1) {
+      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias);
+      if (!precisaReduzir(tentativa, perfil.nivelExperiencia, orcamentoSeg)) return tentativa;
+    }
+    // Nem o menor plano com cobertura coube: devolve o menor, com o shortfall DITO (não escondido).
+    const menor = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: BUDGET_MIN_COBERTURA }, preferencias);
+    return precisaReduzir(menor, perfil.nivelExperiencia, orcamentoSeg) ? { ...menor, duracaoIncompativel: true } : menor;
+  }
+  return rotina;
 }
