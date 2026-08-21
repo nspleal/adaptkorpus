@@ -27,13 +27,14 @@ import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco } from './trilhos';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
-import { avaliarDuracaoSessao } from './duracao-sessao';
+import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
+import { distribuirCardioDaRotina } from './treino-cardio-semana';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
-import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 
@@ -165,6 +166,14 @@ export function montarRotina(
    * honrada pelo adaptador de duração. Ausente ⇒ fallback neutro do catálogo (mesmo multiplicador).
    */
   escolhasExecucao: ReadonlyMap<string, ExecucaoLateralidade> = new Map(),
+  /**
+   * 🔒 C1 (autor 2026-08-21) — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: conjunto ORDENADO de
+   * ÍNDICES de dia (0-based no horizonte da semana). É a MENOR fronteira funcional nova — transiente
+   * por geração, NÃO uma preferência permanente do perfil. Distinto de `diasDisponiveis` (contagem).
+   * Um dia só recebe cardio se foi oferecido E não tem musculação; cardio nunca substitui treino.
+   * Entra, em ordem canônica, no `canonical_input_hash` da distribuição.
+   */
+  diasOferecidosCardio: readonly number[] = [],
 ): RotinaSemanal {
   const avisos: string[] = [];
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
@@ -799,22 +808,76 @@ export function montarRotina(
   }));
 
   const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+
+  /**
+   * 🔒 C1 (autor 2026-08-21) — FINALIZAÇÃO: deriva o discriminante `resultadoGeracao` (a fonte única
+   * que SUBSTITUI o booleano isolado `duracaoIncompativel`) e MATERIALIZA a distribuição semanal de
+   * cardio nos dias oferecidos. Estados vivos alcançáveis: CERTIFICADO / NAO_AVALIADO_ENTREGAVEL /
+   * INCOMPATIVEL (o alocador vivo preserva os invariantes por construção — ERRO_ALOCADOR é exercido
+   * pelo orquestrador puro `gerarPlanoTemporal`). `duracaoIncompativel` vira VISTA derivada.
+   */
+  const finalizar = (r: RotinaSemanal, capacidade: number, incompativel: boolean): RotinaSemanal => {
+    const diasDur = r.duracaoDias ?? [];
+    let rg: ResultadoGeracaoRotina;
+    if (diasDur.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) {
+      // §6 ramo (c): NAO_AVALIADO não certifica nem entra em redução — entrega com motivos.
+      const motivos = [...new Set(diasDur.flatMap((d) => d.motivosNaoAvaliados))];
+      rg = { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos };
+    } else if (incompativel) {
+      rg = { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: capacidade };
+    } else {
+      rg = { tipo: 'CERTIFICADO', capacidadeTerminal: capacidade };
+    }
+
+    // Distribuição semanal de cardio nos dias OFERECIDOS (só quando há semana/ciclo — o v1 puro não
+    // materializa cardio semanal). Cardio prescrito por dia oferecido = meta ÷ nº de oferecidos.
+    let distribuicaoCardio;
+    if (semanaCiclo) {
+      const oferecidos = diasOferecidosCardio.filter((i) => Number.isInteger(i) && i >= 0 && i < dias);
+      const cardioPrescritoPorDiaSegundos =
+        prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
+          ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
+          : 0;
+      distribuicaoCardio = distribuirCardioDaRotina({
+        diasTotais: dias,
+        diasForca,
+        duracaoDias: diasDur,
+        diasOferecidosCardio: oferecidos,
+        orcamentoSegundos: orcamentoSeg,
+        cardioPrescritoPorDiaSegundos,
+        aggregateId: 'rotina-cardio',
+        expectedRevision: 0,
+        formulaVersion: FORMULA_DURACAO_VERSION,
+      });
+    }
+
+    return {
+      ...r,
+      resultadoGeracao: rg,
+      ...(rg.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
+      ...(distribuicaoCardio ? { distribuicaoCardio } : {}),
+    };
+  };
+
   const rotina = certificarDuracao(montarSaida(diasTreino, split), perfil.nivelExperiencia, orcamentoSeg);
 
   // 🔒 C1 §5.5/§6 (override do autor 2026-08-20): o gerador reavaliou o PLANO FINAL pela fórmula
   // canônica (acima). Se um dia ainda estoura o limite operacional (B+480) mesmo com o descanso
   // no piso, REDUZ exercícios reexecutando o alocador completo com menos slots — cobertura,
   // equipamento e puxar≥empurrar preservados pelo próprio alocador (não se apaga o último slot).
-  // `budgetSlotsOverride` presente ⇒ esta já é uma tentativa de redução: não re-reduz.
-  if (semanaCiclo?.budgetSlotsOverride != null) return rotina;
+  // `budgetSlotsOverride` presente ⇒ esta já é uma tentativa de redução: não re-reduz (mas finaliza,
+  // pois o pai pode adotá-la como plano final).
+  if (semanaCiclo?.budgetSlotsOverride != null) {
+    return finalizar(rotina, budgetPorDia, precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg));
+  }
   if (semanaCiclo && precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg)) {
     for (let b = budgetPorDia - 1; b >= BUDGET_MIN_COBERTURA; b -= 1) {
-      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias, escolhasExecucao);
-      if (!precisaReduzir(tentativa, perfil.nivelExperiencia, orcamentoSeg)) return tentativa;
+      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias, escolhasExecucao, diasOferecidosCardio);
+      // a tentativa já vem FINALIZADA (resultadoGeracao); adota a primeira que certifica.
+      if (tentativa.resultadoGeracao?.tipo === 'CERTIFICADO') return tentativa;
     }
-    // Nem o menor plano com cobertura coube: devolve o menor, com o shortfall DITO (não escondido).
-    const menor = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: BUDGET_MIN_COBERTURA }, preferencias);
-    return precisaReduzir(menor, perfil.nivelExperiencia, orcamentoSeg) ? { ...menor, duracaoIncompativel: true } : menor;
+    // Nem o menor plano com cobertura coube: devolve o menor FINALIZADO (INCOMPATIVEL se ainda excede).
+    return montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: BUDGET_MIN_COBERTURA }, preferencias, escolhasExecucao, diasOferecidosCardio);
   }
-  return rotina;
+  return finalizar(rotina, budgetPorDia, false);
 }

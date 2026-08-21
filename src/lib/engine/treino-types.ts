@@ -8,7 +8,23 @@ import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
+import type { DistribuicaoCardioSemanal } from './distribuicao-cardio-semana';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, PadraoMovimento } from '../data/types';
+
+/**
+ * 🔒 C1 — RESULTADO DA GERAÇÃO TEMPORAL do plano vivo (spec §2/§6), o discriminante que SUBSTITUI o
+ * booleano isolado `duracaoIncompativel`. `duracaoIncompativel` continua exposto (compat de UI/teste)
+ * mas é DERIVADO deste discriminante — não é mais fonte independente.
+ *  - CERTIFICADO: todo dia cabe em B+480 (musculação) após a adaptação;
+ *  - NAO_AVALIADO_ENTREGAVEL: algum dia é NAO_AVALIADO — entregue com motivos, nunca certificado;
+ *  - INCOMPATIVEL: nem o menor plano com cobertura coube (MAX > limite operacional);
+ *  - ERRO_ALOCADOR: o plano realocado violou um invariante (rede de segurança do alocador vivo).
+ */
+export type ResultadoGeracaoRotina =
+  | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[] }
+  | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
+  | { tipo: 'ERRO_ALOCADOR'; motivo: 'INVARIANTE_VIOLADO'; violacoesInvariantes: string[] };
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
@@ -293,7 +309,21 @@ export interface RotinaSemanal {
   duracaoDias?: ResultadoDuracao[];
   /**
    * 🔒 C1 (override do autor 2026-08-20) — nem o menor plano com cobertura coube no tempo: o
-   * shortfall é DITO, nunca escondido. O motor não emite o plano excedente como se fosse conforme.
+   * shortfall é DITO, nunca escondido. DERIVADO de `resultadoGeracao.tipo === 'INCOMPATIVEL'`
+   * (não é mais fonte independente — a fonte é o discriminante abaixo).
    */
   duracaoIncompativel?: boolean;
+  /**
+   * 🔒 C1 (autor 2026-08-21) — discriminante da geração temporal do plano vivo (substitui o booleano
+   * isolado). Fonte única do "cabe / não avaliado / incompatível / erro de alocador".
+   */
+  resultadoGeracao?: ResultadoGeracaoRotina;
+  /**
+   * 🔒 C1 (autor 2026-08-21) — DISTRIBUIÇÃO SEMANAL DE CARDIO nos dias OFERECIDOS pelo usuário,
+   * materializada pela primitiva canônica (`construirDistribuicaoCardioSemana`): contratos por
+   * prescrição (prescrito/usado/destinos/descarte) + blocos por dia + hash canônico das entradas
+   * (inclusive os dias oferecidos). Não substitui `diasCardio` (visão de UI existente); é a visão
+   * C1-canônica, auditável e determinística. Ausente em chamadas sem semana/oferta de cardio.
+   */
+  distribuicaoCardio?: DistribuicaoCardioSemanal;
 }

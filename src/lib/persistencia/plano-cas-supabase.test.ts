@@ -109,3 +109,33 @@ describe('C1 CAS Supabase · pré-decisão pura NÃO toca o banco (fixture 52 / 
     expect(fake.rpcCalls).toHaveLength(0);
   });
 });
+
+describe('C1 CAS Supabase · persiste o AGREGADO INTEIRO, não só metadados (autor item E)', () => {
+  // Agregado rico: baseline/terminal, resultados de duração, contratos/blocos de cardio, distribuição.
+  const agregadoRico = {
+    dieta: { cardapios: [] },
+    treino: {
+      dias: [{ nome: 'A', slots: [] }],
+      duracaoDias: [{ estadoCalculo: 'CALCULADO', estadoLimite: 'DENTRO_DO_LIMITE', duracaoMinimaEstimadaSegundos: 1540, duracaoMaximaEstimadaSegundos: 1780, formulaVersion: 'tempo-v2', motivosNaoAvaliados: [], motivosLimite: [] }],
+      resultadoGeracao: { tipo: 'CERTIFICADO', capacidadeTerminal: 4 },
+      distribuicaoCardio: {
+        estado: 'CONSTRUIDA', canonicalInputHash: 'abc0000000000001',
+        contratosPorPrescricao: [{ prescricaoId: 'c1', duracaoUsadaNaSessaoSegundos: 600, alocacoesDestino: [{ diaId: 'dia-005', segundos: 1200 }], duracaoDescartadaSegundos: 0 }],
+        blocosPorDia: [{ diaId: 'dia-005', duracaoTotalSegundos: 1200, linhagens: [] }],
+      },
+    },
+  };
+
+  it('a RPC recebe o agregado COMPLETO como p_payload (não apenas os 4 metadados)', async () => {
+    const fake = new FakeCliente();
+    fake.proximoRpc = { data: { tipo: 'COMMIT_CONFIRMADO', committed_revision: 1 }, error: null };
+    const repo = new RepositorioSupabasePlanoCAS(fake, USER);
+    await repo.commitAtomico({ aggregateId: AGG, expectedRevision: 0, formulaVersion: 'tempo-v2', canonicalInputHash: '00000000abcdef01', aggregate: agregadoRico });
+    // p_payload traz o agregado inteiro — resultados, contratos, blocos, distribuição.
+    expect(fake.rpcCalls[0]!.p_payload).toEqual(agregadoRico);
+    const payload = fake.rpcCalls[0]!.p_payload as typeof agregadoRico;
+    expect(payload.treino.duracaoDias).toHaveLength(1);
+    expect(payload.treino.distribuicaoCardio.blocosPorDia[0]!.duracaoTotalSegundos).toBe(1200);
+    expect(payload.treino.distribuicaoCardio.contratosPorPrescricao[0]!.alocacoesDestino).toEqual([{ diaId: 'dia-005', segundos: 1200 }]);
+  });
+});

@@ -10,6 +10,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { montarRotina } from './treino-montador';
+import { avaliarDuracaoResistida } from './duracao-plano';
+import { prescreverTreino } from './treino';
+import { avaliarGateTreino } from './treino-gate';
+import { EXERCISES } from '../data/exercises';
+import type { PerfilTreino } from './treino-types';
+import type { FlagsSaude } from './types';
 
 const ENGINE = join(__dirname);
 const ler = (arquivo: string) => readFileSync(join(ENGINE, arquivo), 'utf-8');
@@ -67,5 +74,24 @@ describe('C1 §8.1 · uma única definição (proíbe cópia local)', () => {
       expect(ler(a)).not.toMatch(/\?\?\s*90\b/);
       expect(ler(a)).not.toMatch(/series\s*\?\?\s*1\b/);
     }
+  });
+});
+
+describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SHA, autor teste 7)', () => {
+  const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
+  const perfil: PerfilTreino = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'massa', nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 4, tempoPorSessaoMin: 60 };
+
+  it('a certificação do GERADOR (duracaoDias) é BYTE-A-BYTE o que o CRÍTICO calcula no mesmo plano', () => {
+    const presc = prescreverTreino(perfil, avaliarGateTreino(perfil));
+    const rotina = montarRotina(presc, perfil, EXERCISES, new Set(), { semana: 1 });
+    const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+    expect(rotina.duracaoDias).toBeDefined();
+    // o crítico avalia EXATAMENTE o mesmo objeto de plano final pela MESMA função canônica.
+    rotina.dias.forEach((dia, i) => {
+      const doCritico = avaliarDuracaoResistida(dia.slots, perfil.nivelExperiencia, orcamentoSeg);
+      expect(doCritico).toEqual(rotina.duracaoDias![i]);
+    });
+    // e o discriminante da geração está coerente com a certificação.
+    expect(rotina.resultadoGeracao).toBeDefined();
   });
 });

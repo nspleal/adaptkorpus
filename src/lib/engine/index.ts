@@ -164,6 +164,10 @@ export function gerarTreino(
     favoritos?: ReadonlySet<string>;
     /** Semana do mesociclo (v2): liga a rampa de volume por grupo no montador. */
     semanaCiclo?: OpcoesSemanaMontador;
+    /** 🔒 C1 — escolha de execução por exercício (e72 etc.), materializada no slot. */
+    escolhasExecucao?: ReadonlyMap<string, import('../data/types').ExecucaoLateralidade>;
+    /** 🔒 C1 — dias OFERECIDOS pelo usuário para cardio (índices no horizonte). Transiente. */
+    diasOferecidosCardio?: readonly number[];
   },
 ): ResultadoTreino {
   const gate = avaliarGateTreino(perfil);
@@ -174,7 +178,10 @@ export function gerarTreino(
 
   const prescricao = prescreverTreino(perfil, gate);
   const rotina = opcoes?.exercises
-    ? montarRotina(prescricao, perfil, opcoes.exercises, opcoes.favoritos, opcoes.semanaCiclo)
+    ? montarRotina(
+        prescricao, perfil, opcoes.exercises, opcoes.favoritos, opcoes.semanaCiclo,
+        perfil.preferencias, opcoes.escolhasExecucao ?? new Map(), opcoes.diasOferecidosCardio ?? [],
+      )
     : null;
 
   return { gate, prescricao, rotina };
