@@ -7,6 +7,7 @@
  */
 import { gerarDieta, gerarTreino } from '@/lib/engine';
 import type { OpcoesSemana, PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
+import type { ExecucaoLateralidade } from '@/lib/data/types';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
@@ -32,6 +33,22 @@ export function recomputarPlano(
      * chamada v1 seguem no `perfil.pesoKg`).
      */
     pesoEfetivoKg?: number;
+    /**
+     * 🔒 C1 (autor 2026-08-21) — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: índices de dia (0-based
+     * no horizonte da semana) que a pessoa marcou como disponíveis para receber cardio. Entra por
+     * AQUI, o mesmo trilho de `semanaCiclo`/`pesoEfetivoKg`: um knob TRANSIENTE por geração, não
+     * uma preferência permanente do perfil (o fluxo atual não exige persistência — decisão do
+     * autor, item 10). Distinto de `diasDisponiveis`, que é só uma CONTAGEM.
+     *
+     * Um dia só recebe cardio se foi OFERECIDO aqui **e** não contém musculação; cardio nunca
+     * remove/substitui/desloca um dia de treino. Ausente = nenhum dia oferecido ⇒ nenhum bloco.
+     */
+    diasOferecidosCardio?: readonly number[];
+    /**
+     * 🔒 C1 — ESCOLHA DE EXECUÇÃO por exercício (e72 rosca martelo: alternado × simultâneo).
+     * Também transiente: materializa `slot.execucaoSelecionada` e é honrada pelo avaliador.
+     */
+    escolhasExecucao?: ReadonlyMap<string, ExecucaoLateralidade>;
   },
 ): { dieta: ResultadoMotor; treino: ResultadoTreino } {
   /**
@@ -93,6 +110,9 @@ export function recomputarPlano(
       favoritos: new Set(perfil.favoritos ?? []),
       // Rampa do mesociclo (v2 §1): séries por slot da semana corrente.
       ...(opcoes?.semanaCiclo ? { semanaCiclo: opcoes.semanaCiclo } : {}),
+      // 🔒 C1: a escolha do usuário chega ao motor por aqui (transiente, sem persistência nova).
+      ...(opcoes?.diasOferecidosCardio ? { diasOferecidosCardio: opcoes.diasOferecidosCardio } : {}),
+      ...(opcoes?.escolhasExecucao ? { escolhasExecucao: opcoes.escolhasExecucao } : {}),
     }),
   };
 }

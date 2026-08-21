@@ -101,6 +101,16 @@ export interface EntradaDuracao {
    * CARDIO_EXCEDE_TEMPO_DISPONIVEL / CARDIO_PODE_EXCEDER_TEMPO_DISPONIVEL. Default: EDITADO (mede).
    */
   origemPlano?: 'AUTOMATICO' | 'EDITADO';
+  /**
+   * 🔒 C1 §4 / fixture 19 — AQUECIMENTO: ACEITO E DELIBERADAMENTE IGNORADO.
+   *
+   * O override do autor (2026-08-20) exclui o aquecimento da conta: presença, ausência ou duração
+   * desconhecida NÃO alteram MIN, MAX nem o estado. O campo existe para que a exclusão seja
+   * VERIFICÁVEL por teste (ausente × 0 × positivo ⇒ resultado idêntico) — a mera ausência do campo
+   * no tipo não mata a mutação "somar aquecimento". Nunca é lido pela fórmula, nem valida domínio:
+   * um aquecimento negativo/fracionário/infinito também não produz `NAO_AVALIADO`.
+   */
+  aquecimentoSegundos?: number;
 }
 
 export interface ComponentesDuracao {

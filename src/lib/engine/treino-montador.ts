@@ -30,6 +30,8 @@ import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cober
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina } from './treino-cardio-semana';
+import { avaliarInvariantes, type Padrao } from './geracao-temporal';
+import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
@@ -810,16 +812,60 @@ export function montarRotina(
   const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
 
   /**
+   * 🔒 C1 §6.7/§7.8 — VALIDAÇÃO DOS TRÊS INVARIANTES do plano REALOCADO, contra as entradas
+   * INDEPENDENTES (equipamento do perfil e cobertura obrigatória), reusando `avaliarInvariantes`
+   * do orquestrador canônico. Roda SÓ depois de uma realocação do reduce-to-fit: é a rede que
+   * transforma "o alocador preserva por construção" numa AFIRMAÇÃO VERIFICADA em runtime.
+   * Violou ⇒ `ERRO_ALOCADOR{INVARIANTE_VIOLADO}` e o laço encerra — nunca se classifica um plano
+   * estruturalmente inválido como incompatibilidade temporal nem se continua reduzindo a partir dele.
+   */
+  const violacoesDaRealocacao = (r: RotinaSemanal): string[] => {
+    const slots = r.dias.flatMap((d) => d.slots);
+    if (slots.length === 0) return [];
+    const permitidos = new Set<string>(
+      locaisPermitidos(perfil.equipamento).flatMap((l) => (l === 'academia' ? ['academia'] : l === 'casa_com' ? ['casa_com'] : ['casa_sem'])),
+    );
+    // `dobradica_quadril` conta como cobertura de membro inferior (`agachar`); `cardio` não é slot
+    // resistido e não chega aqui. O mapa é explícito para o compilador provar a totalidade.
+    const PARA_PADRAO: Record<PadraoMovimento, Padrao> = {
+      puxar: 'puxar', empurrar: 'empurrar', agachar: 'agachar',
+      dobradica_quadril: 'agachar', isolado: 'isolado', core: 'core', cardio: 'core',
+    };
+    return avaliarInvariantes(
+      slots.map((s) => ({
+        id: s.exercicio.id,
+        padrao: PARA_PADRAO[s.padrao],
+        grupo: s.exercicio.grupoPrimario ?? 'na',
+        equipamento: s.exercicio.local,
+        series: s.series ?? 1,
+        descansoSeg: s.descansoSeg ?? 0,
+        execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG },
+      })),
+      // cobertura obrigatória da spec §8 (fixture 21) + allowlist REAL de locais do perfil.
+      { coberturaObrigatoria: ['puxar', 'empurrar', 'agachar'], equipamentosDisponiveis: [...permitidos] },
+    ).violacoes;
+  };
+
+  /**
    * 🔒 C1 (autor 2026-08-21) — FINALIZAÇÃO: deriva o discriminante `resultadoGeracao` (a fonte única
    * que SUBSTITUI o booleano isolado `duracaoIncompativel`) e MATERIALIZA a distribuição semanal de
-   * cardio nos dias oferecidos. Estados vivos alcançáveis: CERTIFICADO / NAO_AVALIADO_ENTREGAVEL /
-   * INCOMPATIVEL (o alocador vivo preserva os invariantes por construção — ERRO_ALOCADOR é exercido
-   * pelo orquestrador puro `gerarPlanoTemporal`). `duracaoIncompativel` vira VISTA derivada.
+   * cardio nos dias oferecidos. Os QUATRO estados são alcançáveis pelo caminho vivo: CERTIFICADO,
+   * NAO_AVALIADO_ENTREGAVEL, INCOMPATIVEL e ERRO_ALOCADOR (este via `violacoesInvariantes`, quando
+   * uma REALOCAÇÃO devolve plano estruturalmente inválido). `duracaoIncompativel` vira VISTA derivada.
    */
-  const finalizar = (r: RotinaSemanal, capacidade: number, incompativel: boolean): RotinaSemanal => {
+  const finalizar = (
+    r: RotinaSemanal,
+    capacidade: number,
+    incompativel: boolean,
+    violacoesInvariantes?: string[],
+  ): RotinaSemanal => {
     const diasDur = r.duracaoDias ?? [];
     let rg: ResultadoGeracaoRotina;
-    if (diasDur.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) {
+    if (violacoesInvariantes && violacoesInvariantes.length > 0) {
+      // 🔒 precedência §6: invariante violado ANTES de avaliar duração — não vira NAO_AVALIADO
+      // entregável nem incompatibilidade temporal.
+      rg = { tipo: 'ERRO_ALOCADOR', motivo: 'INVARIANTE_VIOLADO', violacoesInvariantes };
+    } else if (diasDur.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) {
       // §6 ramo (c): NAO_AVALIADO não certifica nem entra em redução — entrega com motivos.
       const motivos = [...new Set(diasDur.flatMap((d) => d.motivosNaoAvaliados))];
       rg = { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos };
@@ -868,11 +914,19 @@ export function montarRotina(
   // `budgetSlotsOverride` presente ⇒ esta já é uma tentativa de redução: não re-reduz (mas finaliza,
   // pois o pai pode adotá-la como plano final).
   if (semanaCiclo?.budgetSlotsOverride != null) {
-    return finalizar(rotina, budgetPorDia, precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg));
+    // 🔒 esta chamada É uma REALOCAÇÃO do reduce-to-fit ⇒ valida os três invariantes (§6.7).
+    return finalizar(
+      rotina, budgetPorDia,
+      precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg),
+      violacoesDaRealocacao(rotina),
+    );
   }
   if (semanaCiclo && precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg)) {
     for (let b = budgetPorDia - 1; b >= BUDGET_MIN_COBERTURA; b -= 1) {
       const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias, escolhasExecucao, diasOferecidosCardio);
+      // 🔒 §6 precedência: invariante violado ENCERRA o laço — não continua reduzindo a partir de
+      // um plano estruturalmente inválido nem o classifica como incompatibilidade temporal.
+      if (tentativa.resultadoGeracao?.tipo === 'ERRO_ALOCADOR') return tentativa;
       // a tentativa já vem FINALIZADA (resultadoGeracao); adota a primeira que certifica.
       if (tentativa.resultadoGeracao?.tipo === 'CERTIFICADO') return tentativa;
     }
