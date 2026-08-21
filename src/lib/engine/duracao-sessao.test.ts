@@ -107,32 +107,24 @@ describe('C1 · cardio / duração contínua', () => {
     expect(r.motivosNaoAvaliados.join(' ')).toMatch(/duracaoTotalSegundos/);
   });
 
-  it('sessão MISTA resistido→cardio→resistido: duas reservas de transição explícitas', () => {
-    const itens: ItemDuracao[] = [
-      reps(3, 90),
-      { tipo: 'CONTINUO', duracaoTotalSegundos: 600, reservaTransicaoAposSeg: 45 },
-      reps(3, 60),
-    ];
-    const r = avaliarDuracaoSessao({ itens });
-    // MIN: exec (3×40 + 3×40)=240 + descanso (2×90 + 2×60)=300 + cardio 600 = 1140
-    expect(r.duracaoMinimaEstimadaSegundos).toBe(1140);
-    // MAX: + transição do resistido A (90) + reserva do cardio (45) = 1140 + 135
-    expect(r.duracaoMaximaEstimadaSegundos).toBe(1275);
-  });
-
-  it('omitir a reserva após o cardio (que não é último) → NAO_AVALIADO', () => {
-    const itens: ItemDuracao[] = [
-      { tipo: 'CONTINUO', duracaoTotalSegundos: 600 }, // sem reservaTransicaoAposSeg, e há item depois
-      reps(3, 60),
-    ];
-    const r = avaliarDuracaoSessao({ itens });
+  it('§3.7 cardio DEVE ser o último — cardio→resistido ⇒ NAO_AVALIADO (CARDIO_NAO_FINAL)', () => {
+    const r = avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 600 }, reps(3, 60)] });
     expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/reservaTransicaoAposSeg/);
+    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/CARDIO_NAO_FINAL/);
   });
 
-  it('cardio como ÚLTIMO item não exige reserva de transição', () => {
-    const r = avaliarDuracaoSessao({ itens: [reps(3, 60), { tipo: 'CONTINUO', duracaoTotalSegundos: 300 }] });
+  it('§4 a passagem resistido→cardio NÃO soma deslocamento (transição do último resistido = 0)', () => {
+    // reps(3,90) seguido de cardio: exec 120 + descanso 180 + cardio 600 = 900; transição = 0 (próximo é cardio).
+    const r = avaliarDuracaoSessao({ itens: [reps(3, 90), { tipo: 'CONTINUO', duracaoTotalSegundos: 600 }] });
     expect(r.estadoCalculo).toBe('CALCULADO');
+    expect(r.duracaoMinimaEstimadaSegundos).toBe(900);
+    expect(r.duracaoMaximaEstimadaSegundos).toBe(900); // sem transição para o cardio
+    expect(r.componentes!.transicaoSegundos).toBe(0);
+  });
+
+  it('cardio como ÚLTIMO/único item ⇒ CALCULADO', () => {
+    expect(avaliarDuracaoSessao({ itens: [reps(3, 60), { tipo: 'CONTINUO', duracaoTotalSegundos: 300 }] }).estadoCalculo).toBe('CALCULADO');
+    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 300 }] }).estadoCalculo).toBe('CALCULADO');
   });
 });
 
