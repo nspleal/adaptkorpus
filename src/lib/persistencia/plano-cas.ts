@@ -6,29 +6,17 @@
  * compare-and-swap real) e a orquestração — carregar o snapshot atual, decidir, trocar, devolver
  * o RESULTADO DISCRIMINADO. Nenhum I/O voltou para o motor por causa disto.
  *
- * ⚠️ FRONTEIRA DE PERSISTÊNCIA — O QUE FALTA NO BANCO (reporte honesto, não contornado):
- *   A tabela `public.plans` (migração 0001) hoje é { id, user_id, created_at, tipo, payload, ativo }
- *   — SEM as colunas de concorrência otimista. Para o adaptador Supabase real fazer o CAS atômico,
- *   a estrutura MÍNIMA necessária (nova migração, fora desta sessão — não se escreve no cofre nem se
- *   mexe na migração de planos antigos por causa do CAS) é uma linha de AGREGADO por usuário:
- *
- *     alter table public.plans
- *       add column revision            integer      not null default 0,
- *       add column formula_version     text,
- *       add column canonical_input_hash text,
- *       add column aggregate_id        text;         -- ex.: `${user_id}:plano`
- *     create unique index plans_aggregate_rev on public.plans (aggregate_id);
- *
- *   O UPDATE condicional do adaptador (a troca atômica) é, em uma linha:
- *     update public.plans set payload=:agg, revision=revision+1, formula_version=:fv,
- *            canonical_input_hash=:hash
- *      where aggregate_id=:aid and revision=:expected;   -- 0 linhas ⇒ CONFLITO_REVISAO
- *   (RLS por `user_id` já protege o acesso; a atomicidade vem do `where revision=:expected`.)
- *
- *   Enquanto essas colunas não existirem, o `RepositorioSupabasePlanoCAS` NÃO é instanciável (só o
- *   `RepositorioMemoria`, exercitado nos testes, prova a semântica). O snapshot best-effort atual da
- *   rota `PUT /api/dados/perfil` (insert de dieta+treino) segue como está — o CAS não altera UI nem
- *   migração de planos antigos.
+ * ✅ PERSISTÊNCIA REAL (decisão do autor "CAS PERSISTENTE", 2026-08-21):
+ *   - migração ADITIVA `supabase/migrations/0015_c1_cas_metadata.sql` cria a tabela própria
+ *     `public.plano_cas` (aggregate_id, revision, formula_version, canonical_input_hash, payload)
+ *     com RLS por dono e a RPC atômica `commit_plano_cas` (`UPDATE ... WHERE revision=:expected`,
+ *     zero linhas ⇒ CONFLITO_REVISAO, nunca sucesso). Tabela SEPARADA de `public.plans` de
+ *     propósito: não toca a semântica de planos antigos (B1.14 fora do C1) — legado simplesmente
+ *     não tem linha aqui e o primeiro uso do C1 recompõe e grava.
+ *   - adaptador real: `RepositorioSupabasePlanoCAS` (`plano-cas-supabase.ts`) implementa esta porta.
+ *   - atomicidade provada contra Postgres REAL: `supabase/tests/cas_atomicidade.sql` via
+ *     `supabase/tests/run-cas-test.sh` (7→8, CONFLITO_REVISAO, retry recompute 8→9, tudo-ou-nada).
+ *   O `RepositorioMemoria` abaixo segue como referência de semântica e alvo dos testes de unidade.
  */
 import {
   decidirPreCommit,

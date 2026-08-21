@@ -60,7 +60,27 @@ export {
   canonicalInputHash, decidirPreCommit,
   type ChaveCommit, type ComandoCommit, type SnapshotAtual, type ResultadoCommit, type PreCommit,
 } from './cas';
-export { FORMULA_DURACAO_VERSION } from './duracao-sessao';
+export {
+  FORMULA_DURACAO_VERSION, TEMPO_EXECUCAO_SERIE_REPS_SEG, TOLERANCIA_EXCESSO_SEG,
+  avaliarDuracaoSessao,
+  type ResultadoDuracao, type EntradaDuracao, type ItemDuracao, type EstadoLimite, type EstadoCalculo,
+} from './duracao-sessao';
+
+// --- C1 · cardio (primitiva única) + distribuição semanal + geração temporal ---
+export {
+  calcularUsosCardioNaOrigem, capacidadeCardioDoDia,
+  type CapacidadeCardio, type PrescricaoCardioDia, type UsoCardioOrigem,
+} from './cardio-sessao';
+export {
+  construirDistribuicaoCardioSemana, validarDistribuicaoCardioSemana,
+  type EntradaDistribuicaoSemana, type DistribuicaoCardioSemanal, type EstadoDistribuicao,
+  type CardioPlanejado, type BlocoCardioDia, type ValidacaoDistribuicao,
+} from './distribuicao-cardio-semana';
+export {
+  classificarTentativa, gerarPlanoTemporal, avaliarInvariantes, avaliarDuracaoDoPlano, fatosReducao,
+  type ResultadoGeracaoTemporal, type Tentativa, type MotivoErroAlocador, type Alocador,
+  type ItemPlanoTemporal, type InvariantesTreino, type FatosReducao,
+} from './geracao-temporal';
 
 // --- Substituição (F.2) ---
 export * from './substituicao-types';
