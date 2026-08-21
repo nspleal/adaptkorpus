@@ -55,6 +55,13 @@ export {
   type ModificacaoIsometrico,
 } from './modificacoes-isometricos';
 
+// --- CAS · núcleo puro (C1, decisão do autor "Escolha A") ---
+export {
+  canonicalInputHash, decidirPreCommit,
+  type ChaveCommit, type ComandoCommit, type SnapshotAtual, type ResultadoCommit, type PreCommit,
+} from './cas';
+export { FORMULA_DURACAO_VERSION } from './duracao-sessao';
+
 // --- Substituição (F.2) ---
 export * from './substituicao-types';
 export {
