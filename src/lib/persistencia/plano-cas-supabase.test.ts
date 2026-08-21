@@ -16,22 +16,18 @@ class FakeCliente implements ClienteSupabaseCAS {
   rpcCalls: Record<string, unknown>[] = [];
   snapshot: { revision: number; formula_version: string; canonical_input_hash: string } | null = null;
   proximoRpc: { data: unknown; error: { message: string } | null } = { data: null, error: null };
-  from(_tabela: string) {
-    const self = this;
-    return {
-      select(_cols: string) {
-        return {
-          eq(_c: string, _v: string) {
-            return { async maybeSingle() { return { data: self.snapshot, error: null }; } };
-          },
-        };
-      },
-    };
-  }
-  async rpc(_fn: string, args: Record<string, unknown>) {
+  // arrow properties: `this` é ligado lexicamente (sem aliasing de `this`).
+  from = (_tabela: string) => ({
+    select: (_cols: string) => ({
+      eq: (_c: string, _v: string) => ({
+        maybeSingle: async () => ({ data: this.snapshot, error: null }),
+      }),
+    }),
+  });
+  rpc = async (_fn: string, args: Record<string, unknown>) => {
     this.rpcCalls.push(args);
     return this.proximoRpc;
-  }
+  };
 }
 
 const comando = (over: Partial<ComandoCommit<{ n: number }>> = {}): ComandoCommit<{ n: number }> => ({
