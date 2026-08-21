@@ -266,6 +266,31 @@ describe('C1 · reserva de transição é DERIVADA do descanso vigente (não per
   });
 });
 
+describe('C1 · motivos_limite independente + domínios inteiros seguros (§2/§3.6, fixtures 15/23)', () => {
+  it('orçamento ausente ⇒ CALCULADO, estado_limite NAO_AVALIADO, motivosLimite=[ORCAMENTO_AUSENTE]', () => {
+    const r = avaliarDuracaoSessao({ itens: [reps(4, 90)] });
+    expect(r.estadoCalculo).toBe('CALCULADO');
+    expect(r.estadoLimite).toBe('NAO_AVALIADO');
+    expect(r.motivosLimite).toContain('ORCAMENTO_AUSENTE');
+    expect(r.motivosNaoAvaliados).toEqual([]);
+  });
+  it('orçamento presente sempre ⇒ motivosLimite não tem ORCAMENTO_AUSENTE', () => {
+    const r = avaliarDuracaoSessao({ itens: [reps(4, 90)], orcamentoSegundos: 1800 });
+    expect(r.motivosLimite).not.toContain('ORCAMENTO_AUSENTE');
+  });
+  it('hold fracionário ⇒ NAO_AVALIADO', () => {
+    const iso: ItemDuracao = { tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60, execucao: { tipo: 'ISOMETRIA', holdSegundosPorSerie: 90.5 }, tecnica: { tipo: 'SEM_TECNICA' } };
+    expect(avaliarDuracaoSessao({ itens: [iso] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+  it('duração contínua infinita ou insegura ⇒ NAO_AVALIADO', () => {
+    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: Infinity }] }).estadoCalculo).toBe('NAO_AVALIADO');
+    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: Number.MAX_SAFE_INTEGER + 2 }] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+  it('série fracionária ⇒ NAO_AVALIADO', () => {
+    expect(avaliarDuracaoSessao({ itens: [reps(2.5, 60)] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+});
+
 describe('C1 · determinismo e versionamento', () => {
   it('mesma entrada → resultado idêntico', () => {
     const entrada = { itens: [reps(4, 60), reps(4, 90)], orcamentoSegundos: 1800 };

@@ -25,6 +25,12 @@ describe('C1 adaptador · execução por tipo', () => {
     expect(r.duracaoMinimaEstimadaSegundos).toBe(3 * 120 + 2 * 60); // 480
   });
 
+  it('fixture 53: hold ausente + orçamento ausente ⇒ HOLD_AUSENTE e ORCAMENTO_AUSENTE em listas distintas', () => {
+    const r = avaliarDuracaoResistida([{ exercicio: prancha, series: 3, descansoSeg: 60 }], 'avancado', undefined);
+    expect(r.motivosNaoAvaliados.join(' '), 'HOLD_AUSENTE escondido').toMatch(/HOLD_AUSENTE/);
+    expect(r.motivosLimite, 'ORCAMENTO_AUSENTE escondido').toContain('ORCAMENTO_AUSENTE');
+  });
+
   it('🔒 ISOMÉTRICO sem hold transportado ⇒ NAO_AVALIADO (HOLD_AUSENTE), sem fallback', () => {
     const r = avaliarDuracaoResistida([{ exercicio: prancha, series: 3, descansoSeg: 60 }], 'avancado');
     expect(r.estadoCalculo).toBe('NAO_AVALIADO');

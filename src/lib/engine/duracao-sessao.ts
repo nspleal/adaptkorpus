@@ -94,15 +94,23 @@ export interface ResultadoDuracao {
   limiteOperacionalSegundos?: number;
   formulaVersion: string;
   componentes?: ComponentesDuracao;
+  /** Por que NÃO há cálculo confiável (HOLD_AUSENTE, domínio inválido, técnica sem contrato…). */
   motivosNaoAvaliados: string[];
+  /** 🔒 C1 — dimensão INDEPENDENTE: o que não pôde ser comparado ao limite (ORCAMENTO_AUSENTE,
+   *  CARDIO_EXCEDE_TEMPO_DISPONIVEL, …). Nunca esconde nem é escondido por `motivosNaoAvaliados`. */
+  motivosLimite: string[];
 }
 
-const naoAvaliado = (motivos: string[], orcamentoSegundos?: number): ResultadoDuracao => ({
+/** Inteiro finito e seguro (proíbe fracionário/infinito/inseguro — spec §3.6). */
+const intSeguro = (n: number): boolean => Number.isSafeInteger(n);
+
+const naoAvaliado = (motivos: string[], orcamentoSegundos: number | undefined, motivosLimite: string[]): ResultadoDuracao => ({
   estadoCalculo: 'NAO_AVALIADO',
   estadoLimite: 'NAO_AVALIADO',
   orcamentoSegundos,
   formulaVersion: FORMULA_DURACAO_VERSION,
   motivosNaoAvaliados: motivos,
+  motivosLimite,
 });
 
 /** Execução por série já com o fator de lateralidade (2× só na execução). */
@@ -110,11 +118,11 @@ function execucaoPorSerie(it: ItemResistido, motivos: string[], idx: number): nu
   const fator = it.unilateralDoisLados === true ? 2 : 1;
   if (it.execucao.tipo === 'REPETICOES') {
     const s = it.execucao.segundosEstimadosPorSerie;
-    if (!(s > 0)) { motivos.push(`item ${idx}: segundosEstimadosPorSerie deve ser > 0`); return null; }
+    if (!intSeguro(s) || !(s > 0)) { motivos.push(`item ${idx}: segundosEstimadosPorSerie deve ser inteiro seguro > 0`); return null; }
     return fator * s;
   }
   const h = it.execucao.holdSegundosPorSerie;
-  if (!(h > 0)) { motivos.push(`item ${idx}: holdSegundosPorSerie deve ser > 0`); return null; }
+  if (!intSeguro(h) || !(h > 0)) { motivos.push(`item ${idx}: holdSegundosPorSerie deve ser inteiro seguro > 0`); return null; }
   return fator * h;
 }
 
@@ -127,7 +135,7 @@ function adicionalTecnica(tec: TecnicaTemporal | undefined, motivos: string[], i
   }
   // CONTRATO_COMPLETO
   for (const p of tec.parcelasAdicionaisSegundos) {
-    if (!(p >= 0)) { motivos.push(`item ${idx}: parcela de técnica < 0`); return null; }
+    if (!intSeguro(p) || !(p >= 0)) { motivos.push(`item ${idx}: parcela de técnica deve ser inteiro seguro >= 0`); return null; }
   }
   const soma = tec.parcelasAdicionaisSegundos.reduce((a, b) => a + b, 0);
   if (tec.adicionalTecnicaTotalSegundos !== soma) {
@@ -147,8 +155,12 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
   const { itens, orcamentoSegundos } = entrada;
   const n = itens.length;
 
-  if (orcamentoSegundos !== undefined && !(orcamentoSegundos > 0)) {
-    motivos.push('orçamento presente deve ser > 0');
+  // 🔒 C1 — `motivos_limite` é dimensão INDEPENDENTE: ORCAMENTO_AUSENTE entra aqui mesmo que o
+  // cálculo falhe por outro motivo, e nunca migra para `motivos_nao_avaliados`.
+  const motivosLimite: string[] = [];
+  if (orcamentoSegundos === undefined) motivosLimite.push('ORCAMENTO_AUSENTE');
+  else if (!intSeguro(orcamentoSegundos) || !(orcamentoSegundos > 0)) {
+    motivos.push('orçamento presente deve ser inteiro seguro > 0');
   }
 
   let execucaoSegundos = 0;
@@ -162,11 +174,11 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
     const ehUltimo = i === n - 1;
 
     if (it.tipo === 'RESISTIDO') {
-      if (!Number.isInteger(it.series) || !(it.series > 0)) {
-        motivos.push(`item ${i}: series deve ser inteiro > 0`);
+      if (!intSeguro(it.series) || !(it.series > 0)) {
+        motivos.push(`item ${i}: series deve ser inteiro seguro > 0`);
       }
-      if (!(it.descansoEntreSeriesSeg >= 0)) {
-        motivos.push(`item ${i}: descansoEntreSeriesSeg deve ser >= 0`);
+      if (!intSeguro(it.descansoEntreSeriesSeg) || !(it.descansoEntreSeriesSeg >= 0)) {
+        motivos.push(`item ${i}: descansoEntreSeriesSeg deve ser inteiro seguro >= 0`);
       }
       const exSerie = execucaoPorSerie(it, motivos, i);
       const adic = adicionalTecnica(it.tecnica, motivos, i);
@@ -179,8 +191,8 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
       if (!ehUltimo && it.descansoEntreSeriesSeg >= 0) transicaoSegundos += it.descansoEntreSeriesSeg;
     } else {
       // CONTINUO
-      if (!(it.duracaoTotalSegundos > 0)) {
-        motivos.push(`item ${i}: duracaoTotalSegundos deve ser > 0`);
+      if (!intSeguro(it.duracaoTotalSegundos) || !(it.duracaoTotalSegundos > 0)) {
+        motivos.push(`item ${i}: duracaoTotalSegundos deve ser inteiro seguro > 0`);
       } else {
         continuoSegundos += it.duracaoTotalSegundos;
       }
@@ -189,8 +201,8 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
       if (!ehUltimo) {
         if (it.reservaTransicaoAposSeg === undefined) {
           motivos.push(`item ${i}: item contínuo antes de outro item exige reservaTransicaoAposSeg explícita`);
-        } else if (!(it.reservaTransicaoAposSeg >= 0)) {
-          motivos.push(`item ${i}: reservaTransicaoAposSeg deve ser >= 0`);
+        } else if (!intSeguro(it.reservaTransicaoAposSeg) || !(it.reservaTransicaoAposSeg >= 0)) {
+          motivos.push(`item ${i}: reservaTransicaoAposSeg deve ser inteiro seguro >= 0`);
         } else {
           transicaoSegundos += it.reservaTransicaoAposSeg;
         }
@@ -198,10 +210,14 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
     }
   }
 
-  if (motivos.length > 0) return naoAvaliado(motivos, orcamentoSegundos);
+  if (motivos.length > 0) return naoAvaliado(motivos, orcamentoSegundos, motivosLimite);
 
   const min = execucaoSegundos + descansoSegundos + continuoSegundos + adicionalTecnicaSegundos;
   const max = min + transicaoSegundos;
+  // 🔒 total derivado inseguro (overflow) ⇒ NAO_AVALIADO, nunca arredonda em silêncio.
+  if (!intSeguro(min) || !intSeguro(max)) {
+    return naoAvaliado([`total derivado inseguro (min=${min}, max=${max})`], orcamentoSegundos, motivosLimite);
+  }
   const componentes: ComponentesDuracao = {
     execucaoSegundos, descansoSegundos, continuoSegundos, adicionalTecnicaSegundos, transicaoSegundos,
   };
@@ -216,6 +232,7 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
       formulaVersion: FORMULA_DURACAO_VERSION,
       componentes,
       motivosNaoAvaliados: [],
+      motivosLimite, // contém ORCAMENTO_AUSENTE
     };
   }
 
@@ -236,5 +253,6 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
     formulaVersion: FORMULA_DURACAO_VERSION,
     componentes,
     motivosNaoAvaliados: [],
+    motivosLimite,
   };
 }

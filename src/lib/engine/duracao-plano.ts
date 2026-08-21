@@ -106,6 +106,9 @@ export function avaliarDuracaoResistida(
       orcamentoSegundos,
       formulaVersion: FORMULA_DURACAO_VERSION,
       motivosNaoAvaliados: faltou,
+      // 🔒 C1 — dimensão independente: orçamento ausente registra ORCAMENTO_AUSENTE mesmo aqui,
+      // sem esconder HOLD_AUSENTE (fixture 53).
+      motivosLimite: orcamentoSegundos === undefined ? ['ORCAMENTO_AUSENTE'] : [],
     };
   }
   return avaliarDuracaoSessao({ itens, orcamentoSegundos });
