@@ -3,8 +3,11 @@
  * Fonte: cofre (banco-alimentos / ranking-exercicios). Validado Δ≈0.
  */
 import type { Exercise } from './types';
+import { LATERALIDADE } from './lateralidade';
 
-export const EXERCISES: Exercise[] = [
+// 🔒 Array CRU gerado do xlsx do cofre (sem `execucao`). A lateralidade curada é mesclada
+// abaixo em `EXERCISES`; o load FALHA se algum exercício não estiver curado (gate C1).
+const EXERCISES_RAW: Omit<Exercise, 'execucao'>[] = [
   {
     "id": "e1",
     "nomePt": "Flexão de braço",
@@ -2579,3 +2582,16 @@ export const EXERCISES: Exercise[] = [
     "comoFazer": "Igual à remada invertida na mesa, mas com as palmas viradas para você. Cotovelos mais junto ao corpo, puxando na direção da cintura. Punho neutro; se doer o cotovelo, volte para a pegada pronada."
   }
 ];
+
+/**
+ * 🔒 C1 — EXERCISES = array cru + lateralidade curada. Cada exercício DEVE ter `execucao`; se a
+ * curadoria não cobrir um id, o load LANÇA (gate "valor ausente deve falhar"). Nunca há default
+ * silencioso de BILATERAL.
+ */
+export const EXERCISES: Exercise[] = EXERCISES_RAW.map((e) => {
+  const execucao = LATERALIDADE[e.id];
+  if (execucao == null) {
+    throw new Error(`[catálogo] lateralidade (execucao) não curada para ${e.id} (${e.nomePt}) — ver data/lateralidade.ts`);
+  }
+  return { ...e, execucao };
+});

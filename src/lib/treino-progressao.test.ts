@@ -12,8 +12,8 @@ const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: 
 const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({ pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'saude', nivelExperiencia: 'iniciante', equipamento: 'academia', diasDisponiveis: 4, tempoPorSessaoMin: 60, ...over });
 const prescricao = (over: Partial<PerfilTreino> = {}) => { const p = perfil(over); return prescreverTreino(p, avaliarGateTreino(p)); };
 
-const prancha: Exercise = { id: 'e7', nomePt: 'Prancha', grupoMuscular: 'core', grupoPrimario: 'core', padraoMovimento: 'core', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', equipamentoDetalhe: 'Peso corporal', local: 'casa_sem', comoFazer: '' };
-const supino: Exercise = { id: 'e_sup', nomePt: 'Supino', grupoMuscular: 'peito', grupoPrimario: 'peito', padraoMovimento: 'empurrar', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'academia', equipamentoDetalhe: 'Barra', local: 'academia', comoFazer: '' };
+const prancha: Exercise = { id: 'e7', nomePt: 'Prancha', grupoMuscular: 'core', grupoPrimario: 'core', padraoMovimento: 'core', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', equipamentoDetalhe: 'Peso corporal', local: 'casa_sem', comoFazer: '', execucao: 'BILATERAL' };
+const supino: Exercise = { id: 'e_sup', nomePt: 'Supino', grupoMuscular: 'peito', grupoPrimario: 'peito', padraoMovimento: 'empurrar', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'academia', equipamentoDetalhe: 'Barra', local: 'academia', comoFazer: '', execucao: 'BILATERAL' };
 const byId = (id: string) => ({ e7: prancha, e_sup: supino }[id]);
 
 let seq = 0;

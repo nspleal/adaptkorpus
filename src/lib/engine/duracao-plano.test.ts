@@ -27,9 +27,9 @@ describe('C1 adaptador · execução por tipo', () => {
     expect(r.duracaoMinimaEstimadaSegundos).toBe(330);
   });
 
-  it('NUNCA marca unilateral (o modelo não tem o campo) — bilateral por default', () => {
+  it('lê o campo curado `execucao`: e1 (supino) é BILATERAL ⇒ não dobra', () => {
     const { itens } = itensResistidosDeSlots([{ exercicio: supino, series: 4, descansoSeg: 90 }], 'avancado');
-    expect((itens[0] as { unilateralDoisLados?: boolean }).unilateralDoisLados).toBeUndefined();
+    expect((itens[0] as { unilateralDoisLados?: boolean }).unilateralDoisLados).toBe(false);
   });
 });
 

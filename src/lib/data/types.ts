@@ -6,6 +6,8 @@
  * Estrutura RELACIONAL: foods → recipes → recipe_items (join).
  * kcal/macros de um prato = SOMA dos ingredientes (TACO × gramas), nunca por 4/4/9.
  */
+import type { ExecucaoLateralidade } from './lateralidade';
+export type { ExecucaoLateralidade };
 
 export type GrupoAlimentar =
   | 'proteina_animal'
@@ -164,4 +166,11 @@ export interface Exercise {
   /** Faixa de popularidade (1 essencial → 4 específico), não dificuldade. */
   tier?: number;
   comoFazer: string;
+  /**
+   * 🔒 C1 — LATERALIDADE (decisão do autor A, 2026-08-20). OBRIGATÓRIO em todo exercício.
+   * Só `UNILATERAL_DOIS_LADOS` dobra o componente de EXECUÇÃO (nunca descanso/técnica/cardio);
+   * `UNILATERAL_ALTERNADO` não dobra (a série já representa o conjunto alternado). Curadoria
+   * explícita em `data/lateralidade.ts`, mesclada no load de `EXERCISES`.
+   */
+  execucao: ExecucaoLateralidade;
 }

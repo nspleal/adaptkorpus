@@ -6,9 +6,8 @@
  * avaliam o MESMO objeto de plano final pela MESMA função.
  *
  * 🔑 Fronteiras do modelo de dados atual (medidas em `44f0ee0`, honestas por design):
- *  - **Lateralidade:** o `Exercise` não tem campo de unilateral/lado. Todo item é tratado como
- *    BILATERAL. A fórmula canônica suporta unilateral (dobra só a execução), mas o adaptador
- *    não tem sinal para acioná-lo — entra quando o catálogo ganhar o marcador.
+ *  - **Lateralidade:** vem do campo curado `Exercise.execucao` (data/lateralidade.ts). Só
+ *    `UNILATERAL_DOIS_LADOS` dobra a execução; `ALTERNADO`/`BILATERAL` não. Sem regex em runtime.
  *  - **Técnica avançada (superset/dropset):** o modelo não carrega marcador — todo item é
  *    `SEM_TECNICA`. Superset/circuito são fronteira explícita (exigem contrato temporal próprio).
  *  - **Isometria:** os 5 ids `REP_UNIT_SEGUNDOS` usam o HOLD (proibido 40 s). Como o slot final
@@ -65,6 +64,9 @@ export function itensResistidosDeSlots(
       series: s.series,
       descansoEntreSeriesSeg: s.descansoSeg,
       execucao: execucaoResistidaDe(s.exercicio, nivel),
+      // 🔒 C1 — só UNILATERAL_DOIS_LADOS dobra a execução; ALTERNADO/BILATERAL não. Vem do campo
+      // curado `execucao` (data/lateralidade.ts), nunca de regex em nome/descrição.
+      unilateralDoisLados: s.exercicio.execucao === 'UNILATERAL_DOIS_LADOS',
       tecnica: { tipo: 'SEM_TECNICA' },
     });
   });

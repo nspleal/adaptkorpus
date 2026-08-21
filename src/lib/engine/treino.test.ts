@@ -13,10 +13,10 @@ function prescrever(over: Partial<PerfilTreino> = {}) {
   const p = perfil(over);
   return prescreverTreino(p, avaliarGateTreino(p));
 }
-const supino: Exercise = { id: 'e_sup', nomePt: 'Supino', grupoMuscular: 'peito', grupoPrimario: 'peito', padraoMovimento: 'empurrar', nivel: 'intermediario', tipo: 'forca_hipertrofia', equipamento: 'academia', local: 'academia', comoFazer: '' };
-const agacho: Exercise = { id: 'e_agacho', nomePt: 'Agachamento', grupoMuscular: 'quadriceps', grupoPrimario: 'quadriceps', padraoMovimento: 'agachar', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', local: 'casa_sem', comoFazer: '' };
+const supino: Exercise = { id: 'e_sup', nomePt: 'Supino', grupoMuscular: 'peito', grupoPrimario: 'peito', padraoMovimento: 'empurrar', nivel: 'intermediario', tipo: 'forca_hipertrofia', equipamento: 'academia', local: 'academia', comoFazer: '', execucao: 'BILATERAL' };
+const agacho: Exercise = { id: 'e_agacho', nomePt: 'Agachamento', grupoMuscular: 'quadriceps', grupoPrimario: 'quadriceps', padraoMovimento: 'agachar', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', local: 'casa_sem', comoFazer: '', execucao: 'BILATERAL' };
 // Isométrico: id 'e7' (Prancha) está em REP_UNIT_SEGUNDOS → progride em segundos.
-const prancha: Exercise = { id: 'e7', nomePt: 'Prancha', grupoMuscular: 'core', grupoPrimario: 'core', padraoMovimento: 'core', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', equipamentoDetalhe: 'Peso corporal', local: 'casa_sem', comoFazer: '' };
+const prancha: Exercise = { id: 'e7', nomePt: 'Prancha', grupoMuscular: 'core', grupoPrimario: 'core', padraoMovimento: 'core', nivel: 'iniciante', tipo: 'forca_hipertrofia', equipamento: 'nenhum', equipamentoDetalhe: 'Peso corporal', local: 'casa_sem', comoFazer: '', execucao: 'BILATERAL' };
 
 describe('prescrição FITT', () => {
   it('massa/intermediário bate a spec', () => {

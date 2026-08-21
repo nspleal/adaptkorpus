@@ -116,10 +116,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 25 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    4,
-    4,
-    4,
-    4,
+    3,
+    3,
+    3,
+    3,
   ],
   "tempo": 25,
 }
