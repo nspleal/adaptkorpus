@@ -37,6 +37,8 @@ export interface DiaDoEditor {
   series?: readonly (number | undefined)[];
   /** Descanso por exercício, em segundos (do motor). 🔒 C1: elemento `undefined` ⇒ tempo NAO_AVALIADO. */
   descansoSeg?: readonly (number | undefined)[];
+  /** 🔒 C1: HOLD (s) por exercício isométrico, transportado do motor. Ausente num isométrico ⇒ NAO_AVALIADO. */
+  holdSeg?: readonly (number | undefined)[];
 }
 
 export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_mrv' | 'sem_estimulo';
@@ -204,7 +206,7 @@ export function avisos(
   //    que cabe. O editor é SOFT — isto informa, nunca trava (DF①).
   const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
   dias.forEach((d, i) => {
-    const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k] }));
+    const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k], holdSeg: d.holdSeg?.[k] }));
     const r = avaliarDuracaoResistida(slots, ctx.nivel, orcamentoSeg);
     if (r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
       const min = Math.round(r.duracaoMaximaEstimadaSegundos! / 60);

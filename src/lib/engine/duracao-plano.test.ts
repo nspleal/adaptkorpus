@@ -17,14 +17,20 @@ describe('C1 adaptador · execução por tipo', () => {
     expect(itens[0]).toMatchObject({ execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 } });
   });
 
-  it('ISOMÉTRICO usa o HOLD do nível (nunca 40 s)', () => {
-    const holdAvancado = faixaSegundos('e7', 'avancado')!.min; // 70
-    expect(holdAvancado).toBe(70);
-    const { itens } = itensResistidosDeSlots([{ exercicio: prancha, series: 3, descansoSeg: 60 }], 'avancado');
-    expect(itens[0]).toMatchObject({ execucao: { tipo: 'ISOMETRIA', holdSegundosPorSerie: 70 } });
-    // e a duração reflete o hold: 3×70 exec + 2×60 descanso = 330 (não 240 que 40 s daria).
+  it('ISOMÉTRICO usa o HOLD REAL transportado no slot (nunca 40 s, nunca faixaSegundos.min)', () => {
+    // hold=120 vem do PLANO (slot.holdSeg), não de um cálculo do adaptador.
+    const { itens } = itensResistidosDeSlots([{ exercicio: prancha, series: 3, descansoSeg: 60, holdSeg: 120 }]);
+    expect(itens[0]).toMatchObject({ execucao: { tipo: 'ISOMETRIA', holdSegundosPorSerie: 120 } });
+    const r = avaliarDuracaoResistida([{ exercicio: prancha, series: 3, descansoSeg: 60, holdSeg: 120 }], 'avancado');
+    expect(r.duracaoMinimaEstimadaSegundos).toBe(3 * 120 + 2 * 60); // 480
+  });
+
+  it('🔒 ISOMÉTRICO sem hold transportado ⇒ NAO_AVALIADO (HOLD_AUSENTE), sem fallback', () => {
     const r = avaliarDuracaoResistida([{ exercicio: prancha, series: 3, descansoSeg: 60 }], 'avancado');
-    expect(r.duracaoMinimaEstimadaSegundos).toBe(330);
+    expect(r.estadoCalculo).toBe('NAO_AVALIADO');
+    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/HOLD_AUSENTE/);
+    // mutação-guard: restaurar faixaSegundos.min daria CALCULADO 330 — este teste morre.
+    expect(faixaSegundos('e7', 'avancado')!.min).toBe(70);
   });
 
   it('lê o campo curado `execucao`: e1 (supino) é BILATERAL ⇒ não dobra', () => {

@@ -97,6 +97,26 @@ describe('C1 gerador · a alavanca de redução preserva invariantes (§7.7)', (
   });
 });
 
+describe('C1 gerador · o HOLD isométrico é TRANSPORTADO ao plano (§1 / fixture 3)', () => {
+  it('plano CUSTOM com prancha (e7) transporta holdSeg ao slot; a certificação não é HOLD_AUSENTE', () => {
+    // isométricos não são escolhidos pelo gerador (o alocador prefere core não-isométrico por
+    // tier/id); o caminho real de um isométrico é o plano do usuário.
+    const rotinaCustom = { dias: [{ nome: 'Core', exercicioIds: ['e7', 'e1'] }] };
+    const r = rotina(perfil({ rotinaCustom } as never));
+    const prancha = r.dias.flatMap((d) => d.slots).find((s) => s.exercicio.id === 'e7');
+    expect(prancha, 'prancha não entrou no plano custom').toBeDefined();
+    expect(prancha!.holdSeg, 'holdSeg NÃO transportado ao slot isométrico').toBeDefined();
+    expect(prancha!.holdSeg!).toBeGreaterThan(0);
+    for (const d of r.duracaoDias ?? []) expect(d.motivosNaoAvaliados.join(' ')).not.toMatch(/HOLD_AUSENTE/);
+  });
+  it('nenhum plano gerado (sem isométrico) reporta HOLD_AUSENTE', () => {
+    for (const over of [{}, { tempoPorSessaoMin: 45 }, { nivelExperiencia: 'avancado' as const, diasDisponiveis: 6, tempoPorSessaoMin: 75 }]) {
+      const r = rotina(perfil(over));
+      for (const d of r.duracaoDias!) expect(d.motivosNaoAvaliados.join(' ')).not.toMatch(/HOLD_AUSENTE/);
+    }
+  });
+});
+
 describe('C1 gerador · convergência na AUSÊNCIA de dados (deload não inventa) (§5.6/§8.1)', () => {
   it('em deload (semana 6) o motor não anota séries ⇒ gerador e crítico convergem em NAO_AVALIADO', () => {
     const p = perfil({ tempoPorSessaoMin: 60, diasDisponiveis: 4 });

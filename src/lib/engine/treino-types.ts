@@ -201,6 +201,12 @@ export interface SlotExercicio {
    * deslocamento em silêncio.
    */
   descansoSeg?: number;
+  /**
+   * 🔒 C1 — HOLD prescrito (s) do slot ISOMÉTRICO, TRANSPORTADO ao plano final. O avaliador de
+   * duração usa ESTE valor; ausente num isométrico ⇒ NAO_AVALIADO (proibido faixaSegundos.min
+   * no adaptador). Ausente em não-isométrico é o normal (eles usam a constante de reps).
+   */
+  holdSeg?: number;
 }
 
 export interface DiaTreino {

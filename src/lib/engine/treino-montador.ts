@@ -29,6 +29,7 @@ import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { avaliarDuracaoSessao } from './duracao-sessao';
 import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
+import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
@@ -488,7 +489,13 @@ export function montarRotina(
             semanaRampa, degradacao,
           });
           if (exato == null) return s; // cardio: não há série a descansar
-          return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG) };
+          // 🔒 C1 — transporta o HOLD real prescrito ao plano (isométricos). O avaliador usa
+          // ESTE valor; ausente ⇒ NAO_AVALIADO. `faixaSegundos.min` é a PRESCRIÇÃO de geração
+          // (mesmo alvo de reset da progressão), materializada no plano — não um fallback do adaptador.
+          const holdSeg = repUnitDe(s.exercicio.id) === 'segundos'
+            ? faixaSegundos(s.exercicio.id, perfil.nivelExperiencia)?.min
+            : undefined;
+          return { ...s, descansoSeg: Math.max(exato, DESCANSO_PISO_DURO_SEG), ...(holdSeg != null ? { holdSeg } : {}) };
         });
       }
     }

@@ -32,9 +32,15 @@ export interface SlotParaDuracao {
   series?: number;
   /** Descanso FINAL entre séries (s). Ausente ⇒ NAO_AVALIADO. */
   descansoSeg?: number;
+  /** 🔒 HOLD FINAL (s) TRANSPORTADO — obrigatório em isométrico; ausente ⇒ NAO_AVALIADO. */
+  holdSeg?: number;
 }
 
-/** Execução por série do exercício: hold para os isométricos, 40 s (proxy v1) para os demais. */
+/**
+ * 🔒 C1 — Execução por série de PLANEJAMENTO (custoDia projeta itens): reps=40; isométrico usa o
+ * hold projetado da faixa do nível. ⚠️ NÃO é o caminho de CERTIFICAÇÃO — a certificação lê o
+ * `holdSeg` REAL transportado ao slot (ver `itensResistidosDeSlots`), sem fallback.
+ */
 export function execucaoResistidaDe(ex: Exercise, nivel: NivelExperiencia): ExecucaoResistida {
   if (repUnitDe(ex.id) === 'segundos') {
     const hold = faixaSegundos(ex.id, nivel)?.min ?? PISO_HOLD_SEG;
@@ -50,7 +56,8 @@ export function execucaoResistidaDe(ex: Exercise, nivel: NivelExperiencia): Exec
  */
 export function itensResistidosDeSlots(
   slots: readonly SlotParaDuracao[],
-  nivel: NivelExperiencia,
+  // 🔒 C1 — o hold agora vem TRANSPORTADO no slot; o nível não é mais usado na certificação.
+  _nivel?: NivelExperiencia,
 ): { itens: ItemDuracao[]; faltou: string[] } {
   const itens: ItemDuracao[] = [];
   const faltou: string[] = [];
@@ -59,11 +66,20 @@ export function itensResistidosDeSlots(
       faltou.push(`slot ${i} (${s.exercicio.id}): ${s.series == null ? 'séries' : 'descanso'} ausente`);
       return;
     }
+    let execucao: ExecucaoResistida;
+    if (repUnitDe(s.exercicio.id) === 'segundos') {
+      // 🔒 C1 — isométrico usa o HOLD REAL transportado ao slot; ausente ⇒ NAO_AVALIADO
+      // (HOLD_AUSENTE). Proibido faixaSegundos.min / 40 s / 90 s aqui.
+      if (s.holdSeg == null) { faltou.push(`slot ${i} (${s.exercicio.id}): HOLD_AUSENTE (isométrico sem hold prescrito no plano)`); return; }
+      execucao = { tipo: 'ISOMETRIA', holdSegundosPorSerie: s.holdSeg };
+    } else {
+      execucao = { tipo: 'REPETICOES', segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG };
+    }
     itens.push({
       tipo: 'RESISTIDO',
       series: s.series,
       descansoEntreSeriesSeg: s.descansoSeg,
-      execucao: execucaoResistidaDe(s.exercicio, nivel),
+      execucao,
       // 🔒 C1 — só UNILATERAL_DOIS_LADOS dobra a execução; ALTERNADO/BILATERAL não. Vem do campo
       // curado `execucao` (data/lateralidade.ts), nunca de regex em nome/descrição.
       unilateralDoisLados: s.exercicio.execucao === 'UNILATERAL_DOIS_LADOS',

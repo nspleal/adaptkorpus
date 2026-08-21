@@ -833,6 +833,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       // usa `ctx.seriesPadrao` como piso.
       series: d.slots.map((s) => s.series),
       descansoSeg: d.slots.map((s) => s.descansoSeg),
+      holdSeg: d.slots.map((s) => s.holdSeg),
     }));
   }
 
@@ -881,6 +882,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         // inventar; o placar usa `ctx.seriesPadrao` (abaixo) como piso de volume.
         series: d.slots.map((s) => s.series),
         descansoSeg: d.slots.map((s) => s.descansoSeg),
+        holdSeg: d.slots.map((s) => s.holdSeg),
       })),
       {
         nivel: perfil.nivelExperiencia,
