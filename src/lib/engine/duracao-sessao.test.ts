@@ -13,6 +13,7 @@ import {
   TEMPO_EXECUCAO_SERIE_REPS_SEG,
   TOLERANCIA_EXCESSO_SEG,
   type ItemDuracao,
+  type TecnicaTemporal,
 } from './duracao-sessao';
 
 const reps = (series: number, descansoEntreSeriesSeg: number, seg = TEMPO_EXECUCAO_SERIE_REPS_SEG): ItemDuracao => ({
@@ -166,34 +167,46 @@ describe('C1 · dados ausentes / domínios (proibido fallback 1 série / 90 s)',
   });
 });
 
-describe('C1 · técnica temporal', () => {
-  it('CONTRATO_COMPLETO parcelas [20] em 3×40 entra UMA vez (não ×3 nem ×2)', () => {
-    const it: ItemDuracao = {
-      tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60,
-      execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 },
-      tecnica: { tipo: 'CONTRATO_COMPLETO', parcelasAdicionaisSegundos: [20], adicionalTecnicaTotalSegundos: 20 },
-    };
-    const r = avaliarDuracaoSessao({ itens: [it] });
-    expect(r.componentes!.adicionalTecnicaSegundos).toBe(20); // não 60, não 40
-    expect(r.duracaoMinimaEstimadaSegundos).toBe(120 + 120 + 20); // exec 120 + descanso 120 + técnica 20
+describe('C1 · técnica temporal — contrato casa {aplicacao_id, tecnica_id} materializados (§3.8)', () => {
+  const base = (tecnica: TecnicaTemporal, mats: { aplicacaoId: string; tecnicaId: string }[]): ItemDuracao => ({
+    tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60,
+    execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 }, tecnica, tecnicasMaterializadas: mats,
   });
-  it('CONTRATO_COMPLETO com total ≠ soma das parcelas → NAO_AVALIADO', () => {
-    const it: ItemDuracao = {
-      tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60,
-      execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 },
-      tecnica: { tipo: 'CONTRATO_COMPLETO', parcelasAdicionaisSegundos: [20, 10], adicionalTecnicaTotalSegundos: 25 },
-    };
+  const mats = [{ aplicacaoId: 'a1', tecnicaId: 'drop-1' }, { aplicacaoId: 'a2', tecnicaId: 'drop-2' }];
+
+  it('fixture 17: drop-1:20 + drop-2:30 deriva 50 UMA vez (não ×série nem ×lado)', () => {
+    const it = base({ tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ aplicacaoId: 'a1', tecnicaId: 'drop-1', adicionalSegundos: 20 }, { aplicacaoId: 'a2', tecnicaId: 'drop-2', adicionalSegundos: 30 }] }, mats);
+    const r = avaliarDuracaoSessao({ itens: [it] });
+    expect(r.componentes!.adicionalTecnicaSegundos).toBe(50); // não 150, não 100
+    expect(r.duracaoMinimaEstimadaSegundos).toBe(120 + 120 + 50); // exec + descanso + técnica
+  });
+  it('fixture 10/17: aplicação materializada SEM contrato correspondente ⇒ NAO_AVALIADO', () => {
+    const it = base({ tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ aplicacaoId: 'a1', tecnicaId: 'drop-1', adicionalSegundos: 20 }] }, mats); // falta a2
     expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
   });
-  it('CONTRATO_AUSENTE → NAO_AVALIADO mesmo tentando anexar total 0', () => {
-    const it: ItemDuracao = {
-      tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60,
-      execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 },
-      tecnica: { tipo: 'CONTRATO_AUSENTE', tecnicaIds: ['dropset'] },
-    };
+  it('fixture 10: SEM_TECNICA com técnica materializada ⇒ NAO_AVALIADO', () => {
+    const it = base({ tipo: 'SEM_TECNICA' }, mats);
+    expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+  it('fixture 30: contrato divergente {a1,rest-pause} para materializada {a1,drop-set} ⇒ NAO_AVALIADO', () => {
+    const it = base({ tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ aplicacaoId: 'a1', tecnicaId: 'rest-pause', adicionalSegundos: 10 }] }, [{ aplicacaoId: 'a1', tecnicaId: 'drop-set' }]);
+    expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+  it('fixture 17: adicional negativo ⇒ NAO_AVALIADO', () => {
+    const it = base({ tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ aplicacaoId: 'a1', tecnicaId: 'drop-1', adicionalSegundos: -5 }] }, [{ aplicacaoId: 'a1', tecnicaId: 'drop-1' }]);
+    expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
+  it('CONTRATO_AUSENTE ⇒ NAO_AVALIADO', () => {
+    const it = base({ tipo: 'CONTRATO_AUSENTE', aplicacaoIds: ['a1'] }, [{ aplicacaoId: 'a1', tecnicaId: 'drop-set' }]);
     const r = avaliarDuracaoSessao({ itens: [it] });
     expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/CONTRATO_AUSENTE|contrato/i);
+    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/CONTRATO_AUSENTE/);
+  });
+  it('SEM_TECNICA sem materializadas ⇒ CALCULADO (técnica 0)', () => {
+    const it = base({ tipo: 'SEM_TECNICA' }, []);
+    const r = avaliarDuracaoSessao({ itens: [it] });
+    expect(r.estadoCalculo).toBe('CALCULADO');
+    expect(r.componentes!.adicionalTecnicaSegundos).toBe(0);
   });
 });
 
