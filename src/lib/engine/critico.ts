@@ -22,6 +22,7 @@ import type { NivelExperiencia } from './treino-types';
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
+import { avaliarDuracaoResistida } from './duracao-plano';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 
 /** Um dia do desenho, como o editor o entrega: o rótulo e os exercícios escolhidos. */
@@ -82,10 +83,8 @@ export interface ContextoCritico {
    * como afirmar intervalo — e afirmar sem base é o que este arquivo existe para evitar).
    */
   diasDaSemanaIdx?: readonly number[];
-  /** Séries usadas na estimativa quando o motor ainda não anotou (piso do nível). */
+  /** Séries usadas no PLACAR quando o motor ainda não anotou (piso do nível). */
   seriesPadrao?: number;
-  /** Descanso usado na estimativa quando o motor ainda não anotou. */
-  descansoPadraoSeg?: number;
 }
 
 const rotulo = (g: GrupoPrimario) => ROTULO_GRUPO[g] ?? g;
@@ -195,19 +194,20 @@ export function avisos(
     });
   }
 
-  // ③ Sessão estourando o tempo que a pessoa declarou ter.
+  // ③ Sessão estourando o tempo — pela FÓRMULA CANÔNICA C1 (`avaliarDuracaoResistida`), a
+  //    MESMA do gerador, sobre o plano final (séries e descanso REAIS por slot). 🔒 Sem
+  //    fallback silencioso 1 série / 90 s: faltou dado ⇒ NAO_AVALIADO e o crítico NÃO afirma
+  //    que cabe. O editor é SOFT — isto informa, nunca trava (DF①).
   const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
   dias.forEach((d, i) => {
-    const seg = d.exercicios.reduce((soma, _e, k) => {
-      const s = d.series?.[k] ?? ctx.seriesPadrao ?? 1;
-      const desc = d.descansoSeg?.[k] ?? ctx.descansoPadraoSeg ?? 90;
-      return soma + s * (40 + desc);
-    }, 0);
-    if (seg > orcamentoSeg) {
+    const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k] }));
+    const r = avaliarDuracaoResistida(slots, ctx.nivel, orcamentoSeg);
+    if (r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
+      const min = Math.round(r.duracaoMaximaEstimadaSegundos! / 60);
       itens.push({
         codigo: 'sessao_longa',
         severidade: 'risco',
-        texto: `${d.nome || `Dia ${i + 1}`} deve levar cerca de ${Math.round(seg / 60)} min, acima dos ${ctx.tempoPorSessaoMin} min que você marcou no perfil.`,
+        texto: `${d.nome || `Dia ${i + 1}`} deve levar até cerca de ${min} min, acima dos ${ctx.tempoPorSessaoMin} min que você marcou no perfil.`,
       });
     }
   });

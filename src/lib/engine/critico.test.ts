@@ -14,10 +14,14 @@ import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
 import { EXERCISES } from '../data/exercises';
 
 const byId = (id: string) => EXERCISES.find((e) => e.id === id)!;
-const CTX: ContextoCritico = { nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 60, seriesPadrao: 4, descansoPadraoSeg: 90 };
+const CTX: ContextoCritico = { nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 60, seriesPadrao: 4 };
 
 /** Um dia com N exercícios de um grupo (pelo pool real da biblioteca). */
 const diaDe = (nome: string, ids: string[]): DiaDoEditor => ({ nome, exercicios: ids.map(byId) });
+
+/** Dia com séries/descanso por slot (o plano final que a fórmula canônica C1 avalia). */
+const diaCompleto = (nome: string, ids: string[], series = 4, desc = 90): DiaDoEditor =>
+  ({ nome, exercicios: ids.map(byId), series: ids.map(() => series), descansoSeg: ids.map(() => desc) });
 
 describe('🔒 o placar É a conta do alocador v4 — nunca uma segunda conta', () => {
   it('o ponderado do placar bate com `creditoPonderadoDaSemana` slot a slot', () => {
@@ -123,15 +127,22 @@ describe('🔴 avisos — risco explicado que NÃO trava (DF①)', () => {
     expect(acima!.texto).toMatch(/contra 16 séries/);
   });
 
-  it('sessão estourando o tempo do perfil avisa com a estimativa', () => {
-    // 6 exercícios × 4 séries × (40 + 90) = 3120 s = 52 min → cabe em 60.
-    const cabe = [diaDe('A', ['e1', 'e10', 'e11', 'e14', 'e15', 'e22'])];
+  it('sessão estourando o tempo do perfil avisa com a estimativa (fórmula canônica C1)', () => {
+    // 6 itens × 4 séries @90: MIN 2580 + transição 450 = MAX 3030 s (50 min) → cabe em 60.
+    const cabe = [diaCompleto('A', ['e1', 'e10', 'e11', 'e14', 'e15', 'e22'])];
     expect(avisos(cabe, placarDaSemana(cabe, CTX), CTX).some((a) => a.codigo === 'sessao_longa')).toBe(false);
-    // 8 exercícios → 69 min → estoura.
-    const estoura = [diaDe('A', ['e1', 'e10', 'e11', 'e14', 'e15', 'e22', 'e45', 'e46'])];
+    // 8 itens × 4 séries @90: MAX 4070 s (68 min) > 3600 → estoura (o editor informa a diferença).
+    const estoura = [diaCompleto('A', ['e1', 'e10', 'e11', 'e14', 'e15', 'e22', 'e45', 'e46'])];
     const item = avisos(estoura, placarDaSemana(estoura, CTX), CTX).find((a) => a.codigo === 'sessao_longa');
     expect(item, 'a sessão longa não foi avisada').toBeDefined();
     expect(item!.texto).toMatch(/acima dos 60 min/);
+  });
+
+  it('🔒 sem séries/descanso por slot: NÃO inventa 1 série / 90 s (NAO_AVALIADO ⇒ sem aviso de tempo)', () => {
+    // 8 itens que ESTOURARIAM com o fallback antigo 1/90; sem os dados finais, o crítico se
+    // cala em vez de afirmar (ou negar) que cabe — a regra que a norma C1 trava.
+    const semDados = [diaDe('A', ['e1', 'e10', 'e11', 'e14', 'e15', 'e22', 'e45', 'e46'])];
+    expect(avisos(semDados, placarDaSemana(semDados, CTX), CTX).some((a) => a.codigo === 'sessao_longa')).toBe(false);
   });
 
   it('puxar < empurrar avisa (a invariante do motor, aqui como aviso — não como trava)', () => {
