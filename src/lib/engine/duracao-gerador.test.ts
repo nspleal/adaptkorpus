@@ -97,6 +97,35 @@ describe('C1 gerador · a alavanca de redução preserva invariantes (§7.7)', (
   });
 });
 
+describe('C1 gerador · convergência na AUSÊNCIA de dados (deload não inventa) (§5.6/§8.1)', () => {
+  it('em deload (semana 6) o motor não anota séries ⇒ gerador e crítico convergem em NAO_AVALIADO', () => {
+    const p = perfil({ tempoPorSessaoMin: 60, diasDisponiveis: 4 });
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, { semana: 6, feedbackGrupos: new Map() });
+    expect(r.duracaoDias, 'a certificação existe mesmo em deload').toBeDefined();
+    const semSerie = r.dias.filter((d) => d.slots.some((s) => s.series == null));
+    expect(semSerie.length, 'a fixture assume que o deload não anota séries').toBeGreaterThan(0);
+    r.dias.forEach((d, i) => {
+      if (d.slots.some((s) => s.series == null)) {
+        // gerador: NAO_AVALIADO (não inventa piso)…
+        expect(r.duracaoDias![i]!.estadoCalculo).toBe('NAO_AVALIADO');
+        // …e o crítico, sobre os MESMOS slots crus, também se abstém (mesma função, mesmo objeto).
+        const comoCritico = d.slots.map((s) => ({ exercicio: s.exercicio, series: s.series, descansoSeg: s.descansoSeg }));
+        expect(avaliarDuracaoResistida(comoCritico, p.nivelExperiencia, 3600).estadoCalculo).toBe('NAO_AVALIADO');
+      }
+    });
+  });
+});
+
+describe('C1 gerador · o plano do USUÁRIO também é certificado (§5.5 / DF②)', () => {
+  it('rotinaCustom carrega duracaoDias (o contrato não quebra no caminho do editor)', () => {
+    const base = rotina(perfil());
+    const rotinaCustom = { dias: base.dias.slice(0, 2).map((d) => ({ nome: d.nome, exercicioIds: d.slots.map((s) => s.exercicio.id) })) };
+    const r = rotina(perfil({ rotinaCustom } as never));
+    expect(r.duracaoDias).toBeDefined();
+    expect(r.duracaoDias!.length).toBe(r.dias.length);
+  });
+});
+
 describe('C1 gerador · custoDia não mantém aritmética própria (§5.4 / mutação §8.4)', () => {
   const src = readFileSync(join(process.cwd(), 'src/lib/engine/treino-montador.ts'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');

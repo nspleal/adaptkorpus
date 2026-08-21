@@ -29,10 +29,14 @@ import { ROTULO_GRUPO } from '../frequencia-grupos';
 export interface DiaDoEditor {
   nome: string;
   exercicios: readonly Exercise[];
-  /** Séries planejadas por exercício (do MOTOR — o usuário não edita). Ausente = piso. */
-  series?: readonly number[];
-  /** Descanso por exercício, em segundos (do motor). Ausente = estimativa da classe. */
-  descansoSeg?: readonly number[];
+  /**
+   * Séries planejadas por exercício (do MOTOR — o usuário não edita). 🔒 C1: os elementos
+   * podem ser `undefined` (o motor não anotou — ex.: deload, corpo-inteiro). O PLACAR usa o
+   * piso `ctx.seriesPadrao`; o critério de TEMPO abstém-se (NAO_AVALIADO) — nunca inventa.
+   */
+  series?: readonly (number | undefined)[];
+  /** Descanso por exercício, em segundos (do motor). 🔒 C1: elemento `undefined` ⇒ tempo NAO_AVALIADO. */
+  descansoSeg?: readonly (number | undefined)[];
 }
 
 export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_mrv' | 'sem_estimulo';

@@ -828,8 +828,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (nt.rotina?.dias ?? []).map((d) => ({
       nome: d.nome,
       exercicios: d.slots.map((s) => s.exercicio),
-      series: d.slots.map((s) => s.series ?? prescricao?.seriesPorExercicio.min ?? 1),
-      descansoSeg: d.slots.map((s) => s.descansoSeg ?? prescricao?.descansoCompostoSeg.min ?? 90),
+      // 🔒 C1 — séries/descanso REAIS do motor, sem preencher o que falta: o critério de tempo
+      // abstém-se (NAO_AVALIADO) em vez de afirmar sobre número inventado; o placar de volume
+      // usa `ctx.seriesPadrao` como piso.
+      series: d.slots.map((s) => s.series),
+      descansoSeg: d.slots.map((s) => s.descansoSeg),
     }));
   }
 
@@ -874,8 +877,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       rotinaDias.map((d) => ({
         nome: d.nome,
         exercicios: d.slots.map((s) => s.exercicio),
-        series: d.slots.map((s) => s.series ?? prescricao.seriesPorExercicio.min),
-        descansoSeg: d.slots.map((s) => s.descansoSeg ?? prescricao.descansoCompostoSeg.min),
+        // 🔒 C1 — séries/descanso REAIS (sem preencher o que falta): tempo abstém-se em vez de
+        // inventar; o placar usa `ctx.seriesPadrao` (abaixo) como piso de volume.
+        series: d.slots.map((s) => s.series),
+        descansoSeg: d.slots.map((s) => s.descansoSeg),
       })),
       {
         nivel: perfil.nivelExperiencia,

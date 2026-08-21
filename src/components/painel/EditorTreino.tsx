@@ -93,6 +93,9 @@ export default function EditorTreino({
     // ordem, então os índices de dia da semana acompanham por posição.
     const previsto = preverPlano(dias);
     const comExercicio = dias.filter((d) => d.exercicios.length > 0);
+    // 🔒 O editor NÃO supre `seriesPadrao`: o placar vem do MOTOR (preverPlano). Onde o motor
+    // não anotou séries (deload/corpo-inteiro), o placar cai no piso do próprio crítico — e o
+    // critério de TEMPO abstém-se (C1), nunca inventa.
     return avaliarSemana(previsto, {
       nivel, objetivo, tempoPorSessaoMin,
       diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),

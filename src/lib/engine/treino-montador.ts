@@ -278,7 +278,9 @@ export function montarRotina(
       if (cortados.length > 0) {
         avisos.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
       }
-      return montarSaida(mantidos, 'Meu treino');
+      // 🔒 C1 §5.5 + DF② — o plano do usuário também é CERTIFICADO pela canônica (mesmo
+      // tratamento do gerado). NÃO reduz: o editor é SOFT (o crítico informa, nunca trava).
+      return certificarDuracao(montarSaida(mantidos, 'Meu treino'), perfil.nivelExperiencia, perfil.tempoPorSessaoMin * 60);
     }
   }
 

@@ -232,6 +232,15 @@ describe('C1 · classificação contra o orçamento (tolerância 480)', () => {
     expect(r.duracaoMinimaEstimadaSegundos).toBe(3200);
     expect(r.estadoLimite).toBe('ACIMA_DO_LIMITE_OPERACIONAL');
   });
+  it('MIN == B+480 exato (com MAX>B+480) → LIMITE_INDETERMINADO, não ACIMA (fronteira do MIN)', () => {
+    // reps(2,20): exec 80 + descanso 20. reps(77,0): exec 3080. MIN=3180=2700+480; transição 20 ⇒ MAX 3200.
+    const r = avaliarDuracaoSessao({ itens: [reps(2, 20), reps(77, 0)], orcamentoSegundos: 2700 });
+    expect(r.duracaoMinimaEstimadaSegundos).toBe(3180);
+    expect(r.duracaoMaximaEstimadaSegundos).toBe(3200);
+    expect(r.limiteOperacionalSegundos).toBe(3180);
+    // o comparador é ESTRITO (min > limiteOp); em min == limiteOp cai em INDETERMINADO, nunca ACIMA.
+    expect(r.estadoLimite).toBe('LIMITE_INDETERMINADO');
+  });
   it('MIN <= B+480 < MAX → LIMITE_INDETERMINADO', () => {
     const itens: ItemDuracao[] = [reps(1, 4000), reps(1, 0)]; // MIN 80, MAX 4080
     const r = avaliarDuracaoSessao({ itens, orcamentoSegundos: 2700 });
