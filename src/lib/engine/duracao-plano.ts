@@ -22,7 +22,8 @@ import {
   type ExecucaoResistida, type ItemDuracao, type ResultadoDuracao,
 } from './duracao-sessao';
 import { faixaSegundos, PISO_HOLD_SEG, repUnitDe } from './isometricos';
-import type { Exercise } from '../data/types';
+import { resolverExecucao } from '../data/lateralidade';
+import type { Exercise, ExecucaoLateralidade } from '../data/types';
 import type { NivelExperiencia } from './treino-types';
 
 /** O mínimo que o adaptador lê de um slot/exercício do plano final. */
@@ -34,6 +35,11 @@ export interface SlotParaDuracao {
   descansoSeg?: number;
   /** 🔒 HOLD FINAL (s) TRANSPORTADO — obrigatório em isométrico; ausente ⇒ NAO_AVALIADO. */
   holdSeg?: number;
+  /**
+   * 🔒 C1 — ESCOLHA de execução materializada pelo usuário (e72). Honrada por `resolverExecucao`
+   * ao decidir se a execução dobra. Ausente ⇒ fallback neutro do catálogo. Nunca DOIS_LADOS.
+   */
+  execucaoSelecionada?: ExecucaoLateralidade;
 }
 
 /**
@@ -81,8 +87,10 @@ export function itensResistidosDeSlots(
       descansoEntreSeriesSeg: s.descansoSeg,
       execucao,
       // 🔒 C1 — só UNILATERAL_DOIS_LADOS dobra a execução; ALTERNADO/BILATERAL não. Vem do campo
-      // curado `execucao` (data/lateralidade.ts), nunca de regex em nome/descrição.
-      unilateralDoisLados: s.exercicio.execucao === 'UNILATERAL_DOIS_LADOS',
+      // curado `execucao` (data/lateralidade.ts), honrando a ESCOLHA do usuário (e72) preservada
+      // no slot — nunca de regex em nome/descrição. `resolverExecucao` valida a escolha (fail-safe).
+      unilateralDoisLados:
+        resolverExecucao(s.exercicio.id, s.exercicio.execucao, s.execucaoSelecionada) === 'UNILATERAL_DOIS_LADOS',
       tecnica: { tipo: 'SEM_TECNICA' },
     });
   });

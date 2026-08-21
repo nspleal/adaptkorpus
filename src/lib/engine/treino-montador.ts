@@ -34,7 +34,8 @@ import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
-import type { EquipamentoDisp, Exercise, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
+import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
+import { resolverExecucao } from '../data/lateralidade';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
 export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
@@ -157,6 +158,13 @@ export function montarRotina(
    * âncora de peso, favorito novo e edição de perfil.
    */
   preferencias: PreferenciasTreino | undefined = perfil.preferencias,
+  /**
+   * 🔒 C1 — ESCOLHA DE EXECUÇÃO por exercício (autor, 2026-08-21). Materialização da opção do
+   * usuário para os exercícios com `execucoesPermitidas` (ex.: e72 rosca martelo: alternado ou
+   * simultâneo). Mapa `id → execução escolhida`. Preservada no slot (`execucaoSelecionada`) e
+   * honrada pelo adaptador de duração. Ausente ⇒ fallback neutro do catálogo (mesmo multiplicador).
+   */
+  escolhasExecucao: ReadonlyMap<string, ExecucaoLateralidade> = new Map(),
 ): RotinaSemanal {
   const avisos: string[] = [];
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
@@ -782,6 +790,11 @@ export function montarRotina(
       // Badge (B5, DF 2026-07-04): acende p/ TODO favorito DECLARADO que entrou no plano
       // (preferidos de troca e recentes da retomada usam o trilho, não a badge).
       ...(favoritos.has(s.exercicio.id) ? { incluidoPorPreferencia: true } : {}),
+      // 🔒 C1 — ESCOLHA de execução (e72): materializa a opção do usuário no slot, quando o
+      // exercício admite escolha. `resolverExecucao` valida (fail-safe); o adaptador a honra.
+      ...(s.exercicio.execucoesPermitidas != null && escolhasExecucao.has(s.exercicio.id)
+        ? { execucaoSelecionada: resolverExecucao(s.exercicio.id, s.exercicio.execucao, escolhasExecucao.get(s.exercicio.id)) }
+        : {}),
     })),
   }));
 
@@ -796,7 +809,7 @@ export function montarRotina(
   if (semanaCiclo?.budgetSlotsOverride != null) return rotina;
   if (semanaCiclo && precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg)) {
     for (let b = budgetPorDia - 1; b >= BUDGET_MIN_COBERTURA; b -= 1) {
-      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias);
+      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias, escolhasExecucao);
       if (!precisaReduzir(tentativa, perfil.nivelExperiencia, orcamentoSeg)) return tentativa;
     }
     // Nem o menor plano com cobertura coube: devolve o menor, com o shortfall DITO (não escondido).

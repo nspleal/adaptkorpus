@@ -173,4 +173,11 @@ export interface Exercise {
    * explícita em `data/lateralidade.ts`, mesclada no load de `EXERCISES`.
    */
   execucao: ExecucaoLateralidade;
+  /**
+   * 🔒 C1 — CASO COM ESCOLHA DO USUÁRIO (autor, 2026-08-21). Presente SÓ nos exercícios cuja
+   * execução o usuário escolhe (ex.: e72 rosca martelo: alternado ou simultâneo). Lista as
+   * opções PERMITIDAS; `UNILATERAL_DOIS_LADOS` nunca entra aqui. Ausente ⇒ execução fixa
+   * (`execucao`). Fonte: `data/lateralidade.ts` → `LATERALIDADE_ESCOLHA`, mesclado no load.
+   */
+  execucoesPermitidas?: ExecucaoLateralidade[];
 }

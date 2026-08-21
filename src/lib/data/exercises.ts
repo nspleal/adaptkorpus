@@ -3,7 +3,7 @@
  * Fonte: cofre (banco-alimentos / ranking-exercicios). Validado Δ≈0.
  */
 import type { Exercise } from './types';
-import { LATERALIDADE } from './lateralidade';
+import { LATERALIDADE, LATERALIDADE_ESCOLHA } from './lateralidade';
 
 // 🔒 Array CRU gerado do xlsx do cofre (sem `execucao`). A lateralidade curada é mesclada
 // abaixo em `EXERCISES`; o load FALHA se algum exercício não estiver curado (gate C1).
@@ -2592,6 +2592,15 @@ export const EXERCISES: Exercise[] = EXERCISES_RAW.map((e) => {
   const execucao = LATERALIDADE[e.id];
   if (execucao == null) {
     throw new Error(`[catálogo] lateralidade (execucao) não curada para ${e.id} (${e.nomePt}) — ver data/lateralidade.ts`);
+  }
+  // 🔒 C1 — caso com escolha (e72): o catálogo registra as opções permitidas; o default acima
+  // é o fallback neutro. Guard: o default TEM de estar entre as permitidas (nenhuma dobra).
+  const permitidas = LATERALIDADE_ESCOLHA[e.id];
+  if (permitidas != null) {
+    if (!permitidas.includes(execucao)) {
+      throw new Error(`[catálogo] ${e.id}: default de execução '${execucao}' não está nas permitidas [${permitidas.join(', ')}]`);
+    }
+    return { ...e, execucao, execucoesPermitidas: permitidas };
   }
   return { ...e, execucao };
 });

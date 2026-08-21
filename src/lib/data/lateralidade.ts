@@ -91,6 +91,9 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
   e69: "BILATERAL", // Tríceps na corda
   e70: "BILATERAL", // Supino fechado
   e71: "BILATERAL", // Tríceps testa na polia
+  // 🔒 e72 é CASO COM ESCOLHA DO USUÁRIO (ver LATERALIDADE_ESCOLHA). O valor aqui é o
+  // FALLBACK temporalmente neutro (todas as opções permitidas têm o MESMO multiplicador:
+  // nenhuma dobra). A escolha real do usuário vive no slot (`execucaoSelecionada`).
   e72: "BILATERAL", // Rosca martelo
   e73: "BILATERAL", // Rosca inversa
   e74: "UNILATERAL_DOIS_LADOS", // Rosca concentrada
@@ -120,7 +123,7 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
   e98: "BILATERAL", // Elevação frontal
   e99: "UNILATERAL_DOIS_LADOS", // Elevação frontal na polia
   e100: "BILATERAL", // Paralelas (mergulho)
-  e101: "UNILATERAL_ALTERNADO", // Giro russo
+  e101: "UNILATERAL_DOIS_LADOS", // Giro russo (curadoria final do autor, 2026-08-21)
   e102: "UNILATERAL_DOIS_LADOS", // Flexão lateral (oblíquo)
   e103: "BILATERAL", // Superman (extensão lombar)
   e104: "BILATERAL", // Hiperextensão lombar
@@ -165,7 +168,7 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
   e143: "UNILATERAL_ALTERNADO", // Avanço com salto
   e144: "BILATERAL", // Thruster (agachamento + desenvolvimento)
   e145: "UNILATERAL_DOIS_LADOS", // Agachamento unilateral (pistol)
-  e146: "BILATERAL", // Prancha com toque no ombro
+  e146: "UNILATERAL_ALTERNADO", // Prancha com toque no ombro (curadoria final do autor, 2026-08-21)
   e147: "UNILATERAL_ALTERNADO", // Bird dog (perdigueiro)
   e148: "UNILATERAL_ALTERNADO", // Inseto morto (dead bug)
   e149: "UNILATERAL_ALTERNADO", // Abdominal bicicleta
@@ -191,19 +194,69 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
 };
 
 /**
- * 🟡 AMBIGUIDADES devolvidas ao autor (minha classificação é um juízo defensável; a convenção
- * de treino varia). O campo está preenchido para o gate passar; o autor confirma/sobrescreve.
+ * 🔒 CURADORIA FINAL DO AUTOR (2026-08-21) — os 11 casos antes provisórios foram RESOLVIDOS.
+ * Esta lista SUBSTITUI a antiga `LATERALIDADE_AMBIGUA`; a ambiguidade acabou (zero restante).
+ * Serve de trilha de auditoria: prova que cada caso saiu de "provisório" para "travado" com o
+ * valor final. `e72` NÃO entra aqui como valor único — é caso com escolha (ver LATERALIDADE_ESCOLHA).
  */
-export const LATERALIDADE_AMBIGUA: ReadonlyArray<{ id: string; nome: string; assumido: ExecucaoLateralidade; motivo: string }> = [
-  { id: "e16", nome: "Afundo (avanço)", assumido: "UNILATERAL_DOIS_LADOS", motivo: "estacionário por perna assumido; se for passada alternada, é ALTERNADO" },
-  { id: "e53", nome: "Elevação lateral na polia", assumido: "UNILATERAL_DOIS_LADOS", motivo: "um braço por vez assumido; há variação com os dois" },
-  { id: "e54", nome: "Elevação lateral deitado", assumido: "UNILATERAL_DOIS_LADOS", motivo: "um lado deitado assumido" },
-  { id: "e66", nome: "Cadeira flexora em pé", assumido: "UNILATERAL_DOIS_LADOS", motivo: "uma perna por vez assumido; algumas máquinas fazem as duas" },
-  { id: "e99", nome: "Elevação frontal na polia", assumido: "UNILATERAL_DOIS_LADOS", motivo: "um braço na polia assumido" },
-  { id: "e133", nome: "Tríceps coice", assumido: "UNILATERAL_DOIS_LADOS", motivo: "um braço por vez assumido; com halteres pode ser os dois" },
-  { id: "e72", nome: "Rosca martelo", assumido: "BILATERAL", motivo: "dois braços juntos assumido; se alternada, é ALTERNADO" },
-  { id: "e98", nome: "Elevação frontal", assumido: "BILATERAL", motivo: "barra/anilha (os dois) assumido; halter alternado seria ALTERNADO" },
-  { id: "e101", nome: "Giro russo", assumido: "UNILATERAL_ALTERNADO", motivo: "gira p/ os dois lados na série; não dobra" },
-  { id: "e143", nome: "Avanço com salto", assumido: "UNILATERAL_ALTERNADO", motivo: "troca de perna a cada salto; a série cobre os dois" },
-  { id: "e146", nome: "Prancha com toque no ombro", assumido: "BILATERAL", motivo: "prancha base bilateral; os toques alternam mas a série é o todo" },
+export const LATERALIDADE_RESOLVIDA_AUTOR: ReadonlyArray<{ id: string; nome: string; final: ExecucaoLateralidade | "ESCOLHA_USUARIO" }> = [
+  { id: "e16", nome: "Afundo (avanço)", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e53", nome: "Elevação lateral na polia", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e54", nome: "Elevação lateral deitado", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e66", nome: "Cadeira flexora em pé", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e99", nome: "Elevação frontal na polia", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e101", nome: "Giro russo", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e133", nome: "Tríceps coice", final: "UNILATERAL_DOIS_LADOS" },
+  { id: "e98", nome: "Elevação frontal", final: "BILATERAL" },
+  { id: "e143", nome: "Avanço com salto", final: "UNILATERAL_ALTERNADO" },
+  { id: "e146", nome: "Prancha com toque no ombro", final: "UNILATERAL_ALTERNADO" },
+  { id: "e72", nome: "Rosca martelo", final: "ESCOLHA_USUARIO" },
 ];
+
+/**
+ * 🔒 CASO COM ESCOLHA DO USUÁRIO (autor, 2026-08-21) — exercícios cuja execução o usuário
+ * escolhe entre um conjunto de opções PERMITIDAS. O catálogo registra as opções; o motor NÃO
+ * inventa preferência global. Invariantes travadas (testadas):
+ *  - TODAS as opções permitidas têm o MESMO multiplicador temporal (nenhuma é DOIS_LADOS), então
+ *    a AUSÊNCIA de escolha não torna a duração incalculável;
+ *  - `UNILATERAL_DOIS_LADOS` NUNCA é opção permitida aqui (não dobra a execução por escolha);
+ *  - o valor default em `LATERALIDADE[id]` é apenas o FALLBACK neutro e DEVE estar entre as opções.
+ *
+ * e72 — rosca martelo: alternado (UNILATERAL_ALTERNADO) ou simultâneo (BILATERAL).
+ */
+export const LATERALIDADE_ESCOLHA: Record<string, ExecucaoLateralidade[]> = {
+  e72: ["UNILATERAL_ALTERNADO", "BILATERAL"],
+};
+
+/** Conveniência: um exercício tem escolha de execução? (contrato do catálogo) */
+export function temEscolhaDeExecucao(id: string): boolean {
+  return LATERALIDADE_ESCOLHA[id] != null;
+}
+
+/**
+ * 🔒 Resolve a execução EFETIVA de um exercício, honrando a escolha materializada do usuário.
+ * Determinístico e fail-safe (motor puro, sem default silencioso):
+ *  - exercício SEM escolha: `execucaoSelecionada` só pode repetir o valor curado; divergir LANÇA;
+ *  - exercício COM escolha (e72): a seleção precisa estar entre as opções permitidas; fora
+ *    disso LANÇA (em especial UNILATERAL_DOIS_LADOS é sempre rejeitado para e72). Sem seleção,
+ *    cai no fallback neutro `execucaoBase` — temporalmente idêntico a qualquer opção permitida.
+ */
+export function resolverExecucao(
+  id: string,
+  execucaoBase: ExecucaoLateralidade,
+  execucaoSelecionada?: ExecucaoLateralidade,
+): ExecucaoLateralidade {
+  const permitidas = LATERALIDADE_ESCOLHA[id];
+  if (permitidas == null) {
+    // Sem escolha: a seleção (se houver) não pode contradizer a curadoria única.
+    if (execucaoSelecionada != null && execucaoSelecionada !== execucaoBase) {
+      throw new Error(`[lateralidade] ${id} não admite escolha de execução; recebido '${execucaoSelecionada}' ≠ curadoria '${execucaoBase}'`);
+    }
+    return execucaoBase;
+  }
+  if (execucaoSelecionada == null) return execucaoBase; // fallback neutro (mesmo multiplicador)
+  if (!permitidas.includes(execucaoSelecionada)) {
+    throw new Error(`[lateralidade] ${id}: execução '${execucaoSelecionada}' fora das permitidas [${permitidas.join(', ')}]`);
+  }
+  return execucaoSelecionada;
+}

@@ -8,7 +8,7 @@ import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
-import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
+import type { EquipamentoCasa, EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, PadraoMovimento } from '../data/types';
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
@@ -207,6 +207,13 @@ export interface SlotExercicio {
    * no adaptador). Ausente em não-isométrico é o normal (eles usam a constante de reps).
    */
   holdSeg?: number;
+  /**
+   * 🔒 C1 — ESCOLHA DE EXECUÇÃO materializada pelo usuário (autor, 2026-08-21). Presente só nos
+   * exercícios com `execucoesPermitidas` (ex.: e72 rosca martelo). Preserva a opção do usuário
+   * até o slot; o adaptador de duração a honra via `resolverExecucao`. Ausente ⇒ fallback neutro
+   * do catálogo (todas as opções permitidas têm o mesmo multiplicador temporal). Nunca DOIS_LADOS.
+   */
+  execucaoSelecionada?: ExecucaoLateralidade;
 }
 
 export interface DiaTreino {
