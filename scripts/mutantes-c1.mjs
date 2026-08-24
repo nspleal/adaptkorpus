@@ -2,7 +2,7 @@
 /**
  * 🔒 C1 §8.4 — RUNNER DE MUTAÇÃO REPRODUTÍVEL.
  *
- * Para cada uma das 56 mutações normativas da especificação, aplica o patch no código-fonte,
+ * Para cada mutação normativa e cada variante anti-regressão, aplica o patch no código-fonte,
  * roda o teste (ou testes) que DEVE matá-la e verifica que ele FALHA. Depois restaura o arquivo.
  * Um mutante que SOBREVIVE é uma lacuna real de cobertura e sai marcado como SOBREVIVEU.
  *
@@ -11,7 +11,7 @@
  *       node scripts/mutantes-c1.mjs --md       (saída em tabela markdown)
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
 const RAIZ = process.cwd();
@@ -93,29 +93,33 @@ const MUTACOES = [
     testes: [`${E}/duracao-sessao.test.ts`] },
 
   { n: 14, desc: 'bloquear a entrega automática / reduzir só por `NAO_AVALIADO`', alvo: `${E}/treino-montador.ts`,
-    de: `    } else if (diasDur.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) {`,
-    para: `    } else if (false) {`,
+    de: `      if (resultados.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) return { tipo: 'NAO_AVALIADO', resultado: resultados };`,
+    para: `      if (false) return { tipo: 'NAO_AVALIADO', resultado: resultados };`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
   { n: 15, desc: 'continuar reduzindo/declarar incompatibilidade quando a realocação der `NAO_AVALIADO`', alvo: `${E}/geracao-temporal.ts`,
-    de: `      if (t.tipo === 'NAO_AVALIADO') {`,
+    de: `      if (tentativa.tipo === 'NAO_AVALIADO') {`,
     para: `      if (false) {`,
     testes: [`${E}/geracao-temporal.test.ts`] },
 
-  { n: 16, desc: 'usar `custoDia` como verdade final', alvo: `${E}/treino-montador.ts`,
-    de: `  return { ...rotina, duracaoDias: rotina.dias.map((d) => avaliarDuracaoResistida(d.slots, nivel, orcamentoSeg)) };`,
-    para: `  return { ...rotina, duracaoDias: rotina.dias.map(() => ({ estadoCalculo: 'CALCULADO', estadoLimite: 'DENTRO_DO_LIMITE', duracaoMinimaEstimadaSegundos: 1, duracaoMaximaEstimadaSegundos: 1, formulaVersion: 'x', motivosNaoAvaliados: [], motivosLimite: [] })) };`,
-    testes: [`${E}/duracao-gerador.test.ts`, `${E}/convergencia-c1.test.ts`] },
+  { n: 16, desc: 'usar a duração resistida publicada como verdade final', alvo: `${E}/treino-montador.ts`,
+    de: `      const duracao = avaliarDuracaoFinalDoDia(
+        treino?.slots ?? [], perfil.nivelExperiencia, orcamentoSeg, bloco?.duracaoTotalSegundos ?? 0,
+        cardioSemDuracao,
+      );`,
+    para: `      const duracao = r.duracaoResistidaDias?.[ordemNoHorizonte] ?? avaliarDuracaoFinalDoDia(
+        treino?.slots ?? [], perfil.nivelExperiencia, orcamentoSeg, bloco?.duracaoTotalSegundos ?? 0,
+        cardioSemDuracao,
+      );`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`, `${E}/convergencia-c1.test.ts`] },
 
   { n: '17a', desc: 'ignorar o recheck depois da redução de slots (montador vivo: tentativa reduzida não é reavaliada)', alvo: `${E}/treino-montador.ts`,
-    de: `      precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg),
-      violacoesDaRealocacao(rotina),`,
-    para: `      false,
-      violacoesDaRealocacao(rotina),`,
+    de: `      const excede = precisaReduzir(plano, perfil.nivelExperiencia, orcamentoSeg);`,
+    para: `      const excede = capacidade === budgetPorDia ? precisaReduzir(plano, perfil.nivelExperiencia, orcamentoSeg) : false;`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
   { n: '17b', desc: 'ignorar o recheck depois da redução de slots (orquestrador puro: adota sem reavaliar)', alvo: `${E}/geracao-temporal.ts`,
-    de: `      if (t.tipo === 'CERTIFICADO') {`,
+    de: `      if (tentativa.tipo === 'CERTIFICADO') {`,
     para: `      if (true) {`,
     testes: [`${E}/geracao-temporal.test.ts`, `${E}/c1-mutacoes-guard.test.ts`] },
 
@@ -125,18 +129,18 @@ const MUTACOES = [
     testes: [`${E}/geracao-temporal.test.ts`] },
 
   { n: 19, desc: 'abortar só porque o mesmo plano apareceu sob capacidade menor', alvo: `${E}/geracao-temporal.ts`,
-    de: `      // EXCEDE: guarda e tenta o próximo nível de descanso.\n      ultimoExcede = t.resultadoDuracao;`,
-    para: `      if (ultimoExcede) return { tipo: 'INCOMPATIVEL', resultadoDuracao: ultimoExcede, capacidadeMinimaTestada: capacidade, invariantesPreservados: true };\n      ultimoExcede = t.resultadoDuracao;`,
+    de: `      ultimoExcede = { plano: alocado.plano, resultado: tentativa.resultado, capacidade };`,
+    para: `      if (ultimoExcede) return { tipo: 'INCOMPATIVEL', planoTerminal: ultimoExcede.plano, resultado: ultimoExcede.resultado, capacidadeMinimaTestada: capacidade, invariantesPreservados: true };\n      ultimoExcede = { plano: alocado.plano, resultado: tentativa.resultado, capacidade };`,
     testes: [`${E}/geracao-temporal.test.ts`] },
 
   { n: 20, desc: 'usar capacidade negativa', alvo: `${E}/geracao-temporal.ts`,
-    de: `  while (capacidade >= 0) {`,
-    para: `  while (capacidade >= -5) {`,
+    de: `  for (let capacidade = capacidadeInicial; capacidade >= capacidadeMinima; capacidade -= 1) {`,
+    para: `  for (let capacidade = capacidadeInicial; capacidade >= capacidadeMinima - 5; capacidade -= 1) {`,
     testes: [`${E}/c1-mutacoes-guard.test.ts`] },
 
   { n: 21, desc: 'saltar capacidade intermediária (`5 → 3`)', alvo: `${E}/geracao-temporal.ts`,
-    de: `      capacidade -= 1; // reduz exatamente 1; a escada reinicia no topo do laço.`,
-    para: `      capacidade -= 2;`,
+    de: `  for (let capacidade = capacidadeInicial; capacidade >= capacidadeMinima; capacidade -= 1) {`,
+    para: `  for (let capacidade = capacidadeInicial; capacidade >= capacidadeMinima; capacidade -= 2) {`,
     testes: [`${E}/geracao-temporal.test.ts`] },
 
   { n: 22, desc: 'herdar descanso degradado sem reiniciar a escada', alvo: `${E}/geracao-temporal.ts`,
@@ -170,8 +174,8 @@ const MUTACOES = [
     testes: [`${E}/cardio-sessao.test.ts`, `${E}/duracao-golden.test.ts`] },
 
   { n: 28, desc: 'distribuir cardio antes do plano resistido terminal', alvo: `${E}/treino-montador.ts`,
-    de: `        duracaoDias: diasDur,`,
-    para: `        duracaoDias: diasDur.map((d) => ({ ...d, duracaoMaximaEstimadaSegundos: (d.duracaoMaximaEstimadaSegundos ?? 0) + 600 })),`,
+    de: `    const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];`,
+    para: `    const diasResistidos = rotina.duracaoResistidaDias ?? rotina.duracaoDias ?? [];`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
   { n: 29, desc: 'distribuir saldos antes de reservar o cardio próprio de todos os dias', alvo: `${E}/distribuicao-cardio-semana.ts`,
@@ -236,14 +240,22 @@ const MUTACOES = [
     para: `export const PISO_DEGRADACAO_FORCA_PESADA = 60;`,
     testes: [`${E}/descanso.test.ts`] },
 
-  { n: 39, desc: 'duplicar a fórmula dentro do crítico', alvo: `${E}/critico.ts`,
-    de: `import { avaliarDuracaoResistida } from './duracao-plano';`,
-    para: `const avaliarDuracaoResistida = (slots: readonly { series?: number; descansoSeg?: number }[]) => ({ estadoCalculo: 'CALCULADO' as const, estadoLimite: 'DENTRO_DO_LIMITE' as const, duracaoMinimaEstimadaSegundos: slots.length, duracaoMaximaEstimadaSegundos: slots.length, formulaVersion: 'local', motivosNaoAvaliados: [] as string[], motivosLimite: [] as string[] });`,
+  { n: '39a', desc: 'duplicar/substituir a fórmula canônica dentro do crítico', alvo: `${E}/critico.ts`,
+    de: `import { avaliarDuracaoFinalDoDia } from './duracao-plano';`,
+    para: `const avaliarDuracaoFinalDoDia = (..._args: Parameters<typeof import('./duracao-plano').avaliarDuracaoFinalDoDia>) => ({}) as ReturnType<typeof import('./duracao-plano').avaliarDuracaoFinalDoDia>;`,
+    testes: [`${E}/convergencia-c1.test.ts`] },
+
+  { n: '39b', desc: 'crítico ecoar o resultado publicado pelo gerador', alvo: `${E}/critico.ts`,
+    de: `    const critico = avaliarDuracaoFinalDoDia(
+      treino?.slots ?? [], ctx.nivel, orcamentoSeg, cardioCanonicoSegundos,
+      cardioQualitativoEsperado,
+    );`,
+    para: `    const critico = dia.duracao;`,
     testes: [`${E}/convergencia-c1.test.ts`] },
 
   { n: 40, desc: 'manter a mesma `formula_version` após mudar faixa/estado/componentes', alvo: `${E}/duracao-sessao.ts`,
-    de: `export const FORMULA_DURACAO_VERSION = 'tempo-v2';`,
-    para: `export const FORMULA_DURACAO_VERSION = 'tempo-v1';`,
+    de: `export const FORMULA_DURACAO_VERSION = 'tempo-v3';`,
+    para: `export const FORMULA_DURACAO_VERSION = 'tempo-v2';`,
     testes: [`${E}/duracao-golden.test.ts`] },
 
   { n: 41, desc: 'aceitar commit semanal com revisão/fingerprint obsoleta', alvo: `${E}/cas.ts`,
@@ -322,9 +334,65 @@ const MUTACOES = [
     testes: [`${E}/duracao-plano.test.ts`] },
 
   { n: 56, desc: 'avaliar duração antes dos invariantes (NAO_AVALIADO_ENTREGAVEL p/ plano inválido)', alvo: `${E}/treino-montador.ts`,
-    de: `    if (violacoesInvariantes && violacoesInvariantes.length > 0) {`,
-    para: `    if (false) {`,
+    de: `  if (violacoesBaseline.length > 0) {`,
+    para: `  if (false) {`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 57, desc: 'aceitar plano final vazio por vacuidade no crítico independente', alvo: `${E}/critico.ts`,
+    de: `  const convergiu = motivosEstruturais.length === 0 && conferencias.every((d) => d.converge);`,
+    para: `  const convergiu = conferencias.every((d) => d.converge);`,
+    testes: [`${E}/convergencia-c1.test.ts`] },
+
+  { n: 58, desc: 'ocultar do modelo da agenda o cardio canônico que compartilha dia com musculação', alvo: `src/lib/semana.ts`,
+    de: `        ...(cardioExato ? { cardioIdx: cardioExato.indice, cardio: cardioExato.item } : {}),`,
+    para: `        ...(false ? { cardioIdx: cardioExato?.indice, cardio: cardioExato?.item } : {}),`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 59, desc: 'recomeçar o índice do cardio depois de dias mistos', alvo: `src/lib/semana.ts`,
+    de: `    const cardioIdx = temOrdemCanonica ? cardioExato?.indice : indiceLegado;`,
+    para: `    const cardioIdx = indiceLegado;`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 60, desc: 'publicar candidato reduzido sem cobertura em vez de declarar SEM_PLANO_MENOR', alvo: `${E}/treino-montador.ts`,
+    de: `      if (violacoesBaseline.length === 0 && violacoesDaRealocacao(plano).length > 0) {`,
+    para: `      if (false) {`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 61, desc: 'certificar cardio qualitativo oferecido sem duração', alvo: `${E}/treino-montador.ts`,
+    de: `      prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rg.tipo !== 'INCOMPATIVEL'`,
+    para: `      false`,
+    testes: [`${E}/dia-de-cardio-slot.test.ts`, `src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 62, desc: 'crítico deixar de validar a distribuição observada contra fatos independentes', alvo: `${E}/critico.ts`,
+    de: `    const validacao = validarDistribuicaoCardioSemana({ fatosBase: fatosReconstruidos, distribuicaoObservada: distribuicao });`,
+    para: `    const validacao = { tipo: 'VALIDA' as const };`,
+    testes: [`${E}/convergencia-c1.test.ts`] },
+
+  { n: 63, desc: 'crítico aceitar permutação de treino_idx', alvo: `${E}/critico.ts`,
+    de: `    if (dia.treinoIdx !== treinoIdxEsperado) {`,
+    para: `    if (false) {`,
+    testes: [`${E}/convergencia-c1.test.ts`] },
+
+  { n: 64, desc: 'adaptador apagar cardio terminal inválido como se fosse ausência', alvo: `${E}/duracao-plano.ts`,
+    de: `  const cardioInvalido = cardioMaterializadoSegundos !== 0
+    && (!Number.isSafeInteger(cardioMaterializadoSegundos) || cardioMaterializadoSegundos <= 0);`,
+    para: `  const cardioInvalido = false;`,
+    testes: [`${E}/duracao-plano.test.ts`] },
+
+  { n: 65, desc: 'apagar do plano final o cardio qualitativo oferecido sem duração', alvo: `${E}/treino-montador.ts`,
+    de: `      const cardioSemDuracao = diasCardioSemDuracao.has(ordemNoHorizonte);`,
+    para: `      const cardioSemDuracao = false;`,
+    testes: [`${E}/dia-de-cardio-slot.test.ts`, `src/lib/c1-caminho-publico.test.ts`, `${E}/convergencia-c1.test.ts`] },
+
+  { n: 66, desc: 'certificar catálogo vazio por vacuidade estrutural', alvo: `${E}/treino-montador.ts`,
+    de: `    const slots = r.dias.flatMap((d) => d.slots);`,
+    para: `    const slots = r.dias.flatMap((d) => d.slots);\n    if (slots.length === 0) return [];`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: 67, desc: 'crítico aprender a oferta de cardio do agregado avaliado', alvo: `${E}/critico.ts`,
+    de: `  const oferecidos = ofertaExternaValida ? [...ofertaExterna].sort((a, b) => a - b) : [];`,
+    para: `  const oferecidos = fatosInformados?.diasHorizonte\n    .filter((d) => d.oferecido)\n    .map((d) => d.ordemNoHorizonte)\n    .sort((a, b) => a - b) ?? [];`,
+    testes: [`${E}/convergencia-c1.test.ts`] },
 ];
 
 const args = process.argv.slice(2);
@@ -334,14 +402,40 @@ const lista = alvos.length
   ? MUTACOES.filter((m) => alvos.includes(String(m.n)) || alvos.includes(String(m.n).replace(/[a-z]$/, '')))
   : MUTACOES;
 
-function rodaTestes(testes) {
-  try {
-    execSync(`npx vitest run ${testes.join(' ')} --silent`, { cwd: RAIZ, stdio: 'pipe', timeout: 300000 });
-    return true; // suíte PASSOU
-  } catch {
-    return false; // suíte FALHOU
-  }
+// Pré-voo: um runner com âncora morta não é evidência. Falha antes de tocar qualquer fonte.
+const ancorasMortas = lista.flatMap((m) => {
+  const original = readFileSync(join(RAIZ, m.alvo), 'utf-8');
+  const edits = m.edits ?? [{ de: m.de, para: m.para }];
+  return edits.some((e) => !original.includes(e.de)) ? [m] : [];
+});
+if (ancorasMortas.length > 0) {
+  for (const m of ancorasMortas) console.error(`${String(m.n).padStart(3)}  PATCH_NAO_APLICOU  ${m.desc}`);
+  process.exit(1);
 }
+
+function rodaTestes(testes) {
+  const vitest = join(RAIZ, 'node_modules', 'vitest', 'vitest.mjs');
+  const r = spawnSync(process.execPath, [vitest, 'run', '--configLoader', 'runner', ...testes, '--silent'], {
+    cwd: RAIZ, encoding: 'utf-8', timeout: 300000, windowsHide: true,
+  });
+  const saida = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
+  if (r.error?.code === 'ETIMEDOUT' || r.signal) return { tipo: 'TIMEOUT', saida };
+  if (r.error || r.status == null) return { tipo: 'INFRA_ERRO', saida: `${r.error?.message ?? ''}\n${saida}` };
+  if (r.status === 0) return { tipo: 'PASSOU', saida };
+  const falhaDeTeste = /(?:Test Files|Tests)\s+\d+ failed|^\s*FAIL\s+/m.test(saida);
+  return falhaDeTeste ? { tipo: 'FALHOU_TESTE', saida } : { tipo: 'INFRA_ERRO', saida };
+}
+
+// Baseline obrigatório: a união exata dos testes usados pelos mutantes precisa estar verde ANTES
+// de qualquer edição. Assim uma suíte já vermelha nunca pode "matar" todos os mutantes.
+const testesBaseline = [...new Set(lista.flatMap((m) => m.testes))];
+const baseline = rodaTestes(testesBaseline);
+if (baseline.tipo !== 'PASSOU') {
+  console.error(`BASELINE_${baseline.tipo}: a prova de mutação foi abortada antes de editar fontes.`);
+  console.error(baseline.saida.slice(-8000));
+  process.exit(1);
+}
+if (!md) console.log(`BASELINE_VERDE  ${testesBaseline.length} arquivos de teste`);
 
 const resultados = [];
 for (const m of lista) {
@@ -357,8 +451,11 @@ for (const m of lista) {
     for (const e of edits) mutado = mutado.replace(e.de, e.para);
     writeFileSync(caminho, mutado, 'utf-8');
     try {
-      const passou = rodaTestes(m.testes);
-      status = passou ? 'SOBREVIVEU' : 'MORTO';
+      const execucao = rodaTestes(m.testes);
+      status = execucao.tipo === 'PASSOU' ? 'SOBREVIVEU'
+        : execucao.tipo === 'FALHOU_TESTE' ? 'MORTO'
+          : execucao.tipo;
+      if (status === 'TIMEOUT' || status === 'INFRA_ERRO') detalhe = execucao.saida.slice(-1000);
     } finally {
       writeFileSync(caminho, original, 'utf-8'); // restaura SEMPRE
     }
@@ -370,6 +467,7 @@ for (const m of lista) {
 const mortos = resultados.filter((r) => r.status === 'MORTO').length;
 const sobreviveram = resultados.filter((r) => r.status === 'SOBREVIVEU');
 const naoAplicou = resultados.filter((r) => r.status === 'PATCH_NAO_APLICOU');
+const inconclusivos = resultados.filter((r) => r.status === 'TIMEOUT' || r.status === 'INFRA_ERRO');
 
 if (md) {
   console.log('| # | Mutação normativa | Teste que a mata | Arquivo mutado | Resultado |');
@@ -378,7 +476,8 @@ if (md) {
     console.log(`| ${r.n} | ${r.desc} | \`${r.testes.join('`, `')}\` | \`${r.alvo}\` | **${r.status}** |`);
   }
 }
-console.log(`\nRESUMO: ${mortos}/${resultados.length} MORTOS · ${sobreviveram.length} sobreviveram · ${naoAplicou.length} sem âncora`);
+console.log(`\nRESUMO: ${mortos}/${resultados.length} MORTOS · ${sobreviveram.length} sobreviveram · ${naoAplicou.length} sem âncora · ${inconclusivos.length} inconclusivos`);
 if (sobreviveram.length) console.log('SOBREVIVERAM:', sobreviveram.map((r) => r.n).join(', '));
 if (naoAplicou.length) console.log('SEM ÂNCORA:', naoAplicou.map((r) => r.n).join(', '));
-process.exitCode = sobreviveram.length || naoAplicou.length ? 1 : 0;
+if (inconclusivos.length) console.log('INCONCLUSIVOS:', inconclusivos.map((r) => r.n).join(', '));
+process.exitCode = sobreviveram.length || naoAplicou.length || inconclusivos.length ? 1 : 0;

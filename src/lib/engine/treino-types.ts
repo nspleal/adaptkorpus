@@ -8,7 +8,7 @@ import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
-import type { DistribuicaoCardioSemanal } from './distribuicao-cardio-semana';
+import type { DistribuicaoCardioSemanal, EntradaDistribuicaoSemana, LinhagemParcela } from './distribuicao-cardio-semana';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, PadraoMovimento } from '../data/types';
 
 /**
@@ -24,7 +24,13 @@ export type ResultadoGeracaoRotina =
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
   | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[] }
   | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
-  | { tipo: 'ERRO_ALOCADOR'; motivo: 'INVARIANTE_VIOLADO'; violacoesInvariantes: string[] };
+  | {
+      tipo: 'ERRO_ALOCADOR';
+      motivo: 'INVARIANTE_VIOLADO' | 'CAPACIDADE_REPETIDA' | 'CARDINALIDADE_ACIMA_DA_CAPACIDADE';
+      capacidadeTestada: number;
+      violacoesInvariantes: string[];
+      cardinalidadeRecebida?: number;
+    };
 
 export type NivelExperiencia = 'iniciante' | 'intermediario' | 'avancado';
 
@@ -262,6 +268,27 @@ export interface DiaCardio {
   modalidade: ModalidadeCardio;
   /** Duração do dia, já dividida e arredondada. `null` = meta em sessões (massa). */
   minutos: number | null;
+  /** Identidade do dia no horizonte canônico C1. Ausente apenas na visão legada sem semana. */
+  diaId?: string;
+  /** Posição do dia no horizonte canônico. Permite à agenda anexar cardio ao dia exato. */
+  ordemNoHorizonte?: number;
+  /** Duração exata materializada. `minutos` é somente a projeção de apresentação. */
+  duracaoSegundos?: number;
+  /** Proveniência das parcelas consolidadas no único bloco do dia. */
+  linhagens?: readonly LinhagemParcela[];
+}
+
+/** Um dia do plano automático FINAL, depois de redução, distribuição e materialização do cardio. */
+export interface PlanoFinalDia {
+  diaId: string;
+  ordemNoHorizonte: number;
+  tipo: 'TREINO' | 'CARDIO' | 'TREINO_E_CARDIO' | 'VAZIO';
+  /** Índice em `RotinaSemanal.dias`; ausente em dia sem musculação. */
+  treinoIdx?: number;
+  /** Bloco contínuo positivo ou item qualitativo explícito (`minutos:null`, duração ausente). */
+  cardio?: DiaCardio;
+  /** Avaliação canônica do dia inteiro, inclusive cardio materializado. */
+  duracao: ResultadoDuracao;
 }
 
 export interface RotinaSemanal {
@@ -307,6 +334,8 @@ export interface RotinaSemanal {
    * de slots. Ausente em chamadas v1 sem séries/descanso materializados. Apresentação = C4.
    */
   duracaoDias?: ResultadoDuracao[];
+  /** Faixa somente resistida, congelada antes da distribuição; insumo da capacidade de cardio. */
+  duracaoResistidaDias?: ResultadoDuracao[];
   /**
    * 🔒 C1 (override do autor 2026-08-20) — nem o menor plano com cobertura coube no tempo: o
    * shortfall é DITO, nunca escondido. DERIVADO de `resultadoGeracao.tipo === 'INCOMPATIVEL'`
@@ -326,4 +355,12 @@ export interface RotinaSemanal {
    * C1-canônica, auditável e determinística. Ausente em chamadas sem semana/oferta de cardio.
    */
   distribuicaoCardio?: DistribuicaoCardioSemanal;
+  /** Fatos independentes usados pelo crítico para reconstruir e validar a distribuição observada. */
+  fatosDistribuicaoCardio?: EntradaDistribuicaoSemana;
+  /**
+   * Fonte de verdade temporal do plano automático: horizonte terminal após todas as transformações.
+   * `dias`, `diasCardio` e `duracaoDias` são vistas de compatibilidade derivadas deste objeto quando
+   * a distribuição semanal C1 existe.
+   */
+  planoFinalPorDia?: PlanoFinalDia[];
 }

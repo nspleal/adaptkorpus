@@ -40,7 +40,9 @@ describe('🏃 C2 — o cardio favorito chega ao plano', () => {
 
   /** 🔑 O EFEITO: o dia excedente sai com a modalidade escolhida, não com o default. */
   it('o dia de cardio sai com a modalidade escolhida', () => {
-    const r = recomputarPlano(pelaRota({ cardioFavorito: 'bike' }), { semanaCiclo: { semana: 3 } });
+    const r = recomputarPlano(pelaRota({ cardioFavorito: 'bike' }), {
+      semanaCiclo: { semana: 3 }, diasOferecidosCardio: [3],
+    });
     const dias = r.treino.rotina?.diasCardio ?? [];
     expect(dias.length, 'fixture sem dia excedente — o teste não provaria nada').toBeGreaterThan(0);
     expect(dias.every((d) => d.modalidade === 'bike'), `modalidades: ${dias.map((d) => d.modalidade).join(',')}`).toBe(true);
@@ -52,7 +54,9 @@ describe('🏃 C2 — o cardio favorito chega ao plano', () => {
    * 'bike' passaria no teste anterior.
    */
   it('sem escolha, o default da spec é caminhada — e difere do escolhido', () => {
-    const r = recomputarPlano(pelaRota(), { semanaCiclo: { semana: 3 } });
+    const r = recomputarPlano(pelaRota(), {
+      semanaCiclo: { semana: 3 }, diasOferecidosCardio: [3],
+    });
     const dias = r.treino.rotina?.diasCardio ?? [];
     expect(dias.length).toBeGreaterThan(0);
     expect(dias.every((d) => d.modalidade === 'caminhada')).toBe(true);

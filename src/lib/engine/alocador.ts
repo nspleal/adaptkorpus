@@ -195,6 +195,11 @@ export interface ArgsAlocacao {
    * esvaziá-lo. Fora das prioridades o dia para quando os déficits acabam.
    */
   preencherAteOrcamento?: boolean;
+  /**
+   * Cobertura mínima do plano temporal. Ausente preserva a alocação v4 normal. Quando fornecida,
+   * estes padrões ocupam os primeiros slots disponíveis antes das reservas acessórias.
+   */
+  coberturaTemporalObrigatoria?: readonly ('puxar' | 'empurrar' | 'agachar')[];
 }
 
 /** Um dia comporta reservar um acessório além do core? (≥ 3 slots livres p/ os grandes —
@@ -248,13 +253,19 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   function escolher(
     g: GrupoPrimario,
     usadosDia: ReadonlySet<string>,
-    opts?: { prefira?: (e: Exercise) => boolean; proiba?: (e: Exercise) => boolean },
+    opts?: {
+      prefira?: (e: Exercise) => boolean;
+      proiba?: (e: Exercise) => boolean;
+      /** Filtro duro inclusive para favoritos; usado somente pela reserva de cobertura. */
+      exigir?: (e: Exercise) => boolean;
+    },
   ): Exercise | null {
     // Favorito é ISENTO da trava (`proiba`): a DF #12 o quer em toda sessão em que couber,
     // e o balanço puxar≥empurrar fecha nos picks não-favoritos (verificação post-hoc avisa
     // se um caso de borda não fechar).
     for (const f of favPorGrupo.get(g) ?? []) {
       if (usadosDia.has(f.id)) continue;
+      if (opts?.exigir && !opts.exigir(f)) continue;
       return f;
     }
     const arr = porGrupo.get(g);
@@ -266,6 +277,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       for (let k = 0; k < arr.length; k += 1) {
         const e = arr[(i0 + k) % arr.length]!;
         if (usadosDia.has(e.id)) continue;
+        if (opts?.exigir && !opts.exigir(e)) continue;
         if (opts?.proiba?.(e)) continue;
         if (comPreferencia && opts?.prefira && !opts.prefira(e)) continue;
         cursor.set(g, i0 + k + 1);
@@ -287,6 +299,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   const slotsDiretos = new Map<GrupoPrimario, number>();
   const contaPadrao = new Map<PadraoMovimento, number>();
   const dias: DiaAlocado[] = templates.map((t) => ({ nome: t.nome, slots: [], naoPreenchidos: 0, motivoCurto: null }));
+  const usadosPorDia: Set<string>[] = templates.map(() => new Set<string>());
 
   const coreSlots = () => slotsDiretos.get('core') ?? 0;
   const podeReceber = (g: GrupoPrimario): boolean => {
@@ -355,13 +368,36 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     templates.map((t, i) => ({ t, i })).filter(({ t }) => t.grupos.includes(g)).map(({ i }) => i);
 
   /**
+   * C1 · segunda passagem coverage-first. O montador só ativa esta reserva quando a alocação normal
+   * falhou na cobertura temporal. `agachar` aceita também dobradiça, igual ao invariante canônico.
+   */
+  const correspondeCobertura = (padrao: 'puxar' | 'empurrar' | 'agachar', e: Exercise): boolean =>
+    e.padraoMovimento === padrao || (padrao === 'agachar' && e.padraoMovimento === 'dobradica_quadril');
+  for (const padrao of args.coberturaTemporalObrigatoria ?? []) {
+    if ([...contaPadrao].some(([p, n]) => n > 0 && (p === padrao || (padrao === 'agachar' && p === 'dobradica_quadril')))) continue;
+    reservar:
+    for (let d = 0; d < templates.length; d += 1) {
+      if (dias[d]!.slots.length >= budgetPorDia) continue;
+      for (const g of templates[d]!.grupos) {
+        if (g === 'core' || !temPool(g)) continue;
+        const e = escolher(g, usadosPorDia[d]!, { exigir: (x) => correspondeCobertura(padrao, x) });
+        if (!e) continue;
+        registrar(d, g, e, usadosPorDia[d]!);
+        break reservar;
+      }
+    }
+  }
+
+  /**
    * ── Passo 1: RESERVA do core (invariante 2–3×/semana, travada) ─────────────
    * O core não disputa déficit: cada dia cujo template o lista (até `coreMax` dias) reserva
    * 1 slot, preenchido DEPOIS do passo 2 — core fecha a sessão, como sempre fechou. Isso
    * também torna a contagem de core determinística por template (U/L ×2 → 2 · FB ×3 → 3),
    * em vez de refém da disputa de déficit.
    */
-  const reservadosCore = new Set(diasComGrupoNoTemplate('core').slice(0, args.coreMax));
+  const reservadosCore = new Set(
+    diasComGrupoNoTemplate('core').filter((d) => dias[d]!.slots.length < budgetPorDia).slice(0, args.coreMax),
+  );
 
   /**
    * ── Passo 1b: RESERVA do piso dos pequenos (DF② — ≥ 1 exercício direto/semana) ─────
@@ -374,7 +410,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   for (const g of GRUPOS_PEQUENOS_PISO) {
     if (!temPool(g)) continue;
     const candidatosDia = diasComGrupoNoTemplate(g)
-      .map((d) => ({ d, ocupadas: (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0) }))
+      .map((d) => ({ d, ocupadas: dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0) }))
       // 🔒 O `- PEQUENOS_PISO_DIRETO` é o piso da DF② entrando na conta pelo NOME. Era um
       // `- 1` cravado, com a constante da spec órfã ao lado: dois lugares para o mesmo
       // número, e nada obrigando os dois a concordarem (auditoria 2026-08-14).
@@ -405,7 +441,6 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * mais, e só onde existe dia que consiga colocá-lo. Se não couber, o dia encurta — e o
    * corte é DITO pelo montador, como já é regra.
    */
-  const usadosPorDia: Set<string>[] = templates.map(() => new Set<string>());
   const reservaPuxar = new Set<number>();
   const quantosSoEmpurrar = templates.map((_, d) => d).filter(soEmpurrar).length;
   if (quantosSoEmpurrar > 0) {
@@ -416,7 +451,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     for (const d of diasQuePodemPuxar.slice(0, quantosSoEmpurrar)) {
       // Só reserva onde ainda sobra orçamento para os grandes do dia — mesma regra do 1b:
       // em tempo curto a reserva cede ao tempo, nunca o contrário.
-      const ocupadas = (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
+      const ocupadas = dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
       if (budgetPorDia - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
       reservaPuxar.add(d);
     }

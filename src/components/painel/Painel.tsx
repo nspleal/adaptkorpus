@@ -51,7 +51,7 @@ import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
 import EditorTreino, { PainelCritico, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
-import { avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
+import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
@@ -870,12 +870,24 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   const prescricao = treino.prescricao;
 
-  /**
-   * 🧭 DF② — o crítico do plano JÁ SALVO. Só existe para o plano custom: o do gerador sai
-   * dentro das faixas por construção, e criticá-lo seria o app discutindo consigo mesmo.
-   */
-  const criticoCustom: Avaliacao | null = useMemo(() => {
-    if (!perfil.rotinaCustom || rotinaDias.length === 0 || !prescricao) return null;
+  /** Crítico do plano salvo: custom mede o desenho; automático recompõe o plano final inteiro. */
+  const criticoPlano: Avaliacao | null = useMemo(() => {
+    if (rotinaDias.length === 0 || !prescricao) return null;
+    const ctx = {
+      nivel: perfil.nivelExperiencia,
+      objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
+      tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+      // Entrada independente do plano final: o crítico não pode aprender o horizonte do próprio
+      // agregado que está tentando validar.
+      diasNoHorizonteEsperado: Math.max(0, Math.floor(perfil.diasDisponiveis)),
+      diasOferecidosCardioEsperados: getDiasOferecidosCardio(),
+      diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
+      seriesPadrao: prescricao.seriesPorExercicio.min,
+    };
+    if (!perfil.rotinaCustom && treino.rotina?.planoFinalPorDia) {
+      return avaliarRotinaAutomaticaFinal(treino.rotina, ctx);
+    }
+    if (!perfil.rotinaCustom) return null;
     return avaliarSemana(
       rotinaDias.map((d) => ({
         nome: d.nome,
@@ -886,15 +898,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         descansoSeg: d.slots.map((s) => s.descansoSeg),
         holdSeg: d.slots.map((s) => s.holdSeg),
       })),
-      {
-        nivel: perfil.nivelExperiencia,
-        objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
-        tempoPorSessaoMin: perfil.tempoPorSessaoMin,
-        diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
-        seriesPadrao: prescricao.seriesPorExercicio.min,
-      },
+      ctx,
     );
-  }, [perfil, rotinaDias, prescricao]);
+  }, [perfil, rotinaDias, prescricao, treino.rotina]);
 
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
@@ -1345,7 +1351,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           />
         )}
         {!vista && aba === 'treino' && !editorDias && (prescricao
-          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoCustom={criticoCustom} />
+          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoPlano={criticoPlano} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
@@ -1549,7 +1555,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoCustom }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -1559,11 +1565,8 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   avisoPausa: boolean; onReconhecerPausa: () => void;
   /** 🧭 Editor guiado — a porta "Montar meu treino" (só existe onde há prescrição). */
   onMontar: () => void;
-  /**
-   * 🧭 DF② — o crítico PERMANECE visível no plano custom, não só na montagem. `null` quando
-   * o plano é do gerador (nada a criticar: ele já sai dentro das faixas por construção).
-   */
-  criticoCustom: Avaliacao | null;
+  /** Crítico visível do plano salvo: editor ou recomposição independente do automático final. */
+  criticoPlano: Avaliacao | null;
   /** Cardio (Bloco 1): a seção da semana mora na aba Treino, como o design desenhou. */
   cardio: {
     registros: readonly RegistroCardioDatado[]; meta: MetaCardio | null;
@@ -1587,7 +1590,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
       </div>
       {/* 🧭 DF② — a faixa compacta do crítico no plano JÁ SALVO: os avisos ativos + 1
           recomendação, no mesmo componente do editor. */}
-      {criticoCustom && <PainelCritico avaliacao={criticoCustom} compacto />}
+      {criticoPlano && <PainelCritico avaliacao={criticoPlano} compacto />}
       {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
           mesma de quem não avisou (nada avançou, nada foi remarcado). */}
       {avisoPausa && <AvisoPausaReconhecida />}

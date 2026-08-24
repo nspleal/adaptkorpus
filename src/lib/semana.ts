@@ -87,23 +87,39 @@ export function montarSemana(
    * Dias de cardio EMITIDOS pelo motor (`rotina.diasCardio`). Ausente = comportamento
    * anterior, byte a byte: o excedente vira `recuperacao`, sem item.
    */
-  diasCardio: readonly { modalidade: string; minutos: number | null }[] = [],
+  diasCardio: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[] = [],
 ): DiaDaSemana[] {
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
+  const temOrdemCanonica = diasCardio.some((d) => d.ordemNoHorizonte != null);
+  const cardioPorOrdem = new Map<number, { item: (typeof diasCardio)[number]; indice: number }>();
+  diasCardio.forEach((item, indice) => {
+    if (item.ordemNoHorizonte != null) cardioPorOrdem.set(item.ordemNoHorizonte, { item, indice });
+  });
   let li = 0;
   return ORDEM_SEMANA.map((weekday, idx) => {
     const ativo = treino.has(weekday);
     const base = { idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full, isTraining: ativo, isToday: idx === hojeIdx };
     if (!ativo) return { ...base, tipo: 'descanso' as const };
-    // 🔒 As `n` sessões de FORÇA primeiro, sempre. `sessionIdx` só existe aqui.
-    if (li < n) { const sessionIdx = li; li++; return { ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] }; }
+    const ordemAtiva = li;
+    const cardioExato = cardioPorOrdem.get(ordemAtiva);
+    // 🔒 As `n` sessões de FORÇA primeiro, sempre. Cardio canônico pode coexistir no MESMO dia,
+    // mas nunca recebe `sessionIdx` próprio nem desloca a musculação.
+    if (li < n) {
+      const sessionIdx = li;
+      li++;
+      return {
+        ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx],
+        ...(cardioExato ? { cardioIdx: cardioExato.indice, cardio: cardioExato.item } : {}),
+      };
+    }
     // Excedente: dia de CARDIO quando o motor emitiu item; senão, recuperação (que não
     // prescreve nada). 🔴 Nunca `sessionIdx` — o índice é do outro array.
-    const cardioIdx = li - n;
+    const indiceLegado = li - n;
+    const cardioIdx = temOrdemCanonica ? cardioExato?.indice : indiceLegado;
     li++;
-    const item = diasCardio[cardioIdx];
-    if (item) {
+    const item = temOrdemCanonica ? cardioExato?.item : diasCardio[indiceLegado];
+    if (item && cardioIdx != null) {
       return {
         ...base, tipo: 'cardio' as const, cardioIdx, cardio: item,
         sessionLabel: item.minutos != null ? `Cardio · ${item.minutos} min` : 'Cardio',
@@ -139,7 +155,7 @@ export function sessaoDeHojeIdx(
   treinoDias: readonly Weekday[],
   sessoesNomes: readonly string[],
   hojeIdx: number,
-  diasCardio: readonly { modalidade: string; minutos: number | null }[] = [],
+  diasCardio: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[] = [],
 ): number | null {
   return montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio)[hojeIdx]?.sessionIdx ?? null;
 }

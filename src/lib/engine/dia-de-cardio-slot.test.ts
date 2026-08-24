@@ -37,7 +37,13 @@ function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
 function rotinaComExcedente(over: Partial<PerfilTreino> = {}) {
   const p = perfil(over);
   const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
-  return montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
+  const prescricao = prescreverTreino(p, avaliarGateTreino(p));
+  const dias = Math.max(0, Math.floor(p.diasDisponiveis));
+  const diasForca = dias < 1 ? 0 : Math.min(dias, prescricao.sessoesForcaSemana.max);
+  const diasVagosOferecidos = Array.from({ length: dias - diasForca }, (_, i) => diasForca + i);
+  return montarRotina(
+    prescricao, p, EXERCISES, undefined, opc, undefined, undefined, diasVagosOferecidos,
+  );
 }
 
 describe('🔴 o caso existe (senão os três guards são decorativos)', () => {
@@ -172,17 +178,18 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     }
   });
 
-  /** 🔒 saúde = 150 min/sem; com 2 dias excedentes → 75 min/dia. Número da spec. */
-  it('a duração é a meta ÷ dias, arredondada a 5 — com prova numérica', () => {
+  /** 🔒 A meta por dia é o teto desejado; cardio automático adapta-se ao orçamento sem +8 min. */
+  it('a duração é a meta ÷ dias limitada ao tempo disponível — com prova numérica', () => {
     const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 5 });
     const n = r.diasCardio.length;
     expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
     expect(r.cardio.tipo).toBe('minutos_semana');
     // 🔒 A MESMA função do módulo puro — inclusive o teto de 90 (DF 2026-08-01).
-    const esperado = duracaoDoDiaDeCardio((r.cardio as { min: number }).min, n);
+    const alvoDoDia = duracaoDoDiaDeCardio((r.cardio as { min: number }).min, n);
+    const esperado = Math.min(alvoDoDia, 60); // destino puro: orçamento integral de 60 min
     for (const d of r.diasCardio) expect(d.minutos, `${n} dias`).toBe(esperado);
-    expect(esperado % 5, 'a duração saiu de um múltiplo de 5').toBe(0);
-    expect(esperado).toBeLessThanOrEqual(90);
+    expect(alvoDoDia).toBe(90); // discrimina o clamp: sem adaptação seriam 90 min
+    expect(esperado).toBe(60);
   });
 
   /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
@@ -193,16 +200,26 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     expect(c.min, 'a faixa mudou — reveja o número da prova').toBe(150);
     expect(c.max).toBe(300);
     const n = r.diasCardio.length;
-    expect(r.diasCardio[0]!.minutos).toBe(arredondar5(c.min / n));
+    const alvoPiso = arredondar5(c.min / n);
+    expect(r.diasCardio[0]!.minutos).toBe(Math.min(alvoPiso, 60));
+    expect(alvoPiso).toBe(75); // a meta desejada excede o orçamento de 60 min
     expect(arredondar5(c.max / n), 'o teto daria o dobro').toBe(arredondar5(c.min / n) * 2);
   });
 
-  /** 🔒 Massa é meta em SESSÕES: dizer um número seria inventar o que a spec não dá. */
-  it('massa não recebe minutos — `null`, nunca um número inventado', () => {
+  /** 🔒 Massa é meta qualitativa: sem duração explícita, não existe bloco canônico materializável. */
+  it('massa preserva a meta em sessões como item explícito, sem inventar duração nem bloco', () => {
     const r = rotinaComExcedente({ objetivo: 'massa', diasDisponiveis: 6 });
     expect(r.cardio.tipo).toBe('sessoes_moderadas');
-    expect(r.diasCardio.length).toBeGreaterThan(0);
-    for (const d of r.diasCardio) expect(d.minutos, 'apareceu minuto inventado em massa').toBeNull();
+    expect(r.distribuicaoCardio?.blocosPorDia).toEqual([]);
+    expect(r.diasCardio).toHaveLength(2);
+    expect(r.diasCardio.every((d) => d.minutos === null && d.duracaoSegundos === undefined)).toBe(true);
+    const afetados = r.planoFinalPorDia?.filter((d) => d.cardio) ?? [];
+    expect(afetados).toHaveLength(2);
+    expect(afetados.every((d) => d.duracao.estadoCalculo === 'NAO_AVALIADO')).toBe(true);
+    expect(r.resultadoGeracao).toEqual({
+      tipo: 'NAO_AVALIADO_ENTREGAVEL',
+      motivos: expect.arrayContaining(['CARDIO_SEM_DURACAO']),
+    });
   });
 
   it('sem dia excedente, nenhum dia de cardio é emitido', () => {

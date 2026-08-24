@@ -18,11 +18,15 @@
  * PURO e determinístico: sem relógio, sem rede, sem estado.
  */
 import type { Exercise, GrupoPrimario } from '../data/types';
-import type { NivelExperiencia } from './treino-types';
+import type { NivelExperiencia, RotinaSemanal } from './treino-types';
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
-import { avaliarDuracaoResistida } from './duracao-plano';
+import { avaliarDuracaoFinalDoDia } from './duracao-plano';
+import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
+import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
+import { duracaoDoDiaDeCardio } from './dia-de-cardio';
+import { fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 
 /** Um dia do desenho, como o editor o entrega: o rótulo e os exercícios escolhidos. */
@@ -39,6 +43,8 @@ export interface DiaDoEditor {
   descansoSeg?: readonly (number | undefined)[];
   /** 🔒 C1: HOLD (s) por exercício isométrico, transportado do motor. Ausente num isométrico ⇒ NAO_AVALIADO. */
   holdSeg?: readonly (number | undefined)[];
+  /** Bloco contínuo FINAL do dia automático; ausente/0 no plano editado ou sem cardio. */
+  cardioSegundos?: number;
 }
 
 export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_mrv' | 'sem_estimulo';
@@ -76,6 +82,18 @@ export interface Avaliacao {
   recomendacoes: ItemCritico[];
   /** 🔴 Riscos, com o porquê. **Não travam** (DF①). */
   avisos: ItemCritico[];
+  /** Prova independente de que o crítico recompôs o mesmo plano automático final. */
+  convergenciaPlanoFinal?: {
+    estado: 'CONVERGIU' | 'DIVERGIU';
+    /** Omissões, duplicações e identidades inválidas não podem virar verde por lista vazia. */
+    motivosEstruturais: string[];
+    dias: Array<{
+      diaId: string;
+      converge: boolean;
+      gerador: ResultadoDuracao;
+      critico: ResultadoDuracao;
+    }>;
+  };
 }
 
 export interface ContextoCritico {
@@ -91,6 +109,17 @@ export interface ContextoCritico {
   diasDaSemanaIdx?: readonly number[];
   /** Séries usadas no PLACAR quando o motor ainda não anotou (piso do nível). */
   seriesPadrao?: number;
+}
+
+/**
+ * Entradas do crítico automático que não podem nascer do plano avaliado. O horizonte vem do perfil
+ * que disparou a geração; assim, um agregado final truncado não consegue certificar a si próprio ao
+ * truncar também fatos, contadores e distribuição.
+ */
+export interface ContextoCriticoAutomatico extends ContextoCritico {
+  diasNoHorizonteEsperado: number;
+  /** Oferta transitória que disparou a geração; nunca pode ser aprendida do agregado avaliado. */
+  diasOferecidosCardioEsperados: readonly number[];
 }
 
 const rotulo = (g: GrupoPrimario) => ROTULO_GRUPO[g] ?? g;
@@ -207,7 +236,7 @@ export function avisos(
   const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
   dias.forEach((d, i) => {
     const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k], holdSeg: d.holdSeg?.[k] }));
-    const r = avaliarDuracaoResistida(slots, ctx.nivel, orcamentoSeg);
+    const r = avaliarDuracaoFinalDoDia(slots, ctx.nivel, orcamentoSeg, d.cardioSegundos ?? 0);
     if (r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
       const min = Math.round(r.duracaoMaximaEstimadaSegundos! / 60);
       itens.push({
@@ -235,4 +264,220 @@ export function avisos(
 export function avaliarSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): Avaliacao {
   const placar = placarDaSemana(dias, ctx);
   return { placar, recomendacoes: recomendacoes(placar), avisos: avisos(dias, placar, ctx) };
+}
+
+/** Compara resultados sem depender da identidade do objeto nem de serialização incidental. */
+function duracoesIguais(a: ResultadoDuracao, b: ResultadoDuracao): boolean {
+  return a.estadoCalculo === b.estadoCalculo
+    && a.estadoLimite === b.estadoLimite
+    && a.orcamentoSegundos === b.orcamentoSegundos
+    && a.limiteOperacionalSegundos === b.limiteOperacionalSegundos
+    && a.duracaoMinimaEstimadaSegundos === b.duracaoMinimaEstimadaSegundos
+    && a.duracaoMaximaEstimadaSegundos === b.duracaoMaximaEstimadaSegundos
+    && a.formulaVersion === b.formulaVersion
+    && JSON.stringify(a.componentes ?? null) === JSON.stringify(b.componentes ?? null)
+    && JSON.stringify(a.motivosNaoAvaliados) === JSON.stringify(b.motivosNaoAvaliados)
+    && JSON.stringify(a.motivosLimite) === JSON.stringify(b.motivosLimite);
+}
+
+/**
+ * Crítico real do plano AUTOMÁTICO final. Ele recebe a rotina terminal, reconstrói os itens de cada dia
+ * e chama a fórmula canônica por sua própria fronteira; nunca reutiliza `duracao` como cálculo.
+ */
+export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: ContextoCriticoAutomatico): Avaliacao {
+  const finais = rotina.planoFinalPorDia ?? [];
+  const motivosEstruturais: string[] = [];
+  const fatosInformados = rotina.fatosDistribuicaoCardio;
+  const distribuicao = rotina.distribuicaoCardio;
+  if (!fatosInformados) motivosEstruturais.push('fatos independentes da distribuição ausentes');
+  if (!distribuicao) motivosEstruturais.push('distribuição de cardio observada ausente');
+  const horizonteExternoValido = Number.isSafeInteger(ctx.diasNoHorizonteEsperado)
+    && ctx.diasNoHorizonteEsperado >= 0;
+  const horizonteEsperado = horizonteExternoValido ? ctx.diasNoHorizonteEsperado : 0;
+  if (!horizonteExternoValido) {
+    motivosEstruturais.push(`horizonte externo inválido: ${String(ctx.diasNoHorizonteEsperado)}`);
+  }
+  if (fatosInformados && fatosInformados.diasHorizonte.length !== horizonteEsperado) {
+    motivosEstruturais.push(`horizonte dos fatos diverge da entrada externa: ${fatosInformados.diasHorizonte.length} != ${horizonteEsperado}`);
+  }
+  const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
+  // Reconstrói os campos DERIVADOS a partir dos slots e do contexto do crítico. Dos fatos publicados
+  // não lê horizonte nem oferta: os dois são entradas externas à saída que está sob julgamento.
+  const ofertaExterna = [...ctx.diasOferecidosCardioEsperados];
+  const ofertaExternaValida = ofertaExterna.every((d) => Number.isSafeInteger(d) && d >= 0 && d < horizonteEsperado)
+    && new Set(ofertaExterna).size === ofertaExterna.length;
+  if (!ofertaExternaValida) motivosEstruturais.push('oferta externa de cardio inválida');
+  const oferecidos = ofertaExternaValida ? [...ofertaExterna].sort((a, b) => a - b) : [];
+  const oferecidosInformados = fatosInformados?.diasHorizonte
+    .filter((d) => d.oferecido)
+    .map((d) => d.ordemNoHorizonte)
+    .sort((a, b) => a - b) ?? [];
+  if (JSON.stringify(oferecidosInformados) !== JSON.stringify(oferecidos)) {
+    motivosEstruturais.push('oferta de cardio dos fatos diverge da entrada externa');
+  }
+  const duracaoResistidaCritico = rotina.dias.map((d) =>
+    avaliarDuracaoFinalDoDia(d.slots, ctx.nivel, orcamentoSeg, 0));
+  const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
+    ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
+    : 0;
+  const fatosReconstruidos = fatosInformados
+    ? fatosDistribuicaoCardioDaRotina({
+        diasTotais: horizonteEsperado,
+        diasForca: rotina.dias.length,
+        duracaoDias: duracaoResistidaCritico,
+        diasOferecidosCardio: oferecidos,
+        orcamentoSegundos: orcamentoSeg,
+        cardioPrescritoPorDiaSegundos,
+        aggregateId: 'rotina-cardio', expectedRevision: 0,
+        formulaVersion: FORMULA_DURACAO_VERSION,
+      })
+    : undefined;
+  if (fatosInformados && fatosReconstruidos
+    && JSON.stringify(fatosInformados) !== JSON.stringify(fatosReconstruidos)) {
+    motivosEstruturais.push('fatos publicados divergem da reconstrução independente');
+  }
+  if (fatosReconstruidos && distribuicao) {
+    const validacao = validarDistribuicaoCardioSemana({ fatosBase: fatosReconstruidos, distribuicaoObservada: distribuicao });
+    if (validacao.tipo === 'NAO_AVALIADA_ESTRUTURAL') {
+      motivosEstruturais.push(...validacao.motivos.map((m) => `distribuição inválida: ${m}`));
+    }
+  }
+  const forcaEsperada = fatosReconstruidos?.planosResistidosTerminais.filter((p) => p.temMusculacao).length
+    ?? rotina.diasForcaAgendados;
+  if (rotina.diasForcaAgendados !== forcaEsperada || rotina.dias.length !== forcaEsperada) {
+    motivosEstruturais.push(`dias de força divergentes: fatos ${forcaEsperada}, contador ${rotina.diasForcaAgendados}, planos ${rotina.dias.length}`);
+  }
+  if (rotina.diasCardioRecuperacao !== horizonteEsperado - forcaEsperada) {
+    motivosEstruturais.push(`dias de recuperação divergentes: fatos ${horizonteEsperado - forcaEsperada}, contador ${rotina.diasCardioRecuperacao}`);
+  }
+  if (finais.length !== horizonteEsperado) {
+    motivosEstruturais.push(`horizonte final: esperado ${horizonteEsperado}, recebido ${finais.length}`);
+  }
+  const ids = new Set<string>();
+  const ordens = new Set<number>();
+  const treinos = new Set<number>();
+  const blocosCanonicos = new Map((distribuicao?.blocosPorDia ?? []).map((b) => [b.diaId, b]));
+  for (const dia of finais) {
+    const idEsperado = `dia-${String(dia.ordemNoHorizonte).padStart(3, '0')}`;
+    if (ids.has(dia.diaId)) motivosEstruturais.push(`dia_id duplicado: ${dia.diaId}`);
+    if (ordens.has(dia.ordemNoHorizonte)) motivosEstruturais.push(`ordem duplicada: ${dia.ordemNoHorizonte}`);
+    if (dia.diaId !== idEsperado) motivosEstruturais.push(`identidade divergente: ${dia.diaId} != ${idEsperado}`);
+    if (dia.ordemNoHorizonte < 0 || dia.ordemNoHorizonte >= horizonteEsperado) {
+      motivosEstruturais.push(`ordem fora do horizonte: ${dia.ordemNoHorizonte}`);
+    }
+    ids.add(dia.diaId);
+    ordens.add(dia.ordemNoHorizonte);
+    if (dia.treinoIdx != null) {
+      if (treinos.has(dia.treinoIdx)) motivosEstruturais.push(`treino_idx duplicado: ${dia.treinoIdx}`);
+      if (dia.treinoIdx < 0 || dia.treinoIdx >= rotina.dias.length) {
+        motivosEstruturais.push(`treino_idx fora da rotina: ${dia.treinoIdx}`);
+      }
+      treinos.add(dia.treinoIdx);
+    }
+    const treinoIdxEsperado = dia.ordemNoHorizonte < rotina.dias.length ? dia.ordemNoHorizonte : undefined;
+    if (dia.treinoIdx !== treinoIdxEsperado) {
+      motivosEstruturais.push(`treino_idx divergente em ${dia.diaId}: ${String(dia.treinoIdx)} != ${String(treinoIdxEsperado)}`);
+    }
+    const tipoEsperado = dia.treinoIdx != null
+      ? (dia.cardio ? 'TREINO_E_CARDIO' : 'TREINO')
+      : (dia.cardio ? 'CARDIO' : 'VAZIO');
+    if (dia.tipo !== tipoEsperado) motivosEstruturais.push(`tipo divergente em ${dia.diaId}: ${dia.tipo} != ${tipoEsperado}`);
+    if (dia.cardio && (dia.cardio.diaId !== dia.diaId || dia.cardio.ordemNoHorizonte !== dia.ordemNoHorizonte)) {
+      motivosEstruturais.push(`cardio fora do dia final: ${dia.diaId}`);
+    }
+    const bloco = blocosCanonicos.get(dia.diaId);
+    const cardioQualitativoEsperado = rotina.cardio.tipo === 'sessoes_moderadas'
+      && oferecidos.includes(dia.ordemNoHorizonte);
+    if (dia.cardio) {
+      if (cardioQualitativoEsperado) {
+        if (dia.cardio.minutos !== null) {
+          motivosEstruturais.push(`minutos de cardio qualitativo devem ser nulos em ${dia.diaId}`);
+        }
+        if (dia.cardio.duracaoSegundos != null || bloco) {
+          motivosEstruturais.push(`cardio qualitativo ganhou duração/bloco em ${dia.diaId}`);
+        }
+      } else {
+        if (!Number.isSafeInteger(dia.cardio.duracaoSegundos) || (dia.cardio.duracaoSegundos ?? 0) <= 0) {
+          motivosEstruturais.push(`duração de cardio inválida em ${dia.diaId}`);
+        }
+        if (!bloco) {
+          motivosEstruturais.push(`cardio final sem bloco canônico: ${dia.diaId}`);
+        } else {
+          if (dia.cardio.minutos !== bloco.duracaoTotalSegundos / 60) {
+            motivosEstruturais.push(`minutos de cardio divergem da duração exata em ${dia.diaId}`);
+          }
+          if (dia.cardio.duracaoSegundos !== bloco.duracaoTotalSegundos) {
+            motivosEstruturais.push(`duração de cardio diverge do bloco em ${dia.diaId}`);
+          }
+          if (JSON.stringify(dia.cardio.linhagens ?? []) !== JSON.stringify(bloco.linhagens)) {
+            motivosEstruturais.push(`linhagem de cardio diverge do bloco em ${dia.diaId}`);
+          }
+        }
+      }
+    } else if (cardioQualitativoEsperado) {
+      motivosEstruturais.push(`cardio qualitativo ausente do plano final: ${dia.diaId}`);
+    } else if (bloco) {
+      motivosEstruturais.push(`bloco canônico ausente do plano final: ${dia.diaId}`);
+    }
+  }
+  for (let ordem = 0; ordem < horizonteEsperado; ordem += 1) {
+    if (!ordens.has(ordem)) motivosEstruturais.push(`dia final ausente: dia-${String(ordem).padStart(3, '0')}`);
+  }
+  for (let treinoIdx = 0; treinoIdx < rotina.dias.length; treinoIdx += 1) {
+    if (!treinos.has(treinoIdx)) motivosEstruturais.push(`treino final ausente: ${treinoIdx}`);
+  }
+  for (const bloco of blocosCanonicos.values()) {
+    if (!Number.isSafeInteger(bloco.duracaoTotalSegundos) || bloco.duracaoTotalSegundos <= 0) {
+      motivosEstruturais.push(`bloco canônico com duração inválida: ${bloco.diaId}`);
+    }
+    if (!ids.has(bloco.diaId)) motivosEstruturais.push(`bloco canônico fora do plano final: ${bloco.diaId}`);
+  }
+  const cardioProjetado = finais.flatMap((d) => d.cardio ? [d.cardio] : []);
+  if (JSON.stringify(rotina.diasCardio) !== JSON.stringify(cardioProjetado)) {
+    motivosEstruturais.push('diasCardio diverge da projeção do plano final');
+  }
+  if (!rotina.duracaoResistidaDias
+    || rotina.duracaoResistidaDias.length !== duracaoResistidaCritico.length
+    || rotina.duracaoResistidaDias.some((d, i) => !duracoesIguais(d, duracaoResistidaCritico[i]!))) {
+    motivosEstruturais.push('duracaoResistidaDias diverge da reconstrução independente dos slots');
+  }
+  const duracaoFinalTreinos = rotina.dias.map((_, treinoIdx) =>
+    finais.find((d) => d.treinoIdx === treinoIdx)?.duracao);
+  if (!rotina.duracaoDias
+    || rotina.duracaoDias.length !== duracaoFinalTreinos.length
+    || duracaoFinalTreinos.some((d, i) => !d || !duracoesIguais(rotina.duracaoDias![i]!, d))) {
+    motivosEstruturais.push('duracaoDias diverge da projeção do plano final');
+  }
+  const diasEditor: DiaDoEditor[] = rotina.dias.map((dia, treinoIdx) => {
+    const final = finais.find((d) => d.treinoIdx === treinoIdx);
+    return {
+      nome: dia.nome,
+      exercicios: dia.slots.map((s) => s.exercicio),
+      series: dia.slots.map((s) => s.series),
+      descansoSeg: dia.slots.map((s) => s.descansoSeg),
+      holdSeg: dia.slots.map((s) => s.holdSeg),
+      cardioSegundos: blocosCanonicos.get(final?.diaId ?? '')?.duracaoTotalSegundos,
+    };
+  });
+  const base = avaliarSemana(diasEditor, ctx);
+  const conferencias = finais.map((dia) => {
+    const treino = dia.treinoIdx != null ? rotina.dias[dia.treinoIdx] : undefined;
+    const cardioCanonicoSegundos = blocosCanonicos.get(dia.diaId)?.duracaoTotalSegundos ?? 0;
+    const cardioQualitativoEsperado = rotina.cardio.tipo === 'sessoes_moderadas'
+      && oferecidos.includes(dia.ordemNoHorizonte);
+    const critico = avaliarDuracaoFinalDoDia(
+      treino?.slots ?? [], ctx.nivel, orcamentoSeg, cardioCanonicoSegundos,
+      cardioQualitativoEsperado,
+    );
+    return { diaId: dia.diaId, converge: duracoesIguais(dia.duracao, critico), gerador: dia.duracao, critico };
+  });
+  const convergiu = motivosEstruturais.length === 0 && conferencias.every((d) => d.converge);
+  return {
+    ...base,
+    convergenciaPlanoFinal: {
+      estado: convergiu ? 'CONVERGIU' : 'DIVERGIU',
+      motivosEstruturais,
+      dias: conferencias,
+    },
+  };
 }

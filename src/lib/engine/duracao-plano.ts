@@ -106,18 +106,43 @@ export function avaliarDuracaoResistida(
   nivel: NivelExperiencia,
   orcamentoSegundos?: number,
 ): ResultadoDuracao {
+  return avaliarDuracaoFinalDoDia(slots, nivel, orcamentoSegundos, 0);
+}
+
+/**
+ * Avalia o DIA FINAL materializado: itens resistidos seguidos de, no máximo, um bloco contínuo.
+ * O bloco já chega adaptado/consolidado pela distribuição semanal; esta função não redistribui nem
+ * recalcula sua duração. Assim gerador e crítico podem consumir exatamente o mesmo plano final.
+ */
+export function avaliarDuracaoFinalDoDia(
+  slots: readonly SlotParaDuracao[],
+  nivel: NivelExperiencia,
+  orcamentoSegundos: number | undefined,
+  cardioMaterializadoSegundos: number,
+  cardioPrescritoSemDuracao = false,
+): ResultadoDuracao {
   const { itens, faltou } = itensResistidosDeSlots(slots, nivel);
-  if (faltou.length > 0) {
+  const cardioInvalido = cardioMaterializadoSegundos !== 0
+    && (!Number.isSafeInteger(cardioMaterializadoSegundos) || cardioMaterializadoSegundos <= 0);
+  const motivosNaoAvaliados = [
+    ...faltou,
+    ...(cardioPrescritoSemDuracao ? ['CARDIO_DURACAO_AUSENTE'] : []),
+    ...(cardioInvalido ? [`CARDIO_DURACAO_INVALIDA: ${String(cardioMaterializadoSegundos)}`] : []),
+  ];
+  if (motivosNaoAvaliados.length > 0) {
     return {
       estadoCalculo: 'NAO_AVALIADO',
       estadoLimite: 'NAO_AVALIADO',
       orcamentoSegundos,
       formulaVersion: FORMULA_DURACAO_VERSION,
-      motivosNaoAvaliados: faltou,
+      motivosNaoAvaliados,
       // 🔒 C1 — dimensão independente: orçamento ausente registra ORCAMENTO_AUSENTE mesmo aqui,
       // sem esconder HOLD_AUSENTE (fixture 53).
       motivosLimite: orcamentoSegundos === undefined ? ['ORCAMENTO_AUSENTE'] : [],
     };
   }
-  return avaliarDuracaoSessao({ itens, orcamentoSegundos });
+  const itensFinais: ItemDuracao[] = cardioMaterializadoSegundos > 0
+    ? [...itens, { tipo: 'CONTINUO', duracaoTotalSegundos: cardioMaterializadoSegundos }]
+    : itens;
+  return avaliarDuracaoSessao({ itens: itensFinais, orcamentoSegundos, origemPlano: 'AUTOMATICO' });
 }

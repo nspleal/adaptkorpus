@@ -28,15 +28,15 @@ import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, foco
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
-import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
-import { distribuirCardioDaRotina } from './treino-cardio-semana';
-import { avaliarInvariantes, type Padrao } from './geracao-temporal';
+import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
+import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
+import { avaliarInvariantes, executarReduceToFit, type Padrao } from './geracao-temporal';
 import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
-import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 
@@ -83,6 +83,8 @@ export interface OpcoesSemana {
    * tentativa de redução (não re-reduz, evita recursão infinita). Não faz parte da API pública.
    */
   budgetSlotsOverride?: number;
+  /** Flag estritamente interna: monta uma tentativa resistida, sem finalizar/distribuir cardio. */
+  tentativaTemporalInterna?: true;
 }
 
 /**
@@ -117,12 +119,8 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modal
   }));
 }
 
-/**
- * 🔒 C1 — piso de slots por dia da tabela `orcamentoSlotsDoDia` (o degrau ≤20 min). Abaixo
- * disto a cobertura (core, puxar≥empurrar, dobradiça) não se sustenta; é o "menor plano com
- * cobertura" do override 2. Se nem ele couber, o motor devolve incompatibilidade estruturada.
- */
-const BUDGET_MIN_COBERTURA = 3;
+/** Padrões independentes que o adaptador temporal exige de toda realocação. */
+const COBERTURA_TEMPORAL_OBRIGATORIA = ['puxar', 'empurrar', 'agachar'] as const;
 
 /** 🔒 C1 §6 — um dia estoura o LIMITE OPERACIONAL (B+480) mesmo com o descanso no piso? */
 export function precisaReduzir(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): boolean {
@@ -135,7 +133,8 @@ export function precisaReduzir(rotina: RotinaSemanal, nivel: NivelExperiencia, o
 
 /** 🔒 C1 §5.5 — anexa a certificação canônica por dia ao plano final (autoridade do "cabe?"). */
 function certificarDuracao(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): RotinaSemanal {
-  return { ...rotina, duracaoDias: rotina.dias.map((d) => avaliarDuracaoResistida(d.slots, nivel, orcamentoSeg)) };
+  const duracaoResistidaDias = rotina.dias.map((d) => avaliarDuracaoResistida(d.slots, nivel, orcamentoSeg));
+  return { ...rotina, duracaoResistidaDias, duracaoDias: duracaoResistidaDias };
 }
 
 /**
@@ -319,6 +318,7 @@ export function montarRotina(
     preencherAteOrcamento: divisao === 'prioridades',
   };
   let diasAlocados = alocarSemana(argsAloc);
+  let transferenciaFoco: { de: GrupoPrimario; para: GrupoPrimario } | undefined;
 
   /**
    * 🔒 A CASCATA DO FOCO, DECIDIDA COM OS NÚMEROS REAIS (DF 2026-08-14).
@@ -382,8 +382,29 @@ export function montarRotina(
       sMax: sMaxAloc,
     });
     if (decisaoFoco.moveSlot && compensadorValido) {
-      diasAlocados = alocarSemana({ ...argsAloc, transferirSlot: { de: compensadorValido, para: foco.grupo } });
+      transferenciaFoco = { de: compensadorValido, para: foco.grupo };
+      diasAlocados = alocarSemana({ ...argsAloc, transferirSlot: transferenciaFoco });
     }
+  }
+
+  const padroesTemporaisDaAlocacao = (alocados: typeof diasAlocados): Set<Padrao> => new Set(
+    alocados.flatMap((d) => d.slots.map((s) => {
+      const p = s.exercicio.padraoMovimento;
+      return p === 'dobradica_quadril' ? 'agachar' : p === 'cardio' ? 'core' : p;
+    })),
+  );
+  const coberturaTemporalCompleta = (alocados: typeof diasAlocados): boolean => {
+    const presentes = padroesTemporaisDaAlocacao(alocados);
+    return COBERTURA_TEMPORAL_OBRIGATORIA.every((p) => presentes.has(p));
+  };
+  // A alocação normal continua sendo a primeira escolha. Somente quando ela falha na cobertura
+  // obrigatória, refazemos a semana com reserva coverage-first; isso evita reordenar planos já válidos.
+  if (!coberturaTemporalCompleta(diasAlocados)) {
+    diasAlocados = alocarSemana({
+      ...argsAloc,
+      ...(transferenciaFoco ? { transferirSlot: transferenciaFoco } : {}),
+      coberturaTemporalObrigatoria: COBERTURA_TEMPORAL_OBRIGATORIA,
+    });
   }
 
   /**
@@ -821,7 +842,6 @@ export function montarRotina(
    */
   const violacoesDaRealocacao = (r: RotinaSemanal): string[] => {
     const slots = r.dias.flatMap((d) => d.slots);
-    if (slots.length === 0) return [];
     const permitidos = new Set<string>(
       locaisPermitidos(perfil.equipamento).flatMap((l) => (l === 'academia' ? ['academia'] : l === 'casa_com' ? ['casa_com'] : ['casa_sem'])),
     );
@@ -842,96 +862,181 @@ export function montarRotina(
         execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG },
       })),
       // cobertura obrigatória da spec §8 (fixture 21) + allowlist REAL de locais do perfil.
-      { coberturaObrigatoria: ['puxar', 'empurrar', 'agachar'], equipamentosDisponiveis: [...permitidos] },
+      { coberturaObrigatoria: COBERTURA_TEMPORAL_OBRIGATORIA, equipamentosDisponiveis: [...permitidos] },
     ).violacoes;
   };
 
-  /**
-   * 🔒 C1 (autor 2026-08-21) — FINALIZAÇÃO: deriva o discriminante `resultadoGeracao` (a fonte única
-   * que SUBSTITUI o booleano isolado `duracaoIncompativel`) e MATERIALIZA a distribuição semanal de
-   * cardio nos dias oferecidos. Os QUATRO estados são alcançáveis pelo caminho vivo: CERTIFICADO,
-   * NAO_AVALIADO_ENTREGAVEL, INCOMPATIVEL e ERRO_ALOCADOR (este via `violacoesInvariantes`, quando
-   * uma REALOCAÇÃO devolve plano estruturalmente inválido). `duracaoIncompativel` vira VISTA derivada.
-   */
-  const finalizar = (
+  /** Materializa o único plano final por dia e deriva dele as vistas consumidas pelo produto. */
+  const materializarPlanoFinal = (
     r: RotinaSemanal,
-    capacidade: number,
-    incompativel: boolean,
-    violacoesInvariantes?: string[],
-  ): RotinaSemanal => {
-    const diasDur = r.duracaoDias ?? [];
-    let rg: ResultadoGeracaoRotina;
-    if (violacoesInvariantes && violacoesInvariantes.length > 0) {
-      // 🔒 precedência §6: invariante violado ANTES de avaliar duração — não vira NAO_AVALIADO
-      // entregável nem incompatibilidade temporal.
-      rg = { tipo: 'ERRO_ALOCADOR', motivo: 'INVARIANTE_VIOLADO', violacoesInvariantes };
-    } else if (diasDur.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) {
-      // §6 ramo (c): NAO_AVALIADO não certifica nem entra em redução — entrega com motivos.
-      const motivos = [...new Set(diasDur.flatMap((d) => d.motivosNaoAvaliados))];
-      rg = { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos };
-    } else if (incompativel) {
-      rg = { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: capacidade };
-    } else {
-      rg = { tipo: 'CERTIFICADO', capacidadeTerminal: capacidade };
+    distribuicaoCardio: NonNullable<RotinaSemanal['distribuicaoCardio']>,
+    diasCardioSemDuracao: ReadonlySet<number>,
+  ): Pick<RotinaSemanal, 'planoFinalPorDia' | 'duracaoDias' | 'diasCardio'> => {
+    const blocoPorDia = new Map(distribuicaoCardio.blocosPorDia.map((b) => [b.diaId, b]));
+    const modalidade = perfil.cardioFavorito ?? MODALIDADE_PADRAO_DIA;
+    const planoFinalPorDia: PlanoFinalDia[] = Array.from({ length: dias }, (_, ordemNoHorizonte) => {
+      const diaId = `dia-${String(ordemNoHorizonte).padStart(3, '0')}`;
+      const treino = r.dias[ordemNoHorizonte];
+      const bloco = blocoPorDia.get(diaId);
+      const cardioSemDuracao = diasCardioSemDuracao.has(ordemNoHorizonte);
+      const cardio: DiaCardio | undefined = bloco
+        ? {
+            nome: 'Cardio', padrao: 'cardio', modalidade,
+            minutos: bloco.duracaoTotalSegundos / 60,
+            diaId, ordemNoHorizonte, duracaoSegundos: bloco.duracaoTotalSegundos,
+            linhagens: bloco.linhagens,
+          }
+        : cardioSemDuracao
+          ? { nome: 'Cardio', padrao: 'cardio', modalidade, minutos: null, diaId, ordemNoHorizonte }
+          : undefined;
+      const duracao = avaliarDuracaoFinalDoDia(
+        treino?.slots ?? [], perfil.nivelExperiencia, orcamentoSeg, bloco?.duracaoTotalSegundos ?? 0,
+        cardioSemDuracao,
+      );
+      const tipo: PlanoFinalDia['tipo'] = treino
+        ? (cardio ? 'TREINO_E_CARDIO' : 'TREINO')
+        : (cardio ? 'CARDIO' : 'VAZIO');
+      return {
+        diaId, ordemNoHorizonte, tipo,
+        ...(treino ? { treinoIdx: ordemNoHorizonte } : {}),
+        ...(cardio ? { cardio } : {}),
+        duracao,
+      };
+    });
+
+    const duracaoDias = r.dias.map((_, treinoIdx) => planoFinalPorDia[treinoIdx]!.duracao);
+    // A visão consumida pelo produto nasce dos blocos positivos e, quando a prescrição é
+    // qualitativa, de um item explícito sem duração. Ausência de número nunca vira ausência de plano.
+    const diasCardio = planoFinalPorDia.flatMap((d) => d.cardio ? [d.cardio] : []);
+    return { planoFinalPorDia, duracaoDias, diasCardio };
+  };
+
+  /** Finaliza UMA vez: distribuição e duração final só rodam depois de escolhido o terminal. */
+  const finalizar = (r: RotinaSemanal, rg: ResultadoGeracaoRotina): RotinaSemanal => {
+    if (rg.tipo === 'ERRO_ALOCADOR') {
+      return { ...r, resultadoGeracao: rg };
     }
 
-    // Distribuição semanal de cardio nos dias OFERECIDOS (só quando há semana/ciclo — o v1 puro não
-    // materializa cardio semanal). Cardio prescrito por dia oferecido = meta ÷ nº de oferecidos.
-    let distribuicaoCardio;
-    if (semanaCiclo) {
-      const oferecidos = diasOferecidosCardio.filter((i) => Number.isInteger(i) && i >= 0 && i < dias);
-      const cardioPrescritoPorDiaSegundos =
-        prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-          ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
-          : 0;
-      distribuicaoCardio = distribuirCardioDaRotina({
-        diasTotais: dias,
-        diasForca,
-        duracaoDias: diasDur,
-        diasOferecidosCardio: oferecidos,
-        orcamentoSegundos: orcamentoSeg,
-        cardioPrescritoPorDiaSegundos,
-        aggregateId: 'rotina-cardio',
-        expectedRevision: 0,
-        formulaVersion: FORMULA_DURACAO_VERSION,
-      });
-    }
-
+    const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];
+    const oferecidos = [...new Set(diasOferecidosCardio.filter((i) => Number.isInteger(i) && i >= 0 && i < dias))]
+      .sort((a, b) => a - b);
+    const cardioPrescritoPorDiaSegundos =
+      prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
+        ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
+        : 0;
+    const entradaCardioViva = {
+      diasTotais: dias,
+      diasForca,
+      duracaoDias: diasResistidos,
+      diasOferecidosCardio: oferecidos,
+      orcamentoSegundos: orcamentoSeg,
+      cardioPrescritoPorDiaSegundos,
+      aggregateId: 'rotina-cardio',
+      expectedRevision: 0,
+      formulaVersion: FORMULA_DURACAO_VERSION,
+    };
+    const fatosDistribuicaoCardio = fatosDistribuicaoCardioDaRotina(entradaCardioViva);
+    const distribuicaoCardio = distribuirCardioDaRotina(entradaCardioViva);
+    const diasCardioSemDuracao = prescricao.cardio.tipo === 'sessoes_moderadas'
+      ? new Set(oferecidos)
+      : new Set<number>();
+    const final = materializarPlanoFinal(r, distribuicaoCardio, diasCardioSemDuracao);
+    const resultadoFinal: ResultadoGeracaoRotina =
+      prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rg.tipo !== 'INCOMPATIVEL'
+        ? {
+            tipo: 'NAO_AVALIADO_ENTREGAVEL',
+            motivos: [...new Set([
+              ...(rg.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rg.motivos : []),
+              'CARDIO_SEM_DURACAO',
+            ])],
+          }
+        : rg;
     return {
-      ...r,
-      resultadoGeracao: rg,
-      ...(rg.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
-      ...(distribuicaoCardio ? { distribuicaoCardio } : {}),
+      ...r, ...final, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
+      ...(resultadoFinal.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
     };
   };
 
-  const rotina = certificarDuracao(montarSaida(diasTreino, split), perfil.nivelExperiencia, orcamentoSeg);
+  // A montagem estrutural precede a avaliação temporal. Um plano que viola cobertura,
+  // equipamento ou puxar >= empurrar nunca recebe `duracaoDias` calculada: primeiro ele é
+  // rejeitado pelo contrato do alocador; só um plano estruturalmente válido pode ser medido.
+  const rotinaEstrutural = montarSaida(diasTreino, split);
+  const violacoesBaseline = violacoesDaRealocacao(rotinaEstrutural);
 
-  // 🔒 C1 §5.5/§6 (override do autor 2026-08-20): o gerador reavaliou o PLANO FINAL pela fórmula
-  // canônica (acima). Se um dia ainda estoura o limite operacional (B+480) mesmo com o descanso
-  // no piso, REDUZ exercícios reexecutando o alocador completo com menos slots — cobertura,
-  // equipamento e puxar≥empurrar preservados pelo próprio alocador (não se apaga o último slot).
-  // `budgetSlotsOverride` presente ⇒ esta já é uma tentativa de redução: não re-reduz (mas finaliza,
-  // pois o pai pode adotá-la como plano final).
-  if (semanaCiclo?.budgetSlotsOverride != null) {
-    // 🔒 esta chamada É uma REALOCAÇÃO do reduce-to-fit ⇒ valida os três invariantes (§6.7).
-    return finalizar(
-      rotina, budgetPorDia,
-      precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg),
-      violacoesDaRealocacao(rotina),
-    );
+  if (violacoesBaseline.length > 0) {
+    if (semanaCiclo?.tentativaTemporalInterna) return rotinaEstrutural;
+    return finalizar(rotinaEstrutural, {
+      tipo: 'ERRO_ALOCADOR', motivo: 'INVARIANTE_VIOLADO',
+      capacidadeTestada: budgetPorDia, violacoesInvariantes: violacoesBaseline,
+    });
   }
-  if (semanaCiclo && precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg)) {
-    for (let b = budgetPorDia - 1; b >= BUDGET_MIN_COBERTURA; b -= 1) {
-      const tentativa = montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: b }, preferencias, escolhasExecucao, diasOferecidosCardio);
-      // 🔒 §6 precedência: invariante violado ENCERRA o laço — não continua reduzindo a partir de
-      // um plano estruturalmente inválido nem o classifica como incompatibilidade temporal.
-      if (tentativa.resultadoGeracao?.tipo === 'ERRO_ALOCADOR') return tentativa;
-      // a tentativa já vem FINALIZADA (resultadoGeracao); adota a primeira que certifica.
-      if (tentativa.resultadoGeracao?.tipo === 'CERTIFICADO') return tentativa;
-    }
-    // Nem o menor plano com cobertura coube: devolve o menor FINALIZADO (INCOMPATIVEL se ainda excede).
-    return montarRotina(prescricao, perfil, exercises, favoritos, { ...semanaCiclo, budgetSlotsOverride: BUDGET_MIN_COBERTURA }, preferencias, escolhasExecucao, diasOferecidosCardio);
+
+  const rotina = certificarDuracao(rotinaEstrutural, perfil.nivelExperiencia, orcamentoSeg);
+
+  // Uma tentativa interna devolve somente o plano resistido refeito; o pai escolhe o terminal e
+  // finaliza uma única vez (sem cardio/hash de candidatos intermediários).
+  if (semanaCiclo?.tentativaTemporalInterna) return rotina;
+
+  if (!semanaCiclo) {
+    const motivos = [...new Set((rotina.duracaoDias ?? []).flatMap((d) => d.motivosNaoAvaliados))];
+    // Mesmo a geração v1 passa pela materialização canônica. Sem oferta, minutos de cardio
+    // produzem zero blocos — evita um primeiro render legado antes do recompute semanal do Painel.
+    return finalizar(rotina, motivos.length > 0
+      ? { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos }
+      : { tipo: 'CERTIFICADO', capacidadeTerminal: budgetPorDia });
   }
-  return finalizar(rotina, budgetPorDia, false);
+
+  const temporal = executarReduceToFit<RotinaSemanal, NonNullable<RotinaSemanal['duracaoDias']>>({
+    capacidadeInicial: budgetPorDia,
+    capacidadeMinima: 0,
+    // A escada de descanso já é percorrida dentro de `montarSaida`; cada capacidade chama uma
+    // montagem fresca, portanto nunca herda descanso degradado da capacidade anterior.
+    niveisDescanso: 1,
+    alocar: (capacidade) => {
+      if (capacidade === budgetPorDia) return { tipo: 'PLANO', plano: rotina };
+      const plano = montarRotina(
+        prescricao, perfil, exercises, favoritos,
+        { ...semanaCiclo, budgetSlotsOverride: capacidade, tentativaTemporalInterna: true },
+        preferencias, escolhasExecucao, diasOferecidosCardio,
+      );
+      // O limite real é comportamental: se uma redução do baseline válido já não consegue manter
+      // os invariantes, o alocador declara que não existe plano menor. Não se publica a tentativa
+      // inválida nem se finge que `ceil(cobertura/dias)` descreve o alocador concreto.
+      if (violacoesBaseline.length === 0 && violacoesDaRealocacao(plano).length > 0) {
+        return { tipo: 'SEM_PLANO_MENOR' };
+      }
+      return { tipo: 'PLANO', plano };
+    },
+    // Capacidade semanal = maior nº de slots de qualquer dia, nunca soma plana da semana.
+    cardinalidade: (plano) => Math.max(0, ...plano.dias.map((d) => d.slots.length)),
+    classificar: (plano, _capacidade) => {
+      // Precedência normativa: cardinalidade (no orquestrador) → invariantes → duração.
+      // Vale também para o baseline: plano inicial inválido nunca recebe selo temporal verde.
+      const violacoes = violacoesDaRealocacao(plano);
+      if (violacoes.length > 0) return { tipo: 'ERRO_ALOCADOR', motivo: 'INVARIANTE_VIOLADO', violacoesInvariantes: violacoes };
+      const excede = precisaReduzir(plano, perfil.nivelExperiencia, orcamentoSeg);
+      const resultados = plano.duracaoDias ?? [];
+      if (resultados.some((d) => d.estadoCalculo === 'NAO_AVALIADO')) return { tipo: 'NAO_AVALIADO', resultado: resultados };
+      if (excede) return { tipo: 'EXCEDE', resultado: resultados };
+      return { tipo: 'CERTIFICADO', resultado: resultados };
+    },
+  });
+
+  if (temporal.tipo === 'ERRO_ALOCADOR') {
+    const rg: ResultadoGeracaoRotina = {
+      tipo: 'ERRO_ALOCADOR', motivo: temporal.motivo, capacidadeTestada: temporal.capacidadeTestada,
+      violacoesInvariantes: temporal.violacoesInvariantes ?? [],
+      ...(temporal.cardinalidadeRecebida != null ? { cardinalidadeRecebida: temporal.cardinalidadeRecebida } : {}),
+    };
+    return finalizar(temporal.planoTerminal ?? rotina, rg);
+  }
+  if (temporal.tipo === 'NAO_AVALIADO_ENTREGAVEL') {
+    const motivos = [...new Set(temporal.resultado.flatMap((d) => d.motivosNaoAvaliados))];
+    return finalizar(temporal.planoTerminal, { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos });
+  }
+  if (temporal.tipo === 'CERTIFICADO') {
+    return finalizar(temporal.planoTerminal, { tipo: 'CERTIFICADO', capacidadeTerminal: temporal.capacidadeTerminal });
+  }
+  const terminal = temporal.planoTerminal ?? rotina;
+  return finalizar(terminal, { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: temporal.capacidadeMinimaTestada });
 }

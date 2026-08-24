@@ -156,17 +156,52 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
 describe('C1 §8.3 · regressões adicionais (sessão longa · tempo impossível · deload)', () => {
   const ADICIONAIS = [
     { nome: 'longa (90 min)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: 90 }, semana: 1 as SemanaCiclo, esperado: 'CERTIFICADO' },
-    { nome: 'impossível (10 min)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 10 }, semana: 1 as SemanaCiclo, esperado: 'INCOMPATIVEL' },
+    { nome: 'menor cobertura excede (10 min, 1 dia)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 1, tempoPorSessaoMin: 10 }, semana: 1 as SemanaCiclo, esperado: 'INCOMPATIVEL' },
     { nome: 'deload (semana 6)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 60 }, semana: 6 as SemanaCiclo, esperado: 'NAO_AVALIADO_ENTREGAVEL' },
   ];
   it.each(ADICIONAIS)('$nome → $esperado, com convergência', (c) => {
     const perfil = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, equipamento: 'academia', ...c.perfil } as PerfilTreino;
     const rot = gerarTreino(perfil, { exercises: EXERCISES, semanaCiclo: { semana: c.semana } }).rotina!;
     expect(rot.resultadoGeracao!.tipo).toBe(c.esperado);
+    if (rot.resultadoGeracao!.tipo === 'ERRO_ALOCADOR') {
+      expect(rot.duracaoResistidaDias).toBeUndefined();
+      expect(rot.duracaoDias).toBeUndefined();
+      expect(rot.planoFinalPorDia).toBeUndefined();
+      return;
+    }
     const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
     rot.dias.forEach((d, i) => {
       expect(avaliarDuracaoResistida(d.slots, perfil.nivelExperiencia, orcamentoSeg)).toEqual(rot.duracaoDias![i]);
     });
     expect(rot.duracaoIncompativel ?? false).toBe(rot.resultadoGeracao!.tipo === 'INCOMPATIVEL');
+  });
+
+  it('coverage-first encontra puxar + empurrar + membro inferior antes de declarar incompatibilidade', () => {
+    const perfil = {
+      pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, equipamento: 'academia' as const,
+      objetivo: 'massa' as const, nivelExperiencia: 'intermediario' as const,
+      diasDisponiveis: 1, tempoPorSessaoMin: 10,
+    };
+    const rot = gerarTreino(perfil, { exercises: EXERCISES, semanaCiclo: { semana: 1 } }).rotina!;
+    const padroes = new Set(rot.dias.flatMap((d) => d.slots.map((s) => s.padrao)));
+    expect(padroes.has('puxar')).toBe(true);
+    expect(padroes.has('empurrar')).toBe(true);
+    expect(padroes.has('agachar') || padroes.has('dobradica_quadril')).toBe(true);
+    expect(rot.resultadoGeracao?.tipo).toBe('INCOMPATIVEL');
+  });
+
+  it('plano sem cobertura possível falha estruturalmente antes de ganhar duração', () => {
+    const perfil = {
+      pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, equipamento: 'academia' as const,
+      objetivo: 'massa' as const, nivelExperiencia: 'intermediario' as const,
+      diasDisponiveis: 1, tempoPorSessaoMin: 10,
+    };
+    const semMembroInferior = EXERCISES.filter((e) =>
+      e.padraoMovimento !== 'agachar' && e.padraoMovimento !== 'dobradica_quadril');
+    const rot = gerarTreino(perfil, { exercises: semMembroInferior, semanaCiclo: { semana: 1 } }).rotina!;
+    expect(rot.resultadoGeracao?.tipo).toBe('ERRO_ALOCADOR');
+    expect(rot.duracaoResistidaDias).toBeUndefined();
+    expect(rot.duracaoDias).toBeUndefined();
+    expect(rot.planoFinalPorDia).toBeUndefined();
   });
 });

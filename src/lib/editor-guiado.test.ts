@@ -110,7 +110,7 @@ describe('🔒 DF② — o editor mexe em EXERCÍCIOS, nunca em prescrição', (
   });
 
   it('o crítico permanece no plano JÁ SALVO, no mesmo componente (faixa compacta)', () => {
-    expect(painel, 'a faixa do crítico sumiu do plano salvo').toMatch(/<PainelCritico avaliacao=\{criticoCustom\} compacto \/>/);
+    expect(painel, 'a faixa do crítico sumiu do plano salvo').toMatch(/<PainelCritico avaliacao=\{criticoPlano\} compacto \/>/);
     expect(editor, 'o componente do crítico deixou de ser compartilhado').toMatch(/export function PainelCritico/);
   });
 

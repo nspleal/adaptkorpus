@@ -21,6 +21,7 @@ import { avaliarGateTreino } from './engine/treino-gate';
 import { descansoDoExercicio } from './engine/descanso';
 import { rirAlvoDaSemana } from './engine/treino-mesociclo';
 import { getDiasOferecidosCardio, limparOfertaCardio, setDiasOferecidosCardio, toggleDiaOferecidoCardio } from './cardio-oferta';
+import { montarSemana } from './semana';
 import type { PerfilTreino, RotinaSemanal } from './engine/treino-types';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { FlagsSaude } from './engine';
@@ -64,14 +65,79 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     expect(r.rotina!.duracaoIncompativel).toBeUndefined();
   });
 
-  it('INCOMPATIVEL: nem o menor plano com cobertura cabe (10 min) ⇒ shortfall DITO', () => {
+  it('o mínimo vem do alocador: 10 min aceita capacidade 2 em quatro dias, sem falso INCOMPATIVEL', () => {
     const r = gerarTreino(perfilTreino({ tempoPorSessaoMin: 10 }), { exercises: EXERCISES, semanaCiclo: { semana: 1 } });
     const rg = r.rotina!.resultadoGeracao!;
-    expect(rg.tipo).toBe('INCOMPATIVEL');
-    if (rg.tipo !== 'INCOMPATIVEL') return;
-    expect(rg.capacidadeMinimaTestada).toBe(3); // BUDGET_MIN_COBERTURA
-    // 🔒 `duracaoIncompativel` é VISTA DERIVADA — sai do discriminante, não de decisão própria.
+    expect(rg).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 2 });
+    expect(Math.max(...r.rotina!.dias.map((d) => d.slots.length))).toBe(2);
+    expect(r.rotina!.duracaoIncompativel).toBeUndefined();
+  });
+
+  it('um dia encontra a cobertura mínima válida e só então declara INCOMPATIVEL temporal', () => {
+    const r = gerarTreino(
+      perfilTreino({ diasDisponiveis: 1, tempoPorSessaoMin: 10 }),
+      { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
+    );
+    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 3 });
     expect(r.rotina!.duracaoIncompativel).toBe(true);
+  });
+
+  it('o alocador declara SEM_PLANO_MENOR antes da capacidade 1 inválida e preserva o último terminal válido', () => {
+    const r = gerarTreino(
+      perfilTreino({ diasDisponiveis: 4, tempoPorSessaoMin: 1 }),
+      { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
+    );
+    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 2 });
+    expect(Math.max(...r.rotina!.dias.map((d) => d.slots.length))).toBe(2);
+  });
+
+  it.each([5, 6])('perfil avançado de %i dias não publica candidato de capacidade 1 sem cobertura', (diasDisponiveis) => {
+    const r = gerarTreino(
+      perfilTreino({ nivelExperiencia: 'avancado', diasDisponiveis, tempoPorSessaoMin: 10 }),
+      { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
+    );
+    expect(r.rotina!.resultadoGeracao?.tipo).not.toBe('ERRO_ALOCADOR');
+  });
+
+  it('valida os invariantes também no baseline antes de certificar a duração', () => {
+    const semPuxar = EXERCISES.map((e) => (e.padraoMovimento === 'puxar'
+      ? { ...e, padraoMovimento: 'empurrar' as const }
+      : e));
+    const r = gerarTreino(
+      perfilTreino({ diasDisponiveis: 2, tempoPorSessaoMin: 20 }),
+      { exercises: semPuxar, semanaCiclo: { semana: 1 } },
+    );
+    expect(r.rotina!.resultadoGeracao?.tipo).toBe('ERRO_ALOCADOR');
+    if (r.rotina!.resultadoGeracao?.tipo !== 'ERRO_ALOCADOR') return;
+    expect(r.rotina!.resultadoGeracao.violacoesInvariantes.join(' ')).toMatch(/cobertura ausente/);
+    expect(r.rotina!.duracaoDias).toBeUndefined();
+    expect(r.rotina!.duracaoResistidaDias).toBeUndefined();
+  });
+
+  it('a geração inicial sem semana também valida invariantes antes do selo temporal', () => {
+    const semPuxar = EXERCISES.map((e) => (e.padraoMovimento === 'puxar'
+      ? { ...e, padraoMovimento: 'empurrar' as const }
+      : e));
+    const r = gerarTreino(
+      perfilTreino({ diasDisponiveis: 2, tempoPorSessaoMin: 20 }),
+      { exercises: semPuxar },
+    );
+    expect(r.rotina!.resultadoGeracao?.tipo).toBe('ERRO_ALOCADOR');
+    expect(r.rotina!.duracaoDias).toBeUndefined();
+    expect(r.rotina!.duracaoResistidaDias).toBeUndefined();
+  });
+
+  it('catálogo vazio não ganha certificação temporal por vacuidade', () => {
+    const r = gerarTreino(
+      perfilTreino({ diasDisponiveis: 2, tempoPorSessaoMin: 20 }),
+      { exercises: [], semanaCiclo: { semana: 1 } },
+    );
+    expect(r.rotina!.resultadoGeracao?.tipo).toBe('ERRO_ALOCADOR');
+    if (r.rotina!.resultadoGeracao?.tipo !== 'ERRO_ALOCADOR') return;
+    expect(r.rotina!.resultadoGeracao.violacoesInvariantes.join(' ')).toMatch(/cobertura ausente/);
+    expect(r.rotina!.duracaoDias).toBeUndefined();
+    expect(r.rotina!.duracaoResistidaDias).toBeUndefined();
+    expect(r.rotina!.planoFinalPorDia).toBeUndefined();
   });
 
   it('ERRO_ALOCADOR: realocação devolve plano sem cobertura ⇒ INVARIANTE_VIOLADO, sem classificar duração', () => {
@@ -92,11 +158,24 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     const casos: RotinaSemanal[] = [
       gerarTreino(perfilTreino(), { exercises: EXERCISES, semanaCiclo: { semana: 1 } }).rotina!,
       gerarTreino(perfilTreino(), { exercises: EXERCISES, semanaCiclo: { semana: 6 } }).rotina!,
-      gerarTreino(perfilTreino({ tempoPorSessaoMin: 10 }), { exercises: EXERCISES, semanaCiclo: { semana: 1 } }).rotina!,
+      gerarTreino(perfilTreino({ diasDisponiveis: 1, tempoPorSessaoMin: 10 }), { exercises: EXERCISES, semanaCiclo: { semana: 1 } }).rotina!,
     ];
     for (const rot of casos) {
       expect(rot.duracaoIncompativel ?? false).toBe(rot.resultadoGeracao!.tipo === 'INCOMPATIVEL');
     }
+  });
+
+  it('o caminho vivo reavalia CADA redução e não aceita o primeiro candidato ainda excedente', () => {
+    // Catálogo sintético temporalmente caro, mas estruturalmente idêntico: dobrar somente a execução
+    // força a escada pública 5 → 4 → 3. Em 4 slots o plano ainda excede; só 3 certifica.
+    const todosDoisLados = EXERCISES.map((e) => ({ ...e, execucao: 'UNILATERAL_DOIS_LADOS' as const }));
+    const rot = gerarTreino(
+      perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', tempoPorSessaoMin: 40 }),
+      { exercises: todosDoisLados, semanaCiclo: { semana: 1 } },
+    ).rotina!;
+    expect(rot.resultadoGeracao).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 3 });
+    expect(Math.max(...rot.duracaoResistidaDias!.map((d) => d.duracaoMaximaEstimadaSegundos ?? 0)))
+      .toBeLessThanOrEqual(40 * 60 + 8 * 60);
   });
 });
 
@@ -152,7 +231,7 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
         // limitado à sobra `B − MAX_RESISTIDA`: ele nunca desloca a musculação.
         expect(b.linhagens.every((l) => l.papel === 'ORIGEM')).toBe(true);
         const idx = Number(b.diaId.replace('dia-', ''));
-        const maxResistida = rot.duracaoDias![idx]!.duracaoMaximaEstimadaSegundos ?? 0;
+        const maxResistida = rot.duracaoResistidaDias![idx]!.duracaoMaximaEstimadaSegundos ?? 0;
         expect(b.duracaoTotalSegundos).toBeLessThanOrEqual(Math.max(60 * 60 - maxResistida, 0));
       }
     }
@@ -162,7 +241,96 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
   });
 
   it('sem oferta nenhuma, nenhum bloco é materializado', () => {
-    expect(gerar([]).distribuicaoCardio!.blocosPorDia).toHaveLength(0);
+    const rot = gerar([]);
+    expect(rot.distribuicaoCardio!.blocosPorDia).toHaveLength(0);
+    expect(rot.diasCardio).toEqual([]);
+    expect(rot.planoFinalPorDia?.every((d) => d.cardio == null)).toBe(true);
+  });
+
+  it('cardio qualitativo oferecido permanece explícito como NAO_AVALIADO, sem inventar duração', () => {
+    const rot = gerarTreino(
+      perfilTreino({ objetivo: 'massa', diasDisponiveis: 6 }),
+      { exercises: EXERCISES, semanaCiclo: { semana: 1 }, diasOferecidosCardio: [4, 5] },
+    ).rotina!;
+    expect(rot.cardio.tipo).toBe('sessoes_moderadas');
+    expect(rot.distribuicaoCardio?.blocosPorDia).toEqual([]);
+    expect(rot.diasCardio).toHaveLength(2);
+    expect(rot.diasCardio.every((d) => d.minutos === null && d.duracaoSegundos === undefined)).toBe(true);
+    expect(rot.planoFinalPorDia?.filter((d) => d.cardio).every((d) =>
+      d.duracao.estadoCalculo === 'NAO_AVALIADO'
+      && d.duracao.motivosNaoAvaliados.includes('CARDIO_DURACAO_AUSENTE'))).toBe(true);
+    expect(rot.resultadoGeracao).toEqual({
+      tipo: 'NAO_AVALIADO_ENTREGAVEL',
+      motivos: expect.arrayContaining(['CARDIO_SEM_DURACAO']),
+    });
+  });
+
+  it('a geração inicial sem `semanaCiclo` também não exibe o agendamento legado sem oferta', () => {
+    const rot = gerarTreino(
+      perfilTreino({ objetivo: 'emagrecimento', diasDisponiveis: 5 }), { exercises: EXERCISES },
+    ).rotina!;
+    expect(rot.distribuicaoCardio?.blocosPorDia).toEqual([]);
+    expect(rot.diasCardio).toEqual([]);
+    expect(rot.planoFinalPorDia?.every((d) => d.cardio == null)).toBe(true);
+  });
+
+  it('a vista consumida pela UI é projeção exata dos blocos canônicos positivos', () => {
+    const rot = gerar([3, 4]);
+    const blocos = rot.distribuicaoCardio!.blocosPorDia.map((b) => ({
+      diaId: b.diaId,
+      duracaoSegundos: b.duracaoTotalSegundos,
+    }));
+    const vista = rot.diasCardio.map((d) => ({
+      diaId: d.diaId,
+      duracaoSegundos: d.duracaoSegundos,
+    }));
+    expect(vista).toEqual(blocos);
+  });
+
+  it('a duração FINAL soma o cardio no dia misto e mede o bloco isolado no destino', () => {
+    const rot = gerar([3, 4]);
+    const finais = rot.planoFinalPorDia ?? [];
+    const mistos = finais.filter((d) => d.tipo === 'TREINO_E_CARDIO');
+    const puros = finais.filter((d) => d.tipo === 'CARDIO');
+    expect(mistos.length).toBeGreaterThan(0);
+    expect(puros.length).toBeGreaterThan(0);
+
+    for (const dia of mistos) {
+      const resistida = rot.duracaoResistidaDias![dia.treinoIdx!]!;
+      const cardioSeg = dia.cardio!.duracaoSegundos!;
+      expect(dia.duracao.duracaoMinimaEstimadaSegundos)
+        .toBe((resistida.duracaoMinimaEstimadaSegundos ?? 0) + cardioSeg);
+      expect(dia.duracao.duracaoMaximaEstimadaSegundos)
+        .toBe((resistida.duracaoMaximaEstimadaSegundos ?? 0) + cardioSeg);
+    }
+    for (const dia of puros) {
+      const cardioSeg = dia.cardio!.duracaoSegundos!;
+      expect(dia.duracao.duracaoMinimaEstimadaSegundos).toBe(cardioSeg);
+      expect(dia.duracao.duracaoMaximaEstimadaSegundos).toBe(cardioSeg);
+    }
+  });
+
+  it('o bloco misto chega ao modelo da agenda, sem decidir apresentação/copy de C4', () => {
+    const rot = gerar([0, 4]);
+    const semana = montarSemana(
+      ['seg', 'ter', 'qua', 'qui', 'sex'], rot.dias.map((d) => d.nome), 0, rot.diasCardio,
+    );
+    const misto = semana.find((d) => d.tipo === 'treino' && d.cardio != null);
+    expect(misto?.cardio?.minutos).toBeGreaterThan(0);
+  });
+
+  it('o índice canônico continua correto depois de dias mistos antes de um cardio puro', () => {
+    const cardios = [
+      { modalidade: 'caminhada', minutos: 10, ordemNoHorizonte: 0 },
+      { modalidade: 'bicicleta', minutos: 20, ordemNoHorizonte: 1 },
+      { modalidade: 'eliptico', minutos: 30, ordemNoHorizonte: 4 },
+    ];
+    const semana = montarSemana(
+      ['seg', 'ter', 'qua', 'qui', 'sex'], ['A', 'B', 'C', 'D'], 0, cardios,
+    );
+    expect(semana[0]).toMatchObject({ tipo: 'treino', cardioIdx: 0, cardio: cardios[0] });
+    expect(semana[1]).toMatchObject({ tipo: 'treino', cardioIdx: 1, cardio: cardios[1] });
+    expect(semana[4]).toMatchObject({ tipo: 'cardio', cardioIdx: 2, cardio: cardios[2] });
   });
 });
 
@@ -302,7 +470,9 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
   it('🔒 EXATO: terminal MAX 2240, sobra 100 ⇒ prescrito 900 · usa 100 · redistribui 800 · descarte 0', () => {
     const { rot, B } = montarF36();
     expect(B).toBe(2340);
-    expect(rot.duracaoDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2240); // B − 100
+    expect(rot.duracaoResistidaDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2240); // B − 100
+    expect(rot.duracaoDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2340); // dia FINAL = 2240 + cardio 100
+    expect(rot.duracaoDias![0]!.componentes?.continuoSegundos).toBe(100);
     const c = contratoDia0(rot);
     expect(c.duracaoPrescritaSegundos).toBe(900);
     expect(c.duracaoUsadaNaSessaoSegundos).toBe(100);
@@ -322,7 +492,7 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
     }));
     const durCandidato = avaliarDuracaoResistida(slotsCandidato, p.nivelExperiencia, B);
     expect(durCandidato.duracaoMaximaEstimadaSegundos).toBe(2540); // ≥ B ⇒ capacidade 0
-    const duracaoDiasCandidato = rot.duracaoDias!.map((d, i) => (i === 0 ? durCandidato : d));
+    const duracaoDiasCandidato = rot.duracaoResistidaDias!.map((d, i) => (i === 0 ? durCandidato : d));
     const intermediaria = distribuirCardioDaRotina({
       diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: duracaoDiasCandidato,
       diasOferecidosCardio: [0, 4], orcamentoSegundos: B, cardioPrescritoPorDiaSegundos: 900,
@@ -340,7 +510,7 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
   it('🔒 contratos, blocos e canonical_input_hash derivam SOMENTE do terminal (recomputação bate byte a byte)', () => {
     const { rot, B } = montarF36();
     const doTerminal = distribuirCardioDaRotina({
-      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: rot.duracaoDias!,
+      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: rot.duracaoResistidaDias!,
       diasOferecidosCardio: [0, 4], orcamentoSegundos: B, cardioPrescritoPorDiaSegundos: 900,
       aggregateId: 'rotina-cardio', expectedRevision: 0, formulaVersion: FORMULA_DURACAO_VERSION,
     });
@@ -423,7 +593,7 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
     const b1 = dist.blocosPorDia.find((b) => b.diaId === idDoDia(1));
     if (b1) {
       expect(b1.linhagens.every((l) => l.papel === 'ORIGEM')).toBe(true);
-      const sobra = Math.max(60 * 60 - (rot.duracaoDias![1]!.duracaoMaximaEstimadaSegundos ?? 0), 0);
+      const sobra = Math.max(60 * 60 - (rot.duracaoResistidaDias![1]!.duracaoMaximaEstimadaSegundos ?? 0), 0);
       expect(b1.duracaoTotalSegundos).toBeLessThanOrEqual(sobra);
     }
     // (c) a musculação da terça segue intacta.
@@ -436,6 +606,7 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
     // todos os recomputes de treino do Painel injetam a oferta transitória:
     expect((painel.match(/diasOferecidosCardio: getDiasOferecidosCardio\(\)/g) ?? []).length).toBeGreaterThanOrEqual(10);
     expect(painel).toMatch(/<OfertaCardio/);
+    expect(painel).toMatch(/avaliarRotinaAutomaticaFinal\(treino\.rotina/);
     const controle = readFileSync(join(__dirname, '../components/painel/OfertaCardio.tsx'), 'utf-8');
     expect(controle).toMatch(/toggleDiaOferecidoCardio\(/); // o clique grava o estado transitório
     expect(controle).toMatch(/onChange\(\)/); // e dispara o recompute do Painel

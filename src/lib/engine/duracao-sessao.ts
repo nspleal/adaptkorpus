@@ -23,13 +23,12 @@
  */
 
 /**
- * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v1` → `tempo-v2`
- * (2026-08-21): a semântica de CARDIO aterrissou — `origemPlano`, classificação de cardio editado
- * (CARDIO_EXCEDE/PODE_EXCEDER) e a primitiva de uso de cardio mudam ESTADO/COMPONENTES/DISTRIBUIÇÃO
- * para as mesmas entradas. §5.8: mudança de faixa/estado/componentes/distribuição exige nova versão
- * + fixture dourada (`duracao-golden.test.ts`), que impede reusar a versão com semântica nova.
+ * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v2` → `tempo-v3`
+ * (C1.1-A): o plano publicado passou a materializar o bloco semanal canônico e a avaliar o DIA FINAL
+ * (resistido + cardio). A aritmética elementar é a mesma, mas faixa/componentes/distribuição observáveis
+ * mudaram; a versão não pode permanecer silenciosamente igual.
  */
-export const FORMULA_DURACAO_VERSION = 'tempo-v2';
+export const FORMULA_DURACAO_VERSION = 'tempo-v3';
 /** Execução estimada por série de REPETIÇÕES (proxy v1, não medição — calibrável por telemetria). */
 export const TEMPO_EXECUCAO_SERIE_REPS_SEG = 40;
 /** Tolerância absoluta de excesso por sessão (política de produto: +8 min). */

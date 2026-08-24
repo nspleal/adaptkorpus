@@ -140,6 +140,100 @@ export type PlanoAlocado =
  */
 export type Alocador = (capacidade: number, nivelDescanso: number) => PlanoAlocado;
 
+/** Plano genérico usado pelo único laço reduce-to-fit, compartilhado pelo fixture e pelo montador vivo. */
+export type PlanoAlocadoGenerico<TPlano> =
+  | { tipo: 'PLANO'; plano: TPlano }
+  | { tipo: 'SEM_PLANO_MENOR' };
+
+export type ClassificacaoReduceToFit<TResult> =
+  | { tipo: 'CERTIFICADO'; resultado: TResult }
+  | { tipo: 'NAO_AVALIADO'; resultado: TResult }
+  | { tipo: 'EXCEDE'; resultado: TResult }
+  | { tipo: 'ERRO_ALOCADOR'; motivo: MotivoErroAlocador; violacoesInvariantes?: string[] };
+
+export type ResultadoReduceToFit<TPlano, TResult> =
+  | { tipo: 'CERTIFICADO'; planoTerminal: TPlano; resultado: TResult; capacidadeTerminal: number }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; planoTerminal: TPlano; resultado: TResult; capacidadeTerminal: number }
+  | { tipo: 'ERRO_ALOCADOR'; motivo: MotivoErroAlocador; capacidadeTestada: number; planoTerminal?: TPlano; violacoesInvariantes?: string[]; cardinalidadeRecebida?: number }
+  | {
+      tipo: 'INCOMPATIVEL';
+      /** Último plano que preservou os invariantes e excedeu; ausente só se o alocador nunca o produziu. */
+      planoTerminal?: TPlano;
+      resultado?: TResult;
+      capacidadeMinimaTestada: number;
+      invariantesPreservados: true;
+    };
+
+/**
+ * 🔒 ÚNICO LAÇO reduce-to-fit. A cardinalidade é injetada porque a capacidade do montador vivo é
+ * `máximo de slots em um dia`, enquanto a fixture plana usa `itens.length`.
+ */
+export function executarReduceToFit<TPlano, TResult>(params: {
+  capacidadeInicial: number;
+  capacidadeMinima: number;
+  niveisDescanso: number;
+  alocar: (capacidade: number, nivelDescanso: number) => PlanoAlocadoGenerico<TPlano>;
+  cardinalidade: (plano: TPlano) => number;
+  classificar: (plano: TPlano, capacidade: number) => ClassificacaoReduceToFit<TResult>;
+}): ResultadoReduceToFit<TPlano, TResult> {
+  const { capacidadeInicial, capacidadeMinima, niveisDescanso, alocar, cardinalidade, classificar } = params;
+  const testadas = new Set<number>();
+  let ultimoExcede: { plano: TPlano; resultado: TResult; capacidade: number } | null = null;
+
+  for (let capacidade = capacidadeInicial; capacidade >= capacidadeMinima; capacidade -= 1) {
+    // (1) capacidade repetida — antes de chamar/reusar o alocador.
+    if (testadas.has(capacidade)) {
+      return { tipo: 'ERRO_ALOCADOR', motivo: 'CAPACIDADE_REPETIDA', capacidadeTestada: capacidade };
+    }
+    testadas.add(capacidade);
+
+    for (let nivel = 0; nivel < niveisDescanso; nivel += 1) {
+      const alocado = alocar(capacidade, nivel);
+      if (alocado.tipo === 'SEM_PLANO_MENOR') {
+        return {
+          tipo: 'INCOMPATIVEL',
+          ...(ultimoExcede ? { planoTerminal: ultimoExcede.plano, resultado: ultimoExcede.resultado } : {}),
+          capacidadeMinimaTestada: ultimoExcede?.capacidade ?? capacidade + 1,
+          invariantesPreservados: true,
+        };
+      }
+
+      // (2) cardinalidade antes de qualquer invariante/duração.
+      const recebida = cardinalidade(alocado.plano);
+      if (recebida > capacidade) {
+        return {
+          tipo: 'ERRO_ALOCADOR', motivo: 'CARDINALIDADE_ACIMA_DA_CAPACIDADE',
+          capacidadeTestada: capacidade, planoTerminal: alocado.plano, cardinalidadeRecebida: recebida,
+        };
+      }
+
+      // (3) invariantes e (4) duração são classificados pelo adaptador do produtor.
+      const tentativa = classificar(alocado.plano, capacidade);
+      if (tentativa.tipo === 'ERRO_ALOCADOR') {
+        return {
+          tipo: 'ERRO_ALOCADOR', motivo: tentativa.motivo, capacidadeTestada: capacidade,
+          planoTerminal: alocado.plano,
+          ...(tentativa.violacoesInvariantes ? { violacoesInvariantes: tentativa.violacoesInvariantes } : {}),
+        };
+      }
+      if (tentativa.tipo === 'CERTIFICADO') {
+        return { tipo: 'CERTIFICADO', planoTerminal: alocado.plano, resultado: tentativa.resultado, capacidadeTerminal: capacidade };
+      }
+      if (tentativa.tipo === 'NAO_AVALIADO') {
+        return { tipo: 'NAO_AVALIADO_ENTREGAVEL', planoTerminal: alocado.plano, resultado: tentativa.resultado, capacidadeTerminal: capacidade };
+      }
+      ultimoExcede = { plano: alocado.plano, resultado: tentativa.resultado, capacidade };
+    }
+  }
+
+  return {
+    tipo: 'INCOMPATIVEL',
+    ...(ultimoExcede ? { planoTerminal: ultimoExcede.plano, resultado: ultimoExcede.resultado } : {}),
+    capacidadeMinimaTestada: ultimoExcede?.capacidade ?? capacidadeMinima,
+    invariantesPreservados: true,
+  };
+}
+
 export type ResultadoGeracaoTemporal =
   | { tipo: 'CERTIFICADO'; planoTerminal: ItemPlanoTemporal[]; resultadoDuracao: ResultadoDuracao; capacidadeTerminal: number }
   | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; planoTerminal: ItemPlanoTemporal[]; resultadoDuracao: ResultadoDuracao; capacidadeTerminal: number }
@@ -159,62 +253,41 @@ export function gerarPlanoTemporal(params: {
   orcamentoSegundos: number | undefined;
 }): ResultadoGeracaoTemporal {
   const { capacidadeInicial, niveisDescanso, alocar, invariantes, orcamentoSegundos } = params;
-  const testadas = new Set<number>();
-  let capacidade = capacidadeInicial;
-  let ultimoExcede: ResultadoDuracao | null = null;
-
-  while (capacidade >= 0) {
-    // (1) capacidade repetida — o gate mais alto, antes de qualquer chamada ao alocador.
-    if (testadas.has(capacidade)) {
-      return { tipo: 'ERRO_ALOCADOR', motivo: 'CAPACIDADE_REPETIDA', capacidadeTestada: capacidade };
-    }
-    testadas.add(capacidade);
-
-    let excedeuNestaCapacidade = false;
-    // escada de descanso: reinicia em 0 a cada capacidade (não herda o degradado anterior).
-    for (let nivel = 0; nivel < niveisDescanso; nivel += 1) {
-      const alocado = alocar(capacidade, nivel);
-      if (alocado.tipo === 'SEM_PLANO_MENOR') {
-        // não existe plano nesta capacidade preservando cobertura ⇒ o menor plano é o anterior.
-        if (ultimoExcede) {
-          return { tipo: 'INCOMPATIVEL', resultadoDuracao: ultimoExcede, capacidadeMinimaTestada: capacidade + 1, invariantesPreservados: true };
-        }
-        // sem tentativa anterior que excedeu: não há como classificar — trata como incompatível vazio.
-        return { tipo: 'INCOMPATIVEL', resultadoDuracao: avaliarDuracaoDoPlano([], orcamentoSegundos), capacidadeMinimaTestada: capacidade + 1, invariantesPreservados: true };
-      }
-      // A precedência (cardinalidade/invariantes) não depende do nível; a duração sim.
+  const resultado = executarReduceToFit<ItemPlanoTemporal[], ResultadoDuracao>({
+    capacidadeInicial,
+    capacidadeMinima: 0,
+    niveisDescanso,
+    alocar: (capacidade, nivel) => {
+      const r = alocar(capacidade, nivel);
+      return r.tipo === 'PLANO' ? { tipo: 'PLANO', plano: r.itens } : r;
+    },
+    cardinalidade: (plano) => plano.length,
+    classificar: (plano, capacidade) => {
       const t = classificarTentativa({
         capacidadeTestada: capacidade,
-        // dentro da mesma capacidade não relançamos o gate de repetição.
-        capacidadesJaTestadas: new Set([...testadas].filter((c) => c !== capacidade)),
-        plano: alocado.itens,
+        capacidadesJaTestadas: new Set(),
+        plano,
         invariantes,
         orcamentoSegundos,
       });
       if (t.tipo === 'ERRO_ALOCADOR') return t;
-      if (t.tipo === 'CERTIFICADO') {
-        return { tipo: 'CERTIFICADO', planoTerminal: alocado.itens, resultadoDuracao: t.resultadoDuracao, capacidadeTerminal: capacidade };
-      }
-      if (t.tipo === 'NAO_AVALIADO') {
-        // ramo (c): realocação virou NAO_AVALIADO ⇒ para o laço, entrega com motivos.
-        return { tipo: 'NAO_AVALIADO_ENTREGAVEL', planoTerminal: alocado.itens, resultadoDuracao: t.resultadoDuracao, capacidadeTerminal: capacidade };
-      }
-      // EXCEDE: guarda e tenta o próximo nível de descanso.
-      ultimoExcede = t.resultadoDuracao;
-      excedeuNestaCapacidade = true;
-    }
+      if (t.tipo === 'CERTIFICADO') return { tipo: 'CERTIFICADO', resultado: t.resultadoDuracao };
+      if (t.tipo === 'NAO_AVALIADO') return { tipo: 'NAO_AVALIADO', resultado: t.resultadoDuracao };
+      return { tipo: 'EXCEDE', resultado: t.resultadoDuracao };
+    },
+  });
 
-    if (excedeuNestaCapacidade) {
-      capacidade -= 1; // reduz exatamente 1; a escada reinicia no topo do laço.
-      continue;
-    }
-    break; // segurança (não deveria alcançar)
+  if (resultado.tipo === 'CERTIFICADO') {
+    return { tipo: 'CERTIFICADO', planoTerminal: resultado.planoTerminal, resultadoDuracao: resultado.resultado, capacidadeTerminal: resultado.capacidadeTerminal };
   }
-  // esgotou capacidades sem caber e sem o alocador declarar SEM_PLANO_MENOR.
+  if (resultado.tipo === 'NAO_AVALIADO_ENTREGAVEL') {
+    return { tipo: 'NAO_AVALIADO_ENTREGAVEL', planoTerminal: resultado.planoTerminal, resultadoDuracao: resultado.resultado, capacidadeTerminal: resultado.capacidadeTerminal };
+  }
+  if (resultado.tipo === 'ERRO_ALOCADOR') return resultado;
   return {
     tipo: 'INCOMPATIVEL',
-    resultadoDuracao: ultimoExcede ?? avaliarDuracaoDoPlano([], orcamentoSegundos),
-    capacidadeMinimaTestada: 0,
+    resultadoDuracao: resultado.resultado ?? avaliarDuracaoDoPlano([], orcamentoSegundos),
+    capacidadeMinimaTestada: resultado.capacidadeMinimaTestada,
     invariantesPreservados: true,
   };
 }

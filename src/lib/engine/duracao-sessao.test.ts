@@ -25,7 +25,7 @@ describe('C1 · constantes únicas e centralizadas', () => {
   it('a constante de execução é 40 e existe só aqui', () => {
     expect(TEMPO_EXECUCAO_SERIE_REPS_SEG).toBe(40);
     expect(TOLERANCIA_EXCESSO_SEG).toBe(480);
-    expect(FORMULA_DURACAO_VERSION).toBe('tempo-v2');
+    expect(FORMULA_DURACAO_VERSION).toBe('tempo-v3');
   });
 });
 
@@ -302,7 +302,7 @@ describe('C1 · determinismo e versionamento', () => {
     expect(avaliarDuracaoSessao(entrada)).toEqual(avaliarDuracaoSessao(entrada));
   });
   it('toda avaliação carrega formula_version', () => {
-    expect(avaliarDuracaoSessao({ itens: [reps(3, 60)] }).formulaVersion).toBe('tempo-v2');
-    expect(avaliarDuracaoSessao({ itens: [reps(0, 60)] }).formulaVersion).toBe('tempo-v2');
+    expect(avaliarDuracaoSessao({ itens: [reps(3, 60)] }).formulaVersion).toBe('tempo-v3');
+    expect(avaliarDuracaoSessao({ itens: [reps(0, 60)] }).formulaVersion).toBe('tempo-v3');
   });
 });

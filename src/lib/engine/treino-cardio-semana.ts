@@ -18,6 +18,7 @@ import {
   construirDistribuicaoCardioSemana,
   type DiaHorizonte,
   type DistribuicaoCardioSemanal,
+  type EntradaDistribuicaoSemana,
   type OrcamentoDia,
   type PlanoResistidoTerminalDia,
   type PrescricaoCardioSemana,
@@ -52,7 +53,7 @@ export function idDoDia(indice: number): string {
  * prescrição de cardio adaptável; a primitiva reserva o uso próprio de cada dia e redistribui os
  * saldos a dias posteriores oferecidos e sem musculação.
  */
-export function distribuirCardioDaRotina(e: EntradaCardioSemanaViva): DistribuicaoCardioSemanal {
+export function fatosDistribuicaoCardioDaRotina(e: EntradaCardioSemanaViva): EntradaDistribuicaoSemana {
   const ofertados = new Set(e.diasOferecidosCardio);
 
   const dias: DiaHorizonte[] = Array.from({ length: e.diasTotais }, (_, i) => ({
@@ -89,7 +90,7 @@ export function distribuirCardioDaRotina(e: EntradaCardioSemanaViva): Distribuic
           }))
       : [];
 
-  return construirDistribuicaoCardioSemana({
+  return {
     aggregateId: e.aggregateId,
     expectedRevision: e.expectedRevision,
     formulaVersion: e.formulaVersion,
@@ -97,5 +98,10 @@ export function distribuirCardioDaRotina(e: EntradaCardioSemanaViva): Distribuic
     planosResistidosTerminais: planos,
     orcamentoPorDia: orcamentos,
     prescricoesCardio: prescricoes,
-  });
+  };
+}
+
+/** Constrói a distribuição observada exclusivamente a partir dos fatos-base congelados. */
+export function distribuirCardioDaRotina(e: EntradaCardioSemanaViva): DistribuicaoCardioSemanal {
+  return construirDistribuicaoCardioSemana(fatosDistribuicaoCardioDaRotina(e));
 }

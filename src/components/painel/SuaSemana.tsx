@@ -27,7 +27,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
    */
   diaExcedente?: ConteudoDiaExcedente;
   /** Dias de cardio EMITIDOS pelo motor — rotulam a faixa e trazem o item do dia. */
-  diasCardio?: readonly { modalidade: string; minutos: number | null }[];
+  diasCardio?: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[];
   /**
    * Abre o registro UNIFICADO de cardio, pré-preenchido com o item do dia.
    * 🔴 NUNCA a sessão guiada: `sessao_iniciada` é a métrica de ATIVAÇÃO, e dispará-la para

@@ -80,10 +80,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
-    3,
-    3,
-    3,
+    2,
+    2,
+    2,
+    2,
   ],
   "tempo": 10,
 }
@@ -92,10 +92,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 15 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
-    3,
-    3,
-    3,
+    2,
+    2,
+    2,
+    2,
   ],
   "tempo": 15,
 }
@@ -199,10 +199,10 @@ exports[`📸 caracterização — nº de exercícios por dia, com o estimador A
 
 exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força em sessão curta — o piso de 180 s da força pesada custa exercício 1`] = `
 [
-  3,
-  3,
-  3,
-  3,
+  2,
+  2,
+  2,
+  2,
 ]
 `;
 
