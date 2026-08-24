@@ -39,6 +39,8 @@ import { ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
+import OfertaCardio from './OfertaCardio';
+import { getDiasOferecidosCardio } from '@/lib/cardio-oferta';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import GraficoLinha from './GraficoLinha';
 import { ContadorTreinos } from './ChamaContador';
@@ -400,7 +402,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novo = { ...perfil, favoritos: [...atual] };
     setPerfil(novo);
     onPerfilChange?.(novo);
-    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
@@ -540,7 +542,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: dia });
     setPesoMotorKg(pesoEfetivoKg);
     pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
-    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg });
+    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg });
     // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
@@ -560,7 +562,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      * mudou, o evento NÃO dispara: a ausência é o dado honesto.
      */
     if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
-      const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg });
+      const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg });
       const efeito = medirEntregaDoFoco(nt, ntSemFoco, focoDepois.grupo);
       if (efeito) {
         registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.delta });
@@ -718,7 +720,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     /**
@@ -760,7 +762,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
@@ -779,7 +781,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
   }
@@ -809,7 +811,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novoPerfil = { ...perfil, rotinaCustom };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setEditorDias(null);
@@ -824,7 +826,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function preverPlano(dias: readonly DiaEditavel[]) {
     const rotinaCustom = paraRotinaCustom(dias);
     if (rotinaCustom.dias.length === 0) return [];
-    const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     return (nt.rotina?.dias ?? []).map((d) => ({
       nome: d.nome,
       exercicios: d.slots.map((s) => s.exercicio),
@@ -842,7 +844,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novoPerfil = { ...perfil, rotinaCustom: undefined };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setEditorDias(null);
@@ -1055,7 +1057,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // corrente + feedback agregado por grupo. Roda no mount e quando a semana muda (não em
   // cada registro — troca manual de exercício não é clobrada no meio do uso).
   useEffect(() => {
-    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     // Re-monta quando a semana do ciclo OU a rampa de retomada muda. A rampa entra nas deps
@@ -1298,6 +1300,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               diaExcedente={diaExcedente}
               diasCardio={treino.rotina?.diasCardio ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
+            />
+            {/* 🔒 C1 — o menor seletor funcional de dias oferecidos para cardio (autor, rodada 2):
+                controle → estado transitório (lib/cardio-oferta) → recompute → motor → hash. */}
+            <OfertaCardio
+              totalDias={Math.max(0, Math.floor(perfil.diasDisponiveis))}
+              onChange={() => {
+                const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+                setTreino(nt);
+                setRotinaDias(nt.rotina?.dias ?? []);
+              }}
             />
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>

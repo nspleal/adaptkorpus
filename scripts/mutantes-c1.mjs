@@ -107,7 +107,14 @@ const MUTACOES = [
     para: `  return { ...rotina, duracaoDias: rotina.dias.map(() => ({ estadoCalculo: 'CALCULADO', estadoLimite: 'DENTRO_DO_LIMITE', duracaoMinimaEstimadaSegundos: 1, duracaoMaximaEstimadaSegundos: 1, formulaVersion: 'x', motivosNaoAvaliados: [], motivosLimite: [] })) };`,
     testes: [`${E}/duracao-gerador.test.ts`, `${E}/convergencia-c1.test.ts`] },
 
-  { n: 17, desc: 'ignorar o recheck depois da redução de slots', alvo: `${E}/geracao-temporal.ts`,
+  { n: '17a', desc: 'ignorar o recheck depois da redução de slots (montador vivo: tentativa reduzida não é reavaliada)', alvo: `${E}/treino-montador.ts`,
+    de: `      precisaReduzir(rotina, perfil.nivelExperiencia, orcamentoSeg),
+      violacoesDaRealocacao(rotina),`,
+    para: `      false,
+      violacoesDaRealocacao(rotina),`,
+    testes: [`src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: '17b', desc: 'ignorar o recheck depois da redução de slots (orquestrador puro: adota sem reavaliar)', alvo: `${E}/geracao-temporal.ts`,
     de: `      if (t.tipo === 'CERTIFICADO') {`,
     para: `      if (true) {`,
     testes: [`${E}/geracao-temporal.test.ts`, `${E}/c1-mutacoes-guard.test.ts`] },
@@ -192,10 +199,22 @@ const MUTACOES = [
     para: `  if (false) {`,
     testes: [`${E}/distribuicao-cardio-semana.test.ts`] },
 
-  { n: 34, desc: 'materializar cardio `0` / bloco com duração ≠ soma da linhagem', alvo: `${E}/distribuicao-cardio-semana.ts`,
+  { n: '34a', desc: 'materializar cardio de duração `0` (uso zero vira linhagem e o filtro aceita total 0)', alvo: `${E}/distribuicao-cardio-semana.ts`,
+    edits: [
+      { de: `    if (st.usadaOrigem > 0) {`, para: `    if (true) {` },
+      { de: `    .filter(([, a]) => a.total > 0)`, para: `    .filter(([, a]) => a.total >= 0)` },
+    ],
+    testes: [`${E}/c1-mutacoes-guard.test.ts`, `src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: '34b', desc: 'omitir bloco de destino com soma positiva', alvo: `${E}/distribuicao-cardio-semana.ts`,
+    de: `    .filter(([, a]) => a.total > 0)`,
+    para: `    .filter(() => false)`,
+    testes: [`${E}/distribuicao-cardio-semana.test.ts`, `src/lib/c1-caminho-publico.test.ts`] },
+
+  { n: '34c', desc: 'dar ao bloco duração diferente da soma de sua linhagem', alvo: `${E}/distribuicao-cardio-semana.ts`,
     de: `    a.total += l.segundos;`,
     para: `    a.total += l.segundos + 1;`,
-    testes: [`${E}/distribuicao-cardio-semana.test.ts`, `src/lib/c1-caminho-publico.test.ts`, `${E}/c1-mutacoes-guard.test.ts`] },
+    testes: [`${E}/distribuicao-cardio-semana.test.ts`, `${E}/c1-mutacoes-guard.test.ts`] },
 
   { n: 35, desc: 'reutilizar `prescricao_id` entre origens', alvo: `${E}/distribuicao-cardio-semana.ts`,
     de: `    if (prescIds.has(p.prescricaoId)) motivosEstruturais.push(\`prescricao_id duplicado: \${p.prescricaoId}\`);`,
@@ -310,8 +329,10 @@ const MUTACOES = [
 
 const args = process.argv.slice(2);
 const md = args.includes('--md');
-const alvos = args.filter((a) => /^\d+$/.test(a)).map(Number);
-const lista = alvos.length ? MUTACOES.filter((m) => alvos.includes(m.n)) : MUTACOES;
+const alvos = args.filter((a) => /^\d+[a-z]?$/.test(a));
+const lista = alvos.length
+  ? MUTACOES.filter((m) => alvos.includes(String(m.n)) || alvos.includes(String(m.n).replace(/[a-z]$/, '')))
+  : MUTACOES;
 
 function rodaTestes(testes) {
   try {
@@ -326,12 +347,15 @@ const resultados = [];
 for (const m of lista) {
   const caminho = join(RAIZ, m.alvo);
   const original = readFileSync(caminho, 'utf-8');
+  const edits = m.edits ?? [{ de: m.de, para: m.para }];
   let status, detalhe = '';
-  if (!original.includes(m.de)) {
+  if (edits.some((e) => !original.includes(e.de))) {
     status = 'PATCH_NAO_APLICOU';
     detalhe = 'âncora não encontrada no fonte';
   } else {
-    writeFileSync(caminho, original.replace(m.de, m.para), 'utf-8');
+    let mutado = original;
+    for (const e of edits) mutado = mutado.replace(e.de, e.para);
+    writeFileSync(caminho, mutado, 'utf-8');
     try {
       const passou = rodaTestes(m.testes);
       status = passou ? 'SOBREVIVEU' : 'MORTO';
@@ -340,7 +364,7 @@ for (const m of lista) {
     }
   }
   resultados.push({ ...m, status, detalhe });
-  if (!md) console.log(`${String(m.n).padStart(2)}  ${status.padEnd(17)} ${m.desc}`);
+  if (!md) console.log(`${String(m.n).padStart(3)}  ${status.padEnd(17)} ${m.desc}`);
 }
 
 const mortos = resultados.filter((r) => r.status === 'MORTO').length;

@@ -8,15 +8,19 @@
  * fixture 36 (distribuição SOMENTE pós-terminal).
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { recomputarPlano } from './plano';
 import { gerarTreino, FORMULA_DURACAO_VERSION } from './engine';
 import { avaliarDuracaoResistida } from './engine/duracao-plano';
 import { distribuirCardioDaRotina, idDoDia } from './engine/treino-cardio-semana';
+import { montarRotina } from './engine/treino-montador';
 import { EXERCISES } from './data/exercises';
 import { prescreverTreino } from './engine/treino';
 import { avaliarGateTreino } from './engine/treino-gate';
 import { descansoDoExercicio } from './engine/descanso';
 import { rirAlvoDaSemana } from './engine/treino-mesociclo';
+import { getDiasOferecidosCardio, limparOfertaCardio, setDiasOferecidosCardio, toggleDiaOferecidoCardio } from './cardio-oferta';
 import type { PerfilTreino, RotinaSemanal } from './engine/treino-types';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { FlagsSaude } from './engine';
@@ -258,74 +262,182 @@ describe('C1.1 · e72 ponta a ponta: escolha → gerarTreino → SlotExercicio �
   });
 });
 
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
-// ITEM 2 — FIXTURE 36: distribuição SOMENTE pós-terminal
+// ITEM 2 (rodada 2) — FIXTURE 36 EXATA: candidato usa 0 · terminal usa 100 · redistribui 800
 // ════════════════════════════════════════════════════════════════════════════════════════════
-describe('C1.1 · fixture 36 — a distribuição usa o plano resistido TERMINAL, nunca um candidato', () => {
+describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900)', () => {
   /**
-   * Perfil com DEGRADAÇÃO real de descanso: o candidato inicial (nível 0, descansos cheios) tem
-   * MAX_RESISTIDA MAIOR — logo capacidade de cardio MENOR — que o plano TERMINAL (degradado).
-   * A distribuição materializada tem de bater com o TERMINAL, e diferir do candidato.
+   * Cenário construído pelo GERADOR REAL (montarRotina, API pública) com prescrição artesanal:
+   * massa/intermediário, 39 min (B = 2340 s), 5 séries por slot, cardio 30 min/semana em 2 dias
+   * oferecidos {0, 4}. O dia 0 (Upper A: isol/emp/pux/isol) DEGRADA de 60/120/120/60 (candidato,
+   * MAX 2540 ≥ B ⇒ cardio 0) para 60/90/90/60 (terminal, MAX 2240 ⇒ sobra EXATA de 100 s).
+   * Prescrito por dia oferecido = 30/2 = 15 min = 900 s.
    */
-  const base = perfilResumo({ objetivo: 'saude', nivelExperiencia: 'iniciante', diasDisponiveis: 5, tempoPorSessaoMin: 25 });
-  const OFERECIDO = [4];
+  const montarF36 = () => {
+    const p = perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: 39 });
+    const base = prescreverTreino(p, avaliarGateTreino(p));
+    const presc = {
+      ...base,
+      seriesPorExercicio: { min: 5, max: 5 },
+      volumePorGrupoSemana: { min: 20, max: 20 },
+      cardio: { tipo: 'minutos_semana', min: 30, max: 30 } as const,
+    };
+    const rot = montarRotina(presc, p, EXERCISES, new Set(), { semana: 1 }, p.preferencias, new Map(), [0, 4]);
+    return { p, presc, rot, B: 39 * 60 };
+  };
+  const contratoDia0 = (rot: RotinaSemanal) =>
+    rot.distribuicaoCardio!.contratosPorPrescricao.find((c) => c.diaOrigemId === idDoDia(0))!;
 
-  it('a degradação de descanso de fato ocorre neste perfil (pré-condição da fixture)', () => {
-    const rot = recomputarPlano(base, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: OFERECIDO }).treino.rotina!;
-    const pt = perfilTreino({ objetivo: 'saude', nivelExperiencia: 'iniciante', diasDisponiveis: 5, tempoPorSessaoMin: 25 });
-    const presc = prescreverTreino(pt, avaliarGateTreino(pt));
+  it('pré-condição: a degradação REAL aconteceu (terminal 60/90/90/60; candidato nível 0 seria 60/120/120/60)', () => {
+    const { p, presc, rot } = montarF36();
+    const slots0 = rot.dias[0]!.slots;
+    expect(slots0.map((s) => s.descansoSeg)).toEqual([60, 90, 90, 60]); // terminal degradado
     const rir = presc.rirAlvoSemana ?? rirAlvoDaSemana(presc.rir, 1);
-    const degradou = rot.dias.some((d) => d.slots.some((s) => {
-      const semDegradar = descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: rir, modoForca: presc.modoForca === true, semanaRampa: null, degradacao: 0 });
-      return semDegradar != null && s.descansoSeg != null && s.descansoSeg < semDegradar;
+    const semDegradar = slots0.map((s) => descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: rir, modoForca: false, semanaRampa: null, degradacao: 0 }));
+    expect(semDegradar).toEqual([60, 120, 120, 60]); // candidato (nível 0)
+    void p;
+  });
+
+  it('🔒 EXATO: terminal MAX 2240, sobra 100 ⇒ prescrito 900 · usa 100 · redistribui 800 · descarte 0', () => {
+    const { rot, B } = montarF36();
+    expect(B).toBe(2340);
+    expect(rot.duracaoDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2240); // B − 100
+    const c = contratoDia0(rot);
+    expect(c.duracaoPrescritaSegundos).toBe(900);
+    expect(c.duracaoUsadaNaSessaoSegundos).toBe(100);
+    expect(c.alocacoesDestino).toEqual([{ diaId: idDoDia(4), segundos: 800 }]);
+    expect(c.duracaoDescartadaSegundos).toBe(0);
+    // conservação: 100 + 800 + 0 = 900.
+    expect(c.duracaoUsadaNaSessaoSegundos + c.alocacoesDestino.reduce((s, a) => s + a.segundos, 0) + c.duracaoDescartadaSegundos).toBe(900);
+  });
+
+  it('🔒 o CANDIDATO intermediário usaria cardio 0 e redistribuiria 900 — e esse resultado está AUSENTE do final', () => {
+    const { p, presc, rot, B } = montarF36();
+    // candidato REAL: os mesmos slots do dia 0, com os descansos do nível 0 (pré-degradação).
+    const rir = presc.rirAlvoSemana ?? rirAlvoDaSemana(presc.rir, 1);
+    const slotsCandidato = rot.dias[0]!.slots.map((s) => ({
+      ...s,
+      descansoSeg: descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: rir, modoForca: false, semanaRampa: null, degradacao: 0 })!,
     }));
-    expect(degradou).toBe(true);
+    const durCandidato = avaliarDuracaoResistida(slotsCandidato, p.nivelExperiencia, B);
+    expect(durCandidato.duracaoMaximaEstimadaSegundos).toBe(2540); // ≥ B ⇒ capacidade 0
+    const duracaoDiasCandidato = rot.duracaoDias!.map((d, i) => (i === 0 ? durCandidato : d));
+    const intermediaria = distribuirCardioDaRotina({
+      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: duracaoDiasCandidato,
+      diasOferecidosCardio: [0, 4], orcamentoSegundos: B, cardioPrescritoPorDiaSegundos: 900,
+      aggregateId: 'rotina-cardio', expectedRevision: 0, formulaVersion: FORMULA_DURACAO_VERSION,
+    });
+    const cInt = intermediaria.contratosPorPrescricao.find((c) => c.diaOrigemId === idDoDia(0))!;
+    expect(cInt.duracaoUsadaNaSessaoSegundos).toBe(0); // candidato: cardio usado 0
+    expect(cInt.alocacoesDestino).toEqual([{ diaId: idDoDia(4), segundos: 900 }]); // redistribuiria 900
+    // 🔴 A alocação intermediária de 900 está AUSENTE do resultado final:
+    const cFinal = contratoDia0(rot);
+    expect(cFinal.alocacoesDestino.some((a) => a.segundos === 900)).toBe(false);
+    expect(rot.distribuicaoCardio!.canonicalInputHash).not.toBe(intermediaria.canonicalInputHash);
   });
 
-  it('🔒 a distribuição bate com o TERMINAL e DIVERGE do candidato pré-degradação', () => {
-    const rot = recomputarPlano(base, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: OFERECIDO }).treino.rotina!;
-    const orcamentoSeg = 25 * 60;
-    const dur = rot.duracaoDias!;
-
-    // (a) o que o gerador de fato materializou.
-    const real = rot.distribuicaoCardio!;
-
-    // (b) recomputação a partir do TERMINAL (mesmas durações certificadas do plano final).
+  it('🔒 contratos, blocos e canonical_input_hash derivam SOMENTE do terminal (recomputação bate byte a byte)', () => {
+    const { rot, B } = montarF36();
     const doTerminal = distribuirCardioDaRotina({
-      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: dur,
-      diasOferecidosCardio: OFERECIDO, orcamentoSegundos: orcamentoSeg,
-      cardioPrescritoPorDiaSegundos: real.contratosPorPrescricao[0]?.duracaoPrescritaSegundos ?? 0,
+      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: rot.duracaoDias!,
+      diasOferecidosCardio: [0, 4], orcamentoSegundos: B, cardioPrescritoPorDiaSegundos: 900,
       aggregateId: 'rotina-cardio', expectedRevision: 0, formulaVersion: FORMULA_DURACAO_VERSION,
     });
-    expect(real.blocosPorDia).toEqual(doTerminal.blocosPorDia);
-    expect(real.contratosPorPrescricao).toEqual(doTerminal.contratosPorPrescricao);
+    expect(rot.distribuicaoCardio!.contratosPorPrescricao).toEqual(doTerminal.contratosPorPrescricao);
+    expect(rot.distribuicaoCardio!.blocosPorDia).toEqual(doTerminal.blocosPorDia);
+    expect(rot.distribuicaoCardio!.canonicalInputHash).toBe(doTerminal.canonicalInputHash);
+    // bloco do dia 4 = 900 próprio + 800 recebido = 1700; bloco do dia 0 = 100 próprio.
+    expect(rot.distribuicaoCardio!.blocosPorDia.find((b) => b.diaId === idDoDia(0))!.duracaoTotalSegundos).toBe(100);
+    expect(rot.distribuicaoCardio!.blocosPorDia.find((b) => b.diaId === idDoDia(4))!.duracaoTotalSegundos).toBe(1700);
+  });
+});
 
-    // (c) o CANDIDATO intermediário: mesmo plano ANTES de degradar ⇒ MAX_RESISTIDA maior.
-    //     (simulado somando o que a degradação economizou em cada dia de força)
-    const candidato = dur.map((d) => ({ ...d, duracaoMaximaEstimadaSegundos: (d.duracaoMaximaEstimadaSegundos ?? 0) + 600 }));
-    const doCandidato = distribuirCardioDaRotina({
-      diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: candidato,
-      diasOferecidosCardio: OFERECIDO, orcamentoSegundos: orcamentoSeg,
-      cardioPrescritoPorDiaSegundos: real.contratosPorPrescricao[0]?.duracaoPrescritaSegundos ?? 0,
-      aggregateId: 'rotina-cardio', expectedRevision: 0, formulaVersion: FORMULA_DURACAO_VERSION,
-    });
-    // 🔴 A MUTAÇÃO "distribuir antes do plano terminal" produziria ESTE resultado — e ele difere.
-    expect(real.canonicalInputHash).not.toBe(doCandidato.canonicalInputHash);
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// ITEM 4 (rodada 2) — ENTRADA FUNCIONAL: controle → estado transitório → recomputarPlano → hash
+// ════════════════════════════════════════════════════════════════════════════════════════════
+describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', () => {
+  // 🔒 o mapper deriva diasDisponiveis de treinoDias.length — o horizonte real tem 6 dias.
+  const perfil6 = () => perfilResumo({
+    objetivo: 'emagrecimento', diasDisponiveis: 6, tempoPorSessaoMin: 60,
+    treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as never,
+  });
+  /** Recompute EXATAMENTE como o Painel faz (mesma forma de chamada fiada nos 10 call sites). */
+  const recomputeComoOPainel = (p: PerfilResumo) =>
+    recomputarPlano(p, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: getDiasOferecidosCardio() }).treino.rotina!;
+
+  it('o estado transitório normaliza, alterna e zera (contrato do controle)', () => {
+    limparOfertaCardio();
+    expect(getDiasOferecidosCardio()).toEqual([]);
+    setDiasOferecidosCardio([5, 1, 1, -3, 2.5]); // dedupe + ordena + rejeita inválidos
+    expect(getDiasOferecidosCardio()).toEqual([1, 5]);
+    toggleDiaOferecidoCardio(3);
+    expect(getDiasOferecidosCardio()).toEqual([1, 3, 5]);
+    toggleDiaOferecidoCardio(3);
+    expect(getDiasOferecidosCardio()).toEqual([1, 5]);
+    limparOfertaCardio();
+    expect(getDiasOferecidosCardio()).toEqual([]);
   });
 
-  it('a distribuição só existe DEPOIS da certificação: a capacidade sai do MAX_RESISTIDA terminal', () => {
-    const rot = recomputarPlano(base, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: OFERECIDO }).treino.rotina!;
-    const orcamentoSeg = 25 * 60;
-    // dia 4 é VAGO (sem musculação) ⇒ capacidade = B inteiro; o bloco não pode passar de B.
-    for (const b of rot.distribuicaoCardio!.blocosPorDia) {
-      expect(b.duracaoTotalSegundos).toBeLessThanOrEqual(orcamentoSeg);
+  it('usuário oferece TER (1) e SÁB (5); SOMENTE essa escolha chega ao motor e ao hash', () => {
+    limparOfertaCardio();
+    setDiasOferecidosCardio([1, 5]); // o gesto do controle (toggle ter + toggle sáb)
+    const rot = recomputeComoOPainel(perfil6());
+    const dist = rot.distribuicaoCardio!;
+    // toda origem e todo destino pertencem à oferta {1, 5} — nada além dela chegou ao motor.
+    const diasTocados = new Set<string>([
+      ...dist.contratosPorPrescricao.map((c) => c.diaOrigemId),
+      ...dist.contratosPorPrescricao.flatMap((c) => c.alocacoesDestino.map((a) => a.diaId)),
+      ...dist.blocosPorDia.map((b) => b.diaId),
+    ]);
+    for (const d of diasTocados) expect([idDoDia(1), idDoDia(5)]).toContain(d);
+    // e o hash é DETERMINISTICAMENTE o da oferta [1,5]: recompute bate; oferta diferente diverge.
+    const deNovo = recomputeComoOPainel(perfil6());
+    expect(deNovo.distribuicaoCardio!.canonicalInputHash).toBe(dist.canonicalInputHash);
+    setDiasOferecidosCardio([2, 4]);
+    expect(recomputeComoOPainel(perfil6()).distribuicaoCardio!.canonicalInputHash).not.toBe(dist.canonicalInputHash);
+    limparOfertaCardio();
+  });
+
+  it('QUI (3) vaga mas NÃO oferecida é rejeitada; SÁB (5) vago oferecido recebe', () => {
+    limparOfertaCardio();
+    setDiasOferecidosCardio([1, 5]);
+    const rot = recomputeComoOPainel(perfil6());
+    const blocos = rot.distribuicaoCardio!.blocosPorDia.map((b) => b.diaId);
+    expect(blocos).not.toContain(idDoDia(3)); // quinta vaga, não oferecida ⇒ rejeitada
+    expect(blocos).toContain(idDoDia(5)); // sábado vago e oferecido ⇒ recebe
+    limparOfertaCardio();
+  });
+
+  it('TER (1) com musculação: NÃO recebe parcela redistribuída; cardio PRÓPRIO após o treino segue permitido, adaptado à sobra', () => {
+    limparOfertaCardio();
+    setDiasOferecidosCardio([1, 5]);
+    const rot = recomputeComoOPainel(perfil6());
+    const dist = rot.distribuicaoCardio!;
+    expect(rot.diasForcaAgendados).toBeGreaterThan(1); // ter (1) é dia de FORÇA neste perfil
+    // (a) nenhuma parcela REDISTRIBUÍDA cai na terça (dia com musculação):
+    for (const c of dist.contratosPorPrescricao) {
+      expect(c.alocacoesDestino.some((a) => a.diaId === idDoDia(1))).toBe(false);
     }
-    // e todo dia de FORÇA respeita a certificação terminal (nenhum bloco sobre musculação).
-    rot.duracaoDias!.forEach((d, i) => {
-      if (i < rot.diasForcaAgendados) {
-        expect(rot.distribuicaoCardio!.blocosPorDia.find((b) => b.diaId === idDoDia(i))).toBeUndefined();
-        expect(d.estadoCalculo).toBe('CALCULADO');
-      }
-    });
+    // (b) cardio PRÓPRIO da terça é permitido (decisão fechada do autor) e adaptado à sobra B−MAX:
+    const b1 = dist.blocosPorDia.find((b) => b.diaId === idDoDia(1));
+    if (b1) {
+      expect(b1.linhagens.every((l) => l.papel === 'ORIGEM')).toBe(true);
+      const sobra = Math.max(60 * 60 - (rot.duracaoDias![1]!.duracaoMaximaEstimadaSegundos ?? 0), 0);
+      expect(b1.duracaoTotalSegundos).toBeLessThanOrEqual(sobra);
+    }
+    // (c) a musculação da terça segue intacta.
+    expect(rot.dias[1]!.slots.length).toBeGreaterThan(0);
+    limparOfertaCardio();
+  });
+
+  it('a fiação do Painel e do controle existe de fato (gate estático do caminho)', () => {
+    const painel = readFileSync(join(__dirname, '../components/painel/Painel.tsx'), 'utf-8');
+    // todos os recomputes de treino do Painel injetam a oferta transitória:
+    expect((painel.match(/diasOferecidosCardio: getDiasOferecidosCardio\(\)/g) ?? []).length).toBeGreaterThanOrEqual(10);
+    expect(painel).toMatch(/<OfertaCardio/);
+    const controle = readFileSync(join(__dirname, '../components/painel/OfertaCardio.tsx'), 'utf-8');
+    expect(controle).toMatch(/toggleDiaOferecidoCardio\(/); // o clique grava o estado transitório
+    expect(controle).toMatch(/onChange\(\)/); // e dispara o recompute do Painel
   });
 });
