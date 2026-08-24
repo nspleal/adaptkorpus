@@ -40,7 +40,6 @@ import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
 import OfertaCardio from './OfertaCardio';
-import { getDiasOferecidosCardio } from '@/lib/cardio-oferta';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import GraficoLinha from './GraficoLinha';
 import { ContadorTreinos } from './ChamaContador';
@@ -188,6 +187,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [perfil, setPerfil] = useState<PerfilResumo>(perfilProp);
   const [dieta, setDieta] = useState<ResultadoMotor>(dietaProp);
   const [treino, setTreino] = useState<ResultadoTreino>(treinoProp);
+  /** Oferta transitória por montagem do Painel: não persiste e não vaza entre contas. */
+  const [diasOferecidosCardio, setDiasOferecidosCardio] = useState<Weekday[]>([]);
   const restricoes = { alergenos: perfil.alergenos, preferencia: perfil.preferencia };
   // Aba ativa persistida (evk_aba): reload/voltar restauram exatamente a aba anterior.
   const [aba, setAba] = useState<Aba>(() => {
@@ -402,7 +403,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novo = { ...perfil, favoritos: [...atual] };
     setPerfil(novo);
     onPerfilChange?.(novo);
-    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
@@ -542,7 +543,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: dia });
     setPesoMotorKg(pesoEfetivoKg);
     pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
-    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg });
+    const { dieta: nd, treino: nt } = recomputarPlano(novo, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg });
     // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
@@ -562,7 +563,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      * mudou, o evento NÃO dispara: a ausência é o dado honesto.
      */
     if (focoDepois && focoDepois.grupo !== focoAntes?.grupo) {
-      const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg });
+      const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg });
       const efeito = medirEntregaDoFoco(nt, ntSemFoco, focoDepois.grupo);
       if (efeito) {
         registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.delta });
@@ -720,7 +721,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     /**
@@ -762,7 +763,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
@@ -781,7 +782,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
   }
@@ -811,7 +812,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novoPerfil = { ...perfil, rotinaCustom };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setEditorDias(null);
@@ -826,7 +827,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function preverPlano(dias: readonly DiaEditavel[]) {
     const rotinaCustom = paraRotinaCustom(dias);
     if (rotinaCustom.dias.length === 0) return [];
-    const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     return (nt.rotina?.dias ?? []).map((d) => ({
       nome: d.nome,
       exercicios: d.slots.map((s) => s.exercicio),
@@ -844,7 +845,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const novoPerfil = { ...perfil, rotinaCustom: undefined };
     setPerfil(novoPerfil);
     onPerfilChange?.(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(novoPerfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setEditorDias(null);
@@ -879,8 +880,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       tempoPorSessaoMin: perfil.tempoPorSessaoMin,
       // Entrada independente do plano final: o crítico não pode aprender o horizonte do próprio
       // agregado que está tentando validar.
-      diasNoHorizonteEsperado: Math.max(0, Math.floor(perfil.diasDisponiveis)),
-      diasOferecidosCardioEsperados: getDiasOferecidosCardio(),
+      diasNoHorizonteEsperado: ORDEM_SEMANA.length,
+      diasOferecidosCardioEsperados: diasOferecidosCardio,
+      diasTreinoEsperados: perfil.treinoDias ?? [],
       diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
       seriesPadrao: prescricao.seriesPorExercicio.min,
     };
@@ -900,7 +902,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       })),
       ctx,
     );
-  }, [perfil, rotinaDias, prescricao, treino.rotina]);
+  }, [perfil, rotinaDias, prescricao, treino.rotina, diasOferecidosCardio]);
 
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
@@ -1063,15 +1065,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // corrente + feedback agregado por grupo. Roda no mount e quando a semana muda (não em
   // cada registro — troca manual de exercício não é clobrada no meio do uso).
   useEffect(() => {
-    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+    const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio, pesoEfetivoKg: pesoMotorKg });
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     // Re-monta quando a semana do ciclo OU a rampa de retomada muda. A rampa entra nas deps
     // porque ela nasce depois da hidratação do histórico e pode coincidir com a MESMA semana
     // de ciclo — sem isto, a rotina ficaria com o volume cheio enquanto o chip já diz
     // "Retomada" (bug real, pego no smoke do Bloco 3).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator, pesoMotorKg]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ciclo decide o momento; oferta é a única entrada C1.1-B adicional.
+  }, [ciclo.semanaEfetiva, retomada?.semana, retomada?.fator, pesoMotorKg, diasOferecidosCardio]);
   /**
    * 🔒 A DIETA SEGUE O PESO (Leva D, DF 2026-07-31). Quando a âncora se move — e ela só se
    * move com ≥ 1 kg / 1,5% E ≥ 1 semana desde a última —, o cardápio e o alvo são regerados.
@@ -1307,12 +1309,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               diasCardio={treino.rotina?.diasCardio ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
-            {/* 🔒 C1 — o menor seletor funcional de dias oferecidos para cardio (autor, rodada 2):
-                controle → estado transitório (lib/cardio-oferta) → recompute → motor → hash. */}
+            {/* 🔒 C1.1-B: o seletor controlado nomeia dias reais e fica isolado nesta montagem. */}
             <OfertaCardio
-              totalDias={Math.max(0, Math.floor(perfil.diasDisponiveis))}
-              onChange={() => {
-                const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: getDiasOferecidosCardio(), pesoEfetivoKg: pesoMotorKg });
+              value={diasOferecidosCardio}
+              onChange={(proximaOferta) => {
+                setDiasOferecidosCardio(proximaOferta);
+                const { treino: nt } = recomputarPlano(perfil, { semanaCiclo: opcoesDaSemana(), diasOferecidosCardio: proximaOferta, pesoEfetivoKg: pesoMotorKg });
                 setTreino(nt);
                 setRotinaDias(nt.rotina?.dias ?? []);
               }}

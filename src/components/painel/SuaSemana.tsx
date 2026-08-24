@@ -27,7 +27,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
    */
   diaExcedente?: ConteudoDiaExcedente;
   /** Dias de cardio EMITIDOS pelo motor — rotulam a faixa e trazem o item do dia. */
-  diasCardio?: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[];
+  diasCardio?: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[];
   /**
    * Abre o registro UNIFICADO de cardio, pré-preenchido com o item do dia.
    * 🔴 NUNCA a sessão guiada: `sessao_iniciada` é a métrica de ATIVAÇÃO, e dispará-la para
@@ -53,6 +53,8 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
     : (sd.tipo === 'cardio' && diaExcedente == null && sd.cardio
       ? { tipo: 'cardio' as const, minutos: sd.cardio.minutos, modalidade: sd.cardio.modalidade as never }
       : null);
+  /** Cardio próprio continua depois da musculação e precisa aparecer como parte do mesmo dia. */
+  const cardioAposTreino = sd.tipo === 'treino' ? sd.cardio : undefined;
 
   const cellStyle = (isTraining: boolean, today: boolean, detailSel: boolean): CSSProperties => ({
     position: 'relative', flex: '1 1 0', minWidth: 92, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
@@ -97,8 +99,18 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
                 <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 6 }}>{sd.isToday ? 'Hoje · Treino' : `${cap(sd.full)} · Treino`}</div>
                 <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{sd.sessionLabel ?? 'Treino'}</h3>
                 <p style={{ margin: 0, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{sd.isToday ? 'Seu treino de hoje está pronto quando você estiver.' : `Programado para ${sd.full}.`}</p>
+                {cardioAposTreino && (
+                  <p style={{ margin: '10px 0 0', fontSize: '.86rem', color: 'rgba(234,229,219,.78)', lineHeight: 1.5 }}>
+                    Depois do treino: cardio · {ROTULO_MODALIDADE[cardioAposTreino.modalidade as never]}{cardioAposTreino.minutos != null ? ` · ${cardioAposTreino.minutos} min` : ''}.
+                  </p>
+                )}
               </div>
-              <button onClick={() => sd.sessionIdx != null && onIrSessao(sd.sessionIdx)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer', alignSelf: 'center' }}>{sd.isToday ? 'Ir para a sessão' : 'Ver este treino'}<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', alignSelf: 'center' }}>
+                <button onClick={() => sd.sessionIdx != null && onIrSessao(sd.sessionIdx)} className="hov-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.95rem', padding: '13px 24px', border: 'none', borderRadius: 13, cursor: 'pointer' }}>{sd.isToday ? 'Ir para a sessão' : 'Ver este treino'}<svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                {cardioAposTreino && onRegistrarCardio && (
+                  <button onClick={() => onRegistrarCardio(cardioAposTreino)} className="evk-troca" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(22,163,74,.12)', border: '1px solid rgba(22,163,74,.34)', color: '#8FE3AA', fontWeight: 600, fontSize: '.88rem', padding: '12px 16px', borderRadius: 13, cursor: 'pointer' }}>Registrar cardio</button>
+                )}
+              </div>
             </div>
           </div>
         ) : (sd.tipo === 'recuperacao' || sd.tipo === 'cardio') ? (

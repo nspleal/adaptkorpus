@@ -182,6 +182,8 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
   const diaPorId = new Map<string, DiaHorizonte>();
   const ordensHorizonte = new Set<number>();
   for (const d of e.diasHorizonte) {
+    if (typeof d.diaId !== 'string' || d.diaId.length === 0) motivosEstruturais.push('dia_id vazio');
+    if (typeof d.oferecido !== 'boolean') motivosEstruturais.push(`oferecido inválido: ${d.diaId}`);
     if (diaPorId.has(d.diaId)) motivosEstruturais.push(`dia_id duplicado: ${d.diaId}`);
     if (!intSeguro(d.ordemNoHorizonte) || d.ordemNoHorizonte < 0) motivosEstruturais.push(`ordem_no_horizonte inválida: ${d.diaId}`);
     else if (ordensHorizonte.has(d.ordemNoHorizonte)) motivosEstruturais.push(`ordem_no_horizonte duplicada: ${d.ordemNoHorizonte}`);
@@ -189,12 +191,40 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
     diaPorId.set(d.diaId, d);
   }
 
+  const planosVistos = new Set<string>();
+  for (const p of e.planosResistidosTerminais) {
+    if (!diaPorId.has(p.diaId)) motivosEstruturais.push(`plano referencia dia fora do horizonte: ${p.diaId}`);
+    if (planosVistos.has(p.diaId)) motivosEstruturais.push(`plano duplicado para dia: ${p.diaId}`);
+    planosVistos.add(p.diaId);
+    if (typeof p.temMusculacao !== 'boolean') motivosEstruturais.push(`tem_musculacao inválido: ${p.diaId}`);
+    if (p.maxResistidaSegundos !== null
+      && (!intSeguro(p.maxResistidaSegundos) || p.maxResistidaSegundos < 0)) {
+      motivosEstruturais.push(`max_resistida inválido: ${p.diaId}`);
+    }
+  }
+
+  const orcamentosVistos = new Set<string>();
+  for (const o of e.orcamentoPorDia) {
+    if (!diaPorId.has(o.diaId)) motivosEstruturais.push(`orçamento referencia dia fora do horizonte: ${o.diaId}`);
+    if (orcamentosVistos.has(o.diaId)) motivosEstruturais.push(`orçamento duplicado para dia: ${o.diaId}`);
+    orcamentosVistos.add(o.diaId);
+    if (o.orcamentoSegundos !== undefined
+      && (!intSeguro(o.orcamentoSegundos) || o.orcamentoSegundos <= 0)) {
+      motivosEstruturais.push(`orçamento inválido: ${o.diaId}`);
+    }
+  }
+
   const prescIds = new Set<string>();
   const ordemPorDiaOrigem = new Map<string, Set<number>>();
   for (const p of e.prescricoesCardio) {
+    if (typeof p.prescricaoId !== 'string' || p.prescricaoId.length === 0) motivosEstruturais.push('prescricao_id vazio');
     if (prescIds.has(p.prescricaoId)) motivosEstruturais.push(`prescricao_id duplicado: ${p.prescricaoId}`);
     prescIds.add(p.prescricaoId);
     if (!diaPorId.has(p.diaOrigemId)) motivosEstruturais.push(`prescricao ${p.prescricaoId} referencia dia fora do horizonte: ${p.diaOrigemId}`);
+    else if (!diaPorId.get(p.diaOrigemId)!.oferecido) motivosEstruturais.push(`prescricao ${p.prescricaoId} nasce em dia não oferecido: ${p.diaOrigemId}`);
+    if (!intSeguro(p.duracaoPrescritaSegundos) || p.duracaoPrescritaSegundos <= 0) {
+      motivosEstruturais.push(`duracao_prescrita inválida: ${p.prescricaoId}`);
+    }
     if (!intSeguro(p.ordemPrescricao) || p.ordemPrescricao < 0) {
       motivosEstruturais.push(`ordem_prescricao inválida: ${p.prescricaoId}`);
     } else {
@@ -385,7 +415,18 @@ export type ValidacaoDistribuicao =
 function assinaturaDistribuicao(d: DistribuicaoCardioSemanal): string {
   return canonicalInputHash({
     estado: d.estado,
+    aggregateId: d.aggregateId,
+    expectedRevision: d.expectedRevision,
+    formulaVersion: d.formulaVersion,
     canonicalInputHash: d.canonicalInputHash,
+    motivos: d.motivos,
+    ressalvas: [...d.ressalvas]
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+      .map((r) => ({
+        prescricaoIds: [...r.prescricaoIds].sort(),
+        diaIds: [...r.diaIds].sort(),
+        motivo: r.motivo,
+      })),
     contratos: [...d.contratosPorPrescricao]
       .sort((a, b) => (a.prescricaoId < b.prescricaoId ? -1 : 1))
       .map((c) => ({

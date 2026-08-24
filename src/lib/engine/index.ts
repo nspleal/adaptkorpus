@@ -96,6 +96,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana as OpcoesSemanaMontador } from './treino-montador';
 import type { Exercise, Food, Recipe } from '../data/types';
+import type { Weekday } from '../semana';
 import type { PerfilUsuario, PlanoDieta, ResultadoGate } from './types';
 import type {
   PerfilTreino,
@@ -166,8 +167,8 @@ export function gerarTreino(
     semanaCiclo?: OpcoesSemanaMontador;
     /** 🔒 C1 — escolha de execução por exercício (e72 etc.), materializada no slot. */
     escolhasExecucao?: ReadonlyMap<string, import('../data/types').ExecucaoLateralidade>;
-    /** 🔒 C1 — dias OFERECIDOS pelo usuário para cardio (índices no horizonte). Transiente. */
-    diasOferecidosCardio?: readonly number[];
+    /** 🔒 C1.1-B — dias REAIS oferecidos pelo usuário para cardio. Transiente. */
+    diasOferecidosCardio?: readonly (Weekday | number)[];
   },
 ): ResultadoTreino {
   const gate = avaliarGateTreino(perfil);

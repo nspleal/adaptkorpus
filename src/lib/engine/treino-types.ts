@@ -10,6 +10,7 @@ import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
 import type { DistribuicaoCardioSemanal, EntradaDistribuicaoSemana, LinhagemParcela } from './distribuicao-cardio-semana';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, PadraoMovimento } from '../data/types';
+import type { Weekday } from '../semana';
 
 /**
  * 🔒 C1 — RESULTADO DA GERAÇÃO TEMPORAL do plano vivo (spec §2/§6), o discriminante que SUBSTITUI o
@@ -90,6 +91,8 @@ export interface PerfilTreino {
   equipamentosCasa?: EquipamentoCasa[];
   /** Dias por semana que o usuário pode treinar (1–6). */
   diasDisponiveis: number;
+  /** Agenda real da semana; ausente só para chamadas legadas que ainda usam a agenda padrão. */
+  treinoDias?: readonly Weekday[];
   /** Tempo por sessão em minutos. */
   tempoPorSessaoMin: number;
   /** 🎛️ v4 · DF③ — divisão preferida. Ausente = `auto` (padrão por dias disponíveis). */

@@ -1,41 +1,29 @@
 /**
- * 🔒 C1 — ESTADO TRANSITÓRIO da OFERTA DE DIAS PARA CARDIO (autor 2026-08-21, rodada 2).
+ * 🔒 C1.1-B — funções PURAS da oferta transitória de dias para cardio.
  *
  * O elo entre o CONTROLE do usuário (`components/painel/OfertaCardio.tsx`) e o motor:
- *   controle → ESTE estado transitório → `recomputarPlano({ diasOferecidosCardio })` →
+ *   controle React do Painel → ESTAS funções puras → `recomputarPlano({ diasOferecidosCardio })` →
  *   `gerarTreino` → `montarRotina` → `construirDistribuicaoCardioSemana` → `canonical_input_hash`.
  *
- * DELIBERADAMENTE transiente e client-side (decisão do autor, item 10 da fiação): NÃO é
- * preferência permanente do perfil, não persiste, não é importado por código de servidor
- * (estado de módulo no servidor vazaria entre usuários). Zera a cada carga da página.
- * Distinto de `diasDisponiveis` (que é só uma contagem).
+ * A oferta é estado local do Painel: transiente, não persistida e isolada por montagem/conta.
+ * Este módulo NÃO guarda estado de módulo. Isso impede que a escolha de uma conta vaze para
+ * outra no mesmo processo do navegador/servidor. Distinta de `diasDisponiveis`, que é só uma
+ * contagem, a oferta nomeia dias reais da semana.
  */
+import { ORDEM_SEMANA, type Weekday } from './semana';
 
-let dias: number[] = [];
+const eWeekday = (dia: unknown): dia is Weekday =>
+  typeof dia === 'string' && (ORDEM_SEMANA as readonly string[]).includes(dia);
 
-/** Normaliza: inteiros seguros >= 0, sem duplicata, ordem crescente (ordem canônica do hash). */
-function normalizar(entrada: readonly number[]): number[] {
-  return [...new Set(entrada.filter((i) => Number.isSafeInteger(i) && i >= 0))].sort((a, b) => a - b);
+/** Normaliza dias reais, remove duplicatas e preserva a ordem canônica Seg→Dom. */
+export function normalizarDiasOferecidosCardio(entrada: readonly unknown[]): Weekday[] {
+  const recebidos = new Set(entrada.filter(eWeekday));
+  return ORDEM_SEMANA.filter((dia) => recebidos.has(dia));
 }
 
-/** Substitui a oferta inteira (ex.: hidratação de um formulário). */
-export function setDiasOferecidosCardio(novos: readonly number[]): readonly number[] {
-  dias = normalizar(novos);
-  return dias;
-}
-
-/** A oferta vigente, em ordem canônica. É ISTO que o Painel injeta no recompute. */
-export function getDiasOferecidosCardio(): readonly number[] {
-  return dias;
-}
-
-/** Alterna um dia (gesto do controle). Devolve a oferta resultante. */
-export function toggleDiaOferecidoCardio(indice: number): readonly number[] {
-  dias = dias.includes(indice) ? dias.filter((d) => d !== indice) : normalizar([...dias, indice]);
-  return dias;
-}
-
-/** Limpa a oferta (testes / troca de conta). */
-export function limparOfertaCardio(): void {
-  dias = [];
+/** Alterna um dia sem mutar a oferta recebida; o dono do estado decide onde armazená-la. */
+export function alternarDiaOferecidoCardio(atual: readonly Weekday[], dia: Weekday): Weekday[] {
+  return normalizarDiasOferecidosCardio(
+    atual.includes(dia) ? atual.filter((item) => item !== dia) : [...atual, dia],
+  );
 }

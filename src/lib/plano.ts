@@ -11,6 +11,7 @@ import type { ExecucaoLateralidade } from '@/lib/data/types';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
+import type { Weekday } from '@/lib/semana';
 
 export function recomputarPlano(
   perfil: PerfilResumo,
@@ -34,8 +35,8 @@ export function recomputarPlano(
      */
     pesoEfetivoKg?: number;
     /**
-     * 🔒 C1 (autor 2026-08-21) — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: índices de dia (0-based
-     * no horizonte da semana) que a pessoa marcou como disponíveis para receber cardio. Entra por
+     * 🔒 C1.1-B — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: dias reais da semana que a pessoa
+     * marcou como disponíveis. Entra por
      * AQUI, o mesmo trilho de `semanaCiclo`/`pesoEfetivoKg`: um knob TRANSIENTE por geração, não
      * uma preferência permanente do perfil (o fluxo atual não exige persistência — decisão do
      * autor, item 10). Distinto de `diasDisponiveis`, que é só uma CONTAGEM.
@@ -43,7 +44,7 @@ export function recomputarPlano(
      * Um dia só recebe cardio se foi OFERECIDO aqui **e** não contém musculação; cardio nunca
      * remove/substitui/desloca um dia de treino. Ausente = nenhum dia oferecido ⇒ nenhum bloco.
      */
-    diasOferecidosCardio?: readonly number[];
+    diasOferecidosCardio?: readonly (Weekday | number)[];
     /**
      * 🔒 C1 — ESCOLHA DE EXECUÇÃO por exercício (e72 rosca martelo: alternado × simultâneo).
      * Também transiente: materializa `slot.execucaoSelecionada` e é honrada pelo avaliador.
@@ -62,13 +63,13 @@ export function recomputarPlano(
     sexo: perfil.sexo, pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade,
     nivelAtividade: perfil.nivelAtividade, objetivo: perfil.objetivo, flagsSaude: perfil.flagsSaude,
   };
-  // A agenda (treinoDias) é a fonte de verdade; o motor de treino usa a CONTAGEM de dias.
+  // A agenda (treinoDias) é a fonte de verdade; sua contagem segue disponível ao montador.
   const diasDisponiveis = perfil.treinoDias?.length ?? perfil.diasDisponiveis;
   const perfilT: PerfilTreino = {
     pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade, flagsSaude: perfil.flagsSaude,
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
     equipamentosCasa: perfil.equipamentosCasa, // checklist de casa (modelo 2 níveis)
-    diasDisponiveis, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+    diasDisponiveis, treinoDias: perfil.treinoDias, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
     // Modo força (v2 §4): preset opt-in — o motor ignora p/ iniciante.
     ...(perfil.modoForca ? { modoForca: true } : {}),
     /**

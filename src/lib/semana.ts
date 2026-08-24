@@ -59,7 +59,7 @@ export interface DiaDaSemana {
   weekday: Weekday;
   abbr: string;
   full: string;
-  isTraining: boolean;    // dia ativo (treino OU recuperação)
+  isTraining: boolean;    // dia ativo (treino, cardio ou recuperação)
   isToday: boolean;
   tipo: DiaTipo;
   sessionIdx?: number;    // índice em rotina.dias (só tipo 'treino') — abre a sessão
@@ -87,22 +87,39 @@ export function montarSemana(
    * Dias de cardio EMITIDOS pelo motor (`rotina.diasCardio`). Ausente = comportamento
    * anterior, byte a byte: o excedente vira `recuperacao`, sem item.
    */
-  diasCardio: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[] = [],
+  diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
 ): DiaDaSemana[] {
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
   const temOrdemCanonica = diasCardio.some((d) => d.ordemNoHorizonte != null);
+  const cardioPorDia = new Map<Weekday, { item: (typeof diasCardio)[number]; indice: number }>();
   const cardioPorOrdem = new Map<number, { item: (typeof diasCardio)[number]; indice: number }>();
   diasCardio.forEach((item, indice) => {
+    if (item.diaId != null && (ORDEM_SEMANA as readonly string[]).includes(item.diaId)) {
+      cardioPorDia.set(item.diaId as Weekday, { item, indice });
+    }
     if (item.ordemNoHorizonte != null) cardioPorOrdem.set(item.ordemNoHorizonte, { item, indice });
   });
   let li = 0;
   return ORDEM_SEMANA.map((weekday, idx) => {
     const ativo = treino.has(weekday);
-    const base = { idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full, isTraining: ativo, isToday: idx === hojeIdx };
-    if (!ativo) return { ...base, tipo: 'descanso' as const };
+    const cardioExato = cardioPorDia.get(weekday);
+    const base = {
+      idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full,
+      isTraining: ativo || cardioExato != null, isToday: idx === hojeIdx,
+    };
+    if (!ativo) {
+      if (cardioExato) {
+        const item = cardioExato.item;
+        return {
+          ...base, tipo: 'cardio' as const, cardioIdx: cardioExato.indice, cardio: item,
+          sessionLabel: item.minutos != null ? `Cardio · ${item.minutos} min` : 'Cardio',
+        };
+      }
+      return { ...base, tipo: 'descanso' as const };
+    }
     const ordemAtiva = li;
-    const cardioExato = cardioPorOrdem.get(ordemAtiva);
+    const cardioLegado = cardioExato ?? cardioPorOrdem.get(ordemAtiva);
     // 🔒 As `n` sessões de FORÇA primeiro, sempre. Cardio canônico pode coexistir no MESMO dia,
     // mas nunca recebe `sessionIdx` próprio nem desloca a musculação.
     if (li < n) {
@@ -110,15 +127,15 @@ export function montarSemana(
       li++;
       return {
         ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx],
-        ...(cardioExato ? { cardioIdx: cardioExato.indice, cardio: cardioExato.item } : {}),
+        ...(cardioLegado ? { cardioIdx: cardioLegado.indice, cardio: cardioLegado.item } : {}),
       };
     }
     // Excedente: dia de CARDIO quando o motor emitiu item; senão, recuperação (que não
     // prescreve nada). 🔴 Nunca `sessionIdx` — o índice é do outro array.
     const indiceLegado = li - n;
-    const cardioIdx = temOrdemCanonica ? cardioExato?.indice : indiceLegado;
+    const cardioIdx = cardioExato?.indice ?? (temOrdemCanonica ? cardioPorOrdem.get(ordemAtiva)?.indice : indiceLegado);
     li++;
-    const item = temOrdemCanonica ? cardioExato?.item : diasCardio[indiceLegado];
+    const item = cardioExato?.item ?? (temOrdemCanonica ? cardioPorOrdem.get(ordemAtiva)?.item : diasCardio[indiceLegado]);
     if (item && cardioIdx != null) {
       return {
         ...base, tipo: 'cardio' as const, cardioIdx, cardio: item,
@@ -155,7 +172,7 @@ export function sessaoDeHojeIdx(
   treinoDias: readonly Weekday[],
   sessoesNomes: readonly string[],
   hojeIdx: number,
-  diasCardio: readonly { modalidade: string; minutos: number | null; ordemNoHorizonte?: number }[] = [],
+  diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
 ): number | null {
   return montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio)[hojeIdx]?.sessionIdx ?? null;
 }

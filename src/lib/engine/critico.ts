@@ -28,6 +28,7 @@ import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
 import { duracaoDoDiaDeCardio } from './dia-de-cardio';
 import { fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
+import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
 
 /** Um dia do desenho, como o editor o entrega: o rótulo e os exercícios escolhidos. */
 export interface DiaDoEditor {
@@ -119,7 +120,9 @@ export interface ContextoCritico {
 export interface ContextoCriticoAutomatico extends ContextoCritico {
   diasNoHorizonteEsperado: number;
   /** Oferta transitória que disparou a geração; nunca pode ser aprendida do agregado avaliado. */
-  diasOferecidosCardioEsperados: readonly number[];
+  diasOferecidosCardioEsperados: readonly (Weekday | number)[];
+  /** Agenda real fornecida pelo perfil; ausente só para leitura de agregados legados. */
+  diasTreinoEsperados?: readonly Weekday[];
 }
 
 const rotulo = (g: GrupoPrimario) => ROTULO_GRUPO[g] ?? g;
@@ -304,27 +307,47 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   // Reconstrói os campos DERIVADOS a partir dos slots e do contexto do crítico. Dos fatos publicados
   // não lê horizonte nem oferta: os dois são entradas externas à saída que está sob julgamento.
   const ofertaExterna = [...ctx.diasOferecidosCardioEsperados];
-  const ofertaExternaValida = ofertaExterna.every((d) => Number.isSafeInteger(d) && d >= 0 && d < horizonteEsperado)
+  const ofertaExternaValida = ofertaExterna.every((d) =>
+    (typeof d === 'number' && Number.isSafeInteger(d) && d >= 0 && d < ORDEM_SEMANA.length)
+    || (typeof d === 'string' && ORDEM_SEMANA.includes(d as Weekday)))
     && new Set(ofertaExterna).size === ofertaExterna.length;
   if (!ofertaExternaValida) motivosEstruturais.push('oferta externa de cardio inválida');
-  const oferecidos = ofertaExternaValida ? [...ofertaExterna].sort((a, b) => a - b) : [];
+  const oferecidos = ofertaExternaValida
+    ? ORDEM_SEMANA.filter((dia, indice) => ofertaExterna.includes(dia) || ofertaExterna.includes(indice))
+    : [];
+  // Agregado anterior ao C1.1-B não carregava a agenda. Só nesse caso de compatibilidade,
+  // recompomos a agenda padrão a partir dos contadores publicados; o caminho vivo sempre injeta
+  // `diasTreinoEsperados` a partir do perfil e nunca aprende a agenda da saída auditada.
+  const agendaExterna = [...(ctx.diasTreinoEsperados
+    ?? diasPadrao(rotina.dias.length + rotina.diasCardioRecuperacao))];
+  const agendaExternaValida = agendaExterna.every((d) => ORDEM_SEMANA.includes(d))
+    && new Set(agendaExterna).size === agendaExterna.length;
+  if (!agendaExternaValida) motivosEstruturais.push('agenda externa de treino inválida');
+  const diasTreino = agendaExternaValida
+    ? [...agendaExterna].sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))
+    : [];
+  const diasForcaEsperados = diasTreino.slice(0, rotina.dias.length);
+  if (diasForcaEsperados.length !== rotina.dias.length) {
+    motivosEstruturais.push('agenda externa não comporta as sessões de força da rotina');
+  }
   const oferecidosInformados = fatosInformados?.diasHorizonte
     .filter((d) => d.oferecido)
-    .map((d) => d.ordemNoHorizonte)
-    .sort((a, b) => a - b) ?? [];
+    .map((d) => d.diaId)
+    .sort((a, b) => ORDEM_SEMANA.indexOf(a as Weekday) - ORDEM_SEMANA.indexOf(b as Weekday)) ?? [];
   if (JSON.stringify(oferecidosInformados) !== JSON.stringify(oferecidos)) {
     motivosEstruturais.push('oferta de cardio dos fatos diverge da entrada externa');
   }
   const duracaoResistidaCritico = rotina.dias.map((d) =>
     avaliarDuracaoFinalDoDia(d.slots, ctx.nivel, orcamentoSeg, 0));
   const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-    ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
+      ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
     : 0;
   const fatosReconstruidos = fatosInformados
-    ? fatosDistribuicaoCardioDaRotina({
-        diasTotais: horizonteEsperado,
-        diasForca: rotina.dias.length,
-        duracaoDias: duracaoResistidaCritico,
+      ? fatosDistribuicaoCardioDaRotina({
+        diasComMusculacao: diasForcaEsperados.map((diaId, treinoIdx) => ({
+          diaId,
+          duracao: duracaoResistidaCritico[treinoIdx]!,
+        })),
         diasOferecidosCardio: oferecidos,
         orcamentoSegundos: orcamentoSeg,
         cardioPrescritoPorDiaSegundos,
@@ -347,8 +370,8 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   if (rotina.diasForcaAgendados !== forcaEsperada || rotina.dias.length !== forcaEsperada) {
     motivosEstruturais.push(`dias de força divergentes: fatos ${forcaEsperada}, contador ${rotina.diasForcaAgendados}, planos ${rotina.dias.length}`);
   }
-  if (rotina.diasCardioRecuperacao !== horizonteEsperado - forcaEsperada) {
-    motivosEstruturais.push(`dias de recuperação divergentes: fatos ${horizonteEsperado - forcaEsperada}, contador ${rotina.diasCardioRecuperacao}`);
+  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada) {
+    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada}, contador ${rotina.diasCardioRecuperacao}`);
   }
   if (finais.length !== horizonteEsperado) {
     motivosEstruturais.push(`horizonte final: esperado ${horizonteEsperado}, recebido ${finais.length}`);
@@ -356,9 +379,10 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   const ids = new Set<string>();
   const ordens = new Set<number>();
   const treinos = new Set<number>();
+  const treinoIdxEsperadoPorDia = new Map(diasForcaEsperados.map((diaId, treinoIdx) => [diaId, treinoIdx]));
   const blocosCanonicos = new Map((distribuicao?.blocosPorDia ?? []).map((b) => [b.diaId, b]));
   for (const dia of finais) {
-    const idEsperado = `dia-${String(dia.ordemNoHorizonte).padStart(3, '0')}`;
+    const idEsperado = ORDEM_SEMANA[dia.ordemNoHorizonte];
     if (ids.has(dia.diaId)) motivosEstruturais.push(`dia_id duplicado: ${dia.diaId}`);
     if (ordens.has(dia.ordemNoHorizonte)) motivosEstruturais.push(`ordem duplicada: ${dia.ordemNoHorizonte}`);
     if (dia.diaId !== idEsperado) motivosEstruturais.push(`identidade divergente: ${dia.diaId} != ${idEsperado}`);
@@ -374,7 +398,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
       }
       treinos.add(dia.treinoIdx);
     }
-    const treinoIdxEsperado = dia.ordemNoHorizonte < rotina.dias.length ? dia.ordemNoHorizonte : undefined;
+    const treinoIdxEsperado = treinoIdxEsperadoPorDia.get(dia.diaId as Weekday);
     if (dia.treinoIdx !== treinoIdxEsperado) {
       motivosEstruturais.push(`treino_idx divergente em ${dia.diaId}: ${String(dia.treinoIdx)} != ${String(treinoIdxEsperado)}`);
     }
@@ -387,7 +411,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     }
     const bloco = blocosCanonicos.get(dia.diaId);
     const cardioQualitativoEsperado = rotina.cardio.tipo === 'sessoes_moderadas'
-      && oferecidos.includes(dia.ordemNoHorizonte);
+      && oferecidos.includes(dia.diaId as Weekday);
     if (dia.cardio) {
       if (cardioQualitativoEsperado) {
         if (dia.cardio.minutos !== null) {
@@ -421,7 +445,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     }
   }
   for (let ordem = 0; ordem < horizonteEsperado; ordem += 1) {
-    if (!ordens.has(ordem)) motivosEstruturais.push(`dia final ausente: dia-${String(ordem).padStart(3, '0')}`);
+    if (!ordens.has(ordem)) motivosEstruturais.push(`dia final ausente: ${ORDEM_SEMANA[ordem] ?? String(ordem)}`);
   }
   for (let treinoIdx = 0; treinoIdx < rotina.dias.length; treinoIdx += 1) {
     if (!treinos.has(treinoIdx)) motivosEstruturais.push(`treino final ausente: ${treinoIdx}`);
@@ -464,7 +488,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     const treino = dia.treinoIdx != null ? rotina.dias[dia.treinoIdx] : undefined;
     const cardioCanonicoSegundos = blocosCanonicos.get(dia.diaId)?.duracaoTotalSegundos ?? 0;
     const cardioQualitativoEsperado = rotina.cardio.tipo === 'sessoes_moderadas'
-      && oferecidos.includes(dia.ordemNoHorizonte);
+      && oferecidos.includes(dia.diaId as Weekday);
     const critico = avaliarDuracaoFinalDoDia(
       treino?.slots ?? [], ctx.nivel, orcamentoSeg, cardioCanonicoSegundos,
       cardioQualitativoEsperado,

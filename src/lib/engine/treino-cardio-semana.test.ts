@@ -29,7 +29,7 @@ const contrato = (d: ReturnType<typeof distribuirCardioDaRotina>, i: number) => 
 describe('C1 fiação viva · dias oferecidos (autor 2026-08-21)', () => {
   it('teste 1/2: oferece ter(1) e sáb(5); só esses recebem cardio; quinta(3) vaga não oferecida é rejeitada', () => {
     const d = distribuirCardioDaRotina({ ...base, diasTotais: 7, diasForca: 0, duracaoDias: [], diasOferecidosCardio: [1, 5] });
-    const diasComBloco = d.blocosPorDia.map((b) => b.diaId).sort();
+    const diasComBloco = d.blocosPorDia.map((b) => b.diaId);
     expect(diasComBloco).toEqual([idDoDia(1), idDoDia(5)]);
     expect(bloco(d, 3)).toBeUndefined(); // quinta vaga, não oferecida
   });

@@ -20,7 +20,7 @@ import { prescreverTreino } from './engine/treino';
 import { avaliarGateTreino } from './engine/treino-gate';
 import { descansoDoExercicio } from './engine/descanso';
 import { rirAlvoDaSemana } from './engine/treino-mesociclo';
-import { getDiasOferecidosCardio, limparOfertaCardio, setDiasOferecidosCardio, toggleDiaOferecidoCardio } from './cardio-oferta';
+import { alternarDiaOferecidoCardio, normalizarDiasOferecidosCardio } from './cardio-oferta';
 import { montarSemana } from './semana';
 import type { PerfilTreino, RotinaSemanal } from './engine/treino-types';
 import type { PerfilResumo } from '@/components/painel/Painel';
@@ -218,7 +218,10 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
     const rot = gerar([0]); // dia 0 é dia de FORÇA
     const diasForca = rot.diasForcaAgendados;
     expect(diasForca).toBeGreaterThan(0);
-    const semMusculacao = (diaId: string) => Number(diaId.replace('dia-', '')) >= diasForca;
+    const treinoIdxPorDia = new Map((rot.planoFinalPorDia ?? [])
+      .filter((dia) => dia.treinoIdx != null)
+      .map((dia) => [dia.diaId, dia.treinoIdx!]));
+    const semMusculacao = (diaId: string) => !treinoIdxPorDia.has(diaId);
 
     // 🔒 REGRA 3 do autor — "receber" cardio = receber PARCELA REDISTRIBUÍDA (papel DESTINO).
     // Nenhum destino pode cair sobre um dia de musculação.
@@ -230,7 +233,7 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
         // Num dia de musculação só pode existir cardio PRÓPRIO (sessão mista, fixture 14),
         // limitado à sobra `B − MAX_RESISTIDA`: ele nunca desloca a musculação.
         expect(b.linhagens.every((l) => l.papel === 'ORIGEM')).toBe(true);
-        const idx = Number(b.diaId.replace('dia-', ''));
+        const idx = treinoIdxPorDia.get(b.diaId)!;
         const maxResistida = rot.duracaoResistidaDias![idx]!.duracaoMaximaEstimadaSegundos ?? 0;
         expect(b.duracaoTotalSegundos).toBeLessThanOrEqual(Math.max(60 * 60 - maxResistida, 0));
       }
@@ -524,7 +527,7 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
 });
 
 // ════════════════════════════════════════════════════════════════════════════════════════════
-// ITEM 4 (rodada 2) — ENTRADA FUNCIONAL: controle → estado transitório → recomputarPlano → hash
+// ITEM 4 (C1.1-B) — ENTRADA FUNCIONAL: controle local → recomputarPlano → hash
 // ════════════════════════════════════════════════════════════════════════════════════════════
 describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', () => {
   // 🔒 o mapper deriva diasDisponiveis de treinoDias.length — o horizonte real tem 6 dias.
@@ -532,27 +535,20 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
     objetivo: 'emagrecimento', diasDisponiveis: 6, tempoPorSessaoMin: 60,
     treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as never,
   });
-  /** Recompute EXATAMENTE como o Painel faz (mesma forma de chamada fiada nos 10 call sites). */
-  const recomputeComoOPainel = (p: PerfilResumo) =>
-    recomputarPlano(p, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: getDiasOferecidosCardio() }).treino.rotina!;
+  /** Recompute EXATAMENTE como o Painel faz, com a oferta pertencendo à montagem atual. */
+  const recomputeComoOPainel = (p: PerfilResumo, oferta: readonly ('seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' | 'dom')[]) =>
+    recomputarPlano(p, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: oferta }).treino.rotina!;
 
-  it('o estado transitório normaliza, alterna e zera (contrato do controle)', () => {
-    limparOfertaCardio();
-    expect(getDiasOferecidosCardio()).toEqual([]);
-    setDiasOferecidosCardio([5, 1, 1, -3, 2.5]); // dedupe + ordena + rejeita inválidos
-    expect(getDiasOferecidosCardio()).toEqual([1, 5]);
-    toggleDiaOferecidoCardio(3);
-    expect(getDiasOferecidosCardio()).toEqual([1, 3, 5]);
-    toggleDiaOferecidoCardio(3);
-    expect(getDiasOferecidosCardio()).toEqual([1, 5]);
-    limparOfertaCardio();
-    expect(getDiasOferecidosCardio()).toEqual([]);
+  it('a oferta local normaliza e alterna sem singleton compartilhado', () => {
+    const base = normalizarDiasOferecidosCardio(['sab', 'ter', 'ter', 'invalido']);
+    expect(base).toEqual(['ter', 'sab']);
+    expect(alternarDiaOferecidoCardio(base, 'qui')).toEqual(['ter', 'qui', 'sab']);
+    expect(alternarDiaOferecidoCardio(['ter', 'qui', 'sab'], 'qui')).toEqual(['ter', 'sab']);
   });
 
-  it('usuário oferece TER (1) e SÁB (5); SOMENTE essa escolha chega ao motor e ao hash', () => {
-    limparOfertaCardio();
-    setDiasOferecidosCardio([1, 5]); // o gesto do controle (toggle ter + toggle sáb)
-    const rot = recomputeComoOPainel(perfil6());
+  it('usuário oferece TER e SÁB; SOMENTE essa escolha chega ao motor e ao hash', () => {
+    const oferta = ['ter', 'sab'] as const;
+    const rot = recomputeComoOPainel(perfil6(), oferta);
     const dist = rot.distribuicaoCardio!;
     // toda origem e todo destino pertencem à oferta {1, 5} — nada além dela chegou ao motor.
     const diasTocados = new Set<string>([
@@ -560,37 +556,30 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
       ...dist.contratosPorPrescricao.flatMap((c) => c.alocacoesDestino.map((a) => a.diaId)),
       ...dist.blocosPorDia.map((b) => b.diaId),
     ]);
-    for (const d of diasTocados) expect([idDoDia(1), idDoDia(5)]).toContain(d);
-    // e o hash é DETERMINISTICAMENTE o da oferta [1,5]: recompute bate; oferta diferente diverge.
-    const deNovo = recomputeComoOPainel(perfil6());
+    for (const d of diasTocados) expect([idDoDia('ter'), idDoDia('sab')]).toContain(d);
+    // e o hash é DETERMINISTICAMENTE o da oferta ter/sáb: recompute bate; oferta diferente diverge.
+    const deNovo = recomputeComoOPainel(perfil6(), oferta);
     expect(deNovo.distribuicaoCardio!.canonicalInputHash).toBe(dist.canonicalInputHash);
-    setDiasOferecidosCardio([2, 4]);
-    expect(recomputeComoOPainel(perfil6()).distribuicaoCardio!.canonicalInputHash).not.toBe(dist.canonicalInputHash);
-    limparOfertaCardio();
+    expect(recomputeComoOPainel(perfil6(), ['qua', 'sex']).distribuicaoCardio!.canonicalInputHash).not.toBe(dist.canonicalInputHash);
   });
 
-  it('QUI (3) vaga mas NÃO oferecida é rejeitada; SÁB (5) vago oferecido recebe', () => {
-    limparOfertaCardio();
-    setDiasOferecidosCardio([1, 5]);
-    const rot = recomputeComoOPainel(perfil6());
+  it('DOM vago mas NÃO oferecido é rejeitado; SÁB oferecido recebe', () => {
+    const rot = recomputeComoOPainel(perfil6(), ['ter', 'sab']);
     const blocos = rot.distribuicaoCardio!.blocosPorDia.map((b) => b.diaId);
-    expect(blocos).not.toContain(idDoDia(3)); // quinta vaga, não oferecida ⇒ rejeitada
-    expect(blocos).toContain(idDoDia(5)); // sábado vago e oferecido ⇒ recebe
-    limparOfertaCardio();
+    expect(blocos).not.toContain(idDoDia('dom'));
+    expect(blocos).toContain(idDoDia('sab'));
   });
 
-  it('TER (1) com musculação: NÃO recebe parcela redistribuída; cardio PRÓPRIO após o treino segue permitido, adaptado à sobra', () => {
-    limparOfertaCardio();
-    setDiasOferecidosCardio([1, 5]);
-    const rot = recomputeComoOPainel(perfil6());
+  it('TER com musculação: NÃO recebe parcela redistribuída; cardio PRÓPRIO após o treino segue permitido, adaptado à sobra', () => {
+    const rot = recomputeComoOPainel(perfil6(), ['ter', 'sab']);
     const dist = rot.distribuicaoCardio!;
     expect(rot.diasForcaAgendados).toBeGreaterThan(1); // ter (1) é dia de FORÇA neste perfil
     // (a) nenhuma parcela REDISTRIBUÍDA cai na terça (dia com musculação):
     for (const c of dist.contratosPorPrescricao) {
-      expect(c.alocacoesDestino.some((a) => a.diaId === idDoDia(1))).toBe(false);
+      expect(c.alocacoesDestino.some((a) => a.diaId === idDoDia('ter'))).toBe(false);
     }
     // (b) cardio PRÓPRIO da terça é permitido (decisão fechada do autor) e adaptado à sobra B−MAX:
-    const b1 = dist.blocosPorDia.find((b) => b.diaId === idDoDia(1));
+    const b1 = dist.blocosPorDia.find((b) => b.diaId === idDoDia('ter'));
     if (b1) {
       expect(b1.linhagens.every((l) => l.papel === 'ORIGEM')).toBe(true);
       const sobra = Math.max(60 * 60 - (rot.duracaoResistidaDias![1]!.duracaoMaximaEstimadaSegundos ?? 0), 0);
@@ -598,17 +587,17 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
     }
     // (c) a musculação da terça segue intacta.
     expect(rot.dias[1]!.slots.length).toBeGreaterThan(0);
-    limparOfertaCardio();
   });
 
   it('a fiação do Painel e do controle existe de fato (gate estático do caminho)', () => {
     const painel = readFileSync(join(__dirname, '../components/painel/Painel.tsx'), 'utf-8');
-    // todos os recomputes de treino do Painel injetam a oferta transitória:
-    expect((painel.match(/diasOferecidosCardio: getDiasOferecidosCardio\(\)/g) ?? []).length).toBeGreaterThanOrEqual(10);
+    // todos os recomputes de treino do Painel injetam a oferta local:
+    expect((painel.match(/diasOferecidosCardio,/g) ?? []).length).toBeGreaterThanOrEqual(10);
+    expect(painel).toMatch(/useState<Weekday\[\]>\(\[\]\)/);
     expect(painel).toMatch(/<OfertaCardio/);
     expect(painel).toMatch(/avaliarRotinaAutomaticaFinal\(treino\.rotina/);
     const controle = readFileSync(join(__dirname, '../components/painel/OfertaCardio.tsx'), 'utf-8');
-    expect(controle).toMatch(/toggleDiaOferecidoCardio\(/); // o clique grava o estado transitório
-    expect(controle).toMatch(/onChange\(\)/); // e dispara o recompute do Painel
+    expect(controle).toMatch(/alternarDiaOferecidoCardio\(/); // o clique deriva a próxima oferta
+    expect(controle).toMatch(/onChange\(alternarDiaOferecidoCardio/); // o Painel recebe e recompõe
   });
 });

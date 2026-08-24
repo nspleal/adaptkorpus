@@ -16,6 +16,7 @@ import { construirDistribuicaoCardioSemana } from './distribuicao-cardio-semana'
 import { prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
 import { EXERCISES } from '../data/exercises';
+import { ORDEM_SEMANA } from '../semana';
 import type { PerfilTreino } from './treino-types';
 import type { FlagsSaude } from './types';
 
@@ -90,7 +91,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(rotina, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(rotina.planoFinalPorDia?.some((d) => (d.cardio?.duracaoSegundos ?? 0) > 0)).toBe(true);
@@ -118,7 +119,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -126,7 +127,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     expect(avaliacao.avisos).toEqual(avaliarRotinaAutomaticaFinal(rotina, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     }).avisos);
   });
@@ -137,7 +138,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal({ ...rotina, planoFinalPorDia: [] }, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -152,7 +153,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const adulterada = structuredClone(rotina);
     const fatos = adulterada.fatosDistribuicaoCardio!;
     const ordemRemovida = perfilSeteDias.diasDisponiveis - 1;
-    const diaIdRemovido = `dia-${String(ordemRemovida).padStart(3, '0')}`;
+    const diaIdRemovido = ORDEM_SEMANA[ordemRemovida]!;
     const fatosTruncados = {
       ...fatos,
       diasHorizonte: fatos.diasHorizonte.filter((d) => d.diaId !== diaIdRemovido),
@@ -170,7 +171,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
       nivel: perfilSeteDias.nivelExperiencia, objetivo: perfilSeteDias.objetivo,
       tempoPorSessaoMin: perfilSeteDias.tempoPorSessaoMin,
       seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfilSeteDias.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 6],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -185,7 +186,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(rotinaSemOferta, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -204,7 +205,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -221,7 +222,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -237,7 +238,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -260,7 +261,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -278,7 +279,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -293,7 +294,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const a = avaliarRotinaAutomaticaFinal(distAdulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(a.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -306,7 +307,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const b = avaliarRotinaAutomaticaFinal(finalAdulterado, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(b.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -321,7 +322,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfil.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [0, 4],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
@@ -335,7 +336,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const avaliacao = avaliarRotinaAutomaticaFinal(rotina, {
       nivel: perfilMassa.nivelExperiencia, objetivo: perfilMassa.objetivo,
       tempoPorSessaoMin: perfilMassa.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
-      diasNoHorizonteEsperado: perfilMassa.diasDisponiveis,
+      diasNoHorizonteEsperado: 7,
       diasOferecidosCardioEsperados: [4, 5],
     });
     expect(rotina.resultadoGeracao?.tipo).toBe('NAO_AVALIADO_ENTREGAVEL');

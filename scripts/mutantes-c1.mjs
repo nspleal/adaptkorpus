@@ -169,8 +169,8 @@ const MUTACOES = [
     testes: [`${E}/cardio-sessao.test.ts`, `${E}/distribuicao-cardio-semana.test.ts`] },
 
   { n: 27, desc: 'classificar cardio manual excedente como tolerância', alvo: `${E}/duracao-sessao.ts`,
-    de: `  if (origem === 'EDITADO' && cardioPrescrito > 0 && cardioPrescrito > cardioDisponivelOtimista) {`,
-    para: `  if (false) {`,
+    de: `  } else if (origem === 'EDITADO' && cardioPrescrito > 0 && cardioPrescrito > cardioDisponivelOtimista) {`,
+    para: `  } else if (false) {`,
     testes: [`${E}/cardio-sessao.test.ts`, `${E}/duracao-golden.test.ts`] },
 
   { n: 28, desc: 'distribuir cardio antes do plano resistido terminal', alvo: `${E}/treino-montador.ts`,
@@ -254,8 +254,8 @@ const MUTACOES = [
     testes: [`${E}/convergencia-c1.test.ts`] },
 
   { n: 40, desc: 'manter a mesma `formula_version` após mudar faixa/estado/componentes', alvo: `${E}/duracao-sessao.ts`,
-    de: `export const FORMULA_DURACAO_VERSION = 'tempo-v3';`,
-    para: `export const FORMULA_DURACAO_VERSION = 'tempo-v2';`,
+    de: `export const FORMULA_DURACAO_VERSION = 'tempo-v4';`,
+    para: `export const FORMULA_DURACAO_VERSION = 'tempo-v3';`,
     testes: [`${E}/duracao-golden.test.ts`] },
 
   { n: 41, desc: 'aceitar commit semanal com revisão/fingerprint obsoleta', alvo: `${E}/cas.ts`,
@@ -344,12 +344,12 @@ const MUTACOES = [
     testes: [`${E}/convergencia-c1.test.ts`] },
 
   { n: 58, desc: 'ocultar do modelo da agenda o cardio canônico que compartilha dia com musculação', alvo: `src/lib/semana.ts`,
-    de: `        ...(cardioExato ? { cardioIdx: cardioExato.indice, cardio: cardioExato.item } : {}),`,
-    para: `        ...(false ? { cardioIdx: cardioExato?.indice, cardio: cardioExato?.item } : {}),`,
+    de: `        ...(cardioLegado ? { cardioIdx: cardioLegado.indice, cardio: cardioLegado.item } : {}),`,
+    para: `        ...(false ? { cardioIdx: cardioLegado?.indice, cardio: cardioLegado?.item } : {}),`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
   { n: 59, desc: 'recomeçar o índice do cardio depois de dias mistos', alvo: `src/lib/semana.ts`,
-    de: `    const cardioIdx = temOrdemCanonica ? cardioExato?.indice : indiceLegado;`,
+    de: `    const cardioIdx = cardioExato?.indice ?? (temOrdemCanonica ? cardioPorOrdem.get(ordemAtiva)?.indice : indiceLegado);`,
     para: `    const cardioIdx = indiceLegado;`,
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
@@ -380,7 +380,7 @@ const MUTACOES = [
     testes: [`${E}/duracao-plano.test.ts`] },
 
   { n: 65, desc: 'apagar do plano final o cardio qualitativo oferecido sem duração', alvo: `${E}/treino-montador.ts`,
-    de: `      const cardioSemDuracao = diasCardioSemDuracao.has(ordemNoHorizonte);`,
+    de: `      const cardioSemDuracao = diasCardioSemDuracao.has(diaId);`,
     para: `      const cardioSemDuracao = false;`,
     testes: [`${E}/dia-de-cardio-slot.test.ts`, `src/lib/c1-caminho-publico.test.ts`, `${E}/convergencia-c1.test.ts`] },
 
@@ -390,8 +390,8 @@ const MUTACOES = [
     testes: [`src/lib/c1-caminho-publico.test.ts`] },
 
   { n: 67, desc: 'crítico aprender a oferta de cardio do agregado avaliado', alvo: `${E}/critico.ts`,
-    de: `  const oferecidos = ofertaExternaValida ? [...ofertaExterna].sort((a, b) => a - b) : [];`,
-    para: `  const oferecidos = fatosInformados?.diasHorizonte\n    .filter((d) => d.oferecido)\n    .map((d) => d.ordemNoHorizonte)\n    .sort((a, b) => a - b) ?? [];`,
+    de: `  const oferecidos = ofertaExternaValida\n    ? ORDEM_SEMANA.filter((dia, indice) => ofertaExterna.includes(dia) || ofertaExterna.includes(indice))\n    : [];`,
+    para: `  const oferecidos = fatosInformados?.diasHorizonte\n    .filter((d) => d.oferecido)\n    .map((d) => d.diaId)\n    .filter((d): d is Weekday => ORDEM_SEMANA.includes(d as Weekday)) ?? [];`,
     testes: [`${E}/convergencia-c1.test.ts`] },
 ];
 
@@ -417,6 +417,7 @@ function rodaTestes(testes) {
   const vitest = join(RAIZ, 'node_modules', 'vitest', 'vitest.mjs');
   const r = spawnSync(process.execPath, [vitest, 'run', '--configLoader', 'runner', ...testes, '--silent'], {
     cwd: RAIZ, encoding: 'utf-8', timeout: 300000, windowsHide: true,
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
   });
   const saida = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
   if (r.error?.code === 'ETIMEDOUT' || r.signal) return { tipo: 'TIMEOUT', saida };

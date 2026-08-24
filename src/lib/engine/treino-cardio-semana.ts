@@ -1,10 +1,11 @@
 /**
  * 🔒 C1 — PONTE do gerador vivo para a distribuição semanal canônica de cardio (autor 2026-08-21).
  *
- * Constrói o `dias_horizonte` a partir da rotina real + a SELEÇÃO explícita de dias oferecidos para
- * cardio (`diasOferecidosCardio`, conjunto ORDENADO de índices de dia), e chama a primitiva única
+ * Constrói o `dias_horizonte` a partir da semana real + a SELEÇÃO explícita de dias oferecidos para
+ * cardio (`diasOferecidosCardio`, conjunto de Weekday), e chama a primitiva única
  * `construirDistribuicaoCardioSemana`. Regras travadas (decisão do autor):
- *  - um dia só recebe cardio se foi OFERECIDO e NÃO contém musculação (dia de força nunca recebe);
+ *  - cardio próprio pode ocorrer após a musculação no mesmo dia; parcela REDISTRIBUÍDA só vai a
+ *    destino oferecido, posterior e sem musculação;
  *  - cardio nunca remove/substitui/desloca musculação; dia vago NÃO oferecido é inelegível;
  *  - ordem cronológica, sem wrap; cardio próprio do dia reservado antes da redistribuição;
  *  - cardio adapta-se ao tempo (nunca usa os +480 da musculação);
@@ -24,16 +25,13 @@ import {
   type PrescricaoCardioSemana,
 } from './distribuicao-cardio-semana';
 import type { ResultadoDuracao } from './duracao-sessao';
+import { ORDEM_SEMANA, type Weekday } from '../semana';
 
 export interface EntradaCardioSemanaViva {
-  /** Nº total de dias da semana (força + vagos). Horizonte = 0..diasTotais-1. */
-  diasTotais: number;
-  /** Os primeiros `diasForca` dias são de MUSCULAÇÃO (temMusculacao = true). */
-  diasForca: number;
-  /** Certificação canônica por dia de força (para o MAX_RESISTIDA de cada origem). */
-  duracaoDias: readonly ResultadoDuracao[];
-  /** 🔒 Conjunto ORDENADO de índices de dia oferecidos pelo usuário para cardio. */
-  diasOferecidosCardio: readonly number[];
+  /** Dias reais que contêm musculação, com sua certificação resistida terminal. */
+  diasComMusculacao?: readonly { diaId: Weekday; duracao: ResultadoDuracao }[];
+  /** 🔒 Conjunto de dias reais oferecidos pelo usuário para cardio. */
+  diasOferecidosCardio: readonly (Weekday | number)[];
   /** Orçamento por sessão (s) = tempoPorSessaoMin·60, igual para todos os dias. */
   orcamentoSegundos: number;
   /** Duração de cardio prescrita por dia OFERECIDO (s). 0/ausente ⇒ sem prescrição (ex.: meta em sessões). */
@@ -41,11 +39,20 @@ export interface EntradaCardioSemanaViva {
   aggregateId: string;
   expectedRevision: number;
   formulaVersion: string;
+  /** Adaptador de compatibilidade: APIs anteriores enviavam índices artificiais 0..6. */
+  diasTotais?: number;
+  diasForca?: number;
+  duracaoDias?: readonly ResultadoDuracao[];
 }
 
-/** Índice → id de dia estável e ordenável. */
-export function idDoDia(indice: number): string {
-  return `dia-${String(indice).padStart(3, '0')}`;
+/** A identidade canônica de um dia do horizonte é o próprio Weekday, não um índice artificial. */
+export function idDoDia(dia: Weekday | number): string {
+  return typeof dia === 'number' ? ORDEM_SEMANA[dia] ?? `dia-invalido-${dia}` : dia;
+}
+
+/** Aceita índices legados somente na fronteira de compatibilidade e os converte à semana real. */
+function normalizarOferta(entrada: readonly (Weekday | number)[]): Weekday[] {
+  return ORDEM_SEMANA.filter((dia, indice) => entrada.includes(dia) || entrada.includes(indice));
 }
 
 /**
@@ -54,25 +61,33 @@ export function idDoDia(indice: number): string {
  * saldos a dias posteriores oferecidos e sem musculação.
  */
 export function fatosDistribuicaoCardioDaRotina(e: EntradaCardioSemanaViva): EntradaDistribuicaoSemana {
-  const ofertados = new Set(e.diasOferecidosCardio);
+  const ofertados = new Set(normalizarOferta(e.diasOferecidosCardio));
+  const legado: { diaId: Weekday; duracao: ResultadoDuracao }[] = [];
+  for (let treinoIdx = 0; treinoIdx < Math.max(0, Math.min(7, e.diasForca ?? 0)); treinoIdx += 1) {
+    const diaId = ORDEM_SEMANA[treinoIdx];
+    const duracao = e.duracaoDias?.[treinoIdx];
+    if (diaId && duracao) legado.push({ diaId, duracao });
+  }
+  const diasComMusculacao = e.diasComMusculacao ?? legado;
+  const musculacaoPorDia = new Map(diasComMusculacao.map((dia) => [dia.diaId, dia.duracao]));
 
-  const dias: DiaHorizonte[] = Array.from({ length: e.diasTotais }, (_, i) => ({
-    diaId: idDoDia(i),
-    ordemNoHorizonte: i,
-    oferecido: ofertados.has(i),
+  const dias: DiaHorizonte[] = ORDEM_SEMANA.map((diaId, ordemNoHorizonte) => ({
+    diaId,
+    ordemNoHorizonte,
+    oferecido: ofertados.has(diaId),
   }));
 
-  const planos: PlanoResistidoTerminalDia[] = Array.from({ length: e.diasTotais }, (_, i) => {
-    const ehForca = i < e.diasForca;
-    const cert = ehForca ? e.duracaoDias[i] : undefined;
-    const maxResistidaSegundos = ehForca
+  const planos: PlanoResistidoTerminalDia[] = ORDEM_SEMANA.map((diaId) => {
+    const cert = musculacaoPorDia.get(diaId);
+    const temMusculacao = cert != null;
+    const maxResistidaSegundos = temMusculacao
       ? (cert?.estadoCalculo === 'CALCULADO' ? cert.duracaoMaximaEstimadaSegundos ?? null : null)
       : 0;
-    return { diaId: idDoDia(i), temMusculacao: ehForca, maxResistidaSegundos };
+    return { diaId, temMusculacao, maxResistidaSegundos };
   });
 
-  const orcamentos: OrcamentoDia[] = Array.from({ length: e.diasTotais }, (_, i) => ({
-    diaId: idDoDia(i),
+  const orcamentos: OrcamentoDia[] = ORDEM_SEMANA.map((diaId) => ({
+    diaId,
     orcamentoSegundos: e.orcamentoSegundos,
   }));
 
@@ -80,11 +95,10 @@ export function fatosDistribuicaoCardioDaRotina(e: EntradaCardioSemanaViva): Ent
   const prescricoes: PrescricaoCardioSemana[] =
     e.cardioPrescritoPorDiaSegundos > 0
       ? [...ofertados]
-          .filter((i) => i >= 0 && i < e.diasTotais)
-          .sort((a, b) => a - b)
-          .map((i) => ({
-            prescricaoId: `cardio-${idDoDia(i)}`,
-            diaOrigemId: idDoDia(i),
+          .sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))
+          .map((diaId) => ({
+            prescricaoId: `cardio-${diaId}`,
+            diaOrigemId: diaId,
             ordemPrescricao: 0,
             duracaoPrescritaSegundos: e.cardioPrescritoPorDiaSegundos,
           }))

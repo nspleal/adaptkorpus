@@ -123,9 +123,11 @@ describe('C1 cardio · classificação de cardio EDITADO no avaliador (§4.4)', 
     expect(r.estadoLimite).toBe('DENTRO_DA_TOLERANCIA'); // só a musculação ocupa +480
   });
 
-  it('mutação-guard: o AUTOMATICO nunca recebe as cláusulas de cardio editado', () => {
-    // mesmo bloco de cardio "grande", mas AUTOMATICO ⇒ segue a ordenação genérica, não CARDIO_EXCEDE.
+  it('mutação-guard: cardio AUTOMATICO não recebe cláusula de editado nem usa +480', () => {
+    // Mesmo bloco grande automático: não é editado, mas também não pode ser aceito pela tolerância.
     const r = avaliarDuracaoSessao({ itens: [cardio(3000)], orcamentoSegundos: 2700, origemPlano: 'AUTOMATICO' });
     expect(r.motivosLimite).not.toContain('CARDIO_EXCEDE_TEMPO_DISPONIVEL');
+    expect(r.motivosLimite).toContain('CARDIO_AUTOMATICO_NAO_ADAPTADO');
+    expect(r.estadoLimite).toBe('ACIMA_DO_LIMITE_OPERACIONAL');
   });
 });

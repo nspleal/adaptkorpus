@@ -39,6 +39,7 @@ import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
+import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
 
 /** Locais acessíveis por disponibilidade de equipamento. */
 export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
@@ -168,13 +169,13 @@ export function montarRotina(
    */
   escolhasExecucao: ReadonlyMap<string, ExecucaoLateralidade> = new Map(),
   /**
-   * 🔒 C1 (autor 2026-08-21) — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: conjunto ORDENADO de
-   * ÍNDICES de dia (0-based no horizonte da semana). É a MENOR fronteira funcional nova — transiente
+   * 🔒 C1.1-B — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: dias reais da semana. É a menor
+   * fronteira funcional nova — transiente
    * por geração, NÃO uma preferência permanente do perfil. Distinto de `diasDisponiveis` (contagem).
-   * Um dia só recebe cardio se foi oferecido E não tem musculação; cardio nunca substitui treino.
+   * Cardio próprio pode vir após musculação; parcela redistribuída nunca cai em dia de treino.
    * Entra, em ordem canônica, no `canonical_input_hash` da distribuição.
    */
-  diasOferecidosCardio: readonly number[] = [],
+  diasOferecidosCardio: readonly (Weekday | number)[] = [],
 ): RotinaSemanal {
   const avisos: string[] = [];
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
@@ -202,10 +203,15 @@ export function montarRotina(
     : favoritos;
   /** Fora do pool: banidos ("não quero mais") + preteridos ("prefiro X no lugar deste"). */
   const excluidos = new Set<string>([...prefs.banidos, ...prefs.preteridos]);
-  const dias = Math.max(0, Math.floor(perfil.diasDisponiveis));
+  const diasDaAgenda = perfil.treinoDias && perfil.treinoDias.length > 0
+    ? ORDEM_SEMANA.filter((dia) => perfil.treinoDias!.includes(dia))
+    : diasPadrao(Math.max(0, Math.floor(perfil.diasDisponiveis)));
+  const dias = diasDaAgenda.length;
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
   const diasCardioRecuperacao = Math.max(0, dias - diasForca);
+  /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
+  const diasForcaDaSemana = diasDaAgenda.slice(0, diasForca);
 
   if (diasForca === 0) {
     return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
@@ -870,15 +876,16 @@ export function montarRotina(
   const materializarPlanoFinal = (
     r: RotinaSemanal,
     distribuicaoCardio: NonNullable<RotinaSemanal['distribuicaoCardio']>,
-    diasCardioSemDuracao: ReadonlySet<number>,
+    diasCardioSemDuracao: ReadonlySet<Weekday>,
   ): Pick<RotinaSemanal, 'planoFinalPorDia' | 'duracaoDias' | 'diasCardio'> => {
     const blocoPorDia = new Map(distribuicaoCardio.blocosPorDia.map((b) => [b.diaId, b]));
     const modalidade = perfil.cardioFavorito ?? MODALIDADE_PADRAO_DIA;
-    const planoFinalPorDia: PlanoFinalDia[] = Array.from({ length: dias }, (_, ordemNoHorizonte) => {
-      const diaId = `dia-${String(ordemNoHorizonte).padStart(3, '0')}`;
-      const treino = r.dias[ordemNoHorizonte];
+    const treinoIdxPorDia = new Map(diasForcaDaSemana.map((diaId, treinoIdx) => [diaId, treinoIdx]));
+    const planoFinalPorDia: PlanoFinalDia[] = ORDEM_SEMANA.map((diaId, ordemNoHorizonte) => {
+      const treinoIdx = treinoIdxPorDia.get(diaId);
+      const treino = treinoIdx == null ? undefined : r.dias[treinoIdx];
       const bloco = blocoPorDia.get(diaId);
-      const cardioSemDuracao = diasCardioSemDuracao.has(ordemNoHorizonte);
+      const cardioSemDuracao = diasCardioSemDuracao.has(diaId);
       const cardio: DiaCardio | undefined = bloco
         ? {
             nome: 'Cardio', padrao: 'cardio', modalidade,
@@ -898,13 +905,14 @@ export function montarRotina(
         : (cardio ? 'CARDIO' : 'VAZIO');
       return {
         diaId, ordemNoHorizonte, tipo,
-        ...(treino ? { treinoIdx: ordemNoHorizonte } : {}),
+        ...(treino && treinoIdx != null ? { treinoIdx } : {}),
         ...(cardio ? { cardio } : {}),
         duracao,
       };
     });
 
-    const duracaoDias = r.dias.map((_, treinoIdx) => planoFinalPorDia[treinoIdx]!.duracao);
+    const duracaoDias = r.dias.map((_, treinoIdx) =>
+      planoFinalPorDia.find((dia) => dia.treinoIdx === treinoIdx)!.duracao);
     // A visão consumida pelo produto nasce dos blocos positivos e, quando a prescrição é
     // qualitativa, de um item explícito sem duração. Ausência de número nunca vira ausência de plano.
     const diasCardio = planoFinalPorDia.flatMap((d) => d.cardio ? [d.cardio] : []);
@@ -918,16 +926,17 @@ export function montarRotina(
     }
 
     const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];
-    const oferecidos = [...new Set(diasOferecidosCardio.filter((i) => Number.isInteger(i) && i >= 0 && i < dias))]
-      .sort((a, b) => a - b);
+    const oferecidos = ORDEM_SEMANA.filter((dia, indice) =>
+      diasOferecidosCardio.includes(dia) || diasOferecidosCardio.includes(indice));
     const cardioPrescritoPorDiaSegundos =
       prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
         ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
         : 0;
     const entradaCardioViva = {
-      diasTotais: dias,
-      diasForca,
-      duracaoDias: diasResistidos,
+      diasComMusculacao: diasForcaDaSemana.map((diaId, treinoIdx) => ({
+        diaId,
+        duracao: diasResistidos[treinoIdx]!,
+      })),
       diasOferecidosCardio: oferecidos,
       orcamentoSegundos: orcamentoSeg,
       cardioPrescritoPorDiaSegundos,
@@ -939,7 +948,7 @@ export function montarRotina(
     const distribuicaoCardio = distribuirCardioDaRotina(entradaCardioViva);
     const diasCardioSemDuracao = prescricao.cardio.tipo === 'sessoes_moderadas'
       ? new Set(oferecidos)
-      : new Set<number>();
+      : new Set<Weekday>();
     const final = materializarPlanoFinal(r, distribuicaoCardio, diasCardioSemDuracao);
     const resultadoFinal: ResultadoGeracaoRotina =
       prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rg.tipo !== 'INCOMPATIVEL'

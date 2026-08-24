@@ -23,12 +23,12 @@
  */
 
 /**
- * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v2` → `tempo-v3`
- * (C1.1-A): o plano publicado passou a materializar o bloco semanal canônico e a avaliar o DIA FINAL
- * (resistido + cardio). A aritmética elementar é a mesma, mas faixa/componentes/distribuição observáveis
- * mudaram; a versão não pode permanecer silenciosamente igual.
+ * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v3` → `tempo-v4`
+ * (C1.1-B): os dias do plano final passam a ter identidade real Seg→Dom e o avaliador passa a
+ * recusar cardio automático não adaptado, em vez de deixá-lo consumir a tolerância exclusiva da
+ * musculação. A versão não pode permanecer silenciosamente igual.
  */
-export const FORMULA_DURACAO_VERSION = 'tempo-v3';
+export const FORMULA_DURACAO_VERSION = 'tempo-v4';
 /** Execução estimada por série de REPETIÇÕES (proxy v1, não medição — calibrável por telemetria). */
 export const TEMPO_EXECUCAO_SERIE_REPS_SEG = 40;
 /** Tolerância absoluta de excesso por sessão (política de produto: +8 min). */
@@ -285,16 +285,19 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
 
   const limiteOperacional = orcamentoSegundos + TOLERANCIA_EXCESSO_SEG;
 
-  // 🔒 C1 §4.4 — cláusulas AVALIADAS NA ORDEM da spec. O cardio EDITADO excedente é a primeira a
-  // disparar: só a musculação usa a tolerância; cardio manual acima do disponível é informado sem
-  // tolerância e sem bloqueio. No AUTOMATICO o cardio já foi adaptado — estas cláusulas não valem.
+  // 🔒 C1.1-B — só musculação pode usar a tolerância de +480. O cardio automático deveria chegar
+  // JÁ adaptado: se chega e empurra MAX acima de B, é falha de fiação, não sessão "na tolerância".
+  // Depois vêm as cláusulas do cardio editado, que mede (mas não bloqueia) a escolha manual.
   const origem = entrada.origemPlano ?? 'EDITADO';
   const cardioPrescrito = continuoSegundos;
   const cardioDisponivelOtimista = Math.max(orcamentoSegundos - minResistida, 0);
   const cardioDisponivelPessimista = Math.max(orcamentoSegundos - maxResistida, 0);
 
   let estadoLimite: EstadoLimite;
-  if (origem === 'EDITADO' && cardioPrescrito > 0 && cardioPrescrito > cardioDisponivelOtimista) {
+  if (origem === 'AUTOMATICO' && cardioPrescrito > 0 && max > orcamentoSegundos) {
+    estadoLimite = 'ACIMA_DO_LIMITE_OPERACIONAL';
+    motivosLimite.push('CARDIO_AUTOMATICO_NAO_ADAPTADO');
+  } else if (origem === 'EDITADO' && cardioPrescrito > 0 && cardioPrescrito > cardioDisponivelOtimista) {
     estadoLimite = 'ACIMA_DO_LIMITE_OPERACIONAL';
     motivosLimite.push('CARDIO_EXCEDE_TEMPO_DISPONIVEL');
   } else if (
