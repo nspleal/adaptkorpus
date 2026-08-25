@@ -29,6 +29,8 @@ export type Padrao = 'puxar' | 'empurrar' | 'agachar' | 'isolado' | 'core' | 'po
 
 /** Item resistido do plano, com a classificação necessária aos três invariantes. */
 export interface ItemPlanoTemporal {
+  /** Dia real do horizonte semanal. Frequência é presença em dias distintos, nunca nº de slots. */
+  diaId: string;
   id: string;
   padrao: Padrao;
   grupo: string;
@@ -299,7 +301,7 @@ export interface FatosReducao {
   itensRemovidos: string[];
   /** Volume bruto por grupo (itens e séries) antes e depois — reutiliza contagem, não inventa métrica. */
   volumePorGrupo: Record<string, { itensAntes: number; itensDepois: number; seriesAntes: number; seriesDepois: number }>;
-  /** Frequência direta por grupo = nº de itens diretos daquele grupo (presença) antes/depois. */
+  /** Frequência direta por grupo = nº de DIAS distintos com presença direta antes/depois. */
   frequenciaDiretaPorGrupo: Record<string, { antes: number; depois: number }>;
 }
 
@@ -317,7 +319,10 @@ export function fatosReducao(baseline: readonly ItemPlanoTemporal[], terminal: r
       seriesAntes: ba.reduce((s, i) => s + i.series, 0),
       seriesDepois: te.reduce((s, i) => s + i.series, 0),
     };
-    frequenciaDiretaPorGrupo[g] = { antes: ba.length, depois: te.length };
+    frequenciaDiretaPorGrupo[g] = {
+      antes: new Set(ba.map((i) => i.diaId)).size,
+      depois: new Set(te.map((i) => i.diaId)).size,
+    };
   }
   const idsTerminal = new Set(terminal.map((i) => i.id));
   return {

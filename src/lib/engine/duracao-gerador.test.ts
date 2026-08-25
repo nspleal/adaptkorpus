@@ -41,6 +41,8 @@ describe('C1 gerador · certificação do plano final (§5.5)', () => {
       const r = rotina(perfil(over));
       expect(r.duracaoDias, JSON.stringify(over)).toBeDefined();
       expect(r.duracaoDias!.length).toBe(r.dias.length);
+      expect(r.fatosReducao, JSON.stringify(over)).toBeDefined();
+      expect(r.fatosReducao!.slotsAntes, JSON.stringify(over)).toBe(r.fatosReducao!.slotsDepois);
       for (const d of r.duracaoDias!) {
         expect(d.estadoCalculo, JSON.stringify(over)).toBe('CALCULADO');
         // o gerador nunca ENTREGA um plano acima do limite operacional (reduz antes, se preciso).
@@ -105,8 +107,12 @@ describe('C1 gerador · o HOLD isométrico é TRANSPORTADO ao plano (§1 / fixtu
     const r = rotina(perfil({ rotinaCustom } as never));
     const prancha = r.dias.flatMap((d) => d.slots).find((s) => s.exercicio.id === 'e7');
     expect(prancha, 'prancha não entrou no plano custom').toBeDefined();
-    expect(prancha!.holdSeg, 'holdSeg NÃO transportado ao slot isométrico').toBeDefined();
-    expect(prancha!.holdSeg!).toBeGreaterThan(0);
+    expect(prancha!.holdSeg, 'holdSeg NÃO transportado ao slot isométrico').toBe(70);
+    const somentePrancha = avaliarDuracaoResistida([prancha!], perfil().nivelExperiencia, 3600);
+    expect(somentePrancha.componentes?.execucaoSegundos).toBe((prancha!.series ?? 0) * 70);
+    const semHold = avaliarDuracaoResistida([{ ...prancha!, holdSeg: undefined }], perfil().nivelExperiencia, 3600);
+    expect(semHold.estadoCalculo).toBe('NAO_AVALIADO');
+    expect(semHold.motivosNaoAvaliados.join(' ')).toMatch(/HOLD_AUSENTE/);
     for (const d of r.duracaoDias ?? []) expect(d.motivosNaoAvaliados.join(' ')).not.toMatch(/HOLD_AUSENTE/);
   });
   it('nenhum plano gerado (sem isométrico) reporta HOLD_AUSENTE', () => {

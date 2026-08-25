@@ -15,7 +15,7 @@ import {
 } from './geracao-temporal';
 
 const item = (id: string, padrao: Padrao, grupo: string, equip: string, descanso: number, holdIso?: number): ItemPlanoTemporal => ({
-  id, padrao, grupo, equipamento: equip, series: 3, descansoSeg: descanso,
+  diaId: 'seg', id, padrao, grupo, equipamento: equip, series: 3, descansoSeg: descanso,
   execucao: holdIso === undefined
     ? { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 }
     : { tipo: 'ISOMETRIA', holdSegundosPorSerie: holdIso },
@@ -87,6 +87,16 @@ describe('C1 geração temporal · reduce-to-fit ponta a ponta (fixtures 21, 22,
     expect(f.slotsAntes).toBe(4);
     expect(f.slotsDepois).toBe(3);
     expect(f.itensRemovidos).toEqual(['D']);
+  });
+
+  it('F19: dois blocos no mesmo dia contam uma vez; o mesmo grupo em dias distintos conta duas', () => {
+    const costasMesmoDia = { ...A, id: 'A2', diaId: 'seg' };
+    const costasOutroDia = { ...A, id: 'A3', diaId: 'ter' };
+    const umaVez = fatosReducao([A, costasMesmoDia], [A]);
+    expect(umaVez.frequenciaDiretaPorGrupo.costas).toEqual({ antes: 1, depois: 1 });
+    expect(umaVez.itensRemovidos).toEqual(['A2']);
+    const duasVezes = fatosReducao([A, costasOutroDia], [A]);
+    expect(duasVezes.frequenciaDiretaPorGrupo.costas).toEqual({ antes: 2, depois: 1 });
   });
 
   it('fixture 22: orçamento 300 (limite 780); menor plano 3 itens 900–1080 ainda excede ⇒ INCOMPATIVEL', () => {

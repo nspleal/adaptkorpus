@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import { linhaComConsentimentos, linhaParaPerfil, perfilParaLinha } from './perfil-profile';
 
@@ -136,7 +136,7 @@ describe('🔒 3.5 — `mesocicloSemana` não pode reaparecer no código de src/
     });
   }
   const fontes = () => varrer(join(process.cwd(), 'src'))
-    .map((f) => [f.slice(process.cwd().length + 1), readFileSync(f, 'utf8')] as const);
+    .map((f) => [relative(process.cwd(), f).replace(/\\/g, '/'), readFileSync(f, 'utf8')] as const);
 
   it('nenhum arquivo de CÓDIGO menciona o campo, exceto o que o poda', () => {
     const reincidentes = fontes()

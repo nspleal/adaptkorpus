@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 /**
  * 🔒 NENHUMA TELA DE PRODUTO PROMETE DINHEIRO DE VOLTA (DF 2026-08-01,
@@ -40,7 +40,7 @@ function telas(dir = APP, fora: string[] = []): string[] {
 }
 
 const semComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ').replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ');
-const rel = (p: string) => p.slice(process.cwd().length + 1);
+const rel = (p: string) => relative(process.cwd(), p).replace(/\\/g, '/');
 
 /**
  * ⚠️ EXCEÇÕES NOMEADAS — as duas estão FORA por decisão declarada, não por o guard não as

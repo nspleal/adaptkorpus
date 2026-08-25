@@ -30,7 +30,7 @@ import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cober
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
-import { avaliarInvariantes, executarReduceToFit, type Padrao } from './geracao-temporal';
+import { avaliarInvariantes, executarReduceToFit, fatosReducao, type FatosReducao, type ItemPlanoTemporal, type Padrao } from './geracao-temporal';
 import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
@@ -859,6 +859,7 @@ export function montarRotina(
     };
     return avaliarInvariantes(
       slots.map((s) => ({
+        diaId: 'verificacao',
         id: s.exercicio.id,
         padrao: PARA_PADRAO[s.padrao],
         grupo: s.exercicio.grupoPrimario ?? 'na',
@@ -870,6 +871,36 @@ export function montarRotina(
       // cobertura obrigatória da spec §8 (fixture 21) + allowlist REAL de locais do perfil.
       { coberturaObrigatoria: COBERTURA_TEMPORAL_OBRIGATORIA, equipamentosDisponiveis: [...permitidos] },
     ).violacoes;
+  };
+
+  /** Converte o plano real em fatos de redução com identidade estável por dia/exercício/ocorrência. */
+  const itensTemporaisDaRotina = (r: RotinaSemanal): ItemPlanoTemporal[] => {
+    const PARA_PADRAO: Record<PadraoMovimento, Padrao> = {
+      puxar: 'puxar', empurrar: 'empurrar', agachar: 'agachar',
+      dobradica_quadril: 'agachar', isolado: 'isolado', core: 'core', cardio: 'core',
+    };
+    return r.dias.flatMap((dia, treinoIdx) => {
+      const diaId = diasForcaDaSemana[treinoIdx] ?? `treino-${treinoIdx}`;
+      const ocorrencias = new Map<string, number>();
+      return dia.slots.map((slot) => {
+        const ocorrencia = ocorrencias.get(slot.exercicio.id) ?? 0;
+        ocorrencias.set(slot.exercicio.id, ocorrencia + 1);
+        return {
+          diaId,
+          id: `${diaId}:${slot.exercicio.id}:${ocorrencia}`,
+          padrao: PARA_PADRAO[slot.padrao],
+          grupo: slot.exercicio.grupoPrimario ?? `padrao:${slot.padrao}`,
+          equipamento: slot.exercicio.local,
+          series: slot.series ?? 0,
+          descansoSeg: slot.descansoSeg ?? 0,
+          // Fato de redução não inventa hold: ausência fica 0 neste artefato não-certificador.
+          execucao: repUnitDe(slot.exercicio.id) === 'segundos'
+            ? { tipo: 'ISOMETRIA', holdSegundosPorSerie: slot.holdSeg ?? 0 }
+            : { tipo: 'REPETICOES', segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG },
+          unilateralDoisLados: slot.execucaoSelecionada === 'UNILATERAL_DOIS_LADOS',
+        };
+      });
+    });
   };
 
   /** Materializa o único plano final por dia e deriva dele as vistas consumidas pelo produto. */
@@ -920,9 +951,14 @@ export function montarRotina(
   };
 
   /** Finaliza UMA vez: distribuição e duração final só rodam depois de escolhido o terminal. */
-  const finalizar = (r: RotinaSemanal, rg: ResultadoGeracaoRotina): RotinaSemanal => {
+  const finalizar = (
+    r: RotinaSemanal,
+    rg: ResultadoGeracaoRotina,
+    baseline: RotinaSemanal = r,
+  ): RotinaSemanal => {
+    const fatos: FatosReducao = fatosReducao(itensTemporaisDaRotina(baseline), itensTemporaisDaRotina(r));
     if (rg.tipo === 'ERRO_ALOCADOR') {
-      return { ...r, resultadoGeracao: rg };
+      return { ...r, fatosReducao: fatos, resultadoGeracao: rg };
     }
 
     const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];
@@ -961,7 +997,7 @@ export function montarRotina(
           }
         : rg;
     return {
-      ...r, ...final, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
+      ...r, ...final, fatosReducao: fatos, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
       ...(resultadoFinal.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
     };
   };
@@ -1037,15 +1073,15 @@ export function montarRotina(
       violacoesInvariantes: temporal.violacoesInvariantes ?? [],
       ...(temporal.cardinalidadeRecebida != null ? { cardinalidadeRecebida: temporal.cardinalidadeRecebida } : {}),
     };
-    return finalizar(temporal.planoTerminal ?? rotina, rg);
+    return finalizar(temporal.planoTerminal ?? rotina, rg, rotina);
   }
   if (temporal.tipo === 'NAO_AVALIADO_ENTREGAVEL') {
     const motivos = [...new Set(temporal.resultado.flatMap((d) => d.motivosNaoAvaliados))];
-    return finalizar(temporal.planoTerminal, { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos });
+    return finalizar(temporal.planoTerminal, { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos }, rotina);
   }
   if (temporal.tipo === 'CERTIFICADO') {
-    return finalizar(temporal.planoTerminal, { tipo: 'CERTIFICADO', capacidadeTerminal: temporal.capacidadeTerminal });
+    return finalizar(temporal.planoTerminal, { tipo: 'CERTIFICADO', capacidadeTerminal: temporal.capacidadeTerminal }, rotina);
   }
   const terminal = temporal.planoTerminal ?? rotina;
-  return finalizar(terminal, { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: temporal.capacidadeMinimaTestada });
+  return finalizar(terminal, { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: temporal.capacidadeMinimaTestada }, rotina);
 }

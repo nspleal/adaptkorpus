@@ -35,7 +35,7 @@ describe('C1 mutação 3 (fixture 38) · a constante 40 não pode ser substituí
 describe('C1 mutações 17 e 20 · o laço de capacidade recheca e nunca vai a negativo', () => {
   const INV: InvariantesTreino = { coberturaObrigatoria: ['puxar', 'empurrar', 'agachar'], equipamentosDisponiveis: ['halter'] };
   const item = (id: string, padrao: 'puxar' | 'empurrar' | 'agachar'): ItemPlanoTemporal => ({
-    id, padrao, grupo: id, equipamento: 'halter', series: 3, descansoSeg: 90,
+    diaId: 'seg', id, padrao, grupo: id, equipamento: 'halter', series: 3, descansoSeg: 90,
     execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: 40 },
   });
   const TRES = [item('A', 'puxar'), item('B', 'empurrar'), item('C', 'agachar')];

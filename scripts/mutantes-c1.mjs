@@ -17,14 +17,14 @@ import { join } from 'node:path';
 const RAIZ = process.cwd();
 const E = 'src/lib/engine';
 const P = 'src/lib/persistencia';
+const normalizarEol = (fonte) => fonte.replace(/\r\n/g, '\n');
 
 /**
  * Cada mutação: { n, desc, alvo, de, para, testes }
  *  - `alvo`/`de`/`para`: patch textual exato (string única no arquivo);
  *  - `testes`: caminhos passados ao vitest; espera-se FALHA após o patch.
- *  - `natureza: 'ESTRUTURAL'` = a mutação não é um patch textual local (ex.: exige remover uma
- *    arquitetura inteira); nesse caso o patch aplicado é o mais próximo possível e o teste
- *    correspondente é o gate estático/arquitetural.
+ *  - `natureza: 'SURROGATE'` = não há patch local fiel; o runner declara a aproximação em vez
+ *    de vendê-la como mutação de produção. Ausente = `PATCH_TEXTUAL`.
  */
 const MUTACOES = [
   { n: 1, desc: 'restaurar fallback `1 série / 90 s`', alvo: `${E}/duracao-plano.ts`,
@@ -240,7 +240,7 @@ const MUTACOES = [
     para: `export const PISO_DEGRADACAO_FORCA_PESADA = 60;`,
     testes: [`${E}/descanso.test.ts`] },
 
-  { n: '39a', desc: 'duplicar/substituir a fórmula canônica dentro do crítico', alvo: `${E}/critico.ts`,
+  { n: '39a', natureza: 'SURROGATE', desc: 'duplicar/substituir a fórmula canônica dentro do crítico', alvo: `${E}/critico.ts`,
     de: `import { avaliarDuracaoFinalDoDia } from './duracao-plano';`,
     para: `const avaliarDuracaoFinalDoDia = (..._args: Parameters<typeof import('./duracao-plano').avaliarDuracaoFinalDoDia>) => ({}) as ReturnType<typeof import('./duracao-plano').avaliarDuracaoFinalDoDia>;`,
     testes: [`${E}/convergencia-c1.test.ts`] },
@@ -393,6 +393,17 @@ const MUTACOES = [
     de: `  const oferecidos = ofertaExternaValida\n    ? ORDEM_SEMANA.filter((dia, indice) => ofertaExterna.includes(dia) || ofertaExterna.includes(indice))\n    : [];`,
     para: `  const oferecidos = fatosInformados?.diasHorizonte\n    .filter((d) => d.oferecido)\n    .map((d) => d.diaId)\n    .filter((d): d is Weekday => ORDEM_SEMANA.includes(d as Weekday)) ?? [];`,
     testes: [`${E}/convergencia-c1.test.ts`] },
+
+  { n: 68, desc: 'aceitar tempo por repetição adulterado no avaliador canônico', alvo: `${E}/duracao-sessao.ts`,
+    de: `  if (it.execucao.tipo === 'REPETICOES') {
+    // 🔒 F17: o chamador não escolhe a duração. O campo legado de transporte é ignorado,
+    // inclusive se ausente, adulterado, fracionário ou infinito.
+    return fator * TEMPO_EXECUCAO_SERIE_REPS_SEG;
+  }`,
+    para: `  if (it.execucao.tipo === 'REPETICOES') {
+    return fator * (it.execucao.segundosEstimadosPorSerie ?? TEMPO_EXECUCAO_SERIE_REPS_SEG);
+  }`,
+    testes: [`${E}/duracao-sessao.test.ts`] },
 ];
 
 const args = process.argv.slice(2);
@@ -404,9 +415,9 @@ const lista = alvos.length
 
 // Pré-voo: um runner com âncora morta não é evidência. Falha antes de tocar qualquer fonte.
 const ancorasMortas = lista.flatMap((m) => {
-  const original = readFileSync(join(RAIZ, m.alvo), 'utf-8');
+  const fonte = normalizarEol(readFileSync(join(RAIZ, m.alvo), 'utf-8'));
   const edits = m.edits ?? [{ de: m.de, para: m.para }];
-  return edits.some((e) => !original.includes(e.de)) ? [m] : [];
+  return edits.some((e) => !fonte.includes(e.de)) ? [m] : [];
 });
 if (ancorasMortas.length > 0) {
   for (const m of ancorasMortas) console.error(`${String(m.n).padStart(3)}  PATCH_NAO_APLICOU  ${m.desc}`);
@@ -442,13 +453,14 @@ const resultados = [];
 for (const m of lista) {
   const caminho = join(RAIZ, m.alvo);
   const original = readFileSync(caminho, 'utf-8');
+  const fonte = normalizarEol(original);
   const edits = m.edits ?? [{ de: m.de, para: m.para }];
   let status, detalhe = '';
-  if (edits.some((e) => !original.includes(e.de))) {
+  if (edits.some((e) => !fonte.includes(e.de))) {
     status = 'PATCH_NAO_APLICOU';
     detalhe = 'âncora não encontrada no fonte';
   } else {
-    let mutado = original;
+    let mutado = fonte;
     for (const e of edits) mutado = mutado.replace(e.de, e.para);
     writeFileSync(caminho, mutado, 'utf-8');
     try {
@@ -461,8 +473,9 @@ for (const m of lista) {
       writeFileSync(caminho, original, 'utf-8'); // restaura SEMPRE
     }
   }
-  resultados.push({ ...m, status, detalhe });
-  if (!md) console.log(`${String(m.n).padStart(3)}  ${status.padEnd(17)} ${m.desc}`);
+  const natureza = m.natureza ?? 'PATCH_TEXTUAL';
+  resultados.push({ ...m, natureza, status, detalhe });
+  if (!md) console.log(`${String(m.n).padStart(3)}  ${status.padEnd(17)}  ${natureza.padEnd(14)} ${m.desc}`);
 }
 
 const mortos = resultados.filter((r) => r.status === 'MORTO').length;
@@ -471,14 +484,15 @@ const naoAplicou = resultados.filter((r) => r.status === 'PATCH_NAO_APLICOU');
 const inconclusivos = resultados.filter((r) => r.status === 'TIMEOUT' || r.status === 'INFRA_ERRO');
 
 if (md) {
-  console.log('| # | Mutação normativa | Teste que a mata | Arquivo mutado | Resultado |');
-  console.log('|---|---|---|---|---|');
+  console.log('| # | Mutação normativa | Fidelidade | Teste que a mata | Arquivo mutado | Resultado |');
+  console.log('|---|---|---|---|---|---|');
   for (const r of resultados) {
-    console.log(`| ${r.n} | ${r.desc} | \`${r.testes.join('`, `')}\` | \`${r.alvo}\` | **${r.status}** |`);
+    console.log(`| ${r.n} | ${r.desc} | ${r.natureza} | \`${r.testes.join('`, `')}\` | \`${r.alvo}\` | **${r.status}** |`);
   }
 }
 console.log(`\nRESUMO: ${mortos}/${resultados.length} MORTOS · ${sobreviveram.length} sobreviveram · ${naoAplicou.length} sem âncora · ${inconclusivos.length} inconclusivos`);
 if (sobreviveram.length) console.log('SOBREVIVERAM:', sobreviveram.map((r) => r.n).join(', '));
 if (naoAplicou.length) console.log('SEM ÂNCORA:', naoAplicou.map((r) => r.n).join(', '));
 if (inconclusivos.length) console.log('INCONCLUSIVOS:', inconclusivos.map((r) => r.n).join(', '));
+console.log('ESCOPO: o placar prova apenas os patches listados; não mede a contagem de defeitos reais nem cobertura exaustiva.');
 process.exitCode = sobreviveram.length || naoAplicou.length || inconclusivos.length ? 1 : 0;

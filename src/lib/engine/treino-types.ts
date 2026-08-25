@@ -8,6 +8,7 @@ import type { FocoGrupo } from './trilhos';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
+import type { FatosReducao } from './geracao-temporal';
 import type { DistribuicaoCardioSemanal, EntradaDistribuicaoSemana, LinhagemParcela } from './distribuicao-cardio-semana';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, PadraoMovimento } from '../data/types';
 import type { Weekday } from '../semana';
@@ -360,6 +361,11 @@ export interface RotinaSemanal {
   distribuicaoCardio?: DistribuicaoCardioSemanal;
   /** Fatos independentes usados pelo crítico para reconstruir e validar a distribuição observada. */
   fatosDistribuicaoCardio?: EntradaDistribuicaoSemana;
+  /**
+   * 🔒 C1.1-D F19 — diferença factual entre o baseline e o plano terminal: slots removidos,
+   * volume e frequência por dias reais. Não decide a política de volume/frequência (C2/C3).
+   */
+  fatosReducao?: FatosReducao;
   /**
    * Fonte de verdade temporal do plano automático: horizonte terminal após todas as transformações.
    * `dias`, `diasCardio` e `duracaoDias` são vistas de compatibilidade derivadas deste objeto quando

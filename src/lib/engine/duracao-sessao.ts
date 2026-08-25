@@ -45,7 +45,7 @@ export type EstadoLimite =
 
 /** Descrição de execução de um item resistido — exatamente uma das duas. */
 export type ExecucaoResistida =
-  | { tipo: 'REPETICOES'; segundosEstimadosPorSerie: number }
+  | { tipo: 'REPETICOES'; /** legado de transporte: o avaliador deliberadamente ignora este valor. */ segundosEstimadosPorSerie?: number }
   | { tipo: 'ISOMETRIA'; holdSegundosPorSerie: number };
 
 /** Identidade de uma aplicação de técnica materializada (fonte independente do contrato). */
@@ -152,9 +152,9 @@ const naoAvaliado = (motivos: string[], orcamentoSegundos: number | undefined, m
 function execucaoPorSerie(it: ItemResistido, motivos: string[], idx: number): number | null {
   const fator = it.unilateralDoisLados === true ? 2 : 1;
   if (it.execucao.tipo === 'REPETICOES') {
-    const s = it.execucao.segundosEstimadosPorSerie;
-    if (!intSeguro(s) || !(s > 0)) { motivos.push(`item ${idx}: segundosEstimadosPorSerie deve ser inteiro seguro > 0`); return null; }
-    return fator * s;
+    // 🔒 F17: o chamador não escolhe a duração. O campo legado de transporte é ignorado,
+    // inclusive se ausente, adulterado, fracionário ou infinito.
+    return fator * TEMPO_EXECUCAO_SERIE_REPS_SEG;
   }
   const h = it.execucao.holdSegundosPorSerie;
   if (!intSeguro(h) || !(h > 0)) { motivos.push(`item ${idx}: holdSegundosPorSerie deve ser inteiro seguro > 0`); return null; }

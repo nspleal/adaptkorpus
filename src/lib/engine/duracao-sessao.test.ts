@@ -29,6 +29,17 @@ describe('C1 · constantes únicas e centralizadas', () => {
   });
 });
 
+describe('C1.1-D · F17 execução resistente a adulteração', () => {
+  it.each([1, 999, Number.NaN])('usa 40 s mesmo quando o chamador injeta %p s por série', (adulterado) => {
+    const normal = avaliarDuracaoSessao({ itens: [reps(3, 60)], orcamentoSegundos: 900 });
+    const atacado = avaliarDuracaoSessao({ itens: [reps(3, 60, adulterado)], orcamentoSegundos: 900 });
+    expect(atacado.estadoCalculo).toBe('CALCULADO');
+    expect(atacado.componentes?.execucaoSegundos).toBe(3 * TEMPO_EXECUCAO_SERIE_REPS_SEG);
+    expect(atacado.duracaoMinimaEstimadaSegundos).toBe(normal.duracaoMinimaEstimadaSegundos);
+    expect(atacado.duracaoMaximaEstimadaSegundos).toBe(normal.duracaoMaximaEstimadaSegundos);
+  });
+});
+
 describe('C1 · fixtures numéricas medidas', () => {
   it('caso CURTO: 4×4 @ 60/90/90/60, orçamento 1800 → MIN 1540 / MAX 1780 / DENTRO_DO_LIMITE', () => {
     const r = avaliarDuracaoSessao({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import {
   aceitaTecnica, DESCRICAO_TECNICA, elegibilidade, JANELA_REGRESSAO_DIAS,
   MIN_SESSOES_ELEGIVEL, serieDaTecnica, TECNICAS, tecnicaDaSessao,
@@ -152,7 +152,7 @@ function arquivos(dir: string): string[] {
   });
 }
 const podar = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
-const FONTES = arquivos(SRC).map((f) => [f.slice(process.cwd().length + 1), podar(readFileSync(f, 'utf8'))] as const);
+const FONTES = arquivos(SRC).map((f) => [relative(process.cwd(), f).replace(/\\/g, '/'), podar(readFileSync(f, 'utf8'))] as const);
 
 describe('🔴 ⑩ o motor NUNCA adiciona técnica sozinho', () => {
   it('nenhum arquivo do MOTOR importa o módulo, exceto ele mesmo', () => {
@@ -243,7 +243,7 @@ describe('🔒 a copy nunca apresenta as técnicas como MELHORES', () => {
     for (const tela of telas) {
       const src = readFileSync(tela, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
       for (const re of PROIBIDO) {
-        expect(re.test(src), `${tela.slice(process.cwd().length + 1)} :: ${re}`).toBe(false);
+        expect(re.test(src), `${relative(process.cwd(), tela).replace(/\\/g, '/')} :: ${re}`).toBe(false);
       }
     }
   });

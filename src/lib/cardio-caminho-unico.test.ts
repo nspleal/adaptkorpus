@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { modalidadeDoExercicio, MODALIDADE_POR_EXERCICIO } from './engine/cardio';
 import { gerarTreino } from './engine';
 import { EXERCISES } from './data/exercises';
@@ -30,7 +30,7 @@ function arquivos(dir: string): string[] {
     return /\.tsx?$/.test(nome) && !/\.test\.tsx?$/.test(nome) ? [caminho] : [];
   });
 }
-const rel = (f: string) => f.slice(RAIZ.length + 1);
+const rel = (f: string) => relative(process.cwd(), f).replace(/\\/g, '/');
 /** Só o CÓDIGO: comentários citam `tipo: 'cardio'` para documentar a regra, não para gravar. */
 const semComentarios = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const FONTES = arquivos(SRC).map((f) => [rel(f), semComentarios(readFileSync(f, 'utf8'))] as const);
