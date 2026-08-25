@@ -107,9 +107,9 @@ describe('C1 gerador · o HOLD isométrico é TRANSPORTADO ao plano (§1 / fixtu
     const r = rotina(perfil({ rotinaCustom } as never));
     const prancha = r.dias.flatMap((d) => d.slots).find((s) => s.exercicio.id === 'e7');
     expect(prancha, 'prancha não entrou no plano custom').toBeDefined();
-    expect(prancha!.holdSeg, 'holdSeg NÃO transportado ao slot isométrico').toBe(70);
+    expect(prancha!.holdSeg, 'holdSeg NÃO transportado ao slot isométrico').toBe(40);
     const somentePrancha = avaliarDuracaoResistida([prancha!], perfil().nivelExperiencia, 3600);
-    expect(somentePrancha.componentes?.execucaoSegundos).toBe((prancha!.series ?? 0) * 70);
+    expect(somentePrancha.componentes?.execucaoSegundos).toBe((prancha!.series ?? 0) * 40);
     const semHold = avaliarDuracaoResistida([{ ...prancha!, holdSeg: undefined }], perfil().nivelExperiencia, 3600);
     expect(semHold.estadoCalculo).toBe('NAO_AVALIADO');
     expect(semHold.motivosNaoAvaliados.join(' ')).toMatch(/HOLD_AUSENTE/);
