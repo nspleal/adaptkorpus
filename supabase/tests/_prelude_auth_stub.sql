@@ -15,3 +15,30 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
 end $$;
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000001') on conflict do nothing;
+
+
+-- Stub mínimo de Realtime para testar a migration C1.1-E em Postgres puro. Produção usa o
+-- schema gerenciado pelo Supabase; este stub só registra a emissão em uma caixa local.
+create schema if not exists realtime;
+create table if not exists realtime.messages (
+  extension text,
+  topic text
+);
+alter table realtime.messages enable row level security;
+
+create table if not exists public.realtime_test_outbox (
+  topic text not null,
+  event text not null,
+  payload jsonb not null,
+  private boolean not null
+);
+
+create or replace function realtime.send(jsonb, text, text, boolean)
+returns void
+language plpgsql
+as $$
+begin
+  insert into public.realtime_test_outbox(topic, event, payload, private)
+  values ($3, $2, $1, $4);
+end;
+$$;
