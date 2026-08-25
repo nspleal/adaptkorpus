@@ -10,12 +10,13 @@
  *    `UNILATERAL_DOIS_LADOS` dobra a execução; `ALTERNADO`/`BILATERAL` não. Sem regex em runtime.
  *  - **Técnica avançada (superset/dropset):** o modelo não carrega marcador — todo item é
  *    `SEM_TECNICA`. Superset/circuito são fronteira explícita (exigem contrato temporal próprio).
- *  - **Isometria:** os 5 ids `REP_UNIT_SEGUNDOS` usam o HOLD (proibido 40 s). Como o slot final
- *    não carrega o hold prescrito (mora no estado de progressão), o hold de PLANEJAMENTO v1 é o
- *    PISO da faixa do nível (`faixaSegundos(id,nivel).min`) — calibrável, como os 40 s dos reps.
- *  - **Cardio:** vive em `diasCardio` (array próprio), nunca dentro de uma sessão de força; por
- *    isso este adaptador cobre só itens RESISTIDOS. A avaliação de dia de cardio é do seu campo
- *    `minutos` e não passa por aqui.
+ *  - **Isometria:** os 5 ids `REP_UNIT_SEGUNDOS` usam o HOLD materializado no slot final.
+ *    Certificação lê `slot.holdSeg` exatamente; se ausente, retorna `NAO_AVALIADO`. O piso
+ *    `faixaSegundos(id,nivel).min` só serve ao planejamento anterior à materialização, nunca
+ *    como fallback da duração certificada.
+ *  - **Cardio:** a distribuição semanal materializa, quando houver, um bloco contínuo APÓS a
+ *    musculação. Este adaptador o acrescenta ao mesmo dia final para gerador e crítico avaliarem
+ *    a mesma duração; não redistribui nem troca cardio de modalidade.
  */
 import {
   avaliarDuracaoSessao, FORMULA_DURACAO_VERSION, TEMPO_EXECUCAO_SERIE_REPS_SEG,
