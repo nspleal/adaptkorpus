@@ -18,6 +18,8 @@ declare
   v_email text;
   v_planos integer;
 begin
+  -- O teste possui seu próprio usuário: não depende da ordem nem do fixture de outro arquivo.
+  insert into auth.users(id) values (v_user) on conflict (id) do nothing;
   perform set_config('request.jwt.claim.sub', v_user::text, true);
   perform set_config('request.jwt.claim.email', 'teste@example.com', true);
   v_payload := jsonb_build_object(
