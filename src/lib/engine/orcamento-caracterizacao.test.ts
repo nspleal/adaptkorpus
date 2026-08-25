@@ -139,18 +139,17 @@ describe('📸 caracterização — nº de exercícios por dia, com o estimador 
   });
 });
 
-describe('📸 caracterização — o estimador de HOJE é cego à composição da sessão', () => {
+describe('📸 caracterização — orçamento temporal atual e composição da sessão', () => {
   /**
-   * 🔑 Este é o teste que a Leva B vai INVERTER, e é o motivo de ele estar escrito antes.
+   * 🔑 A contagem INICIAL de slots ainda depende de tempo e volume, antes de existir
+   * uma lista concreta de exercícios. Depois da alocação, o orçamento temporal avalia
+   * cada item pela fórmula canônica — inclusive descanso, isometria e lateralidade.
    *
-   * Hoje o orçamento usa **um** descanso (o do composto) × total de séries, então duas
-   * sessões com a mesma contagem de slots custam o mesmo mesmo que uma seja toda de
-   * composto e a outra toda de acessório. Depois da soma por item, elas **têm** de divergir
-   * — e o critério de aceite 5b pede exatamente essa prova.
-   *
-   * Aqui só registramos a cegueira atual: o `cap` não olha a classe de nada.
+   * Estas fotos distinguem as duas camadas: o cap inicial continua independente da
+   * composição; já o descanso efetivo reage aos exercícios materializados. Assim,
+   * mudanças futuras só podem alterar estes números com uma explicação explícita.
    */
-  it('o divisor do cap não depende de quais exercícios caíram na sessão', () => {
+  it('o cap inicial não depende de quais exercícios caíram na sessão', () => {
     // Mesmo perfil, mesma semana → mesma contagem, qualquer que seja a mistura sorteada.
     const a = rotinaComCiclo({ diasDisponiveis: 4 });
     const b = rotinaComCiclo({ diasDisponiveis: 4 });
