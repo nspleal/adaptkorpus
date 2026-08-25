@@ -14,8 +14,10 @@ PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION_CAS="$HERE/../migrations/0015_c1_cas_metadata.sql"
 MIGRATION_ATOMICA="$HERE/../migrations/0016_c1_persistencia_atomica.sql"
+MIGRATION_SINCRONIZACAO="$HERE/../migrations/0017_c1_sincronizacao_plano_realtime.sql"
 TESTSQL="$HERE/cas_atomicidade.sql"
 TEST_ATOMICO="$HERE/cas_persistencia_atomica.sql"
+TEST_SINCRONIZACAO="$HERE/cas_sincronizacao_realtime.sql"
 
 if [ ! -x "$PGBIN/initdb" ]; then
   # SKIP não é aprovação: C1.1-C exige esta prova no Postgres real antes de encerrar.
@@ -52,10 +54,12 @@ done
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_CAS'" >>"$WORK/migrate.log" 2>&1
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TESTSQL'" >>"$WORK/test.err" 2>&1
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_ATOMICA'" >>"$WORK/migrate.log" 2>&1
-if runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TEST_ATOMICO'" 2>"$WORK/test.err"; then
+runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_SINCRONIZACAO'" >>"$WORK/migrate.log" 2>&1
+if runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TEST_ATOMICO'" 2>"$WORK/test.err" \
+  && runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TEST_SINCRONIZACAO'" 2>>"$WORK/test.err"; then
   grep -h 'NOTICE' "$WORK/test.err" 2>/dev/null || true
-  echo "✅ CAS atomicidade: PASSOU (Postgres real)."
+  echo "✅ CAS atomicidade e sincronização: PASSARAM (Postgres real)."
   exit 0
 else
-  echo "❌ CAS atomicidade: FALHOU."; cat "$WORK/test.err"; exit 1
+  echo "❌ CAS atomicidade/sincronização: FALHOU."; cat "$WORK/test.err"; exit 1
 fi
