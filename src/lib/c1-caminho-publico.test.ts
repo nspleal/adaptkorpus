@@ -165,15 +165,19 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     }
   });
 
-  it('o caminho vivo reavalia CADA redução e não aceita o primeiro candidato ainda excedente', () => {
-    // Catálogo sintético temporalmente caro, mas estruturalmente idêntico: dobrar somente a execução
-    // força a escada pública 5 → 4 → 3. Em 4 slots o plano ainda excede; só 3 certifica.
+  it('degrada descanso para DOIS_LADOS antes de reduzir a capacidade pelo caminho vivo', () => {
+    // Catálogo temporalmente caro, mas estruturalmente idêntico: a lateralidade
+    // precisa entrar no orçamento ANTES do reduce-to-fit. Com o descanso degradado,
+    // quatro slots cabem; remover o quarto antes disso violaria a política do motor.
     const todosDoisLados = EXERCISES.map((e) => ({ ...e, execucao: 'UNILATERAL_DOIS_LADOS' as const }));
     const rot = gerarTreino(
       perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', tempoPorSessaoMin: 40 }),
       { exercises: todosDoisLados, semanaCiclo: { semana: 1 } },
     ).rotina!;
-    expect(rot.resultadoGeracao).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 3 });
+    expect(rot.resultadoGeracao).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 4 });
+    expect(Math.max(...rot.dias.map((d) => d.slots.length))).toBe(4);
+    // Compostos de massa começam a 120 s na semana 1; 90 s só ocorre após degradação.
+    expect(rot.dias.flatMap((d) => d.slots).some((s) => s.descansoSeg === 90)).toBe(true);
     expect(Math.max(...rot.duracaoResistidaDias!.map((d) => d.duracaoMaximaEstimadaSegundos ?? 0)))
       .toBeLessThanOrEqual(40 * 60 + 8 * 60);
   });
