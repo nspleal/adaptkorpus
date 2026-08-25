@@ -26,6 +26,16 @@ create table if not exists realtime.messages (
 );
 alter table realtime.messages enable row level security;
 
+-- Em produção, Realtime entrega o tópico ao motor de policy; no harness ele só precisa
+-- existir para a policy ser compilada. Nenhuma migration de produção define esta função.
+create or replace function realtime.topic()
+returns text
+language sql
+stable
+as $
+  select current_setting('realtime.topic', true)
+$;
+
 create table if not exists public.realtime_test_outbox (
   topic text not null,
   event text not null,
