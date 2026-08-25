@@ -274,8 +274,8 @@ const MUTACOES = [
     testes: [`${E}/geracao-temporal.test.ts`] },
 
   { n: 44, desc: 'omitir o delta factual de frequência direta por grupo', alvo: `${E}/geracao-temporal.ts`,
-    de: `    frequenciaDiretaPorGrupo[g] = { antes: ba.length, depois: te.length };`,
-    para: `    frequenciaDiretaPorGrupo[g] = { antes: 0, depois: 0 };`,
+    de: `      antes: new Set(ba.map((i) => i.diaId)).size,`,
+    para: `      antes: ba.length,`,
     testes: [`${E}/geracao-temporal.test.ts`] },
 
   { n: 45, desc: 'validar cardio observado sem confrontar o construtor canônico', alvo: `${E}/distribuicao-cardio-semana.ts`,
