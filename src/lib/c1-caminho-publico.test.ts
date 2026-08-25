@@ -179,6 +179,22 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
   });
 });
 
+  it('o orçamento de planejamento materializa DOIS_LADOS antes de decidir descanso/capacidade', () => {
+    // Regressão da auditoria fria P1: a certificação final já dobrava a execução,
+    // mas o custo que escolhe o nível de descanso não. Este guard mantém as duas
+    // etapas na mesma lateralidade curada, antes do reduce-to-fit do caminho público.
+    const fonte = readFileSync(join(process.cwd(), 'src/lib/engine/treino-montador.ts'), 'utf8');
+    const inicio = fonte.indexOf('const custoDia =');
+    const fim = fonte.indexOf('\n      /**', inicio);
+    expect(inicio).toBeGreaterThanOrEqual(0);
+    expect(fim).toBeGreaterThan(inicio);
+    const custoDia = fonte.slice(inicio, fim);
+    expect(custoDia).toContain('unilateralDoisLados:');
+    expect(custoDia).toContain(
+      "resolverExecucao(s.exercicio.id, s.exercicio.execucao, s.execucaoSelecionada) === 'UNILATERAL_DOIS_LADOS'",
+    );
+  });
+
 // ════════════════════════════════════════════════════════════════════════════════════════════
 // ITEM 3 — origem FUNCIONAL de `diasOferecidosCardio` (entra pelo fluxo público real)
 // ════════════════════════════════════════════════════════════════════════════════════════════
