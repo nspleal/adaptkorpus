@@ -194,41 +194,39 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
     expect(chamadas(HISTORICO)).toEqual([]);
   });
 
-  it('Painel: as QUATRO chamadas passam `pesoEfetivoKg`', () => {
+  it('Painel: toda chamada usa a porta única que carrega `pesoEfetivoKg`', () => {
     const cs = chamadas(PAINEL);
     expect(cs.length).toBeGreaterThanOrEqual(4);
-    for (const c of cs) expect(c, c).toMatch(/pesoEfetivoKg/);
+    for (const c of cs) expect(c, c).toMatch(/opcoesDoPlano/);
+    const src = semComentarios(PAINEL);
+    const porta = corpoDe(src, 'function opcoesDoPlano(');
+    expect(porta).toMatch(/opcoesDeEntradaPlano\(entradaDoPlano\(perfil, sobrescrever\)\)/);
+    const entrada = corpoDe(src, 'function entradaDoPlano(');
+    expect(entrada).toMatch(/pesoEfetivoKg: sobrescrever\?\.pesoEfetivoKg \?\? pesoMotorKg/);
   });
 
-  it('/app: o plano do mount nasce com o peso resolvido, não com o do perfil', () => {
+  it('/app: mount e recarregamento de conflito usam peso resolvido quando não há snapshot C1', () => {
     const cs = chamadas(APP);
-    expect(cs).toHaveLength(1);
-    expect(cs[0]).toMatch(/pesoEfetivoKg/);
+    expect(cs).toHaveLength(2);
+    for (const c of cs) expect(c, c).toMatch(/opcoes/);
     const src = semComentarios(APP);
-    expect(src).toMatch(/resolverPesoDoPlanoLocal\(/);
+    const montar = corpoDe(src, 'function montar(');
+    expect(montar).toMatch(/entradaPlano \? opcoesDeEntradaPlano\(entradaPlano\) : \{ pesoEfetivoKg \}/);
+    const recarregar = corpoDe(src, 'async function recarregarVersaoSalva(');
+    expect(recarregar).toMatch(/entradaPlano \? opcoesDeEntradaPlano\(servidor\.entradaPlano\) : \{ pesoEfetivoKg \}/);
   });
 
   /**
-   * ⚠️ EXCEÇÃO ACEITA COMO TEMPORÁRIA, COM GATILHO DECLARADO (cofre §5, DF 2026-07-31).
-   *
-   * O `PUT /api/dados/perfil` grava um snapshot em `plans` e roda no SERVIDOR, onde a âncora
-   * não existe (`evk_peso_plano` é do navegador) — então o snapshot pode divergir do que a
-   * pessoa vê. Duas verdades para o mesmo número é a classe de defeito que esta semana
-   * inteira fechou; aqui ela está **latente, não visível**.
-   *
-   * 🔒 GATILHO DO CONSERTO: **assim que qualquer tela exibir kcal derivada do snapshot do
-   * servidor**, a âncora vai para `preferencias` (jsonb — zero SQL) e os dois lados passam a
-   * ler o mesmo. Este teste existe para a exceção continuar NOMEADA até lá.
+   * 🔒 C1.1-C fecha a antiga exceção: a rota não recalcula a partir do perfil cru. Ela recebe
+   * explicitamente a entrada visível (inclusive peso resolvido) e o comando puro certifica
+   * essa mesma fotografia antes de chamar o CAS.
    */
-  it('a rota do perfil NÃO passa peso resolvido — exceção temporária, com gatilho', () => {
+  it('a rota do perfil certifica a entrada visível em vez de recomputar sem peso resolvido', () => {
     const cs = chamadas('src/app/api/dados/perfil/route.ts');
-    expect(cs).toHaveLength(1);
-    expect(cs[0]).not.toMatch(/pesoEfetivoKg/);
-    // O gatilho tem de estar ESCRITO na rota — comentário aqui morre com o teste; na rota,
-    // quem for ligar uma tela ao snapshot topa com ele.
+    expect(cs).toHaveLength(0);
     const rota = readFileSync('src/app/api/dados/perfil/route.ts', 'utf8');
-    expect(rota, 'a exceção precisa estar declarada na própria rota').toMatch(/preferencias/);
-    expect(rota).toMatch(/kcal/i);
+    expect(rota).toMatch(/entradaPlanoVisivelSchema/);
+    expect(rota).toMatch(/comandoCommitDePlano\([^\n]+entrada\?\.data/);
   });
 });
 

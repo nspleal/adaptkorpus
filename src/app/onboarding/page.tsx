@@ -188,7 +188,7 @@ export default function Onboarding() {
           // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
           // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
           // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
-          void salvarPerfilServidor(resumo, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+          void salvarPerfilServidor(resumo, 0, undefined, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
           // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
           if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
           else router.replace('/app');

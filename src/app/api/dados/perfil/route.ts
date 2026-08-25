@@ -1,8 +1,9 @@
 /**
  * GET/PUT /api/dados/perfil — perfil do usuário LOGADO (Ownership-1, RLS).
- * Server client sempre (nunca admin); `id` nasce de `getUser()` (regra 4.2.3). O e-mail
- * NUNCA vem do body — o trigger espelho (0006) o força a `auth.email()`. O PUT também
- * grava o SNAPSHOT auditável do plano em `plans` (motor puro recomputado no servidor).
+ * GET usa o client do usuário; PUT autentica com `getUser()` e só então chama o CAS por um
+ * client server-only. O `id` nasce de `getUser()` (regra 4.2.3), nunca do body. O e-mail
+ * NUNCA vem do body — no escritor server-only, ele nasce da sessão autenticada; o trigger
+ * 0006 ainda protege os writers que usam JWT de usuário.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
@@ -11,8 +12,13 @@ import { criarRateLimit } from '@/lib/rate-limit';
 import { payloadCabe } from '@/lib/validation/api';
 import { linhaComConsentimentos, linhaParaPerfil, perfilParaLinha, type ProfileRow } from '@/lib/persistencia/perfil-profile';
 import { consentimentosSchema, perfilResumoSchema } from '@/lib/validation/perfil-resumo';
-import { recomputarPlano } from '@/lib/plano';
 import type { PerfilResumo } from '@/components/painel/Painel';
+import { entradaPlanoVisivelSchema } from '@/lib/validation/plano-entrada';
+import { comandoCommitDePlano, aggregateIdDePlano } from '@/lib/plano-cas-comando';
+import { persistirPlanoComCAS } from '@/lib/persistencia/plano-cas';
+import { RepositorioSupabasePlanoCAS, type ClienteSupabaseCAS } from '@/lib/persistencia/plano-cas-supabase';
+import { FORMULA_DURACAO_VERSION } from '@/lib/engine';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * 🔴 OS DOIS GUARDS QUE FALTAVAM NESTA ROTA (auditoria de segurança 2026-08-14).
@@ -31,13 +37,23 @@ export const runtime = 'nodejs';
 export async function GET() {
   const ctx = await contextoUsuario();
   if (ctx instanceof NextResponse) return ctx;
-  const { data, error } = await ctx.supabase.from('profile').select('*').eq('id', ctx.user.id).maybeSingle();
-  if (error) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
+  const [{ data, error }, { data: cas, error: erroCas }] = await Promise.all([
+    ctx.supabase.from('profile').select('*').eq('id', ctx.user.id).maybeSingle(),
+    ctx.supabase.from('plano_cas').select('revision, payload').eq('aggregate_id', aggregateIdDePlano(ctx.user.id)).maybeSingle(),
+  ]);
+  if (error || erroCas) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
   // Linha inexistente OU criada sem o bloco de preferências (parcial) = sem perfil usável.
   if (!data || !data.sexo || !data.preferencias?.nivelExperiencia) {
     return NextResponse.json({ error: 'sem_perfil' }, { status: 404 });
   }
-  return NextResponse.json({ perfil: linhaParaPerfil(data as ProfileRow) });
+  const entradaCandidata = (cas?.payload as { entrada?: { opcoes?: unknown } } | null)?.entrada?.opcoes;
+  const entrada = entradaPlanoVisivelSchema.safeParse(entradaCandidata);
+  return NextResponse.json({
+    perfil: linhaParaPerfil(data as ProfileRow),
+    revision: cas?.revision ?? 0,
+    // Snapshot antigo sem C1 continua legível; o primeiro save o promove ao contrato novo.
+    ...(entrada.success ? { entradaPlano: entrada.data } : {}),
+  });
 }
 
 export async function PUT(req: NextRequest) {
@@ -45,7 +61,12 @@ export async function PUT(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const barra = barreiraDados(ctx.user.id, limitador);
   if (barra) return barra;
-  const body = (await req.json().catch(() => null)) as { perfil?: unknown; consentimentos?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as {
+    perfil?: unknown;
+    consentimentos?: unknown;
+    expectedRevision?: unknown;
+    entradaPlano?: unknown;
+  } | null;
   /**
    * 🔒 TETO DE BYTES antes do zod (flanco declarado no cofre em 2026-08-13, Passo 0.2 do
    * editor guiado). O schema limita CAMPOS conhecidos, não o TAMANHO do que chega: o perfil
@@ -57,36 +78,46 @@ export async function PUT(req: NextRequest) {
   const parsed = perfilResumoSchema.safeParse(body?.perfil);
   if (!parsed.success) return NextResponse.json({ error: 'entrada inválida' }, { status: 400 });
   const perfil = parsed.data as PerfilResumo;
-
-  let linha: Record<string, unknown> = { ...perfilParaLinha(perfil), id: ctx.user.id };
-  const consent = consentimentosSchema.safeParse(body?.consentimentos);
-  if (consent.success) linha = linhaComConsentimentos(linha, consent.data, new Date().toISOString());
-
-  const { error } = await ctx.supabase.from('profile').upsert(linha, { onConflict: 'id' });
-  if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
-
-  /**
-   * Snapshot auditável (best-effort — o perfil já está salvo): dieta+treino recomputados
-   * no servidor pelo MESMO mapeamento do client (lib/plano.ts, determinístico).
-   *
-   * ⚠️ EXCEÇÃO ACEITA COMO TEMPORÁRIA (cofre `parametros-motor-dieta-evokorpus` §5, DF
-   * 2026-07-31): daqui **não** sai o peso resolvido da Leva D. A âncora do peso do plano
-   * (`evk_peso_plano`) vive no NAVEGADOR, e o servidor não a enxerga — então este snapshot
-   * pode divergir do plano que a pessoa vê. Duas verdades para o mesmo número, latentes.
-   *
-   * 🔒 GATILHO DO CONSERTO, declarado: **no dia em que qualquer tela exibir kcal derivada
-   * deste snapshot**, a âncora migra para `profile.preferencias` (jsonb — zero SQL) e os
-   * dois lados passam a ler o mesmo número. Enquanto nada exibe, a divergência não chega a
-   * ninguém; quando exibir, chega. Há teste que mantém esta exceção nomeada.
-   */
+  const expectedRevision = body?.expectedRevision;
+  if (!Number.isInteger(expectedRevision) || (expectedRevision as number) < 0) {
+    return NextResponse.json({ error: 'revisao_invalida' }, { status: 400 });
+  }
+  const entrada = body?.entradaPlano == null
+    ? undefined // compatibilidade de onboarding/cliente pré-C1.1-C; o construtor usa defaults explícitos.
+    : entradaPlanoVisivelSchema.safeParse(body.entradaPlano);
+  if (entrada && !entrada.success) return NextResponse.json({ error: 'entrada_plano_invalida' }, { status: 400 });
+  const consent = body?.consentimentos == null ? undefined : consentimentosSchema.safeParse(body.consentimentos);
+  if (consent && !consent.success) return NextResponse.json({ error: 'consentimentos_invalidos' }, { status: 400 });
+  const linhaBase = consent?.success
+    ? linhaComConsentimentos(perfilParaLinha(perfil), consent.data, new Date().toISOString())
+    : perfilParaLinha(perfil);
+  // Uma única RPC substitui "upsert + tentativa best-effort de snapshot": perfil, metadados
+  // CAS e os dois planos entram juntos, ou a transação inteira é desfeita.
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'persistencia_indisponivel' }, { status: 503 });
+  }
+  const comando = comandoCommitDePlano(ctx.user.id, perfil, expectedRevision as number, entrada?.data, linhaBase);
+  // A RPC não é exposta ao navegador: o JWT do usuário só autentica esta rota; o serviço
+  // confiável recebe a identidade já validada e é o único papel com EXECUTE no banco.
+  const repo = new RepositorioSupabasePlanoCAS(
+    createAdminClient() as unknown as ClienteSupabaseCAS,
+    ctx.user.id,
+    ctx.user.email ?? null,
+  );
+  let resultado;
   try {
-    const { dieta, treino } = recomputarPlano(perfil);
-    await ctx.supabase.from('plans').update({ ativo: false }).eq('user_id', ctx.user.id).eq('ativo', true);
-    await ctx.supabase.from('plans').insert([
-      { user_id: ctx.user.id, tipo: 'dieta', payload: dieta },
-      { user_id: ctx.user.id, tipo: 'treino', payload: treino },
-    ]);
-  } catch { /* snapshot falhou — sem log de conteúdo (dado de saúde) */ }
-
-  return NextResponse.json({ ok: true });
+    resultado = await persistirPlanoComCAS(repo, comando, FORMULA_DURACAO_VERSION);
+  } catch {
+    return NextResponse.json({ error: 'falha_atomica' }, { status: 500 });
+  }
+  if (resultado.tipo === 'COMMIT_CONFIRMADO') {
+    return NextResponse.json({ ok: true, revision: resultado.revision, entradaPlano: comando.aggregate.entrada.opcoes });
+  }
+  if (resultado.tipo === 'CONFLITO_REVISAO') {
+    return NextResponse.json({ error: 'conflito_revisao', revisaoAtual: resultado.revisaoAtual }, { status: 409 });
+  }
+  if (resultado.tipo === 'CONFLITO_VERSAO_OU_HASH') {
+    return NextResponse.json({ error: 'conflito_versao_ou_hash', motivo: resultado.motivo }, { status: 409 });
+  }
+  return NextResponse.json({ error: 'falha_atomica' }, { status: 500 });
 }

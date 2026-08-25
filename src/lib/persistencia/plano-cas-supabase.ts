@@ -34,8 +34,10 @@ export interface ClienteSupabaseCAS {
 export class RepositorioSupabasePlanoCAS<A = unknown> implements RepositorioPlanoCAS<A> {
   constructor(
     private readonly cliente: ClienteSupabaseCAS,
-    /** Dono do agregado, para o INSERT do primeiro commit (RLS por auth.uid()). */
+    /** Dono do agregado, derivado pela rota a partir da sessão autenticada. */
     private readonly userId: string,
+    /** Espelho para profile.email; não entra no agregado nem no certificado do plano. */
+    private readonly emailAutenticado: string | null = null,
   ) {}
 
   async carregarSnapshot(aggregateId: string): Promise<SnapshotAtual | null> {
@@ -53,6 +55,7 @@ export class RepositorioSupabasePlanoCAS<A = unknown> implements RepositorioPlan
     const { data, error } = await this.cliente.rpc('commit_plano_cas', {
       p_aggregate_id: comando.aggregateId,
       p_user_id: this.userId,
+      p_email: this.emailAutenticado,
       p_expected_revision: comando.expectedRevision,
       p_formula_version: comando.formulaVersion,
       p_canonical_input_hash: comando.canonicalInputHash,

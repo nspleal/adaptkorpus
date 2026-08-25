@@ -6,7 +6,7 @@
 -- zero-linhas-nunca-vira-sucesso, retry recompute 8→9, tudo-ou-nada (payload+revisão juntos).
 -- ════════════════════════════════════════════════════════════════════════════
 
--- Ordem aplicada pelo runner: _prelude_auth_stub.sql → 0015_c1_cas_metadata.sql → este arquivo.
+-- Ordem aplicada pelo runner: schema mínimo → 0015_c1_cas_metadata.sql → este arquivo → 0016.
 do $$
 declare
   r jsonb;

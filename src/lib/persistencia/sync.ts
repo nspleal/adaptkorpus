@@ -12,6 +12,7 @@ import { supabaseConfigurado } from '@/lib/supabase/env';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RegistroPeso, SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
+import type { EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,19 +53,54 @@ async function enviarJson(url: string, method: 'PUT' | 'POST', body: unknown): P
  * cima) de FALHA de chamada (`null` — 401/rede/500; o boot usa o local SEM subir, senão
  * um cache velho regride o perfil do servidor gravado por outro device).
  */
-export async function carregarPerfilServidor(): Promise<PerfilResumo | 'sem_perfil' | null> {
+export type PerfilServidor = {
+  perfil: PerfilResumo;
+  revision: number;
+  entradaPlano?: EntradaPlanoVisivel;
+};
+
+/** Resultado explícito: conflito nunca vira falso silencioso nem sobrescrita implícita. */
+export type ResultadoSalvarPerfil =
+  | { tipo: 'CONFIRMADO'; revision: number; entradaPlano: EntradaPlanoVisivel }
+  | { tipo: 'CONFLITO_REVISAO'; revisaoAtual: number }
+  | { tipo: 'CONFLITO_VERSAO_OU_HASH' }
+  | { tipo: 'FALHA' };
+
+export async function carregarPerfilServidor(): Promise<PerfilServidor | 'sem_perfil' | null> {
   if (!supabaseConfigurado()) return null;
   const r = await fetchComRetry401('/api/dados/perfil', { cache: 'no-store' });
   if (!r) return null;
   if (r.status === 404) return 'sem_perfil';
   if (!r.ok) return null;
   try {
-    const j = (await r.json()) as { perfil?: PerfilResumo };
-    return j.perfil ?? null;
+    const j = (await r.json()) as Partial<PerfilServidor>;
+    if (!j.perfil || !Number.isInteger(j.revision) || (j.revision as number) < 0) return null;
+    return { perfil: j.perfil, revision: j.revision as number, ...(j.entradaPlano ? { entradaPlano: j.entradaPlano } : {}) };
   } catch { return null; }
 }
-export async function salvarPerfilServidor(perfil: PerfilResumo, consentimentos?: Consentimentos): Promise<boolean> {
-  return enviarJson('/api/dados/perfil', 'PUT', { perfil, ...(consentimentos ? { consentimentos } : {}) });
+export async function salvarPerfilServidor(
+  perfil: PerfilResumo,
+  expectedRevision: number,
+  entradaPlano?: EntradaPlanoVisivel,
+  consentimentos?: Consentimentos,
+): Promise<ResultadoSalvarPerfil> {
+  if (!supabaseConfigurado()) return { tipo: 'FALHA' };
+  const r = await fetchComRetry401('/api/dados/perfil', {
+    method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ perfil, expectedRevision, ...(entradaPlano ? { entradaPlano } : {}), ...(consentimentos ? { consentimentos } : {}) }),
+  });
+  if (!r) return { tipo: 'FALHA' };
+  try {
+    const j = (await r.json()) as { revision?: unknown; entradaPlano?: EntradaPlanoVisivel; revisaoAtual?: unknown; error?: string };
+    if (r.ok && Number.isInteger(j.revision) && j.entradaPlano) {
+      return { tipo: 'CONFIRMADO', revision: j.revision as number, entradaPlano: j.entradaPlano };
+    }
+    if (r.status === 409 && j.error === 'conflito_revisao' && Number.isInteger(j.revisaoAtual)) {
+      return { tipo: 'CONFLITO_REVISAO', revisaoAtual: j.revisaoAtual as number };
+    }
+    if (r.status === 409 && j.error === 'conflito_versao_ou_hash') return { tipo: 'CONFLITO_VERSAO_OU_HASH' };
+  } catch { /* payload inválido = falha tratável */ }
+  return { tipo: 'FALHA' };
 }
 
 // ---- histórico de treino ----------------------------------------------------

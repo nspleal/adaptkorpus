@@ -3,7 +3,7 @@
  * determinístico e que hash+agregado são consistentes por construção (mesmo input canônico).
  */
 import { describe, expect, it } from 'vitest';
-import { comandoCommitDePlano, aggregateIdDePlano } from './plano-cas-comando';
+import { comandoCommitDePlano, aggregateIdDePlano, opcoesDeEntradaPlano } from './plano-cas-comando';
 import { canonicalInputHash, decidirPreCommit, FORMULA_DURACAO_VERSION } from '@/lib/engine';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { FlagsSaude } from '@/lib/engine';
@@ -23,7 +23,7 @@ describe('C1 · o motor produz o comando de commit (puro, determinístico)', () 
     expect(cmd.aggregateId).toBe(aggregateIdDePlano('user-1'));
     expect(cmd.expectedRevision).toBe(7);
     expect(cmd.formulaVersion).toBe(FORMULA_DURACAO_VERSION);
-    expect(cmd.canonicalInputHash).toBe(canonicalInputHash(perfil()));
+    expect(cmd.canonicalInputHash).toBe(canonicalInputHash({ perfil: perfil(), opcoes: cmd.aggregate.entrada.opcoes }));
     expect(cmd.aggregate.dieta).toBeDefined();
     expect(cmd.aggregate.treino).toBeDefined();
   });
@@ -39,5 +39,38 @@ describe('C1 · o motor produz o comando de commit (puro, determinístico)', () 
   it('o comando produzido PASSA na pré-decisão contra um agregado inédito (revisão 0)', () => {
     const cmd = comandoCommitDePlano('user-1', perfil(), 0);
     expect(decidirPreCommit(null, cmd, FORMULA_DURACAO_VERSION)).toMatchObject({ tipo: 'PROSSEGUIR', proximaRevision: 1 });
+  });
+
+  it('certifica as entradas que mudam o plano visível — peso, oferta, ciclo, feedback e retomada não somem do hash', () => {
+    const base = comandoCommitDePlano('user-1', perfil(), 0, {
+      pesoEfetivoKg: 80, diasOferecidosCardio: ['qua'], semanaCiclo: { semana: 1, feedbackGrupos: [] }, escolhasExecucao: [],
+    });
+    const peso = comandoCommitDePlano('user-1', perfil(), 0, {
+      pesoEfetivoKg: 78, diasOferecidosCardio: ['qua'], semanaCiclo: { semana: 1, feedbackGrupos: [] }, escolhasExecucao: [],
+    });
+    const oferta = comandoCommitDePlano('user-1', perfil(), 0, {
+      pesoEfetivoKg: 80, diasOferecidosCardio: ['sex'], semanaCiclo: { semana: 1, feedbackGrupos: [] }, escolhasExecucao: [],
+    });
+    const semana = comandoCommitDePlano('user-1', perfil(), 0, {
+      pesoEfetivoKg: 80, diasOferecidosCardio: ['qua'], semanaCiclo: {
+        semana: 2, feedbackGrupos: [['costas', 'segura']],
+        retomada: { semana: 1, fator: 0.5, volumeReferencia: 12, exerciciosRecentes: ['e1'] },
+      }, escolhasExecucao: [],
+    });
+    expect(peso.canonicalInputHash).not.toBe(base.canonicalInputHash);
+    expect(oferta.canonicalInputHash).not.toBe(base.canonicalInputHash);
+    expect(semana.canonicalInputHash).not.toBe(base.canonicalInputHash);
+  });
+
+  it('transporta a escolha válida de lateralidade sem a perder ao reconstruir as opções do motor', () => {
+    const cmd = comandoCommitDePlano('user-1', perfil(), 0, {
+      pesoEfetivoKg: 80,
+      diasOferecidosCardio: ['qua'],
+      semanaCiclo: { semana: 1, feedbackGrupos: [] },
+      escolhasExecucao: [['e72', 'BILATERAL']],
+    });
+    const opcoes = opcoesDeEntradaPlano(cmd.aggregate.entrada.opcoes);
+    expect(cmd.aggregate.entrada.opcoes.escolhasExecucao).toEqual([['e72', 'BILATERAL']]);
+    expect(opcoes.escolhasExecucao.get('e72')).toBe('BILATERAL');
   });
 });

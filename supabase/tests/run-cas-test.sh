@@ -3,7 +3,7 @@
 # C1 · CAS — roda o teste de atomicidade contra um Postgres REAL, efêmero (local).
 # Decisão do autor "CAS PERSISTENTE": o CAS deve ser testado contra Supabase real/local,
 # não só in-memory. Este runner sobe um Postgres 16 descartável, aplica a migração 0015 e
-# roda `cas_atomicidade.sql` (asserts plpgsql). Exit 0 = tudo passou.
+# roda o CAS histórico e a persistência C1.1-C (asserts plpgsql). Exit 0 = tudo passou.
 #
 # Uso:  bash supabase/tests/run-cas-test.sh
 # Requer: binários do PostgreSQL (initdb/postgres/psql) e um usuário não-root para o servidor.
@@ -12,18 +12,21 @@ set -euo pipefail
 
 PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-MIGRATION="$HERE/../migrations/0015_c1_cas_metadata.sql"
+MIGRATION_CAS="$HERE/../migrations/0015_c1_cas_metadata.sql"
+MIGRATION_ATOMICA="$HERE/../migrations/0016_c1_persistencia_atomica.sql"
 TESTSQL="$HERE/cas_atomicidade.sql"
+TEST_ATOMICO="$HERE/cas_persistencia_atomica.sql"
 
 if [ ! -x "$PGBIN/initdb" ]; then
-  echo "SKIP: PostgreSQL não encontrado em $PGBIN (defina PGBIN)."; exit 0
+  # SKIP não é aprovação: C1.1-C exige esta prova no Postgres real antes de encerrar.
+  echo "SKIP: PostgreSQL não encontrado em $PGBIN (defina PGBIN)."; exit 78
 fi
 
 # Postgres recusa rodar como root; usa um usuário de sistema não-privilegiado.
 RUNUSER=""
 if [ "$(id -u)" = "0" ]; then
   for u in postgres ubuntu claude; do id "$u" >/dev/null 2>&1 && RUNUSER="$u" && break; done
-  [ -n "$RUNUSER" ] || { echo "SKIP: sem usuário não-root para rodar o servidor."; exit 0; }
+  [ -n "$RUNUSER" ] || { echo "SKIP: sem usuário não-root para rodar o servidor."; exit 78; }
 fi
 
 WORK="$(mktemp -d)"
@@ -41,10 +44,15 @@ runpg "$PGBIN/initdb -D '$WORK/data' -U postgres --auth=trust" >"$WORK/initdb.lo
 runpg "$PGBIN/pg_ctl -D '$WORK/data' -o '-k $WORK -c listen_addresses=' -l '$WORK/pg.log' -w start" >/dev/null 2>&1
 runpg "$PGBIN/createdb -h '$WORK' -U postgres testcas"
 
-# Aplica o prelúdio (stub auth), a migração real e depois o teste (mesmo banco).
+# Aplica o esquema necessário, o CAS legado, depois a evolução C1.1-C e seus testes.
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$HERE/_prelude_auth_stub.sql'" >"$WORK/prelude.log" 2>&1
-runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION'" >"$WORK/migrate.log" 2>&1
-if runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TESTSQL'" 2>"$WORK/test.err"; then
+for migration in 0001_init.sql 0002_rls.sql 0005_profile_email_preferencias.sql 0006_rls_hardening_allowlist.sql; do
+  runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$HERE/../migrations/$migration'" >>"$WORK/migrate.log" 2>&1
+done
+runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_CAS'" >>"$WORK/migrate.log" 2>&1
+runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TESTSQL'" >>"$WORK/test.err" 2>&1
+runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_ATOMICA'" >>"$WORK/migrate.log" 2>&1
+if runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TEST_ATOMICO'" 2>"$WORK/test.err"; then
   grep -h 'NOTICE' "$WORK/test.err" 2>/dev/null || true
   echo "✅ CAS atomicidade: PASSOU (Postgres real)."
   exit 0

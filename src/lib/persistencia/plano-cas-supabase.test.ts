@@ -59,7 +59,7 @@ describe('C1 CAS Supabase · mapeamento da RPC', () => {
 describe('C1 CAS Supabase · adaptador contra cliente injetado', () => {
   it('carregarSnapshot mapeia a linha do banco (ou null se inexistente = legado)', async () => {
     const fake = new FakeCliente();
-    const repo = new RepositorioSupabasePlanoCAS(fake, USER);
+    const repo = new RepositorioSupabasePlanoCAS(fake, USER, 'teste@example.com');
     expect(await repo.carregarSnapshot(AGG)).toBeNull(); // legado: sem linha
     fake.snapshot = { revision: 8, formula_version: 'tempo-v1', canonical_input_hash: '00000000abcdef07' };
     expect(await repo.carregarSnapshot(AGG)).toEqual({ revision: 8, formulaVersion: 'tempo-v1', canonicalInputHash: '00000000abcdef07' });
@@ -68,10 +68,10 @@ describe('C1 CAS Supabase · adaptador contra cliente injetado', () => {
   it('commitAtomico repassa o comando à RPC e mapeia COMMIT_CONFIRMADO', async () => {
     const fake = new FakeCliente();
     fake.proximoRpc = { data: { tipo: 'COMMIT_CONFIRMADO', committed_revision: 1 }, error: null };
-    const repo = new RepositorioSupabasePlanoCAS(fake, USER);
+    const repo = new RepositorioSupabasePlanoCAS(fake, USER, 'teste@example.com');
     const r = await repo.commitAtomico(comando());
     expect(r.tipo).toBe('COMMIT_CONFIRMADO');
-    expect(fake.rpcCalls[0]).toMatchObject({ p_aggregate_id: AGG, p_user_id: USER, p_expected_revision: 0 });
+    expect(fake.rpcCalls[0]).toMatchObject({ p_aggregate_id: AGG, p_user_id: USER, p_email: 'teste@example.com', p_expected_revision: 0 });
   });
 
   it('erro de infra da RPC ⇒ FALHA_ATOMICA (nada persistido parcialmente)', async () => {

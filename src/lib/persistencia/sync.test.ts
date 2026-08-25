@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { carregarHistoricoServidor, carregarPerfilServidor, enviarSessaoTreino } from './sync';
+import { carregarHistoricoServidor, carregarPerfilServidor, enviarSessaoTreino, salvarPerfilServidor } from './sync';
 import type { SessaoHistorico } from '@/lib/treino-historico';
 
 /**
@@ -60,9 +60,9 @@ describe('sync — retry em 401 + tri-estado do perfil', () => {
     expect(await e).toBe(false);
   });
 
-  it('carregarPerfilServidor: 200 → perfil; 404 → sem_perfil; 500/erro de rede → null', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resposta(200, { perfil: { idade: 30 } })));
-    expect(await carregarPerfilServidor()).toEqual({ idade: 30 });
+  it('carregarPerfilServidor: 200 → perfil + revisão; 404 → sem_perfil; 500/erro de rede → null', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resposta(200, { perfil: { idade: 30 }, revision: 4 })));
+    expect(await carregarPerfilServidor()).toEqual({ perfil: { idade: 30 }, revision: 4 });
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resposta(404, { error: 'sem_perfil' })));
     expect(await carregarPerfilServidor()).toBe('sem_perfil');
@@ -72,6 +72,15 @@ describe('sync — retry em 401 + tri-estado do perfil', () => {
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('rede')));
     expect(await carregarPerfilServidor()).toBeNull();
+  });
+
+  it('save distingue confirmação, conflito de revisão e falha — nunca reduz tudo a booleano', async () => {
+    const entrada = { pesoEfetivoKg: 80, diasOferecidosCardio: [], semanaCiclo: { semana: 1, feedbackGrupos: [] }, escolhasExecucao: [] } as never;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resposta(200, { revision: 2, entradaPlano: entrada })));
+    expect(await salvarPerfilServidor({ idade: 30 } as never, 1, entrada)).toEqual({ tipo: 'CONFIRMADO', revision: 2, entradaPlano: entrada });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resposta(409, { error: 'conflito_revisao', revisaoAtual: 7 })));
+    expect(await salvarPerfilServidor({ idade: 30 } as never, 1, entrada)).toEqual({ tipo: 'CONFLITO_REVISAO', revisaoAtual: 7 });
   });
 
   it('sem backend configurado (mock) tudo é no-op: null/false sem tocar o fetch', async () => {
