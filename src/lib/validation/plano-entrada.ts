@@ -26,6 +26,20 @@ export const entradaPlanoVisivelSchema = z.object({
     }).optional(),
   }),
   escolhasExecucao: z.array(z.tuple([z.string().min(1).max(80), execucaoSchema])).max(300),
-}).strict();
+}).strict().superRefine((entrada, ctx) => {
+  // A borda HTTP não pode entregar ambiguidades ao normalizador (Set/Map). Em especial,
+  // nunca aceite duas intenções para o mesmo dia, grupo ou exercício e escolha "a última".
+  if (new Set(entrada.diasOferecidosCardio).size !== entrada.diasOferecidosCardio.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['diasOferecidosCardio'], message: 'diasOferecidosCardio não pode conter dias duplicados' });
+  }
+  const grupos = entrada.semanaCiclo.feedbackGrupos.map(([grupo]) => grupo);
+  if (new Set(grupos).size !== grupos.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['semanaCiclo', 'feedbackGrupos'], message: 'feedbackGrupos não pode conter o mesmo grupo mais de uma vez' });
+  }
+  const exercicios = entrada.escolhasExecucao.map(([exercicioId]) => exercicioId);
+  if (new Set(exercicios).size !== exercicios.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['escolhasExecucao'], message: 'escolhasExecucao não pode conter o mesmo exercício mais de uma vez' });
+  }
+});
 
 export type EntradaPlanoVisivelValidada = z.infer<typeof entradaPlanoVisivelSchema>;
