@@ -456,6 +456,11 @@ export function montarRotina(
             rirAlvo, modoForca: prescricao.modoForca === true, semanaRampa, degradacao: nivel,
           }),
           execucao: execucaoResistidaDe(s.exercicio, perfil.nivelExperiencia),
+          // O planejamento usa a mesma lateralidade curada da certificação final:
+          // somente DOIS_LADOS dobra o tempo de execução, antes de decidir degradar
+          // descanso ou reduzir a capacidade.
+          unilateralDoisLados:
+            resolverExecucao(s.exercicio.id, s.exercicio.execucao, s.execucaoSelecionada) === 'UNILATERAL_DOIS_LADOS',
           tecnica: { tipo: 'SEM_TECNICA' as const },
         }));
         return avaliarDuracaoSessao({ itens }).duracaoMaximaEstimadaSegundos ?? Number.POSITIVE_INFINITY;
