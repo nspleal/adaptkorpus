@@ -2,8 +2,9 @@
 do $$
 declare
   r jsonb;
-  v_user uuid := '00000000-0000-0000-0000-000000000001';
-  v_agg text := '00000000-0000-0000-0000-000000000001:plano';
+  -- Identidade própria: este arquivo roda depois de `cas_atomicidade.sql` no mesmo banco.
+  v_user uuid := '00000000-0000-0000-0000-000000000002';
+  v_agg text := '00000000-0000-0000-0000-000000000002:plano';
   v_linha jsonb := '{
     "sexo":"masculino","peso_kg":80,"altura_cm":180,"idade":30,
     "nivel_atividade":"moderado","objetivo":"massa",

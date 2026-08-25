@@ -591,9 +591,13 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
 
   it('a fiação do Painel e do controle existe de fato (gate estático do caminho)', () => {
     const painel = readFileSync(join(__dirname, '../components/painel/Painel.tsx'), 'utf-8');
-    // todos os recomputes de treino do Painel injetam a oferta local:
-    expect((painel.match(/diasOferecidosCardio,/g) ?? []).length).toBeGreaterThanOrEqual(10);
-    expect(painel).toMatch(/useState<Weekday\[\]>\(\[\]\)/);
+    // Todos os recomputes atravessam a fotografia canônica; não contam mais um literal por callsite.
+    const recomputes = painel.split('\n').filter((linha) => linha.includes('recomputarPlano('));
+    expect(recomputes.length).toBeGreaterThan(0);
+    expect(recomputes.every((linha) => linha.includes('opcoesDoPlano('))).toBe(true);
+    expect(painel).toMatch(/function entradaDoPlano/);
+    expect(painel).toMatch(/function opcoesDoPlano/);
+    expect(painel).toMatch(/useState<Weekday\[\]>\(\s*\(\) => entradaPlanoInicial\?\.diasOferecidosCardio/);
     expect(painel).toMatch(/<OfertaCardio/);
     expect(painel).toMatch(/avaliarRotinaAutomaticaFinal\(treino\.rotina/);
     const controle = readFileSync(join(__dirname, '../components/painel/OfertaCardio.tsx'), 'utf-8');
