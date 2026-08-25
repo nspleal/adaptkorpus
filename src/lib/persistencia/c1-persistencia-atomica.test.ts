@@ -87,4 +87,9 @@ describe('C1.1-C — persistência atômica e server-only', () => {
     expect(app).toMatch(/removeChannel\(canal\)/);
   });
 
+  it('a rota rejeita a entrada duplicada antes de o construtor normalizar Map ou Set', () => {
+    expect(rota).toMatch(/entradaPlanoVisivelSchema\.safeParse\(body\.entradaPlano\)/);
+    expect(rota).toMatch(/entrada_plano_invalida/);
+  });
+
 });
