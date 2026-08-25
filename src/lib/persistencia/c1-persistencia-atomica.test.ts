@@ -63,7 +63,7 @@ describe('C1.1-C — persistência atômica e server-only', () => {
     expect(app).toMatch(/resultado\.tipo === 'CONFLITO_VERSAO_OU_HASH'/);
     expect(app).toMatch(/setPendenciaPersistencia\(\{ tipo: 'FALHA'/);
     expect(app).toMatch(/Tentar salvar novamente/);
-    expect(app).toMatch(/Recarregue a versão salva antes de continuar/);
+    expect(app).toMatch(/Atualize para carregar a versão salva antes de continuar/);
   });
   it('notifica somente a revisão no tópico privado do próprio usuário', () => {
     expect(migrationSincronizacao).toMatch(/on realtime\.messages[\s\S]*for select[\s\S]*to authenticated/);
