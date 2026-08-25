@@ -32,9 +32,9 @@ create or replace function realtime.topic()
 returns text
 language sql
 stable
-as $
+as $c1_realtime_topic$
   select current_setting('realtime.topic', true)
-$;
+$c1_realtime_topic$;
 
 create table if not exists public.realtime_test_outbox (
   topic text not null,
