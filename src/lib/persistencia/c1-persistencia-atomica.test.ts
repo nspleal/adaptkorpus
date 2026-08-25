@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('supabase/migrations/0016_c1_persistencia_atomica.sql', 'utf8');
+const migrationSincronizacao = readFileSync('supabase/migrations/0017_c1_sincronizacao_plano_realtime.sql', 'utf8');
 const rota = readFileSync('src/app/api/dados/perfil/route.ts', 'utf8');
 const painel = readFileSync('src/components/painel/Painel.tsx', 'utf8');
 const app = readFileSync('src/app/app/page.tsx', 'utf8');
+const runnerCas = readFileSync('supabase/tests/run-cas-test.sh', 'utf8');
 
 describe('C1.1-C — persistência atômica e server-only', () => {
   it('a função usa security definer com search_path fixo, mas o browser não tem EXECUTE', () => {
@@ -63,4 +65,26 @@ describe('C1.1-C — persistência atômica e server-only', () => {
     expect(app).toMatch(/Tentar salvar novamente/);
     expect(app).toMatch(/Recarregue a versão salva antes de continuar/);
   });
+  it('notifica somente a revisão no tópico privado do próprio usuário', () => {
+    expect(migrationSincronizacao).toMatch(/on realtime\.messages[\s\S]*for select[\s\S]*to authenticated/);
+    expect(migrationSincronizacao).toMatch(/realtime\.topic\(\).*user:/);
+    expect(migrationSincronizacao).toMatch(/realtime\.send\([\s\S]*jsonb_build_object\('revision', new\.revision\)/);
+    expect(migrationSincronizacao).not.toMatch(/perfilLinha|canonical_input_hash|p_payload/);
+    expect(migrationSincronizacao).toMatch(/revoke all on function public\.notificar_revisao_do_plano\(\) from public, anon, authenticated/);
+    expect(runnerCas).toMatch(/0017_c1_sincronizacao_plano_realtime\.sql/);
+    expect(runnerCas).toMatch(/cas_sincronizacao_realtime\.sql/);
+  });
+
+  it('nunca sobrescreve servidor por botão: avisa e só atualiza sob clique explícito', () => {
+    expect(app).toMatch(/ATUALIZACAO_REMOTA/);
+    expect(app).toMatch(/Seu plano foi atualizado em outro dispositivo/);
+    expect(app).toMatch(/Atualizar plano/);
+    expect(app).toMatch(/descarta somente as alterações locais ainda não salvas/);
+    expect(app).not.toMatch(/usarMinhasAlteracoes/);
+    expect(app).not.toMatch(/Usar minhas alterações/);
+    expect(app).toMatch(/window\.addEventListener\('focus'/);
+    expect(app).toMatch(/\.channel\(\`user:\$\{session\.user\.id\}:plano\`/);
+    expect(app).toMatch(/removeChannel\(canal\)/);
+  });
+
 });
