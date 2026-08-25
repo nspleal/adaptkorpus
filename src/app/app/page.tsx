@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Painel, { type PerfilResumo } from '@/components/painel/Painel';
 import type { ResultadoMotor, ResultadoTreino } from '@/lib/engine';
@@ -8,6 +8,7 @@ import { lerSessao, limparSessao, recomputarPlano, salvarSessao } from '@/lib/se
 import { sairDaConta } from '@/lib/auth/sair';
 import { carregarPerfilServidor, consultarAcesso, salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { createClient } from '@/lib/supabase/client';
 import { emModoDiario } from '@/lib/modo-diario';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import VigiaSessao from '@/components/auth/VigiaSessao';
@@ -16,6 +17,7 @@ import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { hojeISO, lerPesos } from '@/lib/treino-historico';
 import { opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
+import { EVENTO_PLANO_ATUALIZADO, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -34,7 +36,7 @@ type Estado = {
   entradaPlano?: EntradaPlanoVisivel;
 };
 type PendenciaPersistencia =
-  | { tipo: 'REVISAO'; perfil: PerfilResumo; entrada: EntradaPlanoVisivel; revisaoAtual: number }
+  | { tipo: 'ATUALIZACAO_REMOTA'; revisaoAtual: number }
   | { tipo: 'VERSAO_OU_HASH'; perfil: PerfilResumo; entrada: EntradaPlanoVisivel }
   | { tipo: 'FALHA'; perfil: PerfilResumo; entrada: EntradaPlanoVisivel };
 
@@ -47,6 +49,14 @@ export default function AppPage() {
   const revisaoRef = useRef(0);
   const bloqueadoPorConflitoRef = useRef(false);
   const filaDeGravacaoRef = useRef<Promise<void>>(Promise.resolve());
+
+  // O servidor é a fonte oficial: uma revisão recebida nunca é aplicada automaticamente.
+  // Bloqueamos novos PUTs e aguardamos o clique explícito que recarrega/recalcula a versão salva.
+  const sinalizarAtualizacaoRemota = useCallback((revisaoAtual: number) => {
+    if (revisaoAtual <= revisaoRef.current) return;
+    bloqueadoPorConflitoRef.current = true;
+    setPendenciaPersistencia({ tipo: 'ATUALIZACAO_REMOTA', revisaoAtual });
+  }, []);
 
   useEffect(() => {
     let vivo = true;
@@ -115,6 +125,66 @@ export default function AppPage() {
   }, [router]);
 
   /**
+   * Recebe apenas o número de revisão em um canal privado do próprio usuário. A migration
+   * correspondente é versionada, mas sua aplicação no Supabase remoto continua dependente
+   * de autorização separada; o foco/retorno abaixo é a defesa caso uma mensagem seja perdida.
+   */
+  useEffect(() => {
+    if (!pronto || !supabaseConfigurado()) return;
+    let cancelado = false;
+    const supabase = createClient();
+    let canal: ReturnType<typeof supabase.channel> | null = null;
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((_evento, sessao) => {
+      void supabase.realtime.setAuth(sessao?.access_token);
+    });
+
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelado || !session) return;
+      await supabase.realtime.setAuth(session.access_token);
+      canal = supabase
+        .channel(`user:${session.user.id}:plano`, { config: { private: true } })
+        .on('broadcast', { event: EVENTO_PLANO_ATUALIZADO }, ({ payload }) => {
+          const revisao = revisaoRemotaMaisNova(revisaoRef.current, payload);
+          if (revisao !== null) sinalizarAtualizacaoRemota(revisao);
+        })
+        .subscribe();
+      if (cancelado && canal) void supabase.removeChannel(canal);
+    })();
+
+    return () => {
+      cancelado = true;
+      authSubscription.unsubscribe();
+      if (canal) void supabase.removeChannel(canal);
+    };
+  }, [pronto, sinalizarAtualizacaoRemota]);
+
+  /**
+   * Revalida ao voltar ao app. Isso cobre navegador suspenso, conexão temporariamente
+   * indisponível ou uma mensagem Realtime perdida, sem descartar estado local automaticamente.
+   */
+  useEffect(() => {
+    if (!pronto || !supabaseConfigurado()) return;
+    let vivo = true;
+    async function conferirVersaoServidor() {
+      const servidor = await carregarPerfilServidor();
+      if (!vivo || !servidor || servidor === 'sem_perfil') return;
+      sinalizarAtualizacaoRemota(servidor.revision);
+    }
+    function aoVoltar() { void conferirVersaoServidor(); }
+    function aoMudarVisibilidade() {
+      if (document.visibilityState === 'visible') aoVoltar();
+    }
+    window.addEventListener('focus', aoVoltar);
+    document.addEventListener('visibilitychange', aoMudarVisibilidade);
+    return () => {
+      vivo = false;
+      window.removeEventListener('focus', aoVoltar);
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade);
+    };
+  }, [pronto, sinalizarAtualizacaoRemota]);
+
+  /**
    * Uma fila impede dois PUTs locais com a mesma revisão. Ao perder a corrida para outro
    * dispositivo, ela PARA: somente um clique explícito pode recarregar ou recomputar e tentar.
    */
@@ -122,7 +192,8 @@ export default function AppPage() {
     salvarSessao(perfil); // local-first continua funcionando offline.
     filaDeGravacaoRef.current = filaDeGravacaoRef.current.catch(() => undefined).then(async () => {
       if (bloqueadoPorConflitoRef.current) {
-        setPendenciaPersistencia((atual) => atual ? { ...atual, perfil, entrada } : atual);
+        // O cache local preserva o que a pessoa editou, mas o servidor não recebe outro PUT
+        // até ela escolher explicitamente atualizar para a versão mais recente.
         return;
       }
       const resultado = await salvarPerfilServidor(perfil, revisaoRef.current, entrada);
@@ -134,7 +205,7 @@ export default function AppPage() {
       }
       if (resultado.tipo === 'CONFLITO_REVISAO') {
         bloqueadoPorConflitoRef.current = true;
-        setPendenciaPersistencia({ tipo: 'REVISAO', perfil, entrada, revisaoAtual: resultado.revisaoAtual });
+        setPendenciaPersistencia({ tipo: 'ATUALIZACAO_REMOTA', revisaoAtual: resultado.revisaoAtual });
         return;
       }
       if (resultado.tipo === 'CONFLITO_VERSAO_OU_HASH') {
@@ -165,21 +236,6 @@ export default function AppPage() {
     setPendenciaPersistencia(null);
   }
 
-  async function usarMinhasAlteracoes() {
-    if (!pendenciaPersistencia || pendenciaPersistencia.tipo !== 'REVISAO') return;
-    const resultado = await salvarPerfilServidor(pendenciaPersistencia.perfil, pendenciaPersistencia.revisaoAtual, pendenciaPersistencia.entrada);
-    if (resultado.tipo === 'CONFIRMADO') {
-      revisaoRef.current = resultado.revision;
-      bloqueadoPorConflitoRef.current = false;
-      setEstado((atual) => atual ? { ...atual, perfil: pendenciaPersistencia.perfil, revision: resultado.revision, entradaPlano: resultado.entradaPlano } : atual);
-      setPendenciaPersistencia(null);
-      return;
-    }
-    if (resultado.tipo === 'CONFLITO_REVISAO') setPendenciaPersistencia((atual) => atual?.tipo === 'REVISAO' ? { ...atual, revisaoAtual: resultado.revisaoAtual } : atual);
-    if (resultado.tipo === 'CONFLITO_VERSAO_OU_HASH') setPendenciaPersistencia((atual) => atual ? { tipo: 'VERSAO_OU_HASH', perfil: atual.perfil, entrada: atual.entrada } : atual);
-    if (resultado.tipo === 'FALHA') setPendenciaPersistencia((atual) => atual ? { tipo: 'FALHA', perfil: atual.perfil, entrada: atual.entrada } : atual);
-  }
-
   async function tentarSalvarNovamente() {
     if (!pendenciaPersistencia || pendenciaPersistencia.tipo !== 'FALHA') return;
     const resultado = await salvarPerfilServidor(pendenciaPersistencia.perfil, revisaoRef.current, pendenciaPersistencia.entrada);
@@ -191,7 +247,7 @@ export default function AppPage() {
     }
     if (resultado.tipo === 'CONFLITO_REVISAO') {
       bloqueadoPorConflitoRef.current = true;
-      setPendenciaPersistencia({ tipo: 'REVISAO', perfil: pendenciaPersistencia.perfil, entrada: pendenciaPersistencia.entrada, revisaoAtual: resultado.revisaoAtual });
+      setPendenciaPersistencia({ tipo: 'ATUALIZACAO_REMOTA', revisaoAtual: resultado.revisaoAtual });
       return;
     }
     if (resultado.tipo === 'CONFLITO_VERSAO_OU_HASH') {
@@ -209,17 +265,26 @@ export default function AppPage() {
       <ConviteInstalar />
       {pendenciaPersistencia && (
         <section role="alert" style={{ margin: '16px auto 0', maxWidth: 760, padding: 16, borderRadius: 12, background: '#39200a', color: '#fff3d6' }}>
-          <strong>{pendenciaPersistencia.tipo === 'REVISAO' ? 'Este plano foi alterado em outro acesso.' : pendenciaPersistencia.tipo === 'VERSAO_OU_HASH' ? 'Este plano usa uma versão que precisa ser recarregada.' : 'Não foi possível confirmar o salvamento agora.'}</strong>
-          <p style={{ margin: '8px 0 12px' }}>
-            {pendenciaPersistencia.tipo === 'REVISAO'
-              ? 'Nada foi sobrescrito automaticamente. Escolha qual versão usar.'
+          <strong>
+            {pendenciaPersistencia.tipo === 'ATUALIZACAO_REMOTA'
+              ? 'Seu plano foi atualizado em outro dispositivo.'
               : pendenciaPersistencia.tipo === 'VERSAO_OU_HASH'
-                ? 'Nada foi sobrescrito. Recarregue a versão salva antes de continuar.'
+                ? 'Este plano usa uma versão que precisa ser atualizada.'
+                : 'Não foi possível confirmar o salvamento agora.'}
+          </strong>
+          <p style={{ margin: '8px 0 12px' }}>
+            {pendenciaPersistencia.tipo === 'ATUALIZACAO_REMOTA'
+              ? 'Atualizar carrega a versão mais recente do servidor e descarta somente as alterações locais ainda não salvas.'
+              : pendenciaPersistencia.tipo === 'VERSAO_OU_HASH'
+                ? 'Atualize para carregar a versão salva antes de continuar.'
                 : 'Sua alteração continua neste dispositivo; tente novamente quando a conexão voltar.'}
           </p>
-          <button type="button" onClick={() => void recarregarVersaoSalva()}>Recarregar versão salva</button>
-          {pendenciaPersistencia.tipo === 'REVISAO' && <button type="button" onClick={() => void usarMinhasAlteracoes()} style={{ marginLeft: 10 }}>Usar minhas alterações</button>}
-          {pendenciaPersistencia.tipo === 'FALHA' && <button type="button" onClick={() => void tentarSalvarNovamente()} style={{ marginLeft: 10 }}>Tentar salvar novamente</button>}
+          {pendenciaPersistencia.tipo !== 'FALHA' && (
+            <button type="button" onClick={() => void recarregarVersaoSalva()}>Atualizar plano</button>
+          )}
+          {pendenciaPersistencia.tipo === 'FALHA' && (
+            <button type="button" onClick={() => void tentarSalvarNovamente()}>Tentar salvar novamente</button>
+          )}
         </section>
       )}
       <Painel
