@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Painel, { type PerfilResumo } from '@/components/painel/Painel';
 import type { ResultadoMotor, ResultadoTreino } from '@/lib/engine';
-import { lerSessao, limparSessao, recomputarPlano, salvarSessao } from '@/lib/session';
+import { lerSessaoCompleta, limparSessao, recomputarPlano, salvarSessao } from '@/lib/session';
 import { sairDaConta } from '@/lib/auth/sair';
 import { carregarPerfilServidor, consultarAcesso, salvarPerfilServidor } from '@/lib/persistencia/sync';
 import { supabaseConfigurado } from '@/lib/supabase/env';
@@ -104,9 +104,9 @@ export default function AppPage() {
 
     if (!supabaseConfigurado()) {
       // Modo mock: caminho local de sempre (escopo `null` — chaves sem sufixo).
-      const perfil = lerSessao();
-      if (!perfil) { router.replace('/onboarding'); return; }
-      montar(perfil);
+      const local = lerSessaoCompleta();
+      if (!local) { router.replace('/onboarding'); return; }
+      montar(local.perfil, 0, local.entradaPlano);
       return () => { vivo = false; };
     }
 
@@ -126,15 +126,15 @@ export default function AppPage() {
       const doServidor = await carregarPerfilServidor();
       if (!vivo) return;
       if (doServidor && doServidor !== 'sem_perfil') {
-        salvarSessao(doServidor.perfil); // cache local (2º device ganha os dados na hora)
+        salvarSessao(doServidor.perfil, doServidor.entradaPlano); // cache local (2º device ganha os dados na hora)
         montar(doServidor.perfil, doServidor.revision, doServidor.entradaPlano);
         return;
       }
-      const local = lerSessao();
+      const local = lerSessaoCompleta();
       if (local) {
         // Só a conta comprovadamente SEM perfil migra o local p/ o servidor.
-        if (doServidor === 'sem_perfil') void salvarPerfilServidor(local, 0);
-        montar(local);
+        if (doServidor === 'sem_perfil') void salvarPerfilServidor(local.perfil, 0, local.entradaPlano);
+        montar(local.perfil, 0, local.entradaPlano);
         return;
       }
       router.replace('/onboarding');
@@ -207,7 +207,7 @@ export default function AppPage() {
    * dispositivo, ela PARA: somente um clique explícito pode recarregar ou recomputar e tentar.
    */
   function persistirMudanca(perfil: PerfilResumo, entrada: EntradaPlanoVisivel) {
-    salvarSessao(perfil); // local-first continua funcionando offline.
+    salvarSessao(perfil, entrada); // local-first preserva também a fotografia certificada offline.
     filaDeGravacaoRef.current = filaDeGravacaoRef.current.catch(() => undefined).then(async () => {
       if (bloqueadoPorConflitoRef.current) {
         // O cache local preserva o que a pessoa editou, mas o servidor não recebe outro PUT
@@ -239,7 +239,7 @@ export default function AppPage() {
   async function recarregarVersaoSalva() {
     const servidor = await carregarPerfilServidor();
     if (!servidor || servidor === 'sem_perfil') return;
-    salvarSessao(servidor.perfil);
+    salvarSessao(servidor.perfil, servidor.entradaPlano);
     revisaoRef.current = servidor.revision;
     revisaoRemotaPendenteRef.current = null;
     bloqueadoPorConflitoRef.current = false;
