@@ -17,7 +17,7 @@ import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { hojeISO, lerPesos } from '@/lib/treino-historico';
 import { opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
-import { EVENTO_PLANO_ATUALIZADO, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
+import { EVENTO_PLANO_ATUALIZADO, reconciliarConfirmacaoLocal, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
 
 /**
  * Área logada estável (`/app`). Reidrata o painel a partir do perfil salvo na sessão
@@ -48,14 +48,31 @@ export default function AppPage() {
   const [painelEpoch, setPainelEpoch] = useState(0);
   const revisaoRef = useRef(0);
   const bloqueadoPorConflitoRef = useRef(false);
+  // Maior revisão remota recebida enquanto há uma gravação local em voo.
+  const revisaoRemotaPendenteRef = useRef<number | null>(null);
   const filaDeGravacaoRef = useRef<Promise<void>>(Promise.resolve());
 
   // O servidor é a fonte oficial: uma revisão recebida nunca é aplicada automaticamente.
   // Bloqueamos novos PUTs e aguardamos o clique explícito que recarrega/recalcula a versão salva.
   const sinalizarAtualizacaoRemota = useCallback((revisaoAtual: number) => {
     if (revisaoAtual <= revisaoRef.current) return;
+    const pendente = Math.max(revisaoRemotaPendenteRef.current ?? 0, revisaoAtual);
+    revisaoRemotaPendenteRef.current = pendente;
     bloqueadoPorConflitoRef.current = true;
-    setPendenciaPersistencia({ tipo: 'ATUALIZACAO_REMOTA', revisaoAtual });
+    setPendenciaPersistencia({ tipo: 'ATUALIZACAO_REMOTA', revisaoAtual: pendente });
+  }, []);
+
+  // Realtime pode entregar o broadcast do nosso próprio commit antes do PUT voltar. A revisão
+  // igual é apenas eco e libera a fila; uma maior continua bloqueada porque veio de outro aparelho.
+  const reconciliarConfirmacaoPersistida = useCallback((revisaoConfirmada: number) => {
+    const resultado = reconciliarConfirmacaoLocal(revisaoConfirmada, revisaoRemotaPendenteRef.current);
+    revisaoRemotaPendenteRef.current = resultado.revisaoRemotaPendente;
+    bloqueadoPorConflitoRef.current = resultado.bloqueado;
+    setPendenciaPersistencia(
+      resultado.revisaoRemotaPendente === null
+        ? null
+        : { tipo: 'ATUALIZACAO_REMOTA', revisaoAtual: resultado.revisaoRemotaPendente },
+    );
   }, []);
 
   useEffect(() => {
@@ -76,6 +93,7 @@ export default function AppPage() {
         limparSessao(); router.replace('/onboarding'); return;
       }
       revisaoRef.current = revision;
+      revisaoRemotaPendenteRef.current = null;
       bloqueadoPorConflitoRef.current = false;
       setEstado({ perfil, dieta, treino, revision, ...(entradaPlano ? { entradaPlano } : {}) });
       setPronto(true);
@@ -199,8 +217,8 @@ export default function AppPage() {
       const resultado = await salvarPerfilServidor(perfil, revisaoRef.current, entrada);
       if (resultado.tipo === 'CONFIRMADO') {
         revisaoRef.current = resultado.revision;
+        reconciliarConfirmacaoPersistida(resultado.revision);
         setEstado((atual) => atual ? { ...atual, perfil, revision: resultado.revision, entradaPlano: resultado.entradaPlano } : atual);
-        setPendenciaPersistencia(null);
         return;
       }
       if (resultado.tipo === 'CONFLITO_REVISAO') {
@@ -223,6 +241,7 @@ export default function AppPage() {
     if (!servidor || servidor === 'sem_perfil') return;
     salvarSessao(servidor.perfil);
     revisaoRef.current = servidor.revision;
+    revisaoRemotaPendenteRef.current = null;
     bloqueadoPorConflitoRef.current = false;
     // Snapshot legado sem C1 ainda pode ser recarregado: aplica o mesmo peso resolvido do
     // mount, nunca volta silenciosamente ao peso cru só neste caminho de conflito.
@@ -241,8 +260,8 @@ export default function AppPage() {
     const resultado = await salvarPerfilServidor(pendenciaPersistencia.perfil, revisaoRef.current, pendenciaPersistencia.entrada);
     if (resultado.tipo === 'CONFIRMADO') {
       revisaoRef.current = resultado.revision;
+      reconciliarConfirmacaoPersistida(resultado.revision);
       setEstado((atual) => atual ? { ...atual, perfil: pendenciaPersistencia.perfil, revision: resultado.revision, entradaPlano: resultado.entradaPlano } : atual);
-      setPendenciaPersistencia(null);
       return;
     }
     if (resultado.tipo === 'CONFLITO_REVISAO') {
