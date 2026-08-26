@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { lerSessao, lerSessaoCompleta, migrarSessao, salvarSessao } from './session';
+import type { EntradaPlanoVisivel } from './plano-cas-comando';
 
 /**
  * Política travada (DF 2026-07-05): um bump de VERSAO NUNCA descarta o perfil salvo — ele é
@@ -69,11 +70,11 @@ describe('sessão C1 — fotografia das entradas transitórias', () => {
       setItem: (k: string, v: string) => { store.set(k, v); },
       removeItem: (k: string) => { store.delete(k); },
     });
-    const entrada = {
+    const entrada: EntradaPlanoVisivel = {
       pesoEfetivoKg: 80,
-      diasOferecidosCardio: ['qua'] as const,
-      semanaCiclo: { semana: 1 as const, feedbackGrupos: [] as [] },
-      escolhasExecucao: [['e72', 'BILATERAL'] as ['e72', 'BILATERAL']],
+      diasOferecidosCardio: ['qua'],
+      semanaCiclo: { semana: 1, feedbackGrupos: [] },
+      escolhasExecucao: [['e72', 'BILATERAL']],
     };
     salvarSessao(legacyPerfil as never, entrada);
     const sessao = lerSessaoCompleta();
