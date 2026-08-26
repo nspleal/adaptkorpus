@@ -890,8 +890,8 @@ export function montarRotina(
   };
 
   /** Dia de um treino é explícito quando disponível; posição na agenda só atende rotinas legadas. */
-  const diaIdDaRotina = (dia: DiaTreino, treinoIdx: number): string =>
-    dia.diaId ?? diasForcaDaSemana[treinoIdx] ?? `treino-${treinoIdx}`;
+  const diaIdDaRotina = (dia: DiaTreino, treinoIdx: number): Weekday =>
+    dia.diaId ?? diasForcaDaSemana[treinoIdx] ?? ORDEM_SEMANA[treinoIdx % ORDEM_SEMANA.length]!;
 
   /** Converte o plano real em fatos de redução com identidade estável por dia/exercício/ocorrência. */
   const itensTemporaisDaRotina = (r: RotinaSemanal): ItemPlanoTemporal[] => {
