@@ -184,9 +184,11 @@ describe('os pontos de entrada resolvem o escopo ANTES de ler o local', () => {
   it('/app resolve o escopo antes de qualquer leitura', () => {
     const src = readFileSync('src/app/app/page.tsx', 'utf8');
     const iEscopo = src.indexOf('await resolverEscopoLocal()');
-    const iLer = src.indexOf('const local = lerSessao()');
+    // O modo mock lê sem sufixo por desenho; no caminho com backend, a leitura completa
+    // precisa ocorrer DEPOIS da resolução da conta que nomeia a gaveta local.
+    const iLerServidor = src.indexOf('const local = lerSessaoCompleta();', iEscopo);
     expect(iEscopo).toBeGreaterThan(-1);
-    expect(iLer).toBeGreaterThan(iEscopo);
+    expect(iLerServidor).toBeGreaterThan(iEscopo);
   });
 
   it('/onboarding resolve o escopo antes do `lerSessao` do boot', () => {
