@@ -20,6 +20,8 @@ import { EQUIPAMENTOS_CASA } from '@/lib/engine';
 import { diasPadrao } from '@/lib/semana';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
+import type { EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
+import { entradaPlanoVisivelSchema } from '@/lib/validation/plano-entrada';
 import { chaveLocal, limparDadoPessoalLocal } from '@/lib/escopo-local';
 
 // Mapeamento PerfilResumo → motor extraído p/ módulo PURO (o servidor também recomputa
@@ -27,11 +29,20 @@ import { chaveLocal, limparDadoPessoalLocal } from '@/lib/escopo-local';
 export { recomputarPlano } from '@/lib/plano';
 
 const KEY = 'evk_sessao' as const;
-const VERSAO = 1;
+const VERSAO = 2;
 
-/** Grava o perfil da sessão (após gerar o plano, ou ao editar o perfil). */
-export function salvarSessao(perfil: PerfilResumo): void {
-  try { localStorage.setItem(chaveLocal(KEY), JSON.stringify({ v: VERSAO, perfil })); } catch { /* storage indisponível */ }
+/**
+ * Grava a fotografia local completa: perfil + as entradas transitórias que geraram o plano.
+ * Mantê-las no MESMO blob preserva a geração exibida quando a rede falha ou a página recarrega.
+ */
+export function salvarSessao(perfil: PerfilResumo, entradaPlano?: EntradaPlanoVisivel): void {
+  try {
+    localStorage.setItem(chaveLocal(KEY), JSON.stringify({
+      v: VERSAO,
+      perfil,
+      ...(entradaPlano ? { entradaPlano } : {}),
+    }));
+  } catch { /* storage indisponível */ }
 }
 
 /**
@@ -49,25 +60,34 @@ export function salvarSessao(perfil: PerfilResumo): void {
 export function migrarSessao(
   raw: string | null,
   versaoAtual = VERSAO,
-): { perfil: PerfilResumo; migrou: boolean } | null {
+): { perfil: PerfilResumo; entradaPlano?: EntradaPlanoVisivel; migrou: boolean } | null {
   if (!raw) return null;
   let obj: unknown;
   try { obj = JSON.parse(raw); } catch { return null; }
   if (!obj || typeof obj !== 'object') return null;
-  const { v, perfil } = obj as { v?: unknown; perfil?: unknown };
+  const { v, perfil, entradaPlano } = obj as { v?: unknown; perfil?: unknown; entradaPlano?: unknown };
   if (typeof v !== 'number' || v > versaoAtual || !perfil || typeof perfil !== 'object') return null;
-  return { perfil: normalizarPerfil(perfil as PerfilResumo), migrou: v !== versaoAtual };
+  const entrada = entradaPlano == null ? null : entradaPlanoVisivelSchema.safeParse(entradaPlano);
+  return {
+    perfil: normalizarPerfil(perfil as PerfilResumo),
+    ...(entrada?.success ? { entradaPlano: entrada.data } : {}),
+    migrou: v !== versaoAtual,
+  };
 }
 
-/** Lê o perfil da sessão; null se não houver ou se irrecuperável. Migra versões antigas
- *  (sem descartar) e re-carimba o storage para a VERSAO atual. */
-export function lerSessao(): PerfilResumo | null {
+/** Lê a sessão completa; null se não houver ou se o blob for irrecuperável. */
+export function lerSessaoCompleta(): { perfil: PerfilResumo; entradaPlano?: EntradaPlanoVisivel } | null {
   try {
     const res = migrarSessao(localStorage.getItem(chaveLocal(KEY)));
     if (!res) return null;
-    if (res.migrou) salvarSessao(res.perfil); // upgrade persistido — não perde o perfil
-    return res.perfil;
+    if (res.migrou) salvarSessao(res.perfil, res.entradaPlano);
+    return { perfil: res.perfil, ...(res.entradaPlano ? { entradaPlano: res.entradaPlano } : {}) };
   } catch { return null; }
+}
+
+/** Compatibilidade para consumidores que precisam somente do perfil salvo. */
+export function lerSessao(): PerfilResumo | null {
+  return lerSessaoCompleta()?.perfil ?? null;
 }
 
 /** Retrocompat: sessões antigas não tinham treinoDias/naoCurto/pratosCansados — deriva
