@@ -29,7 +29,7 @@ begin
     'treino', jsonb_build_object('tipo', 'treino-teste')
   );
 
-  r := public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 0, 'tempo-v4', '1111111111111111', v_payload);
+  r := public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 0, 'tempo-v4', '1111111111111111111111111111111111111111111111111111111111111111', v_payload);
   assert r->>'tipo' = 'COMMIT_CONFIRMADO', format('primeiro commit: %s', r);
   assert (r->>'committed_revision')::integer = 1, format('revisão inicial: %s', r);
   select revision into v_revisao from public.plano_cas where aggregate_id = v_agg;
@@ -41,7 +41,7 @@ begin
 
   -- Conflito não escreve nem perfil, nem plano, nem payload/revisão.
   v_payload := jsonb_set(v_payload, '{perfilLinha,peso_kg}', '91'::jsonb);
-  r := public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 0, 'tempo-v4', '2222222222222222', v_payload);
+  r := public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 0, 'tempo-v4', '2222222222222222222222222222222222222222222222222222222222222222', v_payload);
   assert r->>'tipo' = 'CONFLITO_REVISAO', format('conflito esperado: %s', r);
   select revision into v_revisao from public.plano_cas where aggregate_id = v_agg;
   select peso_kg into v_peso from public.profile where id = v_user;
@@ -51,7 +51,7 @@ begin
   -- Uma falha depois do CAS (CHECK de peso) reverte também o CAS e os snapshots.
   begin
     v_payload := jsonb_set(v_payload, '{perfilLinha,peso_kg}', '1'::jsonb);
-    perform public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 1, 'tempo-v4', '3333333333333333', v_payload);
+    perform public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 1, 'tempo-v4', '3333333333333333333333333333333333333333333333333333333333333333', v_payload);
     raise exception 'esperava CHECK de peso';
   exception when check_violation then null;
   end;
@@ -64,7 +64,7 @@ begin
   begin
     execute 'set local role authenticated';
     insert into public.plano_cas(aggregate_id, user_id, revision, formula_version, canonical_input_hash, payload)
-      values ('direto', v_user, 1, 'tempo-v4', '4444444444444444', '{}'::jsonb);
+      values ('direto', v_user, 1, 'tempo-v4', '4444444444444444444444444444444444444444444444444444444444444444', '{}'::jsonb);
     raise exception 'DML direto deveria ser negado';
   exception when insufficient_privilege then null;
   end;
@@ -72,7 +72,7 @@ begin
 
   begin
     execute 'set local role authenticated';
-    perform public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 1, 'tempo-v4', '4444444444444444', v_payload);
+    perform public.commit_plano_cas(v_agg, v_user, 'teste@example.com', 1, 'tempo-v4', '4444444444444444444444444444444444444444444444444444444444444444', v_payload);
     raise exception 'RPC direta deveria ser negada';
   exception when insufficient_privilege then null;
   end;
