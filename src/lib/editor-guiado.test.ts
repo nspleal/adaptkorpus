@@ -62,10 +62,10 @@ describe('🔒 P0.3 — o editor não alcança quem o gate roteou', () => {
 });
 
 describe('🔒 DF① — o aviso NÃO trava', () => {
-  it('o salvar só desabilita com treino VAZIO, nunca por causa de aviso', () => {
+  it('o salvar só desabilita com treino vazio ou agenda inválida, nunca por aviso', () => {
     const i = editor.indexOf('Salvar meu treino');
     const bloco = editor.slice(Math.max(0, i - 700), i);
-    expect(bloco, 'o botão de salvar não é o esperado').toMatch(/disabled=\{total === 0\}/);
+    expect(bloco, 'o botão de salvar não é o esperado').toMatch(/disabled=\{total === 0 \|\| !diasUnicos\}/);
     // 🔑 O par discriminante: nenhuma forma de aviso pode aparecer na condição do disabled.
     expect(/disabled=\{[^}]*avis/i.test(bloco), 'o aviso passou a travar o salvamento').toBe(false);
     expect(/disabled=\{[^}]*risco/i.test(bloco), 'o risco passou a travar o salvamento').toBe(false);
