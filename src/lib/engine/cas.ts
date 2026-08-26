@@ -186,5 +186,5 @@ export function decidirPreCommit(
 }
 
 function hashBemFormado(h: unknown): boolean {
-  return typeof h === 'string' && /^[0-9a-f]{16}$/.test(h);
+  return typeof h === 'string' && /^[0-9a-f]{64}$/.test(h);
 }
