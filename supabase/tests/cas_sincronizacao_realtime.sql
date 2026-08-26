@@ -8,6 +8,7 @@ declare
   v_event text;
   v_payload jsonb;
   v_private boolean;
+  v_visiveis integer;
 begin
   truncate public.realtime_test_outbox;
 
@@ -34,6 +35,24 @@ begin
       and policyname = 'c1_usuario_recebe_revisao_do_proprio_plano'
       and cmd = 'SELECT'
   ), 'a assinatura privada precisa de policy de leitura';
+
+  -- Não basta a policy existir: no harness, exercitamos seu predicado com o mesmo JWT.
+  -- O papel authenticated enxerga a mensagem de autorização no tópico próprio, mas não no de
+  -- outro usuário. A concessão SELECT necessária para este teste fica só no prelude local.
+  truncate realtime.messages;
+  insert into realtime.messages(extension, topic) values ('broadcast', 'fixture');
+  perform set_config('request.jwt.claim.sub', v_user::text, true);
+  perform set_config('realtime.topic', 'user:' || v_user::text || ':plano', true);
+  execute 'set local role authenticated';
+  select count(*) into v_visiveis from realtime.messages;
+  execute 'reset role';
+  assert v_visiveis = 1, 'o dono deve autorizar somente seu tópico privado';
+
+  perform set_config('realtime.topic', 'user:00000000-0000-0000-0000-000000000003:plano', true);
+  execute 'set local role authenticated';
+  select count(*) into v_visiveis from realtime.messages;
+  execute 'reset role';
+  assert v_visiveis = 0, 'o dono não pode autorizar o tópico de outro usuário';
 
   assert not has_function_privilege('authenticated', 'public.notificar_revisao_do_plano()', 'execute'),
     'o browser não pode emitir a notificação diretamente';
