@@ -13,6 +13,8 @@ import { montarRotina } from './treino-montador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, RotinaCustom, SemanaCiclo } from './treino-types';
+import type { ExecucaoLateralidade } from '../data/types';
+import type { Weekday } from '../semana';
 
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({
@@ -20,8 +22,14 @@ const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({
   nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 4, tempoPorSessaoMin: 60,
   ...over,
 });
-const plano = (p: PerfilTreino, semana: SemanaCiclo = 3) =>
-  montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana });
+const plano = (
+  p: PerfilTreino,
+  semana: SemanaCiclo = 3,
+  diasOferecidosCardio: readonly Weekday[] = [],
+  escolhasExecucao: ReadonlyMap<string, ExecucaoLateralidade> = new Map(),
+) => montarRotina(
+  prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana }, undefined, escolhasExecucao, diasOferecidosCardio,
+);
 
 /**
  * Um desenho de 2 dias: peito+costas / pernas — exercícios reais, TODOS liberados para
@@ -149,5 +157,52 @@ describe('🔒 "Voltar ao recomendado" = apagar o campo, e nada mais', () => {
     const comDesenho = JSON.stringify(plano(perfil({ rotinaCustom: DESENHO })));
     expect(comDesenho).not.toBe(semDesenho);
     expect(JSON.stringify(plano(perfil()))).toBe(semDesenho);
+  });
+});
+
+
+describe('C1.1 · agenda explícita e cardio do plano manual', () => {
+  it('preserva literalmente o treino manual e recomenda cardio apenas no dia oferecido livre', () => {
+    const desenho: RotinaCustom = {
+      origem: 'usuario',
+      dias: [
+        { nome: 'Força A', diaId: 'seg', exercicioIds: ['e1', 'e14'] },
+        { nome: 'Força B', diaId: 'qua', exercicioIds: ['e16', 'e17'] },
+      ],
+    };
+    const p = perfil({ objetivo: 'saude', diasDisponiveis: 2, treinoDias: ['seg', 'qua'], rotinaCustom: desenho });
+    const r = plano(p, 3, ['ter']);
+    // O motor pode recomendar cardio, mas não altera exercícios, ordem ou a agenda de musculação manual.
+    expect(r.dias.map((d) => [d.diaId, d.slots.map((s) => s.exercicio.id)])).toEqual([
+      ['seg', ['e1', 'e14']],
+      ['qua', ['e16', 'e17']],
+    ]);
+    expect(r.planoFinalPorDia?.find((d) => d.diaId === 'seg')?.tipo).toBe('TREINO');
+    expect(r.planoFinalPorDia?.find((d) => d.diaId === 'qua')?.tipo).toBe('TREINO');
+    expect(r.diasCardio.some((d) => d.diaId === 'ter')).toBe(true);
+  });
+
+  it('liga escolha de execução do plano manual ao slot que a duração avalia', () => {
+    const desenho: RotinaCustom = { origem: 'usuario', dias: [{ nome: 'Braços', diaId: 'seg', exercicioIds: ['e72'] }] };
+    const r = plano(
+      perfil({ diasDisponiveis: 1, treinoDias: ['seg'], rotinaCustom: desenho }),
+      3,
+      [],
+      new Map([['e72', 'UNILATERAL_DOIS_LADOS']]),
+    );
+    expect(r.dias[0]?.slots[0]?.execucaoSelecionada).toBe('UNILATERAL_DOIS_LADOS');
+    expect(r.duracaoDias?.[0]?.estadoCalculo).not.toBe('NAO_AVALIADO');
+  });
+
+  it('lê rotina legada sem dia e deriva a agenda uma vez, sem deslocar treino', () => {
+    const legado: RotinaCustom = {
+      origem: 'usuario',
+      dias: [
+        { nome: 'A', exercicioIds: ['e1'] },
+        { nome: 'B', exercicioIds: ['e16'] },
+      ],
+    };
+    const r = plano(perfil({ diasDisponiveis: 2, treinoDias: ['ter', 'sex'], rotinaCustom: legado }));
+    expect(r.dias.map((d) => d.diaId)).toEqual(['ter', 'sex']);
   });
 });
