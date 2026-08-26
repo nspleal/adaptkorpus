@@ -215,7 +215,7 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
     expect(rot.distribuicaoCardio).toBeDefined();
     // o construtor canônico rodou: carrega identidade + hash + estado.
     expect(rot.distribuicaoCardio!.formulaVersion).toBe(FORMULA_DURACAO_VERSION);
-    expect(rot.distribuicaoCardio!.canonicalInputHash).toMatch(/^[0-9a-f]{16}$/);
+    expect(rot.distribuicaoCardio!.canonicalInputHash).toMatch(/^[0-9a-f]{64}$/);
     expect(['CONSTRUIDA', 'CONSTRUIDA_COM_RESSALVAS']).toContain(rot.distribuicaoCardio!.estado);
   });
 
