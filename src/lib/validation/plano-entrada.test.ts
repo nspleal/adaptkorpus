@@ -33,4 +33,15 @@ describe('entradaPlanoVisivelSchema — fronteira sem ambiguidades', () => {
     const recebido = { ...entradaValida, escolhasExecucao: [['ex-1', 'BILATERAL'], ['ex-1', 'UNILATERAL_DOIS_LADOS']] };
     expect(entradaPlanoVisivelSchema.safeParse(recebido).success).toBe(false);
   });
+
+  it('rejeita exercício recente duplicado antes de Set', () => {
+    const recebido = {
+      ...entradaValida,
+      semanaCiclo: {
+        ...entradaValida.semanaCiclo,
+        retomada: { semana: 1, fator: 0.5, volumeReferencia: 12, exerciciosRecentes: ['e1', 'e1'] },
+      },
+    };
+    expect(entradaPlanoVisivelSchema.safeParse(recebido).success).toBe(false);
+  });
 });
