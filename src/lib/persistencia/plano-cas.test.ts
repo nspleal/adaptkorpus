@@ -34,6 +34,8 @@ describe('CAS · canonicalInputHash (puro, determinístico)', () => {
   });
   it('usa SHA-256 UTF-8: vetor conhecido e textos Unicode distintos não colidem', () => {
     expect(canonicalInputHash({ x: 'abc' })).toBe('270012bdffcdc54c226ac7d3bcc965b48e8c688c39b78313e40c82d96cda2dd4');
+    // Vetor UTF-8 independente: evita regressão para bytes UTF-16 e a colisão anterior.
+    expect(canonicalInputHash({ x: 'é' })).toBe('97f06f396a709c3a29824e1cc794eeb98e2d1a262d7d455439d286d42803f0fe');
     expect(canonicalInputHash({ alergenos: ['℡'] })).not.toBe(canonicalInputHash({ alergenos: ['!!'] }));
   });
 });
