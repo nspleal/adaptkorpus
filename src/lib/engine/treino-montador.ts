@@ -280,11 +280,17 @@ export function montarRotina(
    * o v3, sem apagar nada do que a pessoa guardou.
    */
   const custom = perfil.rotinaCustom;
+  // O desenho manual passa pelo mesmo finalizador C1 do plano automático. A construção
+  // acontece cedo; a certificação/distribuição vem depois, quando as funções canônicas existem.
+  let diasUsuarioCustom: DiaTreino[] | null = null;
+  const avisosCustom: string[] = [];
   if (custom && custom.dias.length > 0) {
     const porId = new Map(pool.map((e) => [e.id, e]));
     const diasUsuario = custom.dias
-      .map((d) => ({
+      .map((d, customIdx) => ({
         nome: d.nome,
+        // Novo desenho persiste o dia; legado deriva uma única vez da agenda existente.
+        diaId: d.diaId ?? diasForcaDaSemana[customIdx],
         slots: d.exercicioIds
           .map((id) => porId.get(id))
           .filter((e): e is Exercise => e != null && e.padraoMovimento !== 'cardio')
@@ -292,6 +298,10 @@ export function montarRotina(
             padrao: e.padraoMovimento,
             exercicio: e,
             ...(favoritos.has(e.id) ? { incluidoPorPreferencia: true } : {}),
+            // A escolha lateral segue o mesmo fio do plano automático até o adaptador temporal.
+            ...(e.execucoesPermitidas != null && escolhasExecucao.has(e.id)
+              ? { execucaoSelecionada: resolverExecucao(e.id, e.execucao, escolhasExecucao.get(e.id)) }
+              : {}),
           })),
       }))
       .filter((d) => d.slots.length > 0);
@@ -301,11 +311,11 @@ export function montarRotina(
       const cortados = diasUsuario.slice(diasForca);
       const mantidos = diasUsuario.slice(0, diasForca);
       if (cortados.length > 0) {
-        avisos.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
+        avisosCustom.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
       }
-      // 🔒 C1 §5.5 + DF② — o plano do usuário também é CERTIFICADO pela canônica (mesmo
-      // tratamento do gerado). NÃO reduz: o editor é SOFT (o crítico informa, nunca trava).
-      return certificarDuracao(montarSaida(mantidos, 'Meu treino'), perfil.nivelExperiencia, perfil.tempoPorSessaoMin * 60);
+      // DF②: exercícios, ordem e quantidade do usuário ficam intactos. O caminho canônico
+      // certifica duração e recomenda cardio mais abaixo; nunca aplica reduce-to-fit ao manual.
+      diasUsuarioCustom = mantidos;
     }
   }
 
@@ -817,8 +827,9 @@ export function montarRotina(
     avisos.push(`${porTeto.length === 1 ? 'Este dia ficou' : 'Estes dias ficaram'} mais curto${porTeto.length === 1 ? '' : 's'} de propósito: ${quais}. Os grupos deste dia já alcançaram o volume semanal previsto — acrescentar mais aqui tiraria espaço da recuperação.`);
   }
 
-  const diasTreino: DiaTreino[] = diasAlocados.map((d) => ({
+  const diasTreino: DiaTreino[] = diasAlocados.map((d, treinoIdx) => ({
     nome: d.nome,
+    diaId: diasForcaDaSemana[treinoIdx],
     // Quantos slots o template pediu e NENHUM grupo pôde preencher — o número que sustenta
     // o aviso acima. Exposto para o guard poder ancorar no corte de fato, e não em "o dia
     // veio abaixo do orçamento" (que também acontece por reserva não honrada, inclusive em
@@ -878,6 +889,10 @@ export function montarRotina(
     ).violacoes;
   };
 
+  /** Dia de um treino é explícito quando disponível; posição na agenda só atende rotinas legadas. */
+  const diaIdDaRotina = (dia: DiaTreino, treinoIdx: number): string =>
+    dia.diaId ?? diasForcaDaSemana[treinoIdx] ?? `treino-${treinoIdx}`;
+
   /** Converte o plano real em fatos de redução com identidade estável por dia/exercício/ocorrência. */
   const itensTemporaisDaRotina = (r: RotinaSemanal): ItemPlanoTemporal[] => {
     const PARA_PADRAO: Record<PadraoMovimento, Padrao> = {
@@ -885,7 +900,7 @@ export function montarRotina(
       dobradica_quadril: 'agachar', isolado: 'isolado', core: 'core', cardio: 'core',
     };
     return r.dias.flatMap((dia, treinoIdx) => {
-      const diaId = diasForcaDaSemana[treinoIdx] ?? `treino-${treinoIdx}`;
+      const diaId = diaIdDaRotina(dia, treinoIdx);
       const ocorrencias = new Map<string, number>();
       return dia.slots.map((slot) => {
         const ocorrencia = ocorrencias.get(slot.exercicio.id) ?? 0;
@@ -916,7 +931,7 @@ export function montarRotina(
   ): Pick<RotinaSemanal, 'planoFinalPorDia' | 'duracaoDias' | 'diasCardio'> => {
     const blocoPorDia = new Map(distribuicaoCardio.blocosPorDia.map((b) => [b.diaId, b]));
     const modalidade = perfil.cardioFavorito ?? MODALIDADE_PADRAO_DIA;
-    const treinoIdxPorDia = new Map(diasForcaDaSemana.map((diaId, treinoIdx) => [diaId, treinoIdx]));
+    const treinoIdxPorDia = new Map(r.dias.map((dia, treinoIdx) => [diaIdDaRotina(dia, treinoIdx), treinoIdx]));
     const planoFinalPorDia: PlanoFinalDia[] = ORDEM_SEMANA.map((diaId, ordemNoHorizonte) => {
       const treinoIdx = treinoIdxPorDia.get(diaId);
       const treino = treinoIdx == null ? undefined : r.dias[treinoIdx];
@@ -974,8 +989,8 @@ export function montarRotina(
         ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
         : 0;
     const entradaCardioViva = {
-      diasComMusculacao: diasForcaDaSemana.map((diaId, treinoIdx) => ({
-        diaId,
+      diasComMusculacao: r.dias.map((dia, treinoIdx) => ({
+        diaId: diaIdDaRotina(dia, treinoIdx),
         duracao: diasResistidos[treinoIdx]!,
       })),
       diasOferecidosCardio: oferecidos,
@@ -1006,6 +1021,29 @@ export function montarRotina(
       ...(resultadoFinal.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
     };
   };
+
+  if (diasUsuarioCustom != null) {
+    // A alocação automática acima só preparou os helpers compartilhados. Nenhum aviso ou foco
+    // dela pode vazar para a rotina manual, cujo único conteúdo é a decisão do usuário.
+    avisos.length = 0;
+    avisos.push(...avisosCustom);
+    decisaoFoco = null;
+    compensadorValido = null;
+    const rotinaCustomEstrutural = {
+      ...montarSaida(diasUsuarioCustom, 'Meu treino'),
+      diasForcaAgendados: diasUsuarioCustom.length,
+      diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length),
+    };
+    const rotinaCustomCertificada = certificarDuracao(rotinaCustomEstrutural, perfil.nivelExperiencia, orcamentoSeg);
+    const motivos = [...new Set((rotinaCustomCertificada.duracaoDias ?? []).flatMap((d) => d.motivosNaoAvaliados))];
+    // Manual é soft: duração vira informação do crítico, nunca remove exercício nem bloqueia.
+    return finalizar(
+      rotinaCustomCertificada,
+      motivos.length > 0
+        ? { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos }
+        : { tipo: 'CERTIFICADO', capacidadeTerminal: budgetPorDia },
+    );
+  }
 
   // A montagem estrutural precede a avaliação temporal. Um plano que viola cobertura,
   // equipamento ou puxar >= empurrar nunca recebe `duracaoDias` calculada: primeiro ele é
