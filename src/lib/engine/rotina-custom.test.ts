@@ -188,9 +188,9 @@ describe('C1.1 · agenda explícita e cardio do plano manual', () => {
       perfil({ diasDisponiveis: 1, treinoDias: ['seg'], rotinaCustom: desenho }),
       3,
       [],
-      new Map([['e72', 'UNILATERAL_DOIS_LADOS']]),
+      new Map([['e72', 'UNILATERAL_ALTERNADO']]),
     );
-    expect(r.dias[0]?.slots[0]?.execucaoSelecionada).toBe('UNILATERAL_DOIS_LADOS');
+    expect(r.dias[0]?.slots[0]?.execucaoSelecionada).toBe('UNILATERAL_ALTERNADO');
     expect(r.duracaoDias?.[0]?.estadoCalculo).not.toBe('NAO_AVALIADO');
   });
 
