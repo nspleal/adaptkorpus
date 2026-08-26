@@ -86,8 +86,25 @@ export const perfilResumoSchema = z.object({
     origem: z.literal('usuario'),
     dias: z.array(z.object({
       nome: z.string().max(60),
+      /** Ausente só em rotinas legadas; novas gravações carregam o dia real. */
+      diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
       exercicioIds: z.array(z.string().max(24)).max(20),
     })).max(7),
+  }).superRefine((rotina, ctx) => {
+    // C1.1/Parte 3: nesta versão, uma sessão de musculação ocupa no máximo um dia real.
+    // A compatibilidade legada permanece: dia ausente será derivado pela agenda no montador.
+    const vistos = new Set<string>();
+    rotina.dias.forEach((dia, indice) => {
+      if (dia.diaId == null) return;
+      if (vistos.has(dia.diaId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['dias', indice, 'diaId'],
+          message: 'cada dia da semana pode ter apenas um treino',
+        });
+      }
+      vistos.add(dia.diaId);
+    });
   }).optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
