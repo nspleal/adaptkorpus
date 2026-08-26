@@ -13,13 +13,15 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
-end $$;
+end $;
+grant usage on schema auth to authenticated;
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000001') on conflict do nothing;
 
 
 -- Stub mínimo de Realtime para testar a migration C1.1-E em Postgres puro. Produção usa o
 -- schema gerenciado pelo Supabase; este stub só registra a emissão em uma caixa local.
 create schema if not exists realtime;
+grant usage on schema realtime to authenticated;
 create table if not exists realtime.messages (
   extension text,
   topic text
