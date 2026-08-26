@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { lerSessao, migrarSessao } from './session';
+import { lerSessao, lerSessaoCompleta, migrarSessao, salvarSessao } from './session';
 
 /**
  * Política travada (DF 2026-07-05): um bump de VERSAO NUNCA descarta o perfil salvo — ele é
@@ -54,6 +54,30 @@ describe('lerSessao — perfil antigo carrega migrado e re-carimba (não cai no 
     const perfil = lerSessao();
     expect(perfil).not.toBeNull();               // NÃO retorna null → app não redireciona ao onboarding
     expect(perfil!.equipamento).toBe('casa');    // migrado
-    expect(JSON.parse(store.get('evk_sessao')!).v).toBe(1); // re-carimbado p/ VERSAO atual
+    expect(JSON.parse(store.get('evk_sessao')!).v).toBe(2); // re-carimbado p/ VERSAO atual
+  });
+});
+
+
+describe('sessão C1 — fotografia das entradas transitórias', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('preserva oferta de cardio e escolha de execução em reload offline', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    });
+    const entrada = {
+      pesoEfetivoKg: 80,
+      diasOferecidosCardio: ['qua'] as const,
+      semanaCiclo: { semana: 1 as const, feedbackGrupos: [] as [] },
+      escolhasExecucao: [['e72', 'BILATERAL'] as ['e72', 'BILATERAL']],
+    };
+    salvarSessao(legacyPerfil as never, entrada);
+    const sessao = lerSessaoCompleta();
+    expect(sessao?.entradaPlano).toEqual(entrada);
+    expect(JSON.parse(store.get('evk_sessao')!).v).toBe(2);
   });
 });
