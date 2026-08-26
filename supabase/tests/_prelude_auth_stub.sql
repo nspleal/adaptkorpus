@@ -13,7 +13,7 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
   if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
-end $;
+end $$;
 grant usage on schema auth to authenticated;
 insert into auth.users(id) values ('00000000-0000-0000-0000-000000000001') on conflict do nothing;
 
