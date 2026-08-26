@@ -27,10 +27,14 @@ describe('CAS · canonicalInputHash (puro, determinístico)', () => {
     const a = canonicalInputHash({ x: 1, y: 2 });
     const b = canonicalInputHash({ y: 2, x: 1 });
     expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{16}$/);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
   });
   it('entradas diferentes → hashes diferentes', () => {
     expect(canonicalInputHash({ x: 1 })).not.toBe(canonicalInputHash({ x: 2 }));
+  });
+  it('usa SHA-256 UTF-8: vetor conhecido e textos Unicode distintos não colidem', () => {
+    expect(canonicalInputHash({ x: 'abc' })).toBe('270012bdffcdc54c226ac7d3bcc965b48e8c688c39b78313e40c82d96cda2dd4');
+    expect(canonicalInputHash({ alergenos: ['℡'] })).not.toBe(canonicalInputHash({ alergenos: ['!!'] }));
   });
 });
 
@@ -46,6 +50,10 @@ describe('CAS · decidirPreCommit (precedência versão/hash → revisão)', () 
 
   it('HASH malformado/vazio é rejeitado (sem certificado de input não persiste)', () => {
     const r = decidirPreCommit(atual, comando({ canonicalInputHash: '' }), FV);
+    expect(r).toMatchObject({ tipo: 'CONFLITO_VERSAO_OU_HASH', motivo: 'HASH' });
+  });
+  it('hash legado de 16 caracteres é rejeitado; o certificado SHA-256 precisa estar completo', () => {
+    const r = decidirPreCommit(atual, comando({ canonicalInputHash: '0123456789abcdef' }), FV);
     expect(r).toMatchObject({ tipo: 'CONFLITO_VERSAO_OU_HASH', motivo: 'HASH' });
   });
 
