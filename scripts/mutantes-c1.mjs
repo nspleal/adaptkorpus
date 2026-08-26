@@ -426,10 +426,25 @@ if (ancorasMortas.length > 0) {
 
 function rodaTestes(testes) {
   const vitest = join(RAIZ, 'node_modules', 'vitest', 'vitest.mjs');
-  const r = spawnSync(process.execPath, [vitest, 'run', '--configLoader', 'runner', ...testes, '--silent'], {
+  const opcoes = {
     cwd: RAIZ, encoding: 'utf-8', timeout: 300000, windowsHide: true,
     env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-  });
+  };
+
+  // 🔒 Uma mutação troca o fonte entre invocações. Sem limpar o cache, um worker pode
+  // carregar a transformação anterior e declarar um mutante vivo por engano. Nesta prova
+  // de segurança, reprodutibilidade vale mais que velocidade.
+  const limpeza = spawnSync(process.execPath, [vitest, '--clearCache', '--configLoader', 'runner'], opcoes);
+  const saidaLimpeza = `${limpeza.stdout ?? ''}\n${limpeza.stderr ?? ''}`;
+  if (limpeza.error || limpeza.status !== 0) {
+    return { tipo: 'INFRA_ERRO', saida: `não foi possível limpar o cache do Vitest\n${limpeza.error?.message ?? ''}\n${saidaLimpeza}` };
+  }
+
+  const r = spawnSync(
+    process.execPath,
+    [vitest, 'run', '--configLoader', 'runner', '--no-cache', '--no-file-parallelism', ...testes, '--silent'],
+    opcoes,
+  );
   const saida = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
   if (r.error?.code === 'ETIMEDOUT' || r.signal) return { tipo: 'TIMEOUT', saida };
   if (r.error || r.status == null) return { tipo: 'INFRA_ERRO', saida: `${r.error?.message ?? ''}\n${saida}` };
