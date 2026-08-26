@@ -116,7 +116,7 @@ begin
     'source_revision', p_expected_revision, 'committed_revision', v_new_rev,
     'formula_version', p_formula_version, 'canonical_input_hash', p_canonical_input_hash);
 end;
-$;
+$$;
 
 -- PostgreSQL concede EXECUTE a PUBLIC por padrão em funções novas. A migração 0016 recria
 -- esta assinatura com o escritor final; até lá, nenhum cliente deve alcançar esta versão.
