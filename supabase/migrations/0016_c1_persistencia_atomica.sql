@@ -50,8 +50,8 @@ begin
   if p_formula_version is null or p_formula_version !~ '^tempo-v[0-9]+$' then
     raise exception 'versão de fórmula inválida' using errcode = '22023';
   end if;
-  if p_canonical_input_hash is null or p_canonical_input_hash !~ '^[0-9a-f]{16}$' then
-    raise exception 'hash canônico inválido' using errcode = '22023';
+  if p_canonical_input_hash is null or p_canonical_input_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'hash canônico SHA-256 inválido' using errcode = '22023';
   end if;
   if jsonb_typeof(p_payload) <> 'object'
      or jsonb_typeof(p_payload->'perfilLinha') <> 'object'
