@@ -6,8 +6,8 @@
  * Persiste o **perfil do onboarding** em localStorage para que a área logada (`/app`)
  * sobreviva a reload e navegação de volta, sem jogar a pessoa de volta ao cadastro de
  * perfil. O **plano** (dieta + treino) NÃO é persistido: o motor é determinístico
- * (mesmo input → mesma saída), então recomputamos a partir do perfil salvo — fonte única
- * de verdade, sempre coerente se o motor evoluir.
+ * (mesmo input → mesma saída). A fotografia serializável das entradas transitórias da geração
+ * exibida acompanha o perfil, para um reload offline não trocar oferta de cardio ou execução.
  *
  * ⚠️ Transitório: quando o backend chegar (Supabase Auth + RLS), o perfil — que inclui
  * dado de saúde (flagsSaude) — migra para o servidor com RLS/minimização (ver
@@ -114,7 +114,7 @@ function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   return { ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
 }
 
-/** Encerra a sessão local (logout). Só o perfil — o resto sai por `limparDadosLocais`. */
+/** Encerra a sessão local (logout). Perfil e fotografia de entrada saem por `limparDadosLocais`. */
 export function limparSessao(): void {
   try { localStorage.removeItem(chaveLocal(KEY)); } catch { /* storage indisponível */ }
 }
