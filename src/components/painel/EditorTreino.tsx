@@ -38,9 +38,15 @@ export interface DiaEditavel {
 export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[]): DiaEditavel[] {
   return dias.map((d, i) => ({
     nome: d.nome,
-    weekdayIdx: ORDEM_SEMANA.indexOf(treinoDias[i] ?? ORDEM_SEMANA[i % 7]!),
+    // `diaId` é a fonte nova; agenda/posição é apenas compatibilidade para plano legado.
+    weekdayIdx: Math.max(0, ORDEM_SEMANA.indexOf(d.diaId ?? treinoDias[i] ?? ORDEM_SEMANA[i % 7]!)),
     exercicios: d.slots.map((s) => s.exercicio),
   }));
+}
+
+/** Um treino de força por dia nesta versão. Sessões duplas exigirão uma identidade de sessão própria. */
+export function weekdaysSaoUnicos(dias: readonly DiaEditavel[]): boolean {
+  return new Set(dias.map((d) => d.weekdayIdx)).size === dias.length;
 }
 
 /** Do formato editável para o que se persiste — SÓ o desenho (ids por dia). */
@@ -49,7 +55,7 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
     origem: 'usuario',
     dias: dias
       .filter((d) => d.exercicios.length > 0)
-      .map((d) => ({ nome: d.nome, exercicioIds: d.exercicios.map((e) => e.id) })),
+      .map((d) => ({ nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id) })),
   };
 }
 
@@ -103,6 +109,9 @@ export default function EditorTreino({
   }, [dias, nivel, objetivo, tempoPorSessaoMin, preverPlano]);
 
   const total = dias.reduce((n, d) => n + d.exercicios.length, 0);
+  const diasUnicos = weekdaysSaoUnicos(dias);
+  const proximoDiaLivre = (atuais: readonly DiaEditavel[]) =>
+    Math.max(0, ORDEM_SEMANA.findIndex((_, indice) => !atuais.some((dia) => dia.weekdayIdx === indice)));
 
   const mut = (i: number, f: (d: DiaEditavel) => DiaEditavel) => setDias((p) => p.map((d, k) => (k === i ? f(d) : d)));
   const mover = (i: number, k: number, delta: number) => mut(i, (d) => {
@@ -141,11 +150,22 @@ export default function EditorTreino({
             </div>
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {ORDEM_SEMANA.map((w, wi) => (
-                <button key={w} type="button" onClick={() => mut(i, (x) => ({ ...x, weekdayIdx: wi }))} aria-pressed={d.weekdayIdx === wi} style={pill(d.weekdayIdx === wi)}>
-                  {DIA_LABEL[w].abbr}
-                </button>
-              ))}
+              {ORDEM_SEMANA.map((w, wi) => {
+                const ocupadoPorOutro = dias.some((outro, outroIndice) => outroIndice !== i && outro.weekdayIdx === wi);
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    disabled={ocupadoPorOutro}
+                    onClick={() => !ocupadoPorOutro && mut(i, (x) => ({ ...x, weekdayIdx: wi }))}
+                    aria-pressed={d.weekdayIdx === wi}
+                    title={ocupadoPorOutro ? 'Já existe um treino neste dia' : undefined}
+                    style={{ ...pill(d.weekdayIdx === wi), opacity: ocupadoPorOutro ? .35 : 1, cursor: ocupadoPorOutro ? 'not-allowed' : 'pointer' }}
+                  >
+                    {DIA_LABEL[w].abbr}
+                  </button>
+                );
+              })}
             </div>
 
             {d.exercicios.length === 0 && (
@@ -168,7 +188,11 @@ export default function EditorTreino({
           </div>
         ))}
 
-        <button onClick={() => setDias((p) => [...p, { nome: `Dia ${p.length + 1}`, weekdayIdx: Math.min(6, p.length), exercicios: [] }])} style={{ ...btnGhost, width: '100%', marginBottom: 20 }}>
+        <button
+          disabled={dias.length >= ORDEM_SEMANA.length}
+          onClick={() => setDias((p) => [...p, { nome: `Dia ${p.length + 1}`, weekdayIdx: proximoDiaLivre(p), exercicios: [] }])}
+          style={{ ...btnGhost, width: '100%', marginBottom: 20, opacity: dias.length >= ORDEM_SEMANA.length ? .4 : 1 }}
+        >
           + Adicionar dia
         </button>
 
@@ -181,14 +205,15 @@ export default function EditorTreino({
               salva, e isso não é risco: é ausência de treino. */}
           <button
             onClick={() => { onAvisoMostrado?.(avaliacao.avisos.map((a) => a.codigo)); onSalvar(dias, avaliacao); }}
-            disabled={total === 0}
-            className={total > 0 ? 'hov-btn' : ''}
-            style={{ flex: 1, minWidth: 180, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: total > 0 ? 'pointer' : 'not-allowed', opacity: total > 0 ? 1 : 0.4 }}
+            disabled={total === 0 || !diasUnicos}
+            className={total > 0 && diasUnicos ? 'hov-btn' : ''}
+            style={{ flex: 1, minWidth: 180, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: total > 0 && diasUnicos ? 'pointer' : 'not-allowed', opacity: total > 0 && diasUnicos ? 1 : 0.4 }}
           >
             Salvar meu treino
           </button>
         </div>
         {total === 0 && <p style={{ margin: '10px 2px 0', fontSize: '.84rem', color: 'rgba(234,229,219,.5)' }}>Adicione ao menos um exercício para salvar.</p>}
+        {!diasUnicos && <p style={{ margin: '10px 2px 0', fontSize: '.84rem', color: '#ffb4a5' }}>Escolha dias diferentes: por enquanto, cada dia comporta um treino.</p>}
       </div>
 
       {abrindoEm != null && (
