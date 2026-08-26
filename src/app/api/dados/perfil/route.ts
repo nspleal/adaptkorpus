@@ -15,6 +15,7 @@ import { consentimentosSchema, perfilResumoSchema } from '@/lib/validation/perfi
 import type { PerfilResumo } from '@/components/painel/Painel';
 import { entradaPlanoVisivelSchema } from '@/lib/validation/plano-entrada';
 import { comandoCommitDePlano, aggregateIdDePlano } from '@/lib/plano-cas-comando';
+import { leituraAtomicaDoPlanoCas } from '@/lib/persistencia/leitura-plano-atomica';
 import { persistirPlanoComCAS } from '@/lib/persistencia/plano-cas';
 import { RepositorioSupabasePlanoCAS, type ClienteSupabaseCAS } from '@/lib/persistencia/plano-cas-supabase';
 import { FORMULA_DURACAO_VERSION } from '@/lib/engine';
@@ -37,22 +38,32 @@ export const runtime = 'nodejs';
 export async function GET() {
   const ctx = await contextoUsuario();
   if (ctx instanceof NextResponse) return ctx;
-  const [{ data, error }, { data: cas, error: erroCas }] = await Promise.all([
-    ctx.supabase.from('profile').select('*').eq('id', ctx.user.id).maybeSingle(),
-    ctx.supabase.from('plano_cas').select('revision, payload').eq('aggregate_id', aggregateIdDePlano(ctx.user.id)).maybeSingle(),
-  ]);
-  if (error || erroCas) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
+  // Um snapshot C1 já contém perfil + opções no mesmo payload cuja revisão o CAS confirmou.
+  // Ler `profile` e `plano_cas` em duas queries independentes pode cruzar os dois lados de
+  // uma transação concorrente (perfil antigo com revisão nova). Para C1, nunca devolvemos essa
+  // combinação híbrida; legado sem linha CAS continua no caminho separado de revisão zero.
+  const { data: cas, error: erroCas } = await ctx.supabase
+    .from('plano_cas')
+    .select('revision, payload')
+    .eq('aggregate_id', aggregateIdDePlano(ctx.user.id))
+    .maybeSingle();
+  if (erroCas) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
+  if (cas) {
+    const leitura = leituraAtomicaDoPlanoCas(cas);
+    if (!leitura) return NextResponse.json({ error: 'snapshot_plano_invalido' }, { status: 500 });
+    return NextResponse.json(leitura);
+  }
+
+  const { data, error } = await ctx.supabase.from('profile').select('*').eq('id', ctx.user.id).maybeSingle();
+  if (error) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
   // Linha inexistente OU criada sem o bloco de preferências (parcial) = sem perfil usável.
   if (!data || !data.sexo || !data.preferencias?.nivelExperiencia) {
     return NextResponse.json({ error: 'sem_perfil' }, { status: 404 });
   }
-  const entradaCandidata = (cas?.payload as { entrada?: { opcoes?: unknown } } | null)?.entrada?.opcoes;
-  const entrada = entradaPlanoVisivelSchema.safeParse(entradaCandidata);
+  // Legado sem C1 continua legível; o primeiro save o promove ao contrato novo.
   return NextResponse.json({
     perfil: linhaParaPerfil(data as ProfileRow),
-    revision: cas?.revision ?? 0,
-    // Snapshot antigo sem C1 continua legível; o primeiro save o promove ao contrato novo.
-    ...(entrada.success ? { entradaPlano: entrada.data } : {}),
+    revision: 0,
   });
 }
 
