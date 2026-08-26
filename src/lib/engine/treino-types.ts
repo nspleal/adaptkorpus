@@ -60,7 +60,8 @@ export type DivisaoPreferida = 'auto' | 'superior-inferior' | 'prioridades';
 export interface RotinaCustom {
   /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
   origem: 'usuario';
-  dias: { nome: string; exercicioIds: string[] }[];
+  /** `diaId` explícito passou a ser gravado pelo editor. Ausente só em rotina legada; o montador deriva uma vez da agenda e preserva compatibilidade. */
+  dias: { nome: string; diaId?: Weekday; exercicioIds: string[] }[];
 }
 
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
@@ -245,6 +246,8 @@ export interface SlotExercicio {
 export interface DiaTreino {
   /** Rótulo do dia (ex.: "Full-body", "Upper", "Push"). */
   nome: string;
+  /** Dia real da semana. Um treino de força por dia nesta versão; sessão dupla terá identidade própria futura. */
+  diaId?: Weekday;
   slots: SlotExercicio[];
   /**
    * 🔴 Slots que o template pediu e o catálogo disponível não pôde preencher
