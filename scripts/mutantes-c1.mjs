@@ -10,7 +10,7 @@
  *       node scripts/mutantes-c1.mjs 3 7 12     (só as listadas)
  *       node scripts/mutantes-c1.mjs --md       (saída em tabela markdown)
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -431,13 +431,18 @@ function rodaTestes(testes) {
     env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
   };
 
-  // 🔒 Uma mutação troca o fonte entre invocações. Sem limpar o cache, um worker pode
-  // carregar a transformação anterior e declarar um mutante vivo por engano. Nesta prova
-  // de segurança, reprodutibilidade vale mais que velocidade.
-  const limpeza = spawnSync(process.execPath, [vitest, '--clearCache', '--configLoader', 'runner'], opcoes);
-  const saidaLimpeza = `${limpeza.stdout ?? ''}\n${limpeza.stderr ?? ''}`;
-  if (limpeza.error || limpeza.status !== 0) {
-    return { tipo: 'INFRA_ERRO', saida: `não foi possível limpar o cache do Vitest\n${limpeza.error?.message ?? ''}\n${saidaLimpeza}` };
+  // 🔒 Uma mutação troca o fonte entre invocações. Limpeza via Node é portátil entre
+  // Windows e Unix; não depende de uma flag do Vitest que possa variar entre versões.
+  // Reprodutibilidade vale mais que velocidade nesta prova de segurança.
+  try {
+    rmSync(join(RAIZ, 'node_modules', '.vite'), {
+      recursive: true, force: true, maxRetries: 3, retryDelay: 100,
+    });
+  } catch (erro) {
+    return {
+      tipo: 'INFRA_ERRO',
+      saida: `não foi possível limpar o cache do Vitest: ${erro instanceof Error ? erro.message : String(erro)}`,
+    };
   }
 
   const r = spawnSync(
