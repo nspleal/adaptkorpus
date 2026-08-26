@@ -40,6 +40,10 @@ export const entradaPlanoVisivelSchema = z.object({
   if (new Set(exercicios).size !== exercicios.length) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['escolhasExecucao'], message: 'escolhasExecucao não pode conter o mesmo exercício mais de uma vez' });
   }
+  const recentes = entrada.semanaCiclo.retomada?.exerciciosRecentes ?? [];
+  if (new Set(recentes).size !== recentes.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['semanaCiclo', 'retomada', 'exerciciosRecentes'], message: 'exerciciosRecentes não pode conter o mesmo exercício mais de uma vez' });
+  }
 });
 
 export type EntradaPlanoVisivelValidada = z.infer<typeof entradaPlanoVisivelSchema>;
