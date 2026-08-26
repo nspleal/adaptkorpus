@@ -187,7 +187,14 @@ function adicionalTecnica(
     }
   }
   const contratoKeys = tec.aplicacoes.map(chave).sort();
-  if (contratoKeys.length !== matKeys.length || contratoKeys.some((k, i) => k !== matKeys[i])) {
+  const materializadasSaoUnicas = new Set(matKeys).size === matKeys.length;
+  const contratoTemChavesUnicas = new Set(contratoKeys).size === contratoKeys.length;
+  if (
+    !materializadasSaoUnicas
+    || !contratoTemChavesUnicas
+    || contratoKeys.length !== matKeys.length
+    || contratoKeys.some((k, i) => k !== matKeys[i])
+  ) {
     motivos.push(`item ${idx}: contrato de técnica não casa com as materializadas (ausente/extra/divergente/duplicada)`);
     return null;
   }
