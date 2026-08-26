@@ -199,6 +199,14 @@ describe('C1 · técnica temporal — contrato casa {aplicacao_id, tecnica_id} m
     const it = base({ tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ aplicacaoId: 'a1', tecnicaId: 'drop-1', adicionalSegundos: -5 }] }, [{ aplicacaoId: 'a1', tecnicaId: 'drop-1' }]);
     expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
   });
+  it('rejeita par de técnica duplicado mesmo quando contrato e materialização repetem o mesmo par', () => {
+    const duplicada = { aplicacaoId: 'a1', tecnicaId: 'drop-1' };
+    const it = base(
+      { tipo: 'CONTRATO_COMPLETO', aplicacoes: [{ ...duplicada, adicionalSegundos: 20 }, { ...duplicada, adicionalSegundos: 20 }] },
+      [duplicada, duplicada],
+    );
+    expect(avaliarDuracaoSessao({ itens: [it] }).estadoCalculo).toBe('NAO_AVALIADO');
+  });
   it('CONTRATO_AUSENTE ⇒ NAO_AVALIADO', () => {
     const it = base({ tipo: 'CONTRATO_AUSENTE', aplicacaoIds: ['a1'] }, [{ aplicacaoId: 'a1', tecnicaId: 'drop-set' }]);
     const r = avaliarDuracaoSessao({ itens: [it] });
