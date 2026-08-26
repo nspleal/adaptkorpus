@@ -15,6 +15,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION_CAS="$HERE/../migrations/0015_c1_cas_metadata.sql"
 MIGRATION_ATOMICA="$HERE/../migrations/0016_c1_persistencia_atomica.sql"
 MIGRATION_SINCRONIZACAO="$HERE/../migrations/0017_c1_sincronizacao_plano_realtime.sql"
+TEST_BORDA_0015="$HERE/cas_0015_bloqueia_escrita.sql"
 TESTSQL="$HERE/cas_atomicidade.sql"
 TEST_ATOMICO="$HERE/cas_persistencia_atomica.sql"
 TEST_SINCRONIZACAO="$HERE/cas_sincronizacao_realtime.sql"
@@ -52,6 +53,7 @@ for migration in 0001_init.sql 0002_rls.sql 0005_profile_email_preferencias.sql 
   runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$HERE/../migrations/$migration'" >>"$WORK/migrate.log" 2>&1
 done
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_CAS'" >>"$WORK/migrate.log" 2>&1
+runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TEST_BORDA_0015'" >>"$WORK/test.err" 2>&1
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$TESTSQL'" >>"$WORK/test.err" 2>&1
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_ATOMICA'" >>"$WORK/migrate.log" 2>&1
 runpg "psql -v ON_ERROR_STOP=1 -h '$WORK' -U postgres -d testcas -f '$MIGRATION_SINCRONIZACAO'" >>"$WORK/migrate.log" 2>&1
