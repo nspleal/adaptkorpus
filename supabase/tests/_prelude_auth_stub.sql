@@ -25,6 +25,9 @@ create table if not exists realtime.messages (
   topic text
 );
 alter table realtime.messages enable row level security;
+-- O harness concede SELECT apenas para exercitar a policy com o papel authenticated. Produção
+-- usa o fluxo interno do Realtime para esta autorização; esta concessão não é uma migration.
+grant select on realtime.messages to authenticated;
 
 -- Em produção, Realtime entrega o tópico ao motor de policy; no harness ele só precisa
 -- existir para a policy ser compilada. Nenhuma migration de produção define esta função.
