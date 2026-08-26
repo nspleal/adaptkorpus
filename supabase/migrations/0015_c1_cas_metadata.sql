@@ -38,13 +38,10 @@ alter table public.plano_cas enable row level security;
 
 create policy "plano_cas_select_own"
   on public.plano_cas for select to authenticated using (auth.uid() = user_id);
-create policy "plano_cas_insert_own"
-  on public.plano_cas for insert to authenticated with check (auth.uid() = user_id);
-create policy "plano_cas_update_own"
-  on public.plano_cas for update to authenticated
-  using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "plano_cas_delete_own"
-  on public.plano_cas for delete to authenticated using (auth.uid() = user_id);
+
+-- A primeira migration já deve ser segura quando aplicada isoladamente: a escrita só nasce na
+-- RPC definitiva da 0016. Não deixe uma falha/interrupção entre arquivos reabrir DML no browser.
+revoke insert, update, delete on table public.plano_cas from public, anon, authenticated;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- RPC ATÔMICA — a garantia final da corrida (compare-and-swap real)
@@ -53,7 +50,8 @@ create policy "plano_cas_delete_own"
 --   { tipo: 'COMMIT_CONFIRMADO', source_revision, committed_revision, formula_version,
 --     canonical_input_hash }
 --   { tipo: 'CONFLITO_REVISAO', expected_revision, actual_revision }
--- `security invoker`: a RLS do chamador vale (o dono só commita o próprio agregado).
+-- Esta RPC histórica existe para compatibilidade do harness de migração. Ela é bloqueada de
+-- imediato para PUBLIC/anon/authenticated abaixo; o único escritor de produção nasce na 0016.
 -- `SELECT ... FOR UPDATE` serializa concorrentes na MESMA linha; o `WHERE revision =
 -- expected` no UPDATE é a trava final: zero linhas ⇒ conflito, nunca sucesso.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -118,7 +116,11 @@ begin
     'source_revision', p_expected_revision, 'committed_revision', v_new_rev,
     'formula_version', p_formula_version, 'canonical_input_hash', p_canonical_input_hash);
 end;
-$$;
+$;
+
+-- PostgreSQL concede EXECUTE a PUBLIC por padrão em funções novas. A migração 0016 recria
+-- esta assinatura com o escritor final; até lá, nenhum cliente deve alcançar esta versão.
+revoke all on function public.commit_plano_cas(text, uuid, integer, text, text, jsonb) from public, anon, authenticated;
 
 -- Nota de legado (B1.14, fora do C1): agregados legados NÃO têm linha em `plano_cas`.
 -- O primeiro uso do C1 recomputa e grava (expected_revision = 0 ⇒ COMMIT_CONFIRMADO rev 1).
