@@ -77,9 +77,9 @@ const MUTACOES = [
     para: `  return tec.aplicacoes.reduce((s, a) => s + a.adicionalSegundos, 0) * 3;`,
     testes: [`${E}/duracao-sessao.test.ts`] },
 
-  { n: 11, desc: 'aceitar aplicação técnica negativa/duplicada/extra/sem correspondência', alvo: `${E}/duracao-sessao.ts`,
-    de: `  if (contratoKeys.length !== matKeys.length || contratoKeys.some((k, i) => k !== matKeys[i])) {`,
-    para: `  if (false) {`,
+  { n: 11, desc: 'aceitar técnica extra ou sem correspondência materializada', alvo: `${E}/duracao-sessao.ts`,
+    de: `  if (\n    !materializadasSaoUnicas\n    || !contratoTemChavesUnicas\n    || contratoKeys.length !== matKeys.length\n    || contratoKeys.some((k, i) => k !== matKeys[i])\n  ) {`,
+    para: `  if (\n    !materializadasSaoUnicas\n    || !contratoTemChavesUnicas\n  ) {`,
     testes: [`${E}/duracao-sessao.test.ts`] },
 
   { n: 12, desc: 'tratar `CONTRATO_AUSENTE` como `SEM_TECNICA`', alvo: `${E}/duracao-sessao.ts`,
