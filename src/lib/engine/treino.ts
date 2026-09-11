@@ -374,15 +374,32 @@ export function feedbackRefinado(args: {
   return fb;
 }
 
-/** Aplica a semana de deload à prescrição: −~45% do volume (carga −10% é por exercício). */
+/**
+ * Aplica a semana de deload à prescrição: −~45% do volume (carga −10% é por exercício).
+ *
+ * 🔴 D2 (diagnóstico 2026-09-10): a redução alcança as DUAS réguas de volume, não só a
+ * semanal por grupo. Medido: reduzir apenas `volumePorGrupoSemana` deixa intocado todo grupo
+ * cuja capacidade estrutural (`nº de slots × seriesPorExercicio.max`) já estava ABAIXO do
+ * alvo — bíceps com 1 exercício continuava em 4 séries nas duas semanas. O corte agregado
+ * caía para −28 %, fora da banda −40–50 % que o cofre registra
+ * (`motor-treino-mesociclo-v2`, 2026-07-08).
+ *
+ * 🔒 Mesmo fator, uma única constante (`DELOAD_REDUCAO_VOLUME`), nenhum percentual novo.
+ * O piso 1 não é escolha: é o menor inteiro que ainda é uma série.
+ */
+export function seriesEmDeload(series: number): number {
+  return Math.max(1, Math.round(series * (1 - DELOAD_REDUCAO_VOLUME)));
+}
+
 export function aplicarDeload(p: PrescricaoFITT): PrescricaoFITT & { deload: true } {
-  const fator = 1 - DELOAD_REDUCAO_VOLUME;
+  const reduzir = (f: Faixa): Faixa => ({
+    min: seriesEmDeload(f.min),
+    max: seriesEmDeload(f.max),
+  });
   return {
     ...p,
-    volumePorGrupoSemana: {
-      min: Math.max(1, Math.round(p.volumePorGrupoSemana.min * fator)),
-      max: Math.max(1, Math.round(p.volumePorGrupoSemana.max * fator)),
-    },
+    volumePorGrupoSemana: reduzir(p.volumePorGrupoSemana),
+    seriesPorExercicio: reduzir(p.seriesPorExercicio),
     deload: true,
   };
 }

@@ -82,10 +82,21 @@ describe('🧭 o desenho do usuário manda nos EXERCÍCIOS', () => {
     expect(series(5)).toBeGreaterThan(series(1));
   });
 
+  /**
+   * 🔴 D2 (2026-09-10): o título deste teste sempre disse "deload continua valendo" e a
+   * asserção provava o contrário — que a semana 6 saía SEM séries. Agora ela anota séries
+   * reduzidas, e é isso que se trava: o mesmo desenho, menos volume, sem ramo especial.
+   */
   it('deload (semana 6) e rampa continuam valendo no plano custom — sem ramo especial', () => {
-    const r6 = plano(perfil({ rotinaCustom: DESENHO }), 6);
+    const p = perfil({ rotinaCustom: DESENHO });
+    const r5 = plano(p, 5);
+    const r6 = plano(p, 6);
     expect(r6.semana).toEqual(expect.objectContaining({ numero: 6, deload: true }));
-    for (const d of r6.dias) for (const s of d.slots) expect(s.series).toBeUndefined();
+    const ids = (r: typeof r6) => r.dias.map((d) => d.slots.map((s) => s.exercicio.id).join(',')).join('|');
+    const total = (r: typeof r6) => r.dias.flatMap((d) => d.slots.map((s) => s.series ?? 0)).reduce((a, b) => a + b, 0);
+    expect(ids(r6), 'o deload trocou exercício do desenho').toBe(ids(r5));
+    for (const d of r6.dias) for (const s of d.slots) expect(s.series, s.exercicio.id).toBeGreaterThan(0);
+    expect(total(r6), `S5=${total(r5)} S6=${total(r6)}`).toBeLessThan(total(r5));
   });
 
   it('a retomada também opera sobre o desenho (o pipeline é um só)', () => {

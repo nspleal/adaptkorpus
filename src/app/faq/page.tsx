@@ -2,7 +2,7 @@ import LegalLayout from '@/components/legal/LegalLayout';
 import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 import FaqBusca, { type FaqCat } from '@/components/legal/FaqBusca';
 
-export const metadata = { title: 'Perguntas frequentes · Evokorpus' };
+export const metadata = { title: 'Perguntas frequentes · Adaptkorpus' };
 
 // FAQ é conteúdo informacional (NÃO jurídico) → draftMode={false} (sem selo de rascunho).
 // Conteúdo canônico VERBATIM do cofre (conceitos/faq-evokorpus, 2026-07-02) — o app porta
@@ -67,12 +67,12 @@ const CATEGORIAS: FaqCat[] = [
   {
     id: 's-cat-legal', label: 'Saúde, legal e 18+', desc: 'Os limites da ferramenta e quem pode usar.',
     items: [
-      { q: 'O Evokorpus usa IA?', a: 'Não. É uma ferramenta baseada em regras claras e numa base de dados curada — uma fórmula transparente, não um chute de "caixa-preta". Você fica no comando das escolhas.' },
+      { q: 'O Adaptkorpus usa IA?', a: 'Não. É uma ferramenta baseada em regras claras e numa base de dados curada — uma fórmula transparente, não um chute de "caixa-preta". Você fica no comando das escolhas.' },
       { q: 'Isso substitui nutricionista ou personal trainer?', a: 'Não. É uma ferramenta geral e educacional pra você organizar treino e alimentação; não é acompanhamento clínico. Para necessidades específicas, procure um profissional.' },
       { q: 'Tenho uma condição de saúde (diabetes, gravidez, lesão, coração) — posso usar?', a: 'Nesses casos o app não gera plano e te orienta a procurar um profissional de saúde. É uma escolha de segurança, não um limite comercial.' },
       { q: 'Vocês prometem que eu vou emagrecer ou ganhar massa?', a: 'Não prometemos resultado. Entregamos uma ferramenta honesta e organizada; o resultado depende de constância e de fatores individuais.' },
-      { q: 'Vocês recomendam suplementos?', a: 'Não. O Evokorpus não vende nem recomenda suplementos.' },
-      { q: 'Tem idade mínima?', a: 'Sim: o Evokorpus é para maiores de 18 anos.' },
+      { q: 'Vocês recomendam suplementos?', a: 'Não. O Adaptkorpus não vende nem recomenda suplementos.' },
+      { q: 'Tem idade mínima?', a: 'Sim: o Adaptkorpus é para maiores de 18 anos.' },
     ],
   },
 ];

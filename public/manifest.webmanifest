@@ -1,6 +1,6 @@
 {
-  "name": "Evokorpus",
-  "short_name": "Evokorpus",
+  "name": "Adaptkorpus",
+  "short_name": "Adaptkorpus",
   "description": "Treino e dieta que evoluem com você, todo dia.",
   "start_url": "/app",
   "scope": "/",

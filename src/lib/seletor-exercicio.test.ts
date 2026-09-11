@@ -65,7 +65,7 @@ describe('🔎 o que o seletor mostra (e o que ele NÃO esconde)', () => {
   it('favoritos vêm primeiro (DF #12) e o equipamento do usuário é o default', () => {
     expect(sel).toMatch(/favoritos\.has\(a\.id\)/);
     expect(sel).toMatch(/useState\(true\)/); // soMeuEquipamento ligado por default
-    expect(sel, 'a saída para a biblioteca inteira sumiu').toMatch(/Biblioteca inteira/);
+    expect(sel, 'a saída para outros equipamentos sumiu').toMatch(/Todos os equipamentos/);
   });
 
   it('cada item mostra primário + secundários (o dado que o v4 normalizou)', () => {

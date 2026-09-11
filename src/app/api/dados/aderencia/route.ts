@@ -1,7 +1,8 @@
 /**
  * GET/PUT /api/dados/aderencia — registro de refeições por DIA local (`logs` tipo
  * `refeicao`, um registro por dia; payload = { logs, notes } como no `evk_aderencia`).
- * Upsert manual (select→update|insert): `logs` não tem unique (user,tipo,data).
+ * RPC atômica apoiada no índice único parcial `logs_refeicao_por_dia_unico`
+ * (migration 0018): uma linha por (user_id, 'refeicao', data).
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
@@ -38,11 +39,11 @@ export async function PUT(req: NextRequest) {
   // 🔒 Teto de tamanho: o zod limita a FORMA, não o volume (um mapa válido pode ter 10 mil
   // chaves). Os dois juntos fecham.
   if (!payloadCabe(payload)) return NextResponse.json({ error: 'payload_grande' }, { status: 413 });
-  const { data: existente } = await ctx.supabase
-    .from('logs').select('id').eq('tipo', 'refeicao').eq('data', body.dia).maybeSingle();
-  const { error } = existente
-    ? await ctx.supabase.from('logs').update({ payload }).eq('id', existente.id)
-    : await ctx.supabase.from('logs').insert({ user_id: ctx.user.id, tipo: 'refeicao', data: body.dia, payload });
+  // A RPC inclui o predicado do índice parcial e resolve auth.uid() sob RLS.
+  const { error } = await ctx.supabase.rpc('registrar_aderencia_dia', {
+    p_dia: body.dia,
+    p_payload: payload,
+  });
   if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

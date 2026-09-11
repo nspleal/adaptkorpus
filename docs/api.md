@@ -113,7 +113,36 @@ Pipeline de treino: gate herdado → prescrição FITT → rotina semanal.
 | `objetivo` | `emagrecimento` \| `massa` \| `saude` |
 | `nivelExperiencia` | `iniciante` \| `intermediario` \| `avancado` |
 | `equipamento` | `nenhum` \| `casa` \| `academia` |
-| `diasDisponiveis` 1–7 · `tempoPorSessaoMin` 10–180 |
+| `diasDisponiveis` 1–7 · `tempoPorSessaoMin` 10–240 |
+
+### Campos opcionais — alinhamento com o plano do produto (D5, 2026-09-10)
+
+Até 2026-09-10 esta rota aceitava só os dez campos acima e **descartava** sete que o montador
+lê, além de não repassar nenhuma entrada transitória de geração. Consequência medida: para o
+mesmo usuário, a rota devolvia `Upper / Lower ×2` e o app `Prioridades (4 dias)`, com
+exercícios diferentes — e, sem `semanaCiclo`, uma rotina **sem séries e sem descanso**.
+
+Todos os campos abaixo são **opcionais** e a compatibilidade está preservada: um corpo com só
+os dez campos antigos continua recebendo 200 (agora com séries, porque a semana ausente cai
+em 1, a mesma regra do app).
+
+| Campo | Efeito |
+|---|---|
+| `treinoDias` | agenda real da semana — é a FONTE DE VERDADE dos dias; sem ela o split diverge do app |
+| `preferencias` | `{ banidos, trocas }` — banir e trocar exercícios |
+| `foco` | `{ grupo, compensa, semana }` — redistribui volume 1:1 |
+| `divisaoPreferida` | `auto` \| `superior-inferior` \| `prioridades` |
+| `rotinaCustom` | o desenho do editor guiado |
+| `cardioFavorito` | modalidade do dia de cardio |
+| `modoForca` | preset de força (ignorado para iniciante) |
+| `favoritos` | ids preferidos no slot |
+| `semanaCiclo` | `{ semana: 1..6, feedbackGrupos?: [grupo, ok \| segura][], retomada?: { semana, fator, volumeReferencia, exerciciosRecentes } }` — **ausente ⇒ semana 1** |
+| `pesoEfetivoKg` | peso resolvido usado nesta geração; ausente ⇒ `pesoKg` |
+| `diasOferecidosCardio` | dias que a pessoa ofereceu para cardio |
+| `escolhasExecucao` | pares `[exercicioId, BILATERAL \| UNILATERAL_ALTERNADO \| UNILATERAL_DOIS_LADOS]` |
+
+Um corpo com estes campos devolve **a mesma rotina** que o app gera para o mesmo perfil —
+travado por teste em `src/app/api/treino/route.test.ts`.
 
 **Resposta 200** (`{ gate, prescricao, rotina }`):
 

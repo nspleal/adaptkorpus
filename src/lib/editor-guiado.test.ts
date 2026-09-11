@@ -77,15 +77,15 @@ describe('🔒 DF① — o aviso NÃO trava', () => {
   });
 });
 
-describe('🔒 DF② — o editor mexe em EXERCÍCIOS, nunca em prescrição', () => {
-  it('não há campo de série, rep ou RIR editável', () => {
+describe('🔒 DF② — edição manual de séries; reps e RIR permanecem automáticos', () => {
+  it('não há campo de rep ou RIR editável', () => {
     // O editor NÃO estima séries: a prévia vem do motor (`preverPlano`). Aqui se prova só
     // que não existe edição de prescrição na tela.
-    expect(/onChange[^;]{0,120}(series|reps|rir)/i.test(editor), 'apareceu edição de prescrição').toBe(false);
-    expect(/setSeries|setReps|setRir/i.test(editor), 'apareceu estado de prescrição no editor').toBe(false);
+    expect(/onChange[^;]{0,120}(reps|rir)/i.test(editor), 'apareceu edição de prescrição').toBe(false);
+    expect(/setReps|setRir/i.test(editor), 'apareceu estado de prescrição no editor').toBe(false);
   });
 
-  it('o que se persiste é SÓ o desenho (ids por dia)', () => {
+  it('não persiste descanso nem prescrição completa', () => {
     expect(editor).toMatch(/exercicioIds: d\.exercicios\.map\(\(e\) => e\.id\)/);
     // 🔑 Nada de séries/descanso no que vai para o perfil — senão a pessoa congela fora dos
     // consertos futuros do motor (a lição do v3 · Bloco A).
@@ -105,7 +105,7 @@ describe('🔒 DF② — o editor mexe em EXERCÍCIOS, nunca em prescrição', (
    */
   it('o placar do editor vem do motor (preverPlano), nunca de séries chutadas', () => {
     expect(editor, 'o editor voltou a estimar séries por conta própria').not.toMatch(/seriesPadrao/);
-    expect(editor).toMatch(/const previsto = preverPlano\(dias\)/);
+    expect(editor).toMatch(/const previsto = useMemo\(\(\) => preverPlano\(dias\)/);
     expect(painel, 'a prévia não usa o mesmo recompute do salvamento').toMatch(/function preverPlano[\s\S]{0,400}recomputarPlano\(\{ \.\.\.perfil, rotinaCustom \}/);
   });
 

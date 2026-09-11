@@ -55,12 +55,12 @@ export function PorQueOAparelho() {
         style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', padding: '6px 0', cursor: 'pointer', color: 'rgba(234,229,219,.6)', fontSize: '.84rem', fontWeight: 600, minHeight: 44 }}
       >
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden><circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} /><path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth={2} strokeLinecap="round" /></svg>
-        Por que o número da esteira é maior?
+        Como estimamos esse gasto?
         <svg width={13} height={13} viewBox="0 0 24 24" fill="none" aria-hidden style={{ transform: aberto ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }}><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       {aberto && (
         <p style={{ ...apoio, margin: '4px 0 0', textWrap: 'pretty' }}>
-          O número do aparelho costuma ser maior: ele soma também o que você gastaria parado e não conhece seu condicionamento. Aqui mostramos só o gasto extra do exercício — é a conta que conversa com a sua dieta.
+          Mostramos uma estimativa do gasto extra da atividade, sem incluir o que você gastaria em repouso. Esse valor é informativo e não aumenta as calorias do seu plano alimentar.
         </p>
       )}
     </div>

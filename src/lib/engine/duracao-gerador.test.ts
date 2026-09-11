@@ -123,13 +123,20 @@ describe('C1 gerador · o HOLD isométrico é TRANSPORTADO ao plano (§1 / fixtu
   });
 });
 
-describe('C1 gerador · convergência na AUSÊNCIA de dados (deload não inventa) (§5.6/§8.1)', () => {
-  it('em deload (semana 6) o motor não anota séries ⇒ gerador e crítico convergem em NAO_AVALIADO', () => {
+/**
+ * 🔴 D2 (2026-09-10) — o VEÍCULO mudou, a propriedade não. A ausência de séries era produzida
+ * pelo deload (semana 6), e isso era o defeito: agora a semana 6 anota séries reduzidas e é
+ * certificada como as outras cinco. O produtor de ausência que RESTA é o caminho v1 — chamar
+ * o montador **sem `semanaCiclo`** —, e é sobre ele que a convergência continua sendo cobrada:
+ * nem o gerador nem o crítico inventam piso quando o dado não existe.
+ */
+describe('C1 gerador · convergência na AUSÊNCIA de dados (o motor não inventa) (§5.6/§8.1)', () => {
+  it('sem semanaCiclo o motor não anota séries ⇒ gerador e crítico convergem em NAO_AVALIADO', () => {
     const p = perfil({ tempoPorSessaoMin: 60, diasDisponiveis: 4 });
-    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, { semana: 6, feedbackGrupos: new Map() });
-    expect(r.duracaoDias, 'a certificação existe mesmo em deload').toBeDefined();
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined);
+    expect(r.duracaoDias, 'a certificação existe mesmo sem a semana do ciclo').toBeDefined();
     const semSerie = r.dias.filter((d) => d.slots.some((s) => s.series == null));
-    expect(semSerie.length, 'a fixture assume que o deload não anota séries').toBeGreaterThan(0);
+    expect(semSerie.length, 'a fixture assume que o caminho v1 não anota séries').toBeGreaterThan(0);
     r.dias.forEach((d, i) => {
       if (d.slots.some((s) => s.series == null)) {
         // gerador: NAO_AVALIADO (não inventa piso)…

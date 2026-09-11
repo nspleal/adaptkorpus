@@ -65,7 +65,7 @@ export default function CadastroPage() {
           <div style={{ ...cardAuth, padding: '34px 32px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(189,255,0,.12)', border: '1px solid rgba(189,255,0,.3)', color: '#BDFF00', borderRadius: 999, padding: '4px 12px', fontSize: '.7rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 16 }}>Beta fechado</div>
             <h1 style={{ margin: '0 0 6px', fontSize: '1.7rem', fontWeight: 700, letterSpacing: '-.02em' }}>Crie sua conta</h1>
-            <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Entre no beta do Evokorpus. É <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>grátis durante os testes</strong> — sem cartão.</p>
+            <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Entre no beta do Adaptkorpus. É <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>grátis durante os testes</strong> — sem cartão.</p>
 
             <div style={{ ...kicker, marginBottom: 15 }}>Sua conta</div>
             <Campo label="Nome"><input autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" style={inputAuth} /></Campo>

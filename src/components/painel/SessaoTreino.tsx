@@ -1,5 +1,7 @@
 'use client';
 
+import { seriesDoSlot } from '@/lib/series-treino';
+
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { aceitaTecnica, DESCRICAO_TECNICA, serieDaTecnica, TECNICAS, type TecnicaAvancada } from '@/lib/engine/tecnicas-avancadas';
@@ -181,8 +183,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     // passar à frente. (`estado?.series ?? sl.series` congelaria usuários de carga no
     // mínimo: a progressão nunca toca `series` no modo carga.)
     // deload corta ~metade, mantém o movimento — cofre §Deload.
-    const seriesBase = Math.max(sl.series ?? 0, estado?.series ?? 0, prescricao.seriesPorExercicio.min);
-    const nSetsEx = deload ? Math.max(1, Math.ceil(seriesBase / 2)) : seriesBase;
+    const nSetsEx = seriesDoSlot(sl);
     // alvo único (peso corporal / hold) só quando já há progressão; senão mostra a faixa
     const temAlvoUnico = modo === 'peso_corporal' && !!estado;
     const bandaStr = esSeg && faixaSeg ? `${rotuloFaixaSeg(faixaSeg)} ${unidade}` : `${reps.min}–${reps.max} ${unidade}`;
@@ -401,7 +402,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
           <div style={{ animation: `evkStepIn .45s ${EASE}` }}>
             <div style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#BDFF00', marginBottom: 8 }}>Treino de hoje</div>
             <h1 style={{ margin: '0 0 6px', fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-.02em' }}>{dia.nome}</h1>
-            <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.6)', fontSize: '.98rem' }}>{total} exercícios · {seriesMin}–{seriesMax} séries por exercício · {prescricao.rirAlvoSemana != null ? `RIR alvo ${prescricao.rirAlvoSemana}` : `RIR ${prescricao.rir.min}–${prescricao.rir.max}`}</p>
+            <p style={{ margin: '0 0 24px', color: 'rgba(234,229,219,.8)', fontSize: '.98rem' }}>{total} exercícios · {exs.reduce((n, e) => n + e.nSetsEx, 0)} séries no total · {seriesMin}–{seriesMax} por exercício · {prescricao.rirAlvoSemana != null ? `RIR alvo ${prescricao.rirAlvoSemana}` : `RIR ${prescricao.rir.min}–${prescricao.rir.max}`}</p>
             {deload && <AvisoAlivio />}
             <div style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 18, padding: '10px 20px', marginBottom: 24 }}>
               {exs.map((e, i) => (

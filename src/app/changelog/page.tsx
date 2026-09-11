@@ -1,6 +1,6 @@
 import InstitucionalShell from '@/components/legal/InstitucionalShell';
 
-export const metadata = { title: 'Changelog · Evokorpus' };
+export const metadata = { title: 'Changelog · Adaptkorpus' };
 
 // Releases REAIS do Evokorpus, compilados do histórico de lançamentos — atualizar a cada release.
 // Tags SEM vermelho (vermelho = erro/segurança em todo o sistema): "Novo" = Pulso sólido;
@@ -68,7 +68,7 @@ export default function Changelog() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
           <h1 style={{ margin: 0, fontWeight: 800, fontSize: 'clamp(2.1rem,4.4vw,3.2rem)', lineHeight: 1.06, letterSpacing: '-.03em' }}>Changelog</h1>
         </div>
-        <p style={{ margin: '0 0 44px', fontSize: 'clamp(1.02rem,1.4vw,1.16rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.66)', fontWeight: 500, maxWidth: 520 }}>O que muda no Evokorpus, direto ao ponto — atualizado a cada novo lançamento.</p>
+        <p style={{ margin: '0 0 44px', fontSize: 'clamp(1.02rem,1.4vw,1.16rem)', lineHeight: 1.6, color: 'rgba(234,229,219,.66)', fontWeight: 500, maxWidth: 520 }}>O que muda no Adaptkorpus, direto ao ponto — atualizado a cada novo lançamento.</p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
           {GRUPOS.map((g) => (

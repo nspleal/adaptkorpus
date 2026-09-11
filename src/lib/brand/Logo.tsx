@@ -44,7 +44,7 @@ export function KAscendente({
   variante = 'escuro',
   size = 64,
   corMono = COR.bone,
-  title = 'Evokorpus',
+  title = 'Adaptkorpus',
   style,
   className,
 }: KAscendenteProps) {
@@ -91,7 +91,7 @@ interface KSeloProps {
 }
 
 /** "K em Selo" — variante cunhada; é o ÍCONE DO APP (quadrado arredondado Bone). */
-export function KSelo({ size = 64, title = 'Evokorpus', style, className }: KSeloProps) {
+export function KSelo({ size = 64, title = 'Adaptkorpus', style, className }: KSeloProps) {
   return (
     <svg
       viewBox="0 0 100 100"
@@ -128,8 +128,8 @@ export function Wordmark({ variante = 'escuro', className }: WordmarkProps) {
   const corKorpus = variante === 'escuro' ? COR.pulso : COR.folha;
   return (
     <span className={className} style={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-      <span style={{ color: corEvo }}>evo</span>
-      <span style={{ color: corKorpus }}>korpus</span>
+      <span style={{ color: corEvo }}>adapt</span>
+      <span style={{ color: corKorpus, marginLeft: '0.02em' }}>korpus</span>
     </span>
   );
 }

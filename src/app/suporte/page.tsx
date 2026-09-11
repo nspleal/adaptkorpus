@@ -5,7 +5,7 @@ import FaqAccordion from '@/components/legal/FaqAccordion';
 import ContactForm from '@/components/legal/ContactForm';
 import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 
-export const metadata = { title: 'Suporte e Contato · Evokorpus' };
+export const metadata = { title: 'Suporte e Contato · Adaptkorpus' };
 
 const TOC = [
   { id: 's-faq', label: 'Perguntas frequentes' },
@@ -14,7 +14,7 @@ const TOC = [
 ];
 
 const FAQ = [
-  { q: 'O Evokorpus substitui um nutricionista ou personal?', a: 'Não. É uma ferramenta geral e educacional, dirigida por você. Para condições de saúde ou orientação individual, procure um profissional habilitado.' },
+  { q: 'O Adaptkorpus substitui um nutricionista ou personal?', a: 'Não. É uma ferramenta geral e educacional, dirigida por você. Para condições de saúde ou orientação individual, procure um profissional habilitado.' },
   { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
   // 🔒 Saíram "Como funciona a cobrança e o teste grátis?" e "Como eu cancelo?" (DF
   // 2026-07-29): não há cobrança, e a segunda mandava o usuário a "Conta → Assinatura",
@@ -38,7 +38,7 @@ export default function Suporte() {
       </section>
 
       <SecaoLegal id="s-contato" titulo="Fale com a gente">
-        <Paragrafo mb>Não achou a resposta? Escreva pra gente. E-mail de suporte: <AValidar>suporte@evokorpus… real</AValidar></Paragrafo>
+        <Paragrafo mb>Não achou a resposta? Escreva pra gente. E-mail de suporte: <AValidar>endereço de suporte a confirmar</AValidar></Paragrafo>
         <ContactForm />
       </SecaoLegal>
 

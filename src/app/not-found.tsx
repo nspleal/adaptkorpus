@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { EstadoSistema, estiloBotaoPrimario, estiloBotaoSecundario } from '@/components/estados/ui';
 
-export const metadata = { title: 'Página não encontrada · Evokorpus' };
+export const metadata = { title: 'Página não encontrada · Adaptkorpus' };
 
 export default function NotFound() {
   return (

@@ -1,4 +1,5 @@
 import type { PerfilResumo } from '@/components/painel/Painel';
+import { sanearBlocosDeTreino } from '@/lib/validation/perfil-resumo';
 
 /**
  * Mapeador PURO `PerfilResumo` ↔ linha da tabela `public.profile` (DF 2026-07-05).
@@ -154,7 +155,12 @@ export function linhaComConsentimentos<T extends object>(
 /** Linha de `profile` → `PerfilResumo` (inverso fiel de `perfilParaLinha`). */
 export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
   const pref = row.preferencias;
-  return {
+  /**
+   * 🔴 D6 (2026-09-10) — o jsonb `preferencias` de uma linha LEGADA guarda qualquer forma, e
+   * este é o inverso do PUT: o que sai daqui vai direto ao motor. `sanearBlocosDeTreino`
+   * aplica a mesma régua do schema de escrita — bloco inválido some, o perfil segue.
+   */
+  return sanearBlocosDeTreino({
     sexo: row.sexo,
     idade: row.idade,
     alturaCm: row.altura_cm,
@@ -194,5 +200,5 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
       lesao: row.lesao,
       diabetes: row.diabetes,
     },
-  };
+  });
 }

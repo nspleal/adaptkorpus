@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: process.env.SUPORTE_EMAIL_REMETENTE ?? 'Evokorpus <onboarding@resend.dev>',
+        from: process.env.SUPORTE_EMAIL_REMETENTE ?? 'Adaptkorpus <onboarding@resend.dev>',
         to: [destino],
         reply_to: email,
         // 🔒 `nome` é interpolado no ASSUNTO: CR/LF viram separador de header em SMTP.

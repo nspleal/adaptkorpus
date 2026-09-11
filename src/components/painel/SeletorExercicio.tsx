@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import type { Exercise, GrupoPrimario, PadraoMovimento } from '@/lib/data/types';
 import { exercicioDisponivel } from '@/lib/engine/equipamento';
 import { dificuldadesLiberadas } from '@/lib/engine/treino';
@@ -45,11 +46,12 @@ export interface ContextoSeletor {
 }
 
 export default function SeletorExercicio({
-  exercises, ctx, onEscolher, onDesbanir, onFechar, titulo = 'Biblioteca de exercícios', grupoInicial = null,
+  exercises, ctx, onEscolher, onEscolherVarios, onDesbanir, onFechar, titulo = 'Biblioteca de exercícios', grupoInicial = null,
 }: {
   exercises: readonly Exercise[];
   ctx: ContextoSeletor;
   onEscolher: (ex: Exercise) => void;
+  onEscolherVarios?: (exercicios: Exercise[]) => void;
   /** "Trazer de volta" um banido — mesma ação do Editar perfil, aqui a um toque. */
   onDesbanir?: (id: string) => void;
   onFechar: () => void;
@@ -57,6 +59,26 @@ export default function SeletorExercicio({
   grupoInicial?: GrupoPrimario | null;
 }) {
   const [busca, setBusca] = useState('');
+  const [selecionados, setSelecionados] = useState<Exercise[]>([]);
+  const dialogo = useRef<HTMLDivElement>(null);
+  const fechar = useRef(onFechar);
+  fechar.current = onFechar;
+  useEffect(() => {
+    const anterior = document.activeElement as HTMLElement | null;
+    dialogo.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const teclado = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); fechar.current(); }
+      if (e.key !== 'Tab') return;
+      const controles = Array.from(dialogo.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, summary, [tabindex="0"]') ?? []).filter((el) => el.getClientRects().length > 0);
+      const primeiro = controles[0]; const ultimo = controles[controles.length - 1];
+      if (e.shiftKey && document.activeElement === primeiro) { e.preventDefault(); ultimo?.focus(); }
+      if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro?.focus(); }
+    };
+    document.addEventListener('keydown', teclado);
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = overflowAnterior; document.removeEventListener('keydown', teclado); anterior?.focus(); };
+  }, []);
   const [grupo, setGrupo] = useState<GrupoPrimario | null>(grupoInicial);
   const [padrao, setPadrao] = useState<PadraoMovimento | null>(null);
   /** Ligado por default: a pessoa vê primeiro o que ela consegue fazer hoje. */
@@ -82,12 +104,12 @@ export default function SeletorExercicio({
       });
   }, [exercises, ctx, busca, grupo, padrao, soMeuEquipamento]);
 
-  return (
-    <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 220, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(7,18,11,.7)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(168deg, rgba(16,42,26,.99), rgba(15,15,14,.99))', border: '1px solid rgba(234,229,219,.14)', borderRadius: '22px 22px 0 0', padding: 20, boxShadow: '0 -30px 90px -30px rgba(0,0,0,.8)' }}>
+  return typeof document === 'undefined' ? null : createPortal(
+    <div ref={dialogo} className="ak-library-overlay" role="dialog" aria-modal="true" aria-label={titulo} onClick={onFechar}>
+      <div className="ak-library-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{titulo}</div>
-          <button onClick={onFechar} aria-label="Fechar" style={{ background: 'none', border: 'none', color: 'rgba(234,229,219,.5)', fontSize: '1.4rem', lineHeight: 1, cursor: 'pointer' }}>×</button>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{titulo}</div>
+          <button onClick={onFechar} aria-label="Fechar" style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', borderRadius: 12, color: '#EAE5DB', width: 44, height: 44, fontSize: '1.4rem', lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>×</button>
         </div>
 
         <input
@@ -99,56 +121,80 @@ export default function SeletorExercicio({
           style={{ flexShrink: 0, width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.16)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none', marginBottom: 10 }}
         />
 
-        <div style={fileiraChips(4)}>
+        <div className="ak-library-filters" aria-label="Filtrar por músculo principal" style={fileiraChips(4)}>
           <button type="button" onClick={() => setGrupo(null)} aria-pressed={grupo === null} style={chip(grupo === null)}>Todos</button>
           {GRUPOS.map((g) => (
             <button key={g} type="button" onClick={() => setGrupo(grupo === g ? null : g)} aria-pressed={grupo === g} style={chip(grupo === g)}>{ROTULO_GRUPO[g] ?? g}</button>
           ))}
         </div>
-        <div style={fileiraChips(8)}>
+        <div className="ak-library-filters" aria-label="Filtrar por movimento e equipamento" style={fileiraChips(8)}>
           {PADROES_FILTRO.map((p) => (
             <button key={p} type="button" onClick={() => setPadrao(padrao === p ? null : p)} aria-pressed={padrao === p} style={chip(padrao === p)}>{ROTULO_PADRAO[p] ?? p}</button>
           ))}
           <button type="button" onClick={() => setSoMeuEquipamento((v) => !v)} aria-pressed={soMeuEquipamento} style={chip(soMeuEquipamento)}>
-            {soMeuEquipamento ? 'Só meu equipamento' : 'Biblioteca inteira'}
+            {soMeuEquipamento ? 'Só meu equipamento' : 'Todos os equipamentos'}
           </button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="ak-library-context">
+          <p role="status"><strong>{lista.length} exercícios encontrados</strong> · nível {ctx.nivelExperiencia === 'iniciante' ? 'iniciante' : ctx.nivelExperiencia === 'intermediario' ? 'intermediário' : 'avançado'}{soMeuEquipamento ? ' · seu equipamento' : ' · todos os equipamentos'}</p>
+          <p>Os filtros se combinam. Os grupos consideram o músculo principal. Esta lista mantém o limite do seu nível e não inclui cardio.</p>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }} className="ak-library-results">
           {lista.length === 0 && (
-            <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>
-              Nenhum exercício com esses filtros. Tente limpar a busca ou desligar &quot;Só meu equipamento&quot;.
-            </p>
+            <div className="ak-library-empty">
+              <p>Nenhum exercício combina com estes filtros. Isso não significa que o grupo esteja vazio na biblioteca.</p>
+              <button type="button" style={botao} onClick={() => { setBusca(''); setGrupo(null); setPadrao(null); }}>Limpar busca e filtros</button>
+              {soMeuEquipamento && <button type="button" style={botao} onClick={() => setSoMeuEquipamento(false)}>Ver outros equipamentos</button>}
+            </div>
           )}
           {lista.map((ex) => {
             const banido = ctx.banidos.has(ex.id);
             const favorito = ctx.favoritos.has(ex.id);
             const sec = secundariosDe(ex).map((g) => ROTULO_GRUPO[g] ?? g);
             return (
-              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(234,229,219,.04)', border: `1px solid ${banido ? 'rgba(229,72,77,.34)' : 'rgba(234,229,219,.12)'}`, borderRadius: 14, padding: '12px 14px', opacity: banido ? 0.72 : 1 }}>
+              <article key={ex.id} className="ak-library-exercise" data-selected={selecionados.some((item) => item.id === ex.id)} aria-label={ex.nomePt} style={{ borderColor: banido ? 'rgba(229,72,77,.5)' : undefined }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '.98rem', fontWeight: 600 }}>{ex.nomePt}</span>
                     {favorito && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', border: '1px solid rgba(189,255,0,.4)', borderRadius: 6, padding: '2px 6px' }}>Favorito</span>}
                     {banido && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#E5484D', border: '1px solid rgba(229,72,77,.4)', borderRadius: 6, padding: '2px 6px' }}>Fora do meu plano</span>}
                   </div>
-                  <div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.55)', marginTop: 3 }}>
+                  <div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.8)', marginTop: 8, lineHeight: 1.6 }}>
                     {ROTULO_GRUPO[ex.grupoPrimario ?? ''] ?? ex.grupoMuscular}
-                    {sec.length > 0 && <span style={{ color: 'rgba(234,229,219,.4)' }}> · também {sec.join(', ').toLowerCase()}</span>}
-                    {ex.equipamentoDetalhe && <span style={{ color: 'rgba(234,229,219,.4)' }}> · {ex.equipamentoDetalhe}</span>}
+                    {sec.length > 0 && <span> · também {sec.join(', ').toLowerCase()}</span>}
+                    {ex.equipamentoDetalhe && <span style={{ display: 'block' }}>{ex.equipamentoDetalhe}</span>}
                   </div>
                 </div>
+                <details className="ak-library-instructions">
+                  <summary aria-label={`Como fazer ${ex.nomePt}`}>Como fazer</summary>
+                  <p>{ex.comoFazer || 'Este exercício ainda não possui instruções cadastradas.'}</p>
+                </details>
                 {banido && onDesbanir ? (
                   <button onClick={() => onDesbanir(ex.id)} style={botao} aria-label={`Trazer ${ex.nomePt} de volta`}>Trazer de volta</button>
                 ) : (
-                  <button onClick={() => onEscolher(ex)} style={botao} aria-label={`Escolher ${ex.nomePt}`}>Escolher</button>
+                  <button
+                    onClick={() => onEscolherVarios
+                      ? setSelecionados((atuais) => atuais.some((item) => item.id === ex.id)
+                        ? atuais.filter((item) => item.id !== ex.id) : [...atuais, ex])
+                      : onEscolher(ex)}
+                    style={{ ...botao, background: selecionados.some((item) => item.id === ex.id) ? '#BDFF00' : 'rgba(234,229,219,.1)', color: selecionados.some((item) => item.id === ex.id) ? '#0D2818' : '#EAE5DB', minHeight: 44 }}
+                    aria-pressed={onEscolherVarios ? selecionados.some((item) => item.id === ex.id) : undefined}
+                    aria-label={`${onEscolherVarios ? 'Selecionar' : 'Escolher'} ${ex.nomePt}`}
+                  >{selecionados.some((item) => item.id === ex.id) ? 'Selecionado' : onEscolherVarios ? 'Selecionar' : 'Escolher'}</button>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>
+        {onEscolherVarios && (
+          <div style={{ flexShrink: 0, paddingTop: 16, borderTop: '1px solid rgba(234,229,219,.2)' }}>
+            <p role="status" style={{ margin: '0 0 10px', color: '#EAE5DB', fontSize: '.85rem' }}>{selecionados.length} selecionados · organize a ordem depois de adicionar.</p>
+            <button type="button" disabled={selecionados.length === 0} onClick={() => onEscolherVarios(selecionados)} style={{ ...botao, width: '100%', minHeight: 48, background: '#BDFF00', color: '#0D2818', opacity: selecionados.length ? 1 : .4 }}>Adicionar selecionados ({selecionados.length})</button>
+          </div>
+        )}
       </div>
-    </div>
+    </div>, document.body
   );
 }
 

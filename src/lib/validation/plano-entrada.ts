@@ -4,19 +4,22 @@
  */
 import { z } from 'zod';
 
-const weekdaySchema = z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']);
-const grupoSchema = z.enum([
+export const weekdaySchema = z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']);
+export const grupoSchema = z.enum([
   'antebraco', 'biceps', 'core', 'costas', 'gluteos', 'lombar',
   'ombros', 'panturrilha', 'peito', 'posterior', 'quadriceps', 'triceps',
 ]);
-const execucaoSchema = z.enum(['BILATERAL', 'UNILATERAL_ALTERNADO', 'UNILATERAL_DOIS_LADOS']);
+export const execucaoSchema = z.enum(['BILATERAL', 'UNILATERAL_ALTERNADO', 'UNILATERAL_DOIS_LADOS']);
+
+/** Semana do mesociclo (1–6) — a mesma régua para a borda HTTP e para a rota do motor. */
+export const semanaDoCicloSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]);
 
 /** Aceita somente a forma transportável que o motor reconstrói de modo determinístico. */
 export const entradaPlanoVisivelSchema = z.object({
   pesoEfetivoKg: z.number().finite().min(30).max(300),
   diasOferecidosCardio: z.array(weekdaySchema).max(7),
   semanaCiclo: z.object({
-    semana: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
+    semana: semanaDoCicloSchema,
     feedbackGrupos: z.array(z.tuple([grupoSchema, z.enum(['ok', 'segura'])])).max(12),
     retomada: z.object({
       semana: z.number().int().min(1).max(6),

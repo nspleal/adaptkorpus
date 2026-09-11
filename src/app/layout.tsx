@@ -19,12 +19,12 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Evokorpus — O corpo que não para de evoluir',
+  title: 'Adaptkorpus — O corpo que não para de evoluir',
   description:
     'Treino e dieta que se adaptam a cada avanço seu. Sem planilha, sem achismo — um plano construído com você, dia após dia. Ferramenta educacional, 18+.',
-  applicationName: 'Evokorpus',
+  applicationName: 'Adaptkorpus',
   manifest: '/manifest.webmanifest',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Evokorpus' },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Adaptkorpus' },
   // 🔒 iOS ignora os ícones do manifest: sem `apple-touch-icon` o atalho na tela inicial
   // usa uma CAPTURA da página. O PNG é RASTERIZADO do `icon.svg` canônico (fidelidade
   // visual do cofre — nunca redesenhar), por isso 180 px é o mesmo desenho, não outro.

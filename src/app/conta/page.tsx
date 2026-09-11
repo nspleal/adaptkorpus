@@ -112,7 +112,7 @@ export default function ContaPage() {
       try {
         const r = await fetch('/api/lgpd/exportar', { cache: 'no-store' });
         if (r.ok) {
-          baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(await r.json(), null, 2));
+          baixarArquivo('adaptkorpus-meus-dados.json', JSON.stringify(await r.json(), null, 2));
           return;
         }
       } catch { /* cai no parcial local */ }
@@ -122,7 +122,7 @@ export default function ContaPage() {
       aviso: 'Exportação parcial (dados da conta nesta tela). A exportação completa de perfil, plano e histórico depende do backend (LGPD / Ownership-4).',
       conta: { nome, email, assinatura: { status: 'beta_gratuito' } },
     };
-    baixarArquivo('evokorpus-meus-dados.json', JSON.stringify(dados, null, 2));
+    baixarArquivo('adaptkorpus-meus-dados.json', JSON.stringify(dados, null, 2));
   }
 
   const [excluindo, setExcluindo] = useState(false);
@@ -246,7 +246,7 @@ export default function ContaPage() {
 
           <div style={{ padding: '4px 4px 0' }}>
             <span style={{ display: 'inline-block', marginBottom: 12, border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.6)', borderRadius: 8, padding: '3px 10px', fontSize: '.78rem', fontWeight: 700 }}>18+</span>
-            <p style={{ margin: 0, fontSize: '.8rem', color: 'rgba(234,229,219,.42)', lineHeight: 1.6, maxWidth: 760 }}>O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.</p>
+            <p style={{ margin: 0, fontSize: '.8rem', color: 'rgba(234,229,219,.42)', lineHeight: 1.6, maxWidth: 760 }}>O Adaptkorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.</p>
           </div>
         </div>
       </div>
@@ -356,4 +356,4 @@ function Logo({ size }: { size: number }) {
   );
 }
 
-const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>;

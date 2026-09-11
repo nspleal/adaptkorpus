@@ -15,6 +15,20 @@ import { chaveLocal } from '@/lib/escopo-local';
  */
 
 export interface SessaoHistorico extends ResumoSessao {
+  /**
+   * 🔒 D8a (2026-09-10) — IDENTIDADE GLOBAL da sessão, atribuída na criação e imutável.
+   *
+   * 🔴 O defeito que ela fecha: a reconciliação local × servidor casava por
+   * `dataISO|n|tipo`, e `n` é LOCAL — cada aparelho atribui `max(n) + 1` sobre o seu próprio
+   * histórico. Dois aparelhos que treinam no mesmo dia geram o mesmo `n` para sessões
+   * DIFERENTES: a local era tida como "já está no servidor", saía de `faltantes` (nunca era
+   * re-subida) e perdia para a do servidor na união — sumia da tela e do banco, sem erro.
+   *
+   * Opcional porque linha LEGADA não tem: para ela a chave composta continua valendo, e está
+   * certo — são as duas cópias da MESMA sessão, gravadas antes de o campo existir. Viaja de
+   * graça no payload (`logs.payload` é a sessão verbatim; o schema é `passthrough`).
+   */
+  id?: string;
   n: number;        // nº sequencial (1 = primeira sessão registrada)
   dataISO: string;  // 'YYYY-MM-DD' — dia em que a sessão aconteceu (manual pode ser passado)
   manual?: boolean; // true = registrada pelo formulário "Registrar treino feito"
@@ -105,11 +119,16 @@ export function lerHistorico(): SessaoHistorico[] {
  */
 export function registrarSessaoEm(
   resumo: ResumoSessao, dataISO: string,
-  extra?: { manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo']; cardio?: SessaoHistorico['cardio'] },
+  extra?: { id?: string; manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo']; cardio?: SessaoHistorico['cardio'] },
 ): SessaoHistorico[] {
   const hist = lerHistorico();
   // n único = maior n existente + 1 (length+1 duplicaria após qualquer entrada descartada).
-  const nova: SessaoHistorico = { ...resumo, ...extra, n: hist.reduce((m, s) => Math.max(m, s.n), 0) + 1, dataISO };
+  const nova: SessaoHistorico = {
+    ...resumo, ...extra,
+    id: extra?.id ?? novoIdDeSessao(),
+    n: hist.reduce((m, s) => Math.max(m, s.n), 0) + 1,
+    dataISO,
+  };
   const i = hist.findIndex((s) => s.dataISO <= dataISO);
   const todo = i === -1 ? [...hist, nova] : [...hist.slice(0, i), nova, ...hist.slice(i)];
   try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(todo)); } catch { /* storage indisponível */ }
@@ -132,9 +151,27 @@ export function substituirHistorico(sessoes: readonly SessaoHistorico[]): Sessao
   return ordenado;
 }
 
-/** Chave estável de uma sessão p/ reconciliação local × servidor. */
-function chaveSessao(s: SessaoHistorico): string {
-  return `${s.dataISO}|${s.n}|${s.tipo ?? 'treino'}`;
+/**
+ * 🔒 D8a — Identificador global de sessão. `crypto.randomUUID` exige contexto seguro; o
+ * fallback não precisa ser criptográfico, só não colidir entre aparelhos — tempo + aleatório
+ * resolve, e a chave legada (`dataISO|n|tipo`) segue de rede se nem isso existir.
+ */
+function novoIdDeSessao(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Chave estável de uma sessão p/ reconciliação local × servidor.
+ *
+ * 🔴 D8a: o `id` global manda quando existe. A chave composta fica só para a linha LEGADA —
+ * onde ela é a chave CERTA, porque as duas cópias são a mesma sessão de antes do campo.
+ * Sessão nova com `id` × linha legada sem: não casam, e o resultado é duplicata visível em
+ * vez de sessão sumida em silêncio. Das duas, a duplicata é a que a pessoa pode desfazer.
+ */
+export function chaveSessao(s: SessaoHistorico): string {
+  return s.id ?? `${s.dataISO}|${s.n}|${s.tipo ?? 'treino'}`;
 }
 
 /**

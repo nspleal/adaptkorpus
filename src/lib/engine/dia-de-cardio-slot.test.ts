@@ -332,9 +332,20 @@ describe('🔴 o cartão de cardio: denominador do PLANO, forma de registro', ()
     expect(s, 'a barra voltou a medir contra a meta abstrata').not.toMatch(/\(feito \/ meta\.alvo\)/);
   });
 
-  it('e o Painel passa a soma dos dias de cardio EMITIDOS pelo motor', () => {
+  /**
+   * 🔴 D4 (2026-09-10) — esta asserção CODIFICAVA o defeito. O describe promete "denominador
+   * do PLANO"; a asserção exigia a soma de `diasCardio[].minutos`, que é o ENTREGUE. Medido:
+   * prescrição de 160 min, entrega de 123, e a barra fechava 123/123 — o cartão não tinha como
+   * mostrar falta nenhuma, porque o denominador encolhia junto com o numerador.
+   *
+   * A prescrição real é `rotina.cardioSemana.prescritoSegundos`. O que falta aparece na faixa
+   * de avisos do motor (`AvisosMotor`), com planejado, entregue e faltante.
+   */
+  it('e o Painel passa a PRESCRIÇÃO do motor, não a soma do que coube', () => {
     const p = podarSrc(readFileSync('src/components/painel/Painel.tsx', 'utf8'));
-    expect(p).toMatch(/prescritoMin: \(treino\.rotina\?\.diasCardio \?\? \[\]\)\.reduce/);
+    expect(p).toMatch(/prescritoMin:[\s\S]{0,200}cardioSemana\.prescritoSegundos/);
+    expect(p, 'o denominador voltou a ser a soma do entregue')
+      .not.toMatch(/prescritoMin: \(treino\.rotina\?\.diasCardio/);
   });
 
   it('anti-vacuidade: o recorte lê o cartão certo e enxerga a barra', () => {

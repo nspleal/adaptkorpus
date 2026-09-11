@@ -88,7 +88,7 @@ export function Backdrop() {
 
 export function LogoFloat({ size = 48 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Evokorpus" style={{ animation: 'evkFloat 7s ease-in-out infinite' }}>
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Adaptkorpus" style={{ animation: 'evkFloat 7s ease-in-out infinite' }}>
       <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
     </svg>
@@ -96,7 +96,7 @@ export function LogoFloat({ size = 48 }: { size?: number }) {
 }
 
 export const Marca = ({ size = '1.3rem' }: { size?: string }) => (
-  <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>
+  <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>
 );
 
 /** Cabeçalho de tela de auth: logo flutuante + wordmark, centrado. */

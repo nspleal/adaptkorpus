@@ -21,7 +21,7 @@ const MANIFEST = JSON.parse(readFileSync(join('public', 'manifest.webmanifest'),
 
 describe('manifest — instalável de verdade', () => {
   it('tem os campos que a instalação exige', () => {
-    expect(MANIFEST.name).toBe('Evokorpus');
+    expect(MANIFEST.name).toBe('Adaptkorpus');
     expect(MANIFEST.short_name).toBeTruthy();
     expect(MANIFEST.display).toBe('standalone');
   });

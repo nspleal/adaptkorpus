@@ -16,7 +16,7 @@ import ConviteInstalar from '@/components/pwa/ConviteInstalar';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { hojeISO, lerPesos } from '@/lib/treino-historico';
-import { opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
+import { normalizarEntradaPlanoVisivel, opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
 import { EVENTO_PLANO_ATUALIZADO, reconciliarConfirmacaoLocal, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
 
 /**
@@ -84,7 +84,18 @@ export default function AppPage() {
       // com o `perfil.pesoKg` cru. É seguro ler o storage aqui — no caminho com backend
       // `montar` só roda depois de `resolverEscopoLocal()`, então a gaveta já é a certa.
       const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil, pesos: lerPesos(), hojeISO: hojeISO() });
-      const opcoes = entradaPlano ? opcoesDeEntradaPlano(entradaPlano) : { pesoEfetivoKg };
+      /**
+       * 🔴 D7 (2026-09-10) — o fallback `: { pesoEfetivoKg }` mandava o PRIMEIRO render pelo
+       * caminho v1: sem `semanaCiclo`, o motor devolvia plano sem séries, sem descanso, com
+       * `NAO_AVALIADO_ENTREGAVEL` e sem o foco do perfil (a cascata exige a semana) — e a
+       * tela disfarçava com um piso próprio. Acontecia em sessão só local e em linha legada
+       * sem snapshot C1.
+       *
+       * 🔒 Uma porta só: `normalizarEntradaPlanoVisivel` é a MESMA função que o servidor já
+       * usava (`comandoCommitDePlano`), e ela fixa `semana ?? 1`. Nada de regra nova aqui; o
+       * peso resolvido continua entrando por cima, como sempre entrou.
+       */
+      const opcoes = opcoesDeEntradaPlano(entradaPlano ?? normalizarEntradaPlanoVisivel(perfil, { pesoEfetivoKg }));
       const { dieta, treino } = recomputarPlano(perfil, opcoes);
       // 🔒 Cofre, DF 2026-07-27: gate ROTEAR NÃO é mais um beco sem saída. O painel monta em
       // MODO DIÁRIO (registra, não recebe prescrição). Antes daqui o ROTEAR caía no
@@ -246,7 +257,10 @@ export default function AppPage() {
     // Snapshot legado sem C1 ainda pode ser recarregado: aplica o mesmo peso resolvido do
     // mount, nunca volta silenciosamente ao peso cru só neste caminho de conflito.
     const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: servidor.perfil, pesos: lerPesos(), hojeISO: hojeISO() });
-    const opcoes = servidor.entradaPlano ? opcoesDeEntradaPlano(servidor.entradaPlano) : { pesoEfetivoKg };
+    // 🔴 D7 — mesma porta única do mount: sem snapshot C1 o fallback caía no caminho v1
+    // (plano sem séries, sem descanso, sem foco). `normalizarEntradaPlanoVisivel` fixa a
+    // semana 1 e o peso resolvido continua entrando por cima.
+    const opcoes = opcoesDeEntradaPlano(servidor.entradaPlano ?? normalizarEntradaPlanoVisivel(servidor.perfil, { pesoEfetivoKg }));
     const { dieta, treino } = recomputarPlano(servidor.perfil, opcoes);
     setEstado({ perfil: servidor.perfil, dieta, treino, revision: servidor.revision, ...(servidor.entradaPlano ? { entradaPlano: servidor.entradaPlano } : {}) });
     // O Painel guarda estados locais para edição; recarregar é uma escolha explícita de trocar
@@ -278,7 +292,7 @@ export default function AppPage() {
   if (!pronto || !estado) return <Splash />;
 
   return (
-    <>
+    <div className="ak-app-interactions">
       <VigiaSessao />
       {/* 🔒 O convite vive AQUI, na área logada — nunca na landing (beta por allowlist). */}
       <ConviteInstalar />
@@ -317,7 +331,7 @@ export default function AppPage() {
         onPerfilChange={persistirMudanca}
         onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
       />
-    </>
+    </div>
   );
 }
 
