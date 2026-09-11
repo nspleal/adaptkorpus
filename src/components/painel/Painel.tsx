@@ -57,7 +57,7 @@ import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
-import EditorTreino, { PainelCritico, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
+import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
@@ -1742,7 +1742,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
       {/* 🔴 D1 — a saída do MOTOR (veredito da geração + avisos honestos + conta do cardio).
           Vem antes do crítico de propósito: o crítico fala do DESENHO da semana; este fala do
           que a geração conseguiu (ou não) entregar. */}
-      <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} avisos={unificarAvisos(rotina, criticoPlano).avisosMotor} />
+      <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} avisos={unificarAvisos(rotina, criticoPlano && { recomendacoes: recomendacoesVisiveis(criticoPlano, true), avisos: criticoPlano.avisos }).avisosMotor} />
       {/* 🔴 D14 — o dia PEDIDO que não virou sessão continua na tela, com o motivo. O que ele
           não tem é botão de iniciar ou registrar: não existe sessão vazia para começar. */}
       <DiasNaoAtendidos dias={rotina?.diasNaoAtendidos} />

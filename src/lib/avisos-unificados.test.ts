@@ -7,6 +7,7 @@ import { avaliarSemana, type Avaliacao, type ItemCritico } from '@/lib/engine/cr
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '@/lib/semana';
 import type { FatoCoberturaGrupo, RotinaSemanal } from '@/lib/engine/treino-types';
 import { unificarAvisos } from './avisos-unificados';
+import { recomendacoesVisiveis } from '@/components/painel/EditorTreino';
 
 /**
  * 🔴 D16 (auditoria 2026-09-11 sobre `a40f8af`) — O MESMO FATO, DITO UMA VEZ.
@@ -156,12 +157,40 @@ describe('D16 · no plano de verdade', () => {
   });
 });
 
+describe('D16 · o eco só sai se a fala do crítico estiver REALMENTE na tela', () => {
+  /**
+   * 🔴 O crítico do plano salvo é COMPACTO: mostra UMA recomendação. Comparar contra a lista
+   * inteira faria o fato sumir das duas listas quando a fala do crítico ficasse de fora do
+   * compacto — a tela mais limpa e um fato a menos, que é o oposto do pedido.
+   */
+  it('fala do crítico fora do compacto ⇒ o aviso do motor FICA', () => {
+    const f = fato();
+    const primeiro = itemCritico({
+      texto: 'Costas está abaixo da faixa mínima desta semana (4 de 12 séries).',
+      fato: { grupo: 'costas', escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: 12 },
+    });
+    const completo = [primeiro, itemCritico()];
+    expect(unificarAvisos(rotinaCom([f.aviso], [f]), avaliacaoCom(completo)).avisosMotor).toEqual([]);
+    const visivel = recomendacoesVisiveis({ recomendacoes: completo }, true);
+    expect(visivel).toHaveLength(1);
+    expect(unificarAvisos(rotinaCom([f.aviso], [f]), avaliacaoCom(visivel)).avisosMotor).toEqual([f.aviso]);
+  });
+
+  it('o Painel compara contra o que o crítico EXIBE, usando a mesma régua do componente', () => {
+    const painel = readFileSync('src/components/painel/Painel.tsx', 'utf8');
+    expect(painel).toMatch(/unificarAvisos\(rotina, criticoPlano && \{ recomendacoes: recomendacoesVisiveis\(criticoPlano, true\)/);
+    const editor = readFileSync('src/components/painel/EditorTreino.tsx', 'utf8');
+    expect(editor, 'a régua do compacto voltou a existir em dois lugares')
+      .toMatch(/const visiveis = recomendacoesVisiveis\(avaliacao, compacto\)/);
+  });
+});
+
 describe('D16 · a tela usa a unificação, e a regra não mora no componente', () => {
   const painel = readFileSync('src/components/painel/Painel.tsx', 'utf8');
   const avisosMotor = readFileSync('src/components/painel/AvisosMotor.tsx', 'utf8');
 
   it('o Painel passa a lista unificada, e o crítico segue inteiro', () => {
-    expect(painel).toMatch(/avisos=\{unificarAvisos\(rotina, criticoPlano\)\.avisosMotor\}/);
+    expect(painel).toMatch(/avisos=\{unificarAvisos\(rotina, criticoPlano && \{/);
     expect(painel).toMatch(/<PainelCritico avaliacao=\{criticoPlano\} compacto \/>/);
   });
 
