@@ -144,7 +144,7 @@ export default function Home() {
           <div className="rv" style={{ maxWidth: 780, marginBottom: 60 }}>
             <Kicker>Como funciona</Kicker>
             <h2 style={{ margin: '0 0 22px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.6vw,3rem)', lineHeight: 1.1, letterSpacing: '-.02em' }}>Um plano que evolui com você, toda semana</h2>
-            <p style={{ margin: 0, color: 'rgba(234,229,219,.62)', lineHeight: 1.65, fontSize: '1.05rem' }}>Você diz seu objetivo e sua rotina. O Evokorpus monta treino e dieta a partir de dados reconhecidos e <span style={{ color: '#BDFF00', fontWeight: 600 }}>regras adaptativas</span> — e, a cada avanço seu, recalcula o plano. Você sugere, ajusta e fica no comando: tudo é editável.</p>
+            <p style={{ margin: 0, color: 'rgba(234,229,219,.62)', lineHeight: 1.65, fontSize: '1.05rem' }}>Você diz seu objetivo e sua rotina. O Adaptkorpus monta treino e dieta a partir de dados reconhecidos e <span style={{ color: '#BDFF00', fontWeight: 600 }}>regras adaptativas</span> — e, a cada avanço seu, recalcula o plano. Você sugere, ajusta e fica no comando: tudo é editável.</p>
           </div>
           <div style={{ position: 'relative' }}>
             <svg aria-hidden viewBox="0 0 1100 120" preserveAspectRatio="none" style={{ position: 'absolute', top: 18, left: 0, width: '100%', height: 120, zIndex: 0, opacity: 0.8 }}>
@@ -313,7 +313,7 @@ export default function Home() {
           <h2 className="rv" style={{ margin: '0 0 44px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', letterSpacing: '-.02em', textAlign: 'center' }}>Perguntas frequentes</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              { q: 'Isso substitui um nutricionista ou personal?', a: 'Não. O Evokorpus é uma ferramenta geral e educacional, dirigida por você. Para condições de saúde, procure um profissional habilitado.' },
+              { q: 'Isso substitui um nutricionista ou personal?', a: 'Não. O Adaptkorpus é uma ferramenta geral e educacional, dirigida por você. Para condições de saúde, procure um profissional habilitado.' },
               { q: 'O app usa inteligência artificial?', a: 'Não. O plano é montado por regras claras e adaptativas sobre dados reconhecidos — sem caixa-preta.' },
               { q: 'Vou perder quantos quilos?', a: 'Não prometemos número nem prazo. Entregamos um método que se adapta à sua rotina — o resto é constância.' },
               { q: 'Quanto custa?', a: QUANTO_CUSTA.landing },
@@ -361,8 +361,8 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <p style={{ margin: '0 0 18px', paddingTop: 28, borderTop: '1px solid rgba(234,229,219,.08)', color: 'rgba(234,229,219,.4)', fontSize: '.8rem', lineHeight: 1.6, maxWidth: 880 }}>O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Consulte um médico antes de iniciar qualquer programa de exercício ou mudança alimentar. Conteúdo para maiores de 18 anos.</p>
-          <p style={{ margin: 0, color: 'rgba(234,229,219,.4)', fontSize: '.82rem' }}>© Evokorpus • Botucatu/SP • [CNPJ]</p>
+          <p style={{ margin: '0 0 18px', paddingTop: 28, borderTop: '1px solid rgba(234,229,219,.08)', color: 'rgba(234,229,219,.4)', fontSize: '.8rem', lineHeight: 1.6, maxWidth: 880 }}>O Adaptkorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Consulte um médico antes de iniciar qualquer programa de exercício ou mudança alimentar. Conteúdo para maiores de 18 anos.</p>
+          <p style={{ margin: 0, color: 'rgba(234,229,219,.4)', fontSize: '.82rem' }}>© Adaptkorpus • Botucatu/SP • [CNPJ]</p>
         </div>
       </footer>
     </div>
@@ -378,7 +378,7 @@ function Kicker({ children, mb = 18 }: { children: React.ReactNode; mb?: number 
 
 function LogoSvg({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Evokorpus">
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Adaptkorpus">
       <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" />
@@ -387,7 +387,7 @@ function LogoSvg({ size }: { size: number }) {
   );
 }
 function Marca({ size }: { size: string }) {
-  return <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+  return <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>;
 }
 const Check14 = () => <svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#BDFF00" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const Check16 = () => <svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#BDFF00" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;

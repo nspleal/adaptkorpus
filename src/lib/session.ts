@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { sanearBlocosDeTreino } from '@/lib/validation/perfil-resumo';
 import { EQUIPAMENTOS_CASA } from '@/lib/engine';
 import { diasPadrao } from '@/lib/semana';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
@@ -111,7 +112,14 @@ function normalizarPerfil(p: PerfilResumo): PerfilResumo {
   } else if (equipamentosCasa === undefined) {
     equipamentosCasa = equipamento === 'casa' ? [...EQUIPAMENTOS_CASA] : [];
   }
-  return { ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length };
+  /**
+   * 🔴 D6 (2026-09-10) — os quatro blocos de TREINO entravam CRUS daqui para o motor:
+   * `preferencias: { banidos: [] }` (sem `trocas`) num blob antigo lançava
+   * `TypeError: prefs.trocas is not iterable` e o app ficava sem plano nenhum, sem mensagem.
+   * A régua é a MESMA do `PUT /api/dados/perfil` — bloco que não passa é removido, e ausência
+   * é o default que o motor já sabe tratar.
+   */
+  return sanearBlocosDeTreino({ ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length });
 }
 
 /** Encerra a sessão local (logout). Perfil e fotografia de entrada saem por `limparDadosLocais`. */

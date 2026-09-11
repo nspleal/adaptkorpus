@@ -157,7 +157,14 @@ describe('C1 §8.3 · regressões adicionais (sessão longa · tempo impossível
   const ADICIONAIS = [
     { nome: 'longa (90 min)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: 90 }, semana: 1 as SemanaCiclo, esperado: 'CERTIFICADO' },
     { nome: 'menor cobertura excede (10 min, 1 dia)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 1, tempoPorSessaoMin: 10 }, semana: 1 as SemanaCiclo, esperado: 'INCOMPATIVEL' },
-    { nome: 'deload (semana 6)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 60 }, semana: 6 as SemanaCiclo, esperado: 'NAO_AVALIADO_ENTREGAVEL' },
+    /**
+     * 🔴 D2 (2026-09-10) — expectativa VIRADA de propósito, não afrouxada. O
+     * `NAO_AVALIADO_ENTREGAVEL` desta linha era o defeito: a semana 6 saía sem séries e o
+     * motor não sabia dizer se a sessão cabia no tempo, 1 semana em 6. Com o deload anotado
+     * pela rampa (`aplicarDeload`, uma única redução), o deload passa a ser certificável como
+     * as outras cinco — e a convergência gerador↔crítico abaixo continua sendo cobrada.
+     */
+    { nome: 'deload (semana 6)', perfil: { objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 60 }, semana: 6 as SemanaCiclo, esperado: 'CERTIFICADO' },
   ];
   it.each(ADICIONAIS)('$nome → $esperado, com convergência', (c) => {
     const perfil = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, equipamento: 'academia', ...c.perfil } as PerfilTreino;

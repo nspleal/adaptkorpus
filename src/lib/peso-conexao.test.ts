@@ -210,10 +210,21 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
     expect(cs).toHaveLength(2);
     for (const c of cs) expect(c, c).toMatch(/opcoes/);
     const src = semComentarios(APP);
+    /**
+     * 🔴 D7 (2026-09-10) — a régua mudou de FORMA, não de conteúdo. Os dois call sites
+     * usavam `entradaPlano ? … : { pesoEfetivoKg }`: o peso resolvido chegava, mas a
+     * `semanaCiclo` não, e sem ela o motor devolve plano sem séries. Agora ambos passam pela
+     * porta única `normalizarEntradaPlanoVisivel(perfil, { pesoEfetivoKg })` — a mesma do
+     * servidor —, que carrega o peso resolvido E fixa a semana. O que este teste cobra
+     * continua sendo: nenhum dos dois volta ao peso cru quando não há snapshot C1.
+     */
+    const PORTA_UNICA = /opcoesDeEntradaPlano\([^)]*normalizarEntradaPlanoVisivel\([^)]*\{ pesoEfetivoKg \}\)\)/;
     const montar = corpoDe(src, 'function montar(');
-    expect(montar).toMatch(/entradaPlano \? opcoesDeEntradaPlano\(entradaPlano\) : \{ pesoEfetivoKg \}/);
+    expect(montar).toMatch(PORTA_UNICA);
+    expect(montar, 'o fallback v1 voltou ao mount').not.toMatch(/:\s*\{ pesoEfetivoKg \}/);
     const recarregar = corpoDe(src, 'async function recarregarVersaoSalva(');
-    expect(recarregar).toMatch(/entradaPlano \? opcoesDeEntradaPlano\(servidor\.entradaPlano\) : \{ pesoEfetivoKg \}/);
+    expect(recarregar).toMatch(PORTA_UNICA);
+    expect(recarregar, 'o fallback v1 voltou ao recarregamento de conflito').not.toMatch(/:\s*\{ pesoEfetivoKg \}/);
   });
 
   /**

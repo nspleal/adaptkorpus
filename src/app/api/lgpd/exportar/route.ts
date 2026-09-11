@@ -28,6 +28,22 @@ export async function GET() {
     // justamente para não sair misturada com o histórico da pessoa.
     ctx.supabase.from('eventos').select('*').order('created_at', { ascending: true }),
   ]);
+  /**
+   * 🔴 D8c (2026-09-07, reconfirmado em 2026-09-10) — a rota lia só `.data` das seis consultas
+   * e nunca `.error`. Uma falha de leitura virava seção VAZIA dentro de um 200, e o arquivo
+   * baixado afirmava, pelo silêncio, que a pessoa não tem plano, histórico ou telemetria.
+   *
+   * 🔒 Numa rota de PORTABILIDADE, export incompleto apresentado como completo é o pior erro
+   * possível: quem baixa não tem como saber. Falhou uma? Nenhuma sai, e a resposta nomeia
+   * quais. `data` nulo com `error` nulo continua sendo ausência legítima — e 200.
+   */
+  const consultas = { profile, plans, logs, feedback, subscription, eventos };
+  const falharam = Object.entries(consultas)
+    .filter(([, r]) => r.error != null)
+    .map(([nome]) => nome);
+  if (falharam.length > 0) {
+    return NextResponse.json({ error: 'falha_leitura', secoes: falharam }, { status: 500 });
+  }
   return NextResponse.json({
     exportadoEm: new Date().toISOString(),
     usuario: { id: ctx.user.id, email: ctx.user.email ?? null },

@@ -1,3 +1,4 @@
+import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 /**
  * Agenda semanal — mapeia as sessões do motor (rotina.dias) sobre os **dias da semana
  * escolhidos** e resolve "hoje". Vive FORA do motor (o motor é determinístico e não lê
@@ -113,7 +114,7 @@ export function montarSemana(
         const item = cardioExato.item;
         return {
           ...base, tipo: 'cardio' as const, cardioIdx: cardioExato.indice, cardio: item,
-          sessionLabel: item.minutos != null ? `Cardio · ${item.minutos} min` : 'Cardio',
+          sessionLabel: item.minutos != null ? `Cardio · ${formatarDuracaoMinutos(item.minutos)}` : 'Cardio',
         };
       }
       return { ...base, tipo: 'descanso' as const };
@@ -139,7 +140,7 @@ export function montarSemana(
     if (item && cardioIdx != null) {
       return {
         ...base, tipo: 'cardio' as const, cardioIdx, cardio: item,
-        sessionLabel: item.minutos != null ? `Cardio · ${item.minutos} min` : 'Cardio',
+        sessionLabel: item.minutos != null ? `Cardio · ${formatarDuracaoMinutos(item.minutos)}` : 'Cardio',
       };
     }
     return { ...base, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' };

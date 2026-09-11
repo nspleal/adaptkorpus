@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
-import { dificuldadesLiberadas, prescreverTreino } from './treino';
+import { aplicarDeload, dificuldadesLiberadas, prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
@@ -236,15 +236,19 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
   it('toda série por slot fica dentro de seriesPorExercicio {min..max}', () => {
     const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 });
     const presc = prescreverTreino(p, avaliarGateTreino(p));
+    /**
+     * 🔴 D2 (2026-09-10): a semana 6 ANOTA séries — antes ela pulava a rampa inteira e a
+     * asserção era `toBeUndefined()`. A invariante não mudou de conteúdo, só de régua: a
+     * faixa da semana 6 é a da prescrição passada por `aplicarDeload`, o único ponto onde a
+     * redução acontece. Continua proibido série fora da faixa DECLARADA da semana.
+     */
     for (const s of [...SEMANAS, 6 as const]) {
       const r = rotinaSemana(s);
+      const faixa = (s === 6 ? aplicarDeload(presc) : presc).seriesPorExercicio;
       for (const d of r.dias)
         for (const slot of d.slots) {
-          if (s === 6) expect(slot.series).toBeUndefined(); // deload NÃO anota séries (corte único via mecanismo v1)
-          else {
-            expect(slot.series).toBeGreaterThanOrEqual(presc.seriesPorExercicio.min);
-            expect(slot.series).toBeLessThanOrEqual(presc.seriesPorExercicio.max);
-          }
+          expect(slot.series, `semana ${s}`).toBeGreaterThanOrEqual(faixa.min);
+          expect(slot.series, `semana ${s}`).toBeLessThanOrEqual(faixa.max);
         }
     }
   });
@@ -335,11 +339,13 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
           const r = montarRotina(presc, p, EXERCISES, new Set(), { semana: s });
           const conta = (pat: string) => r.dias.reduce((n, d) => n + d.slots.filter((x) => x.padrao === pat).length, 0);
           expect(conta('puxar')).toBeGreaterThanOrEqual(conta('empurrar'));
+          // D2: na semana 6 a faixa é a da prescrição em deload (mesma invariante, régua da semana).
+          const faixa = (s === 6 ? aplicarDeload(presc) : presc).seriesPorExercicio;
           for (const d of r.dias)
             for (const slot of d.slots) {
               if (slot.series != null) {
-                expect(slot.series).toBeGreaterThanOrEqual(presc.seriesPorExercicio.min);
-                expect(slot.series).toBeLessThanOrEqual(presc.seriesPorExercicio.max);
+                expect(slot.series, `${nivel}/${obj}/S${s}`).toBeGreaterThanOrEqual(faixa.min);
+                expect(slot.series, `${nivel}/${obj}/S${s}`).toBeLessThanOrEqual(faixa.max);
               }
             }
         }

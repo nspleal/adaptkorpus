@@ -1,10 +1,14 @@
 'use client';
 
+import { seriesDoSlot } from '@/lib/series-treino';
+import ResumoSeries from './ResumoSeries';
+
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
 import type { FlagsSaude } from '@/lib/engine';
+import type { RotinaSemanal } from '@/lib/engine/treino-types';
 import type { Orcamento } from '@/lib/engine/orcamento';
 import { Orcamento as SeletorOrcamento, ROTULO_ORCAMENTO } from '@/components/perfil/DiasEPreferencias';
 import { recomputarPlano } from '@/lib/session';
@@ -35,11 +39,14 @@ import DiaDaDieta from './DiaDaDieta';
 import { EscadaPill } from './EscadaDegraus';
 import { BadgeFavorito, EstrelaFavorito } from './Favoritos';
 import { bandaChama, diasDeTreino } from '@/lib/chama';
-import { ORDEM_SEMANA, type Weekday } from '@/lib/semana';
+import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import { normalizarEntradaPlanoVisivel, opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
 import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
+import AvisosMotor from './AvisosMotor';
+import AvisosHidratacao from './AvisosHidratacao';
+import { chaveSessao } from '@/lib/treino-historico';
 import OfertaCardio from './OfertaCardio';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import GraficoLinha from './GraficoLinha';
@@ -68,6 +75,8 @@ import { useAbaVoltavel, useCamadaVoltavel, useVoltarDoNavegador } from '@/lib/u
  */
 
 export interface PerfilResumo {
+  /** Avisos de recuperação do perfil; não são parâmetros do motor nem dados de saúde. */
+  avisosHidratacao?: string[];
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
   preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
@@ -806,7 +815,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function abrirEditor() {
     const origem = perfil.rotinaCustom ? 'plano' : rotinaDias.length > 0 ? 'plano' : 'vazio';
     registrarEvento('editor_aberto', { origem });
-    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? []));
+    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? [], perfil.rotinaCustom));
   }
 
   function salvarTreinoCustom(dias: DiaEditavel[], avaliacao: Avaliacao) {
@@ -880,38 +889,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   const prescricao = treino.prescricao;
 
-  /** Crítico do plano salvo: custom mede o desenho; automático recompõe o plano final inteiro. */
-  const criticoPlano: Avaliacao | null = useMemo(() => {
-    if (rotinaDias.length === 0 || !prescricao) return null;
-    const ctx = {
-      nivel: perfil.nivelExperiencia,
-      objetivo: prescricao.objetivoEfetivo ?? perfil.objetivo,
-      tempoPorSessaoMin: perfil.tempoPorSessaoMin,
-      // Entrada independente do plano final: o crítico não pode aprender o horizonte do próprio
-      // agregado que está tentando validar.
-      diasNoHorizonteEsperado: ORDEM_SEMANA.length,
-      diasOferecidosCardioEsperados: diasOferecidosCardio,
-      diasTreinoEsperados: perfil.treinoDias ?? [],
-      diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
-      seriesPadrao: prescricao.seriesPorExercicio.min,
-    };
-    if (!perfil.rotinaCustom && treino.rotina?.planoFinalPorDia) {
-      return avaliarRotinaAutomaticaFinal(treino.rotina, ctx);
-    }
-    if (!perfil.rotinaCustom) return null;
-    return avaliarSemana(
-      rotinaDias.map((d) => ({
-        nome: d.nome,
-        exercicios: d.slots.map((s) => s.exercicio),
-        // 🔒 C1 — séries/descanso REAIS (sem preencher o que falta): tempo abstém-se em vez de
-        // inventar; o placar usa `ctx.seriesPadrao` (abaixo) como piso de volume.
-        series: d.slots.map((s) => s.series),
-        descansoSeg: d.slots.map((s) => s.descansoSeg),
-        holdSeg: d.slots.map((s) => s.holdSeg),
-      })),
-      ctx,
-    );
-  }, [perfil, rotinaDias, prescricao, treino.rotina, diasOferecidosCardio]);
 
   // Progressão viva (Bloco B): alvo por exercício + semana de alívio, derivados do histórico.
   const progresso = prescricao ? progressoDosExercicios(sessoes, prescricao, (id) => EXERCISES_SEED.find((e) => e.id === id), EXERCISES_SEED, perfil.equipamento, perfil.equipamentosCasa) : undefined;
@@ -954,9 +931,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     registros: registrosCardioSemana, meta: metaCardio, retomada, hojeISO: hojeISO(),
     acumuladoMin: minutosAcumulados(sessoes), objetivo: perfil.objetivo,
     onRegistrar: () => { setRegistrandoCardio(true); window.scrollTo(0, 0); },
-    // 🔒 O denominador do cartão é o que o PLANO prescreve (DF 2026-08-01) — soma dos dias
-    // de cardio emitidos pelo motor. Sem dia emitido, `undefined`: o cartão cai na meta.
-    prescritoMin: (treino.rotina?.diasCardio ?? []).reduce((n, d) => n + (d.minutos ?? 0), 0) || undefined,
+    /**
+     * 🔒 O denominador do cartão é o que o PLANO prescreve (DF 2026-08-01).
+     *
+     * 🔴 D4 (2026-09-10): isto somava `diasCardio[].minutos` — o ENTREGUE — e chamava de
+     * "prescrito". Medido: prescrição de 160 min, entrega de 123, e a barra fechava 123/123.
+     * A prescrição real é `rotina.cardioSemana.prescritoSegundos`; o que falta aparece na
+     * faixa de avisos do motor (`AvisosMotor`), com os três números.
+     */
+    prescritoMin: treino.rotina?.cardioSemana
+      ? Math.round(treino.rotina.cardioSemana.prescritoSegundos / 60) || undefined
+      : undefined,
     // 🔒 C3: com todos os dias oferecidos virando força, não sobra dia de cardio — e o cartão
     // precisa DESCREVER esse arranjo em vez de cobrar uma meta que o plano não prescreveu.
     diasDeForca: treino.rotina?.diasForcaAgendados ?? 0,
@@ -1180,6 +1165,41 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const prescricaoEfetiva = prescricaoBase && retomada
     ? aplicarRetomada(prescricaoBase, retomada.semana)
     : prescricaoBase;
+  /** Crítico do plano salvo: custom mede o desenho; automático recompõe o plano final inteiro. */
+  const criticoPlano: Avaliacao | null = (() => {
+    if (rotinaDias.length === 0 || !prescricaoEfetiva) return null;
+    const ctx = {
+      nivel: perfil.nivelExperiencia,
+      objetivo: prescricaoEfetiva.objetivoEfetivo ?? perfil.objetivo,
+      tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+      // Entrada independente do plano final: o crítico não pode aprender o horizonte do próprio
+      // agregado que está tentando validar.
+      diasNoHorizonteEsperado: ORDEM_SEMANA.length,
+      diasOferecidosCardioEsperados: diasOferecidosCardio,
+      diasTreinoEsperados: perfil.treinoDias ?? [],
+      diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
+      seriesPadrao: prescricaoEfetiva.seriesPorExercicio.min,
+    };
+    const atual = avaliarSemana(
+      rotinaDias.map((d) => ({
+        nome: d.nome,
+        exercicios: d.slots.map((s) => s.exercicio),
+        // 🔒 C1 — séries/descanso REAIS (sem preencher o que falta): tempo abstém-se em vez de
+        // inventar; o placar usa `ctx.seriesPadrao` (abaixo) como piso de volume.
+        series: d.slots.map((s) => seriesDoSlot(s)),
+        descansoSeg: d.slots.map((s) => s.descansoSeg),
+        holdSeg: d.slots.map((s) => s.holdSeg),
+      })),
+      ctx,
+    );
+    if (!perfil.rotinaCustom && treino.rotina?.planoFinalPorDia) {
+      const automatico = avaliarRotinaAutomaticaFinal(treino.rotina, ctx);
+      return { ...automatico, placar: atual.placar, recomendacoes: atual.recomendacoes,
+        avisos: [...automatico.avisos.filter((a) => a.codigo === 'sessao_longa'), ...atual.avisos.filter((a) => a.codigo !== 'sessao_longa')] };
+    }
+    return atual;
+  })();
+
   // Botão de fadiga (v2 §6): grava o evento (não conta dia de treino) → o deload reativo
   // dispara na hora (sinaisFadiga → estadoDoCiclo antecipa a semana 6 e reancora).
   function sinalizarFadiga() {
@@ -1220,7 +1240,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Não aplicamos o plano nem mexemos na sessão: o plano válido anterior segue intacto.
   if (encaminhamento) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+      <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
         <EncaminhamentoEdicao motivos={encaminhamento} onRevisar={() => { setEncaminhamento(null); setEditando(true); }} onManter={() => setEncaminhamento(null)} />
       </div>
@@ -1230,7 +1250,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Editar perfil (tela cheia) → recalcular o plano.
   if (editando) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+      <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
         {/* 🔒 Os insumos do PORTÃO das técnicas avançadas (Leva F, §🥊) vêm DAQUI: quem tem
             o histórico é o Painel. A tela não conta sessão nem lê gate por conta própria —
@@ -1251,7 +1271,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Registrar treino feito (tela cheia, fora do shell — mesmo padrão da sessão guiada).
   if (registrando) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+      <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
         <RegistrarTreino
           diaHoje={diaDeHoje}
@@ -1270,7 +1290,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Registrar CARDIO (Leva 2 · Bloco 1) — tela cheia, mesmo padrão do registro manual.
   if (registrandoCardio) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', padding: '32px 20px 60px' }}>
+      <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', padding: '32px 20px 60px' }}>
         <Backdrop />
         <RegistrarCardio
           pesoKg={perfil.pesoKg}
@@ -1286,7 +1306,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
   if (sessaoDia !== null && prescricaoEfetiva && rotinaDias[sessaoDia]) {
     return (
-      <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
+      <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
         <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricaoEfetiva} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} onRegistrarCardio={salvarCardio} pesoKg={perfil.pesoKg} tecnicasLiberadas={tecnicasLiberadas} />
       </div>
@@ -1294,7 +1314,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', animation: `evkScreenIn .5s ${EASE}` }}>
+    <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', animation: `evkScreenIn .5s ${EASE}` }}>
       <Backdrop />
       {/* header */}
       <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
@@ -1302,7 +1322,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           <div className="evk-painel-marca" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
           <nav className="evk-painel-tabs" style={{ flex: 1, minWidth: 0, display: 'flex', gap: 4, overflowX: 'auto', padding: '2px 4px' }}>
             {tabs.map((t) => (
-              <div key={t.id} className="evk-painel-tab" onClick={() => irAba(t.id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', borderWidth: 1, borderStyle: 'solid', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { color: 'rgba(234,229,219,.62)', borderColor: 'transparent' }) }}>{t.label}</div>
+              <button type="button" aria-pressed={aba === t.id && !vista} key={t.id} className="evk-painel-tab" onClick={() => irAba(t.id)} style={{ fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.94rem', transition: 'all .25s ease', borderWidth: 1, borderStyle: 'solid', ...(aba === t.id && !vista ? { background: 'rgba(189,255,0,.12)', color: '#BDFF00', borderColor: 'rgba(189,255,0,.3)' } : { background: 'transparent', color: 'rgba(234,229,219,.8)', borderColor: 'transparent' }) }}>{t.label}</button>
             ))}
           </nav>
           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -1392,6 +1412,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
+        {!vista && <AvisosHidratacao avisos={perfil.avisosHidratacao} />}
         {/* 🔒 O cardio aparece mesmo SEM prescrição: quem o gate roteou "registra, mas não
             recebe meta". Sem este ramo, o usuário em ROTEAR veria a aba Treino VAZIA e não
             teria onde registrar — o oposto do que a spec pede. */}
@@ -1423,7 +1444,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           />
         )}
         {!vista && aba === 'treino' && !editorDias && (prescricao
-          ? <TreinoTab dias={rotinaDias} prescricao={prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoPlano={criticoPlano} />
+          ? <TreinoTab dias={rotinaDias} rotina={treino.rotina ?? null} tempoPorSessaoMin={perfil.tempoPorSessaoMin} prescricao={prescricaoEfetiva ?? prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoPlano={criticoPlano} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
@@ -1627,7 +1648,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -1639,6 +1660,8 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   onMontar: () => void;
   /** Crítico visível do plano salvo: editor ou recomposição independente do automático final. */
   criticoPlano: Avaliacao | null;
+  rotina: RotinaSemanal | null;
+  tempoPorSessaoMin: number;
   /** Cardio (Bloco 1): a seção da semana mora na aba Treino, como o design desenhou. */
   cardio: {
     registros: readonly RegistroCardioDatado[]; meta: MetaCardio | null;
@@ -1647,27 +1670,70 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   };
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
+  const [diaSelecionado, setDiaSelecionado] = useState(0);
+  useEffect(() => {
+    if (diaSelecionado >= dias.length) setDiaSelecionado(0);
+  }, [diaSelecionado, dias.length]);
+  const series = (slot: DiaTreino['slots'][number]) => seriesDoSlot(slot);
   return (
     <div style={sec}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
         <div><div style={{ ...kicker, color: '#BDFF00', marginBottom: 6 }}>Plano de treino</div><h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700, letterSpacing: '-.02em' }}>{treinoNome}</h2></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios</span>
+          <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios · {dias.reduce((n, d) => n + d.slots.reduce((sum, slot) => sum + series(slot), 0), 0)} séries na semana</span>
           {/* Entrada A2 do registro manual (handoff): no header da aba Treino. */}
           <button onClick={onRegistrarTreino} className="evk-registrar" style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
           {/* 🧭 A porta do EDITOR (pedido nº 5). Render incondicional dentro da aba — a
               regra da descobribilidade de 2026-08-08: controle atrás de condição some. */}
-          <button onClick={onMontar} style={{ background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Montar meu treino</button>
+          <button onClick={onMontar} style={{ background: '#BDFF00', border: '1px solid #BDFF00', color: '#0D2818', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Montar meu treino</button>
         </div>
       </div>
       {/* 🧭 DF② — a faixa compacta do crítico no plano JÁ SALVO: os avisos ativos + 1
           recomendação, no mesmo componente do editor. */}
-      {criticoPlano && <PainelCritico avaliacao={criticoPlano} compacto />}
+      {/* 🔴 D1 — a saída do MOTOR (veredito da geração + avisos honestos + conta do cardio).
+          Vem antes do crítico de propósito: o crítico fala do DESENHO da semana; este fala do
+          que a geração conseguiu (ou não) entregar. */}
+      <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} />
+      {criticoPlano && <section aria-label="Avaliação semanal do plano"><p style={{ fontSize: ".84rem", color: "rgba(234,229,219,.75)" }}>Resumo da semana inteira — atualizado ao alterar exercícios ou séries. Selecionar um dia não altera esta avaliação.</p><PainelCritico avaliacao={criticoPlano} compacto /></section>}
       {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
           mesma de quem não avisou (nada avançou, nada foi remarcado). */}
       {avisoPausa && <AvisoPausaReconhecida />}
+      {dias.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ marginBottom: 10, fontSize: '.78rem', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)' }}>Escolha o dia</div>
+          <div role="tablist" aria-label="Dias do plano de treino" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 0 8px', scrollbarWidth: 'thin' }}>
+            {dias.map((dia, d) => {
+              const selecionado = d === diaSelecionado;
+              return (
+                <button
+                  key={`${dia.nome}-${d}`}
+                  type="button"
+                  role="tab"
+                  id={`treino-dia-tab-${d}`}
+                  aria-selected={selecionado}
+                  aria-controls={`treino-dia-painel-${d}`}
+                  onClick={() => setDiaSelecionado(d)}
+                  tabIndex={selecionado ? 0 : -1}
+                  onKeyDown={(e) => {
+                    const alvo = e.key === 'ArrowRight' ? (d + 1) % dias.length : e.key === 'ArrowLeft' ? (d + dias.length - 1) % dias.length : e.key === 'Home' ? 0 : e.key === 'End' ? dias.length - 1 : null;
+                    if (alvo != null) { e.preventDefault(); setDiaSelecionado(alvo); document.getElementById('treino-dia-tab-' + alvo)?.focus(); }
+                  }}
+                  style={{ minWidth: 150, flex: '1 0 150px', maxWidth: 230, textAlign: 'left', cursor: 'pointer', borderRadius: 13, padding: '12px 14px', transition: 'border-color .2s ease, background .2s ease, color .2s ease', border: `1px solid ${selecionado ? 'rgba(189,255,0,.48)' : 'rgba(234,229,219,.12)'}`, background: selecionado ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.035)', color: selecionado ? '#BDFF00' : '#EAE5DB' }}
+                >
+                  <span style={{ display: 'block', fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', opacity: selecionado ? 1 : .8, marginBottom: 4 }}>{dia.diaId ? DIA_LABEL[dia.diaId].full : `Dia ${d + 1}`}</span>
+                  <span style={{ display: 'block', fontSize: '.92rem', lineHeight: 1.25, fontWeight: 700 }}>{dia.nome}</span>
+                  <span style={{ display: 'block', marginTop: 5, fontSize: '.75rem', color: selecionado ? 'rgba(189,255,0,.72)' : 'rgba(234,229,219,.8)' }}>{dia.slots.length} exercícios · {dia.slots.reduce((n, s) => n + series(s), 0)} séries</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {dias.map((dia, d) => (
+        <section role="tabpanel" aria-labelledby={`treino-dia-tab-${d}`} id={`treino-dia-painel-${d}`} key={`${dia.nome}-${d}`} hidden={diaSelecionado !== d}>
         <div key={`${dia.nome}-${d}`} style={{ marginBottom: 22 }}>
+          <h3 style={{ margin: '0 0 16px' }}>{dia.slots.reduce((n, s) => n + series(s), 0)} séries planejadas neste dia</h3>
+          <ResumoSeries slots={dia.slots.map((slot) => ({ exercicio: slot.exercicio, series: series(slot) }))} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={kicker}>{dia.nome} · RIR {prescricao.rir.min}–{prescricao.rir.max}</div>
             <button onClick={() => onIniciar(d)} className="hov-btn" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.85rem', padding: '8px 16px', border: 'none', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill="currentColor" /></svg>Iniciar treino</button>
@@ -1693,7 +1759,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
                     <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'rgba(234,229,219,.22)', lineHeight: 1.2, flexShrink: 0 }}>{String(s + 1).padStart(2, '0')}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                      <div className="ak-exercise-heading" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                           {/* 🔒 C1 — O GRUPO MUSCULAR NO CARD (pedido do autor, 2026-08-14):
                               *"acho bom colocar do lado de cada exercício que grupo muscular
@@ -1722,7 +1788,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
                       {/* Indicador "Degrau X de Y" (V8.3 Estado 1) — só peso corporal com escada mapeada. */}
                       <EscadaPill exercicioId={efetivo.id} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} margemBaixo={12} />
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-                        <span style={pill}>{prescricao.seriesPorExercicio.min}–{prescricao.seriesPorExercicio.max} × {reps.min}–{reps.max} reps</span>
+                        <span style={pill}>{series(sl)} séries × {reps.min}–{reps.max} reps</span>
                         <span style={pill}>RIR {prescricao.rir.min}–{prescricao.rir.max}</span>
                         <span style={pill}>Descanso {rotuloDescanso(restSeg)}</span>
                       </div>
@@ -1743,6 +1809,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
             })}
           </div>
         </div>
+        </section>
       ))}
       <p style={{ margin: '4px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Seu retorno ajusta o próximo treino. Iniciante não treina até a falha — a carga sobe por dupla progressão guiada pelo seu feedback.</p>
       {/* Cardio (Bloco 1): o motor já prescrevia cardio na tabela 1.1 — o app é que não
@@ -1874,7 +1941,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
   const [sub, setSub] = useState<Sub>('treinos');
   const subTab = (id: Sub, label: string) => {
     const on = sub === id;
-    return <div key={id} onClick={() => setSub(id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '9px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.03)', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{label}</div>;
+    return <button type="button" aria-pressed={on} key={id} onClick={() => setSub(id)} style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '9px 16px', borderRadius: 11, fontWeight: 600, fontSize: '.9rem', transition: 'all .25s ease', border: `1px solid ${on ? '#BDFF00' : 'rgba(234,229,219,.14)'}`, background: on ? 'rgba(189,255,0,.1)' : 'rgba(234,229,219,.03)', color: on ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>{label}</button>;
   };
   return (
     <div style={sec}>
@@ -1900,7 +1967,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
               if (w.tipo === 'cardio' && w.cardio) {
                 const c = w.cardio;
                 return (
-                  <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                  <div key={chaveSessao(w)} style={{ ...cardSoft, padding: '18px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: '50%', background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2.5-5 4 10 2.5-5h5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
                       <div>
@@ -1914,7 +1981,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
               // Registro rápido legado (V6.3, sem exercícios) — linha informativa, não clicável.
               if (w.manual && w.exercicios.length === 0) {
                 return (
-                  <div key={w.n} style={{ ...cardSoft, padding: '18px 20px' }}>
+                  <div key={chaveSessao(w)} style={{ ...cardSoft, padding: '18px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ width: 30, height: 30, minWidth: 30, borderRadius: '50%', background: 'rgba(189,255,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={15} height={15} viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#BDFF00" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg></span>
                       <div><div style={{ fontWeight: 700, fontSize: '1.05rem' }}>Treino registrado</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 2 }}>{fmtDataCurta(w.dataISO)} · Você marcou este dia como treinado.</div></div>
@@ -1925,7 +1992,7 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
               const fbVals = Object.values(w.feedback);
               const resumoFb = fbVals.length ? `${fbVals.filter((f) => f === 'na_medida').length} na medida` : 'sem feedback';
               return (
-                <div key={w.n} onClick={() => onAbrir(w)} className="hov-lift" style={{ ...cardSoft, padding: '18px 20px', cursor: 'pointer' }}>
+                <div key={chaveSessao(w)} onClick={() => onAbrir(w)} className="hov-lift" style={{ ...cardSoft, padding: '18px 20px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
                     {/* Sessão manual = MESMA aparência da guiada + texto discreto (não é badge/selo). */}
                     <div><div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{w.dia}</span>{w.manual ? <span style={{ fontSize: '.72rem', color: 'rgba(234,229,219,.4)' }}>· registrado manualmente</span> : <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)' }}>Sessão {w.n}</span>}</div><div style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.6)', marginTop: 3 }}>{w.manual ? `${fmtDataCurta(w.dataISO)} · ` : ''}{w.series} série{w.series === 1 ? '' : 's'} · {w.volumeKg.toLocaleString('pt-BR')} kg · {resumoFb}</div></div>
@@ -2014,7 +2081,7 @@ function Perfil({ perfil, onConta, onEditar, modoDiario }: {
         </div>
         <div style={{ padding: '4px 4px 0' }}>
           <span style={{ display: 'inline-block', marginBottom: 12, border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.6)', borderRadius: 8, padding: '3px 10px', fontSize: '.78rem', fontWeight: 700 }}>18+</span>
-          <p style={{ margin: 0, fontSize: '.8rem', color: 'rgba(234,229,219,.42)', lineHeight: 1.6 }}>O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.</p>
+          <p style={{ margin: 0, fontSize: '.8rem', color: 'rgba(234,229,219,.42)', lineHeight: 1.6 }}>O Adaptkorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, nem substitui a orientação de profissionais habilitados. Conteúdo para maiores de 18 anos.</p>
         </div>
       </div>
     </div>
@@ -2139,13 +2206,13 @@ function Backdrop() {
 }
 function Logo({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Evokorpus">
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Adaptkorpus">
       <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
     </svg>
   );
 }
-const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>;
 
 function Barra({ nome, g, pct, cor }: { nome: string; g: number; pct: number; cor: string }) {
   return (

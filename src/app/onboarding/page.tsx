@@ -271,7 +271,7 @@ function Step0({ terms, setTerms }: { terms: [boolean, boolean, boolean]; setTer
   return (
     <div>
       <h2 style={{ ...h2, marginBottom: 14 }}>Antes de começar</h2>
-      <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.98rem' }}>O Evokorpus é uma ferramenta de uso geral e educacional. Ele <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>sugere</strong> um plano de treino e dieta — você está sempre no comando e pode ajustar tudo. Não é prescrição médica, nutricional ou de educação física, e não substitui um profissional.</p>
+      <p style={{ margin: '0 0 26px', color: 'rgba(234,229,219,.66)', lineHeight: 1.6, fontSize: '.98rem' }}>O Adaptkorpus é uma ferramenta de uso geral e educacional. Ele <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>sugere</strong> um plano de treino e dieta — você está sempre no comando e pode ajustar tudo. Não é prescrição médica, nutricional ou de educação física, e não substitui um profissional.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {linhas.map((l, i) => (
           <LinhaConsentimento
@@ -484,11 +484,11 @@ function Backdrop() {
 
 function Logo({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Evokorpus">
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-label="Adaptkorpus">
       <line x1={28} y1={16} x2={28} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" /><line x1={29} y1={50} x2={68} y2={84} stroke="#EAE5DB" strokeWidth={13} strokeLinecap="round" />
       <path d="M33 50 Q50 38 70 18" stroke="#BDFF00" strokeWidth={3.5} fill="none" strokeLinecap="round" /><circle cx={35} cy={50} r={4.5} fill="#BDFF00" /><circle cx={52} cy={35} r={5} fill="#BDFF00" /><circle cx={70} cy={18} r={6} fill="#BDFF00" />
     </svg>
   );
 }
-const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>;
 const CheckCircle = () => <span style={{ width: 26, height: 26, minWidth: 26, borderRadius: '50%', background: '#BDFF00', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width={14} height={14} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="#0D2818" strokeWidth={3.4} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></span>;

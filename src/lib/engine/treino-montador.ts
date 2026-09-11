@@ -16,7 +16,7 @@
  *    onde elas moram, não a progressão (armadilha 7 do handoff);
  *  - determinístico (ordena por tier↑ depois id; rotaciona por grupo p/ variar).
  */
-import { dificuldadesLiberadas } from './treino';
+import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload } from './treino';
 import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
@@ -35,7 +35,7 @@ import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
-import { DESCANSO_COMPOSTO_TETO_SEG } from './treino-constants';
+import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
@@ -181,6 +181,13 @@ export function montarRotina(
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
   // dos favoritos (mecanismo existente), para o montador preferi-los em vez de rotacionar.
   const recentes = semanaCiclo?.retomada?.exerciciosRecentes;
+  /**
+   * 🔒 D2/D9 — deload AGENDADO da semana 6. A retomada o exclui de propósito: ela já é um
+   * estado de volume reduzido e somar os dois é o corte duplo. Único lugar do motor onde a
+   * semana 6 é reconhecida como deload; a tela lê o resultado, não a condição.
+   */
+  const deloadAgendado = semanaCiclo != null && !semanaCiclo.retomada
+    && semanaCiclo.semana === DELOAD_SEMANAS_DEFAULT;
   // 🎛️ v3 · Bloco A: revalidadas AQUI, na montagem — equipamento e nível mudam no perfil, e
   // preferência que deixou de caber é ignorada na geração (o plano sai correto) sem ser
   // apagada do perfil: se a pessoa recuperar o equipamento, ela volta a valer sozinha.
@@ -564,16 +571,30 @@ export function montarRotina(
     // --- Rampa de volume por grupo (v2 §1, DF 2026-07-08) ---------------------
     // Distribui o volume-alvo da SEMANA (dentro da banda da tabela 1.2 — sem tabela nova)
     // pelos slots de cada grupoPrimario, em round-robin determinístico na ordem (dia, slot),
-    // clampado a seriesPorExercicio {min..max}. Semana 6 NÃO anota séries: o deload usa o
-    // mecanismo existente (aplicarDeload + corte de séries na sessão) — evita corte duplo.
+    // clampado a seriesPorExercicio {min..max}.
+    //
+    // 🔴 D2/D9 (diagnóstico 2026-09-10, §6.3): a semana 6 PULAVA este bloco inteiro e saía sem
+    // séries — `NAO_AVALIADO_ENTREGAVEL` com um motivo "séries ausente" por slot, `duracaoDias`
+    // toda em `NAO_AVALIADO`, e o número exibido decidido por `lib/series-treino · seriesDoSlot`
+    // com régua PRÓPRIA (`ceil(base/2)` ≈ −50 %). O comentário antigo apostava em `aplicarDeload`
+    // — que, medido, **não tinha nenhum chamador de produção**. Eram duas autoridades, e a que
+    // valia era a da tela.
+    //
+    // 🔒 Agora a redução acontece UMA vez e AQUI: a banda da semana 6 é a banda da prescrição
+    // passada por `aplicarDeload` (`DELOAD_REDUCAO_VOLUME = 0.45`, a constante já registrada —
+    // nenhum percentual novo). A retomada continua supersedendo o mesociclo: ela já é um deload,
+    // e somar os dois seria o corte duplo que o ramo antigo temia.
     const ret = semanaCiclo?.retomada;
-    if (semanaCiclo && (ret || semanaCiclo.semana !== 6)) {
+    if (semanaCiclo) {
       const { semana, feedbackGrupos } = semanaCiclo;
       // A banda da ALOCAÇÃO vem da prescrição — como a do orçamento de tempo acima. Uma
-      // banda literal em qualquer um dos dois pontos seria número solto fora do cofre.
-      const banda = prescricao.volumePorGrupoSemana;
-      const sMin = prescricao.seriesPorExercicio.min;
-      const sMax = prescricao.seriesPorExercicio.max;
+      // banda literal em qualquer um dos dois pontos seria número solto fora do cofre. Na
+      // semana de deload é a MESMA prescrição passada por `aplicarDeload` — um único ponto
+      // de redução, as duas réguas de volume juntas.
+      const prescricaoDaSemana = deloadAgendado ? aplicarDeload(prescricao) : prescricao;
+      const banda = prescricaoDaSemana.volumePorGrupoSemana;
+      const sMin = prescricaoDaSemana.seriesPorExercicio.min;
+      const sMax = prescricaoDaSemana.seriesPorExercicio.max;
       const porGrupo = new Map<GrupoPrimario, SlotExercicio[]>();
       /** Dia de cada slot — o teto de séries do grupo NA SESSÃO precisa saber onde o slot mora. */
       const diaDoSlot = new Map<SlotExercicio, number>();
@@ -1006,18 +1027,62 @@ export function montarRotina(
       ? new Set(oferecidos)
       : new Set<Weekday>();
     const final = materializarPlanoFinal(r, distribuicaoCardio, diasCardioSemDuracao);
+    /**
+     * 🔴 D4 — A PERDA É DITA. O corte pelo orçamento de cada dia já acontecia e já era
+     * medido; o que faltava era sair do objeto e virar número e frase. Medido no SHA
+     * `34b2ede`: oferta de 4 dias prescrevia 160 min e entregava 123, sem aviso nenhum.
+     *
+     * 🔒 Nada é redistribuído para consertar o número: cardio só vai a dia OFERECIDO, e
+     * oferecer por conta própria seria prescrever em dia que a pessoa não deu. A conta é dita
+     * como está.
+     */
+    const prescritoSegundos = fatosDistribuicaoCardio.prescricoesCardio
+      .reduce((n, p) => n + (p.duracaoPrescritaSegundos > 0 ? p.duracaoPrescritaSegundos : 0), 0);
+    const entregueSegundos = distribuicaoCardio.blocosPorDia
+      .reduce((n, b) => n + b.duracaoTotalSegundos, 0);
+    const cardioSemana = prescritoSegundos > 0
+      ? { prescritoSegundos, entregueSegundos, faltanteSegundos: Math.max(0, prescritoSegundos - entregueSegundos) }
+      : undefined;
+    if (cardioSemana && cardioSemana.faltanteSegundos > 0) {
+      const min = (seg: number) => Math.round(seg / 60);
+      avisos.push(
+        `Cardio: o plano pede ${min(cardioSemana.prescritoSegundos)} min nesta semana e couberam `
+        + `${min(cardioSemana.entregueSegundos)} min nos dias que você ofereceu — faltam `
+        + `${min(cardioSemana.faltanteSegundos)} min. O cardio entra só em dia que você ofereceu e `
+        + `nunca tira tempo da musculação.`,
+      );
+    }
+    /**
+     * 🔴 D3 — a INVARIANTE do certificado, num único ponto que cobre os DOIS produtores
+     * (alocador automático e editor guiado): `CERTIFICADO` afirma *"todo dia cabe"*, então um
+     * dia MEDIDO acima do limite operacional o desqualifica. O plano continua entregue e
+     * intacto — o que muda é o rótulo, e ele passa a nomear os dias que estouram.
+     *
+     * No caminho automático isto nunca deve morder (o `reduceToFit` degrada até caber); é o
+     * ramo manual, que por política não reduz, quem produz o caso. Se um dia morder no
+     * automático, o rótulo honesto é este e não o falso verde.
+     */
+    const acimaDoLimite = (final.duracaoDias ?? [])
+      .map((d, i) => (d.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL' ? i : -1))
+      .filter((i) => i >= 0);
+    const rgCertificado: ResultadoGeracaoRotina = rg.tipo === 'CERTIFICADO' && acimaDoLimite.length > 0
+      ? { tipo: 'ENTREGUE_SEM_CERTIFICACAO', diasAcimaDoLimite: acimaDoLimite }
+      : rg;
     const resultadoFinal: ResultadoGeracaoRotina =
-      prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rg.tipo !== 'INCOMPATIVEL'
+      prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rgCertificado.tipo !== 'INCOMPATIVEL'
         ? {
             tipo: 'NAO_AVALIADO_ENTREGAVEL',
+            ...(acimaDoLimite.length > 0 ? { diasAcimaDoLimite: acimaDoLimite } : {}),
             motivos: [...new Set([
-              ...(rg.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rg.motivos : []),
+              ...(rgCertificado.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rgCertificado.motivos : []),
               'CARDIO_SEM_DURACAO',
             ])],
           }
-        : rg;
+        : rgCertificado;
     return {
       ...r, ...final, fatosReducao: fatos, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
+      ...(cardioSemana ? { cardioSemana } : {}),
+      avisos: [...avisos],
       ...(resultadoFinal.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),
     };
   };
@@ -1034,6 +1099,35 @@ export function montarRotina(
       diasForcaAgendados: diasUsuarioCustom.length,
       diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length),
     };
+    // Author request 2026-09-10 supersedes the old editor's non-editable sets.
+    // Apply before duration certification; recovery never increases its assigned volume.
+    //
+    // Deload reduz a escolha manual pela constante do motor, uma única vez.
+    // Retomada mantém seu teto específico. O desenho original permanece intacto.
+    for (const dia of rotinaCustomEstrutural.dias) {
+      const desenho = custom?.dias.find((d, i) => (d.diaId ?? diasForcaDaSemana[i]) === dia.diaId);
+      for (const slot of dia.slots) {
+        const escolhidas = desenho?.seriesPorExercicio?.[slot.exercicio.id];
+        // Sem escolha para este exercício: o motor decide, e não há nada a dizer.
+        if (escolhidas == null) continue;
+        /**
+         * 🔴 D3 — entrada inválida é RECUSADA e DITA. Antes o `continue` engolia o valor: a
+         * pessoa digitava, o número sumia, o plano vinha com outro e nada explicava. O teto é
+         * de TAMANHO (`SERIES_MANUAIS_MAX`), não uma regra de treino — por isso a frase nomeia
+         * a trava em vez de fingir fundamento fisiológico.
+         */
+        if (!Number.isInteger(escolhidas) || escolhidas < 1 || escolhidas > SERIES_MANUAIS_MAX) {
+          avisos.push(`Séries de ${slot.exercicio.nomePt}: ${escolhidas} não é um número inteiro de 1 a ${SERIES_MANUAIS_MAX} — mantivemos a quantidade calculada pelo app para este exercício.`);
+          continue;
+        }
+        // Retomada limita pelo estágio de recuperação. Deload reduz a escolha do usuário
+        // pela mesma constante da prescrição; limitá-la ao automático cortava 99 para 2.
+        slot.series = semanaCiclo?.retomada
+          ? Math.min(escolhidas, slot.series ?? escolhidas)
+          : deloadAgendado ? seriesEmDeload(escolhidas) : escolhidas;
+        slot.seriesDefinidasPeloUsuario = true;
+      }
+    }
     const rotinaCustomCertificada = certificarDuracao(rotinaCustomEstrutural, perfil.nivelExperiencia, orcamentoSeg);
     const motivos = [...new Set((rotinaCustomCertificada.duracaoDias ?? []).flatMap((d) => d.motivosNaoAvaliados))];
     // Manual é soft: duração vira informação do crítico, nunca remove exercício nem bloqueia.

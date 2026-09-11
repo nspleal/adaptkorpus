@@ -94,6 +94,15 @@ export const INCREMENTO_CARGA = {
 } as const;
 export const REDUCAO_CARGA_DIFICIL = 0.1; // −~10% após 2 "difícil" seguidas
 
+/**
+ * 🏷️ TETO DE TAMANHO do campo de séries do editor guiado — **trava de entrada, não regra de
+ * treino** (D3, 2026-09-10). Não há teto de séries por exercício no cofre; este número existe
+ * só para que um campo numérico livre não vire um plano de 9 h. Fonte única: o schema
+ * (`perfil-resumo`), o input da tela e o montador leem daqui. Quando ele morde, o motor DIZ —
+ * entrada recusada em silêncio é a mesma perda, só invisível.
+ */
+export const SERIES_MANUAIS_MAX = 99;
+
 /** Deload (semana de alívio). */
 export const DELOAD_SEMANAS_DEFAULT = 6; // v2: agendado = semana 6 do mesociclo (universal)
 export const DELOAD_REDUCAO_VOLUME = 0.45; // −40–50% do volume (ponto: 45%)

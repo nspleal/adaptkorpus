@@ -98,7 +98,7 @@ export default function ConviteInstalar() {
   return (
     <div
       role="complementary"
-      aria-label="Instalar o Evokorpus"
+      aria-label="Instalar o Adaptkorpus"
       style={{
         background: 'linear-gradient(165deg, rgba(189,255,0,.07), rgba(15,15,14,.5))',
         border: '1px solid rgba(189,255,0,.25)', borderRadius: 18, padding: '18px 20px', marginBottom: 18,
@@ -112,12 +112,12 @@ export default function ConviteInstalar() {
         </svg>
       </span>
       <div style={{ flex: 1, minWidth: 200 }}>
-        <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 5 }}>Deixe o Evokorpus na tela inicial</div>
+        <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 5 }}>Deixe o Adaptkorpus na tela inicial</div>
         {/* 🔒 O argumento é a barra do navegador. NADA de notificações — elas não existem. */}
         <p style={{ margin: 0, fontSize: '.9rem', lineHeight: 1.55, color: 'rgba(234,229,219,.66)' }}>
           {ios
             ? <>No Safari, toque em <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Compartilhar</strong> e depois em <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>Adicionar à Tela de Início</strong>. Abre direto, sem a barra do navegador.</>
-            : <>Abre direto, sem a barra do navegador — como um app. Continua sendo o mesmo Evokorpus.</>}
+            : <>Abre direto, sem a barra do navegador — como um app. Continua sendo o mesmo Adaptkorpus.</>}
         </p>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

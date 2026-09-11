@@ -1,12 +1,15 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
 import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico } from '@/lib/engine/critico';
+import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import SeletorExercicio, { type ContextoSeletor } from './SeletorExercicio';
+import ResumoSeries from './ResumoSeries';
+import OrdemExercicios from './OrdemExercicios';
 
 /**
  * 🧭 O EDITOR GUIADO — "Montar meu treino" (handoff-editor-guiado-2026-08-13).
@@ -18,9 +21,8 @@ import SeletorExercicio, { type ContextoSeletor } from './SeletorExercicio';
  *  ① **Aviso NÃO trava.** O botão de salvar nunca desabilita por causa do crítico; os
  *    avisos aparecem em vermelho, explicados, e a pessoa segue. Os únicos bloqueios do
  *    produto continuam sendo o gate de saúde e o piso legal de reps — nenhum mora aqui.
- *  ② **Séries/reps/RIR NÃO são editáveis.** O editor mexe em QUAIS exercícios e em QUE dia;
- *    a prescrição e a progressão continuam do motor, e o crítico segue visível depois de
- *    salvar (a faixa compacta no plano).
+ *  ② Pedido posterior (2026-09-10): séries manuais no treino customizado.
+ *    Reps/RIR/descanso continuam automáticos; o crítico permanece visível.
  *  ③ **O seletor é o mesmo do TROCAR** — uma peça, duas portas.
  */
 
@@ -32,15 +34,17 @@ export interface DiaEditavel {
   /** Dia da semana em que este treino cai (índice Seg=0…Dom=6). */
   weekdayIdx: number;
   exercicios: Exercise[];
+  seriesPorExercicio?: Record<string, number>;
 }
 
 /** Do plano gerado para o formato editável ("começar do meu plano atual"). */
-export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[]): DiaEditavel[] {
+export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[], custom?: RotinaCustom): DiaEditavel[] {
   return dias.map((d, i) => ({
     nome: d.nome,
     // `diaId` é a fonte nova; agenda/posição é apenas compatibilidade para plano legado.
     weekdayIdx: Math.max(0, ORDEM_SEMANA.indexOf(d.diaId ?? treinoDias[i] ?? ORDEM_SEMANA[i % 7]!)),
     exercicios: d.slots.map((s) => s.exercicio),
+    seriesPorExercicio: custom?.dias.find((dia, indice) => (dia.diaId ?? treinoDias[indice]) === (d.diaId ?? treinoDias[i]))?.seriesPorExercicio ?? Object.fromEntries(d.slots.filter((s) => s.seriesDefinidasPeloUsuario && s.series != null).map((s) => [s.exercicio.id, s.series!])),
   }));
 }
 
@@ -55,7 +59,9 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
     origem: 'usuario',
     dias: dias
       .filter((d) => d.exercicios.length > 0)
-      .map((d) => ({ nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id) })),
+      .map((d) => ({ nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id),
+        ...(d.seriesPorExercicio && Object.keys(d.seriesPorExercicio).length ? { seriesPorExercicio: Object.fromEntries(d.exercicios.filter((e) => d.seriesPorExercicio?.[e.id] != null).map((e) => [e.id, d.seriesPorExercicio![e.id]!])) } : {}),
+      })),
   };
 }
 
@@ -93,11 +99,11 @@ export default function EditorTreino({
   const [dias, setDias] = useState<DiaEditavel[]>(inicial.length > 0 ? inicial : [{ nome: 'Dia 1', weekdayIdx: 0, exercicios: [] }]);
   const [abrindoEm, setAbrindoEm] = useState<number | null>(null);
   const [confirmarVolta, setConfirmarVolta] = useState(false);
+  const previsto = useMemo(() => preverPlano(dias), [dias, preverPlano]);
 
   const avaliacao = useMemo<Avaliacao>(() => {
     // A prévia vem do MOTOR (mesmo caminho do plano salvo); os dias com exercício mantêm a
     // ordem, então os índices de dia da semana acompanham por posição.
-    const previsto = preverPlano(dias);
     const comExercicio = dias.filter((d) => d.exercicios.length > 0);
     // 🔒 O editor NÃO supre `seriesPadrao`: o placar vem do MOTOR (preverPlano). Onde o motor
     // não anotou séries (deload/corpo-inteiro), o placar cai no piso do próprio crítico — e o
@@ -106,7 +112,7 @@ export default function EditorTreino({
       nivel, objetivo, tempoPorSessaoMin,
       diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),
     });
-  }, [dias, nivel, objetivo, tempoPorSessaoMin, preverPlano]);
+  }, [dias, nivel, objetivo, tempoPorSessaoMin, previsto]);
 
   const total = dias.reduce((n, d) => n + d.exercicios.length, 0);
   const diasUnicos = weekdaysSaoUnicos(dias);
@@ -114,25 +120,18 @@ export default function EditorTreino({
     Math.max(0, ORDEM_SEMANA.findIndex((_, indice) => !atuais.some((dia) => dia.weekdayIdx === indice)));
 
   const mut = (i: number, f: (d: DiaEditavel) => DiaEditavel) => setDias((p) => p.map((d, k) => (k === i ? f(d) : d)));
-  const mover = (i: number, k: number, delta: number) => mut(i, (d) => {
-    const ex = [...d.exercicios];
-    const alvo = k + delta;
-    if (alvo < 0 || alvo >= ex.length) return d;
-    [ex[k], ex[alvo]] = [ex[alvo]!, ex[k]!];
-    return { ...d, exercicios: ex };
-  });
-
   return (
     <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', padding: '28px 20px 48px', animation: `evkScreenIn .45s ${EASE}` }}>
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 6px', fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-.02em' }}>Montar meu treino</h1>
         <p style={{ margin: '0 0 20px', fontSize: '.9rem', color: 'rgba(234,229,219,.62)', lineHeight: 1.55 }}>
-          Você escolhe os exercícios e em que dia cada um entra. As séries, as repetições e o descanso
-          continuam vindo do app, e a progressão segue igual à do treino recomendado.
+          Escolha vários exercícios de uma vez, organize a ordem e ajuste as séries.
+          Repetições e descanso seguem as recomendações do app. Nas fases de recuperação, o volume pode ser reduzido.
         </p>
 
         {/* ═══ O CRÍTICO — placar, recomendações e avisos, ao vivo enquanto monta ═══ */}
         <PainelCritico avaliacao={avaliacao} />
+        <ResumoSeries slots={previsto.flatMap((dia) => dia.exercicios.map((exercicio, i) => ({ exercicio, series: dia.series?.[i] ?? 0 })))} />
 
         {dias.map((d, i) => (
           <div key={i} style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: 16, marginBottom: 14 }}>
@@ -168,23 +167,22 @@ export default function EditorTreino({
               })}
             </div>
 
+            <p style={{ color: 'rgba(234,229,219,.8)', fontSize: '.85rem' }}>{d.exercicios.length} exercícios · {d.exercicios.length ? previsto[dias.slice(0, i).filter((dia) => dia.exercicios.length).length]?.series?.reduce<number>((n, s) => n + (s ?? 0), 0) ?? 0 : 0} séries previstas</p>
             {d.exercicios.length === 0 && (
               <p style={{ margin: '0 0 10px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)' }}>Nenhum exercício ainda neste dia.</p>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
-              {d.exercicios.map((ex, k) => (
-                <div key={`${ex.id}-${k}`} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(13,40,24,.4)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 12, padding: '10px 12px' }}>
+            <OrdemExercicios exercicios={d.exercicios} onMover={(de, para) => mut(i, (dia) => { const itens = [...dia.exercicios]; const [item] = itens.splice(de, 1); itens.splice(para, 0, item!); return { ...dia, exercicios: itens }; })}>
+              {(ex, k) => (<>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '.94rem', fontWeight: 600 }}>{ex.nomePt}</div>
                     <div style={{ fontSize: '.76rem', color: 'rgba(234,229,219,.5)' }}>{ROTULO_GRUPO[ex.grupoPrimario ?? ''] ?? ex.grupoMuscular}</div>
                   </div>
-                  <button onClick={() => mover(i, k, -1)} disabled={k === 0} style={{ ...btnIcone, opacity: k === 0 ? 0.3 : 1 }} aria-label="Subir">↑</button>
-                  <button onClick={() => mover(i, k, +1)} disabled={k === d.exercicios.length - 1} style={{ ...btnIcone, opacity: k === d.exercicios.length - 1 ? 0.3 : 1 }} aria-label="Descer">↓</button>
+                  <CampoSeries nome={ex.nomePt} valor={d.seriesPorExercicio?.[ex.id] ?? previsto[dias.slice(0, i).filter((dia) => dia.exercicios.length).length]?.series?.[k] ?? 1} onMudar={(valor) => mut(i, (dia) => ({ ...dia, seriesPorExercicio: { ...dia.seriesPorExercicio, [ex.id]: valor } }))} />
                   <button onClick={() => mut(i, (x) => ({ ...x, exercicios: x.exercicios.filter((_, j) => j !== k) }))} style={btnIcone} aria-label={`Remover ${ex.nomePt}`}>×</button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setAbrindoEm(i)} style={btnGhost}>+ Adicionar exercício</button>
+                </>
+              )}
+            </OrdemExercicios>
+            <button onClick={() => setAbrindoEm(i)} style={{ ...btnGhost, width: '100%', background: '#BDFF00', color: '#0D2818', minHeight: 48 }}>+ Adicionar exercícios</button>
           </div>
         ))}
 
@@ -221,6 +219,7 @@ export default function EditorTreino({
           exercises={exercises}
           ctx={ctxSeletor}
           onEscolher={(ex) => { mut(abrindoEm, (d) => ({ ...d, exercicios: [...d.exercicios, ex] })); setAbrindoEm(null); }}
+          onEscolherVarios={(selecionados) => { mut(abrindoEm, (d) => ({ ...d, exercicios: [...d.exercicios, ...selecionados.filter((ex) => !d.exercicios.some((atual) => atual.id === ex.id))] })); setAbrindoEm(null); }}
           onDesbanir={onDesbanir}
           onFechar={() => setAbrindoEm(null)}
         />
@@ -242,6 +241,18 @@ export default function EditorTreino({
       )}
     </div>
   );
+}
+
+function CampoSeries({ nome, valor, onMudar }: { nome: string; valor: number; onMudar: (valor: number) => void }) {
+  const [texto, setTexto] = useState(String(valor));
+  useEffect(() => setTexto(String(valor)), [valor]);
+  return <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.8rem' }}>Séries
+    <input type="number" inputMode="numeric" min={1} max={SERIES_MANUAIS_MAX} step={1} aria-label={`Séries de ${nome}`} value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => { const n = Number(texto); if (Number.isInteger(n) && n >= 1 && n <= SERIES_MANUAIS_MAX) onMudar(n); else setTexto(String(valor)); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      style={{ width: 58, minHeight: 44, borderRadius: 10, background: '#0D2818', color: '#EAE5DB', border: '1px solid rgba(234,229,219,.4)', padding: 8, font: 'inherit' }} />
+  </label>;
 }
 
 /**
@@ -299,8 +310,8 @@ const btnGhost: CSSProperties = {
   fontWeight: 600, fontSize: '.88rem', padding: '11px 15px', borderRadius: 12, cursor: 'pointer',
 };
 const btnIcone: CSSProperties = {
-  background: 'none', border: '1px solid rgba(234,229,219,.16)', color: 'rgba(234,229,219,.8)',
-  width: 32, minWidth: 32, height: 32, borderRadius: 9, cursor: 'pointer', fontSize: '.95rem', lineHeight: 1,
+  background: 'rgba(234,229,219,.08)', border: '1px solid rgba(234,229,219,.3)', color: '#EAE5DB',
+  width: 44, minWidth: 44, height: 44, borderRadius: 12, cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1,
 };
 
 /** Só para o teste de tipo do grupo — mantém o import de GrupoPrimario honesto. */

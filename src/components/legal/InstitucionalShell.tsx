@@ -54,7 +54,7 @@ function Logo({ size }: { size: number }) {
     </svg>
   );
 }
-const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>evo</span><span style={{ color: '#BDFF00' }}>korpus</span></span>;
+const Marca = ({ size }: { size: string }) => <span style={{ fontWeight: 800, fontSize: size, letterSpacing: '-.02em' }}><span style={{ color: '#EAE5DB' }}>adapt</span><span style={{ color: '#BDFF00', marginLeft: '0.02em' }}>korpus</span></span>;
 
 export default function InstitucionalShell({ page, showAmbient = true, children }: { page: PageKey; showAmbient?: boolean; children: ReactNode }) {
   // Logado → "voltar" leva à área logada (/app), não à landing de marketing; deslogado → landing.
@@ -110,7 +110,7 @@ export default function InstitucionalShell({ page, showAmbient = true, children 
           <p style={{ margin: '0 0 18px', paddingTop: 24, borderTop: '1px solid rgba(234,229,219,.08)', color: 'rgba(234,229,219,.4)', fontSize: '.8rem', lineHeight: 1.6, maxWidth: 880 }}>{DISCLAIMER}</p>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
             <span style={{ border: '1px solid rgba(234,229,219,.25)', color: 'rgba(234,229,219,.6)', borderRadius: 8, padding: '4px 10px', fontSize: '.78rem', fontWeight: 700 }}>18+</span>
-            <p style={{ margin: 0, color: 'rgba(234,229,219,.4)', fontSize: '.82rem' }}>© Evokorpus • <AValidar>CNPJ / razão social</AValidar> • Botucatu/SP</p>
+            <p style={{ margin: 0, color: 'rgba(234,229,219,.4)', fontSize: '.82rem' }}>© Adaptkorpus • <AValidar>CNPJ / razão social</AValidar> • Botucatu/SP</p>
           </div>
         </div>
       </footer>

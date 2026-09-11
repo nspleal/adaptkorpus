@@ -1,7 +1,7 @@
 import LegalLayout from '@/components/legal/LegalLayout';
 import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, AValidar } from '@/components/legal/ui';
 
-export const metadata = { title: 'Política de Privacidade · Evokorpus' };
+export const metadata = { title: 'Política de Privacidade · Adaptkorpus' };
 
 const TOC = [
   { id: 's-fazemos', label: 'O que fazemos e o que não fazemos' },

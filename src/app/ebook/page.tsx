@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import InstitucionalShell from '@/components/legal/InstitucionalShell';
-export const metadata = { title: 'A Curva · Evokorpus' };
+export const metadata = { title: 'A Curva · Adaptkorpus' };
 
 const BULLETS = [
   'Como montar uma rotina de treino que cabe no seu dia.',

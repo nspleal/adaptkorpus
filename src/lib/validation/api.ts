@@ -4,8 +4,29 @@
  */
 import { z } from 'zod';
 import { perfilSchema } from './profile';
+import { divisaoPreferidaSchema, focoSchema, perfilResumoSchema, preferenciasTreinoSchema, rotinaCustomSchema } from './perfil-resumo';
+import { entradaPlanoVisivelSchema, weekdaySchema } from './plano-entrada';
 
-/** Entrada do motor de treino. */
+const camposEntradaPlano = entradaPlanoVisivelSchema.innerType().shape;
+
+/**
+ * Entrada do motor de treino (`POST /api/treino`).
+ *
+ * 🔴 D5 (diagnóstico 2026-09-10, §6.6) — este schema aceitava DEZ campos e descartava sete
+ * que o montador lê: `treinoDias`, `preferencias`, `foco`, `divisaoPreferida`,
+ * `rotinaCustom`, `cardioFavorito`, `modoForca`. A rota também não repassava `favoritos`,
+ * `semanaCiclo`, `diasOferecidosCardio` nem `escolhasExecucao`. Resultado medido: para o
+ * MESMO usuário, a rota devolvia split `Upper / Lower ×2` e o app `Prioridades (4 dias)`,
+ * com exercícios totalmente diferentes — e, sem `semanaCiclo`, uma rotina sem séries.
+ *
+ * 🔒 A rota NÃO foi removida: ausência de chamada interna não prova ausência de uso externo.
+ * Foi ALINHADA, e todo campo novo é OPCIONAL — um cliente que mandava os dez continua
+ * recebendo 200, agora com um plano que tem séries.
+ *
+ * ⚠️ Os sub-schemas vêm de `perfil-resumo` e `plano-entrada`, não são redigitados aqui: era
+ * exatamente a régua duplicada que deixava `tempoPorSessaoMin` valer 10–180 numa borda e
+ * 10–240 na outra, para o mesmo campo.
+ */
 export const perfilTreinoSchema = z.object({
   pesoKg: z.coerce.number().finite().min(30).max(300),
   alturaCm: z.coerce.number().finite().min(100).max(250),
@@ -22,7 +43,35 @@ export const perfilTreinoSchema = z.object({
   equipamento: z.enum(['nenhum', 'casa', 'academia']), // 'nenhum' = legado (≡ casa + [])
   equipamentosCasa: z.array(z.enum(['halteres', 'barra_fixa', 'elastico', 'banco', 'kettlebell', 'corda_pular', 'roda_abdominal'])).optional(),
   diasDisponiveis: z.coerce.number().int().min(1).max(7),
-  tempoPorSessaoMin: z.coerce.number().int().min(10).max(180),
+  // 🔒 UMA régua com o perfil do produto (era 10–180 aqui e 10–240 lá, no mesmo campo).
+  tempoPorSessaoMin: perfilResumoSchema.shape.tempoPorSessaoMin,
+
+  // ── os sete campos que o montador lê e a rota descartava ──────────────────────────────
+  /** Agenda real da semana — é a FONTE DE VERDADE dos dias; sem ela o split diverge do app. */
+  treinoDias: z.array(weekdaySchema).min(1).max(7).optional(),
+  preferencias: preferenciasTreinoSchema.optional(),
+  foco: focoSchema.optional(),
+  divisaoPreferida: divisaoPreferidaSchema.optional(),
+  rotinaCustom: rotinaCustomSchema.optional(),
+  cardioFavorito: z.enum(['caminhada', 'corrida', 'bike', 'pular_corda', 'lutas', 'outro']).optional(),
+  modoForca: z.boolean().optional(),
+
+  // ── entradas transitórias da geração (as mesmas de `opcoesDeEntradaPlano`) ────────────
+  favoritos: z.array(z.string().max(24)).max(200).optional(),
+  /** Ausente ⇒ semana 1, como `normalizarEntradaPlanoVisivel` faz no app. */
+  pesoEfetivoKg: camposEntradaPlano.pesoEfetivoKg.optional(),
+  semanaCiclo: camposEntradaPlano.semanaCiclo.partial({ feedbackGrupos: true }).optional(),
+  diasOferecidosCardio: camposEntradaPlano.diasOferecidosCardio.optional(),
+  escolhasExecucao: camposEntradaPlano.escolhasExecucao.optional(),
+}).superRefine((body, ctx) => {
+  // Mantém também as invariantes de unicidade da borda C1, sem escolher a última intenção.
+  const entrada = entradaPlanoVisivelSchema.safeParse({
+    pesoEfetivoKg: body.pesoEfetivoKg ?? body.pesoKg,
+    diasOferecidosCardio: body.diasOferecidosCardio ?? [],
+    semanaCiclo: { semana: 1, ...body.semanaCiclo, feedbackGrupos: body.semanaCiclo?.feedbackGrupos ?? [] },
+    escolhasExecucao: body.escolhasExecucao ?? [],
+  });
+  if (!entrada.success) for (const issue of entrada.error.issues) ctx.addIssue(issue);
 });
 
 const macrosSchema = z.object({
@@ -105,6 +154,8 @@ export const aderenciaDiaSchema = z.object({
 
 /** Sessão de treino: só o esqueleto estrutural — o payload varia com a leva. */
 export const sessaoHistoricoSchema = z.object({
+  /** 🔒 D8a — identidade global da sessão (ausente em linha legada). Teto de tamanho, não regra. */
+  id: z.string().max(64).optional(),
   dataISO: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data ISO'),
   n: z.number().int().min(0).max(100_000),
   dia: z.string().max(120).optional(),

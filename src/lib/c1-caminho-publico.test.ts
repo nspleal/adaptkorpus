@@ -53,8 +53,16 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     expect(r.rotina!.duracaoIncompativel).toBeUndefined();
   });
 
-  it('NAO_AVALIADO_ENTREGAVEL: deload (semana 6) não anota séries ⇒ entregue com motivos, sem certificar', () => {
-    const r = gerarTreino(perfilTreino(), { exercises: EXERCISES, semanaCiclo: { semana: 6 } });
+  /**
+   * 🔴 D2 (2026-09-10) — o VEÍCULO deste caso mudou, a propriedade não. O deload era o
+   * produtor de `NAO_AVALIADO_ENTREGAVEL` porque a semana 6 saía sem séries — e isso era o
+   * defeito, não a feature. O produtor legítimo que resta é a meta de cardio QUALITATIVA:
+   * objetivo `massa` prescreve 1–2 *sessões*, não minutos, então um dia oferecido para cardio
+   * fica sem duração (`CARDIO_SEM_DURACAO`) e a semana inteira é entregue sem certificar.
+   */
+  it('NAO_AVALIADO_ENTREGAVEL: cardio sem duração (meta em sessões) ⇒ entregue com motivos, sem certificar', () => {
+    const r = gerarTreino(perfilTreino({ objetivo: 'massa', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] }),
+      { exercises: EXERCISES, semanaCiclo: { semana: 1 }, diasOferecidosCardio: ['dom'] });
     const rg = r.rotina!.resultadoGeracao!;
     expect(rg.tipo).toBe('NAO_AVALIADO_ENTREGAVEL');
     if (rg.tipo !== 'NAO_AVALIADO_ENTREGAVEL') return;

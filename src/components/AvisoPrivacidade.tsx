@@ -43,7 +43,7 @@ export default function AvisoPrivacidade() {
             <path d="M9.3 11.9l1.9 1.9 3.6-3.9" stroke="#EAE5DB" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
-        <p className="evk-cookie__text">Usamos apenas uma medição anônima de uso (sem cookies de rastreio) para melhorar o Evokorpus. <span className="evk-cookie__muted">Nenhum dado de saúde é usado para publicidade.</span></p>
+        <p className="evk-cookie__text">Usamos apenas uma medição anônima de uso (sem cookies de rastreio) para melhorar o Adaptkorpus. <span className="evk-cookie__muted">Nenhum dado de saúde é usado para publicidade.</span></p>
       </div>
       <div className="evk-cookie__actions">
         <Link className="evk-cookie__more" href="/privacidade">Saiba mais</Link>

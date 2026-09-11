@@ -11,7 +11,7 @@ import { type ReactNode, type CSSProperties } from 'react';
 
 /** Disclaimer canônico (rodapé de todas as páginas + cartão da página Aviso). */
 export const DISCLAIMER =
-  'O Evokorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. ' +
+  'O Adaptkorpus é uma ferramenta de uso geral e caráter educacional, dirigida pelo usuário. ' +
   'Não constitui prescrição, consulta ou acompanhamento nutricional ou de educação física, ' +
   'nem substitui a orientação de profissionais habilitados. Consulte um médico antes de iniciar ' +
   'qualquer programa de exercício ou mudança alimentar. Conteúdo para maiores de 18 anos.';

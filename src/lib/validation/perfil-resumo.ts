@@ -5,6 +5,7 @@
  * `PerfilResumo` (components/painel/Painel.tsx).
  */
 import { z } from 'zod';
+import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
 
 /**
  * 🔴 Grupos primários (12 valores anatômicos — DF 2026-07-27). Espelho de `GrupoPrimario`
@@ -15,6 +16,128 @@ const grupoPrimario = z.enum([
   'antebraco', 'biceps', 'core', 'costas', 'gluteos', 'lombar',
   'ombros', 'panturrilha', 'peito', 'posterior', 'quadriceps', 'triceps',
 ]);
+
+/**
+ * 🔒 D6 (2026-09-10) — os quatro blocos de TREINO que entram por HIDRATAÇÃO, extraídos para
+ * consts próprias. Eles já eram validados no `PUT /api/dados/perfil`; o que faltava era um
+ * jeito de aplicar a MESMA régua nas duas bordas que recebem o dado cru — o blob do
+ * `localStorage` (`session · normalizarPerfil`) e o jsonb da linha `profile`
+ * (`persistencia/perfil-profile · linhaParaPerfil`). São referências, não cópias: uma régua
+ * nova aqui vale para as três bordas de uma vez.
+ */
+export const preferenciasTreinoSchema = z.object({
+  trocas: z.array(z.object({ de: z.string(), para: z.string() })),
+  banidos: z.array(z.string()),
+});
+
+export const focoSchema = z.object({
+  grupo: grupoPrimario,
+  compensa: grupoPrimario,
+  semana: z.number().int().min(1),
+});
+
+export const divisaoPreferidaSchema = z.enum(['auto', 'superior-inferior', 'prioridades']);
+
+export const rotinaCustomSchema = z.object({
+  origem: z.literal('usuario'),
+  dias: z.array(z.object({
+    nome: z.string().max(60),
+    /** Ausente só em rotinas legadas; novas gravações carregam o dia real. */
+    diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
+    exercicioIds: z.array(z.string().max(24)).max(20),
+    seriesPorExercicio: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)).optional(),
+  })).max(7),
+}).superRefine((rotina, ctx) => {
+  // C1.1/Parte 3: nesta versão, uma sessão de musculação ocupa no máximo um dia real.
+  // A compatibilidade legada permanece: dia ausente será derivado pela agenda no montador.
+  const vistos = new Set<string>();
+  rotina.dias.forEach((dia, indice) => {
+    if (dia.diaId == null) return;
+    if (vistos.has(dia.diaId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dias', indice, 'diaId'],
+        message: 'cada dia da semana pode ter apenas um treino',
+      });
+    }
+    vistos.add(dia.diaId);
+  });
+});
+
+/**
+ * Forma mínima da `rotinaCustom` para HIDRATAÇÃO. Igual à de escrita menos a faixa dos
+ * valores de série — ver a nota em `BLOCOS_DE_TREINO`.
+ */
+export const rotinaCustomHidratacaoSchema = z.object({
+  origem: z.literal('usuario'),
+  dias: z.array(z.object({
+    nome: z.string().max(60),
+    diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
+    exercicioIds: z.array(z.string().max(24)).max(20),
+    seriesPorExercicio: z.record(z.string().max(24), z.number()).optional(),
+  })).max(7),
+});
+
+/**
+ * 🔴 D6 — SANEAMENTO DA HIDRATAÇÃO. Medido no SHA `34b2ede`: `preferencias: { banidos: [] }`
+ * vindo de um storage velho fazia `recomputarPlano` lançar `TypeError` e o app ficava **sem
+ * plano nenhum**, sem mensagem. Aqui o bloco que não passa na sua régua é REMOVIDO — o perfil
+ * segue, o plano sai, e o que some é a preferência inválida, não a sessão inteira.
+ *
+ * Preferências parciais conservam as escolhas válidas. Campo inválido usa o default de
+ * ausência, acompanhado de aviso de recuperação; o usuário não perde escolhas em silêncio.
+ */
+const BLOCOS_DE_TREINO = {
+  preferencias: preferenciasTreinoSchema,
+  foco: focoSchema,
+  divisaoPreferida: divisaoPreferidaSchema,
+  /**
+   * 🔴 O DESENHO DO USUÁRIO SE VALIDA PELA FORMA, NÃO PELO VALOR (medido no navegador,
+   * 2026-09-10). Com o schema de ESCRITA aqui, um único `seriesPorExercicio` fora de 1–99
+   * derrubava a `rotinaCustom` INTEIRA na hidratação: a pessoa recarregava e o treino que ela
+   * montou simplesmente sumia, sem uma palavra. Isso troca um defeito por outro pior.
+   *
+   * 🔒 A régua da hidratação é só a que evita QUEBRA (`dias` que não é array, ausente, etc.).
+   * Valor de série fora de faixa atravessa e morre onde tem quem explique: o montador recusa
+   * a entrada e emite o aviso nomeando o exercício (D3). Escrita nova continua barrada pelo
+   * `perfilResumoSchema`, que segue com a faixa.
+   */
+  rotinaCustom: rotinaCustomHidratacaoSchema,
+} as const;
+
+export function sanearBlocosDeTreino<T extends Record<string, unknown>>(perfil: T): T {
+  let saneado = perfil;
+  const rotulos: Record<keyof typeof BLOCOS_DE_TREINO, string> = {
+    preferencias: 'preferências de exercícios', foco: 'foco muscular',
+    divisaoPreferida: 'divisão de treino', rotinaCustom: 'desenho do treino',
+  };
+  const mensagens = Object.fromEntries(Object.entries(rotulos).map(([k, rotulo]) => [k,
+    `Não foi possível recuperar todas as suas escolhas de ${rotulo}. Mantivemos o que pôde ser lido; confira essas opções antes de treinar.`,
+  ]));
+  const avisos = new Set<string>(Array.isArray(perfil.avisosHidratacao)
+    ? perfil.avisosHidratacao.filter((v): v is string => typeof v === 'string' && Object.values(mensagens).includes(v))
+    : []);
+  for (const [chave, schema] of Object.entries(BLOCOS_DE_TREINO)) {
+    if (saneado[chave] == null) continue;
+    if (schema.safeParse(saneado[chave]).success) continue;
+    avisos.add(mensagens[chave]!);
+    const bruto = saneado[chave];
+    if (chave === 'preferencias' && bruto && typeof bruto === 'object' && !Array.isArray(bruto)) {
+      const p = bruto as Record<string, unknown>;
+      // Ausência de trocas não invalida banimentos; um item inválido não apaga os irmãos.
+      const trocas = Array.isArray(p.trocas) ? p.trocas.flatMap(v => {
+        const parsed = preferenciasTreinoSchema.shape.trocas.element.safeParse(v);
+        return parsed.success ? [parsed.data] : [];
+      }) : [];
+      const banidos = Array.isArray(p.banidos) ? p.banidos.filter((v): v is string => typeof v === 'string') : [];
+      saneado = { ...saneado, preferencias: { trocas, banidos } };
+    } else {
+      const { [chave]: _descartado, ...resto } = saneado;
+      saneado = resto as T;
+    }
+  }
+  return avisos.size > 0 ? { ...saneado, avisosHidratacao: [...avisos] } : saneado;
+}
 
 export const perfilResumoSchema = z.object({
   sexo: z.enum(['masculino', 'feminino']),
@@ -57,15 +180,8 @@ export const perfilResumoSchema = z.object({
    * cache local com o perfil sem eles. Banimento, troca, foco, técnicas e orçamento
    * morriam no primeiro reload com backend vivo.
    */
-  preferencias: z.object({
-    trocas: z.array(z.object({ de: z.string(), para: z.string() })),
-    banidos: z.array(z.string()),
-  }).optional(),
-  foco: z.object({
-    grupo: grupoPrimario,
-    compensa: grupoPrimario,
-    semana: z.number().int().min(1),
-  }).optional(),
+  preferencias: preferenciasTreinoSchema.optional(),
+  foco: focoSchema.optional(),
   tecnicasAvancadas: z.boolean().optional(),
   /**
    * 🏃 C2 — a MODALIDADE preferida de cardio. A spec já previa modalidade escolhida (default
@@ -76,36 +192,13 @@ export const perfilResumoSchema = z.object({
   // interno ('baixo'|'medio'|'alto'), nunca o rótulo de tela (DF 2026-08-10).
   orcamento: z.enum(['baixo', 'medio', 'alto']).nullable().optional(),
   // 🎛️ v4 · DF③ — divisão preferida (leva B consome; a persistência entra já na leva A).
-  divisaoPreferida: z.enum(['auto', 'superior-inferior', 'prioridades']).optional(),
+  divisaoPreferida: divisaoPreferidaSchema.optional(),
   /**
    * 🧭 Editor guiado — o desenho do usuário. Limites de forma são TRAVA DE TAMANHO, não
    * regra de treino: 7 dias, 20 exercícios por dia e id curto. O que é bom ou ruim para o
    * treino é dito pelo CRÍTICO (aviso que não trava — DF①), nunca recusado na borda.
    */
-  rotinaCustom: z.object({
-    origem: z.literal('usuario'),
-    dias: z.array(z.object({
-      nome: z.string().max(60),
-      /** Ausente só em rotinas legadas; novas gravações carregam o dia real. */
-      diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
-      exercicioIds: z.array(z.string().max(24)).max(20),
-    })).max(7),
-  }).superRefine((rotina, ctx) => {
-    // C1.1/Parte 3: nesta versão, uma sessão de musculação ocupa no máximo um dia real.
-    // A compatibilidade legada permanece: dia ausente será derivado pela agenda no montador.
-    const vistos = new Set<string>();
-    rotina.dias.forEach((dia, indice) => {
-      if (dia.diaId == null) return;
-      if (vistos.has(dia.diaId)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['dias', indice, 'diaId'],
-          message: 'cada dia da semana pode ter apenas um treino',
-        });
-      }
-      vistos.add(dia.diaId);
-    });
-  }).optional(),
+  rotinaCustom: rotinaCustomSchema.optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
     renal: z.boolean(),

@@ -1,5 +1,8 @@
 'use client';
 
+import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
+
+
 import { useState, type CSSProperties } from 'react';
 import { montarSemana, proximoTreinoIdx, weekdayHojeIdx, type Weekday } from '@/lib/semana';
 import { ROTULO_MODALIDADE } from '@/lib/engine/cardio';
@@ -84,6 +87,9 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
               <span style={{ fontWeight: 700, fontSize: '.95rem', color: d.isTraining ? '#EAE5DB' : 'rgba(234,229,219,.7)' }}>{d.abbr}</span>
               <span style={d.tipo === 'treino' ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? { width: 7, height: 7, borderRadius: '50%', background: '#16A34A' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
               <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'cardio' ? (d.sessionLabel ?? 'Cardio') : d.tipo === 'recuperacao' ? 'Recuperação' : 'Descanso'}</span>
+              {d.tipo === 'treino' && d.cardio?.minutos != null && d.cardio.minutos > 0 && (
+                <span style={{ fontSize: '.74rem', lineHeight: 1.4, color: 'rgba(234,229,219,.85)' }}>Cardio · {formatarDuracaoMinutos(d.cardio.minutos)}</span>
+              )}
             </div>
           ))}
         </div>
@@ -101,7 +107,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
                 <p style={{ margin: 0, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{sd.isToday ? 'Seu treino de hoje está pronto quando você estiver.' : `Programado para ${sd.full}.`}</p>
                 {cardioAposTreino && (
                   <p style={{ margin: '10px 0 0', fontSize: '.86rem', color: 'rgba(234,229,219,.78)', lineHeight: 1.5 }}>
-                    Depois do treino: cardio · {ROTULO_MODALIDADE[cardioAposTreino.modalidade as never]}{cardioAposTreino.minutos != null ? ` · ${cardioAposTreino.minutos} min` : ''}.
+                    Depois do treino: cardio · {ROTULO_MODALIDADE[cardioAposTreino.modalidade as never]}{cardioAposTreino.minutos != null ? ` · ${formatarDuracaoMinutos(cardioAposTreino.minutos)}` : ''}.
                   </p>
                 )}
               </div>
@@ -131,7 +137,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
                     prescreve nada. O texto do cardio NÃO fala no futuro nem promete
                     resultado: descreve o item do dia. */}
                 <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{`${sd.isToday ? 'Hoje' : cap(sd.full)} · ${cardio ? 'Cardio' : 'Recuperação'}`}</div>
-                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade]} · ${cardio.minutos} min` : ROTULO_MODALIDADE[cardio.modalidade]) : 'Recuperação ativa'}</h3>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade]} · ${formatarDuracaoMinutos(cardio.minutos)}` : ROTULO_MODALIDADE[cardio.modalidade]) : 'Recuperação ativa'}</h3>
                 <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade, a intensidade e a duração ao registrar.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
               </div>
               {cardio && onRegistrarCardio ? (

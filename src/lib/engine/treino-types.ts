@@ -19,12 +19,27 @@ import type { Weekday } from '../semana';
  * mas é DERIVADO deste discriminante — não é mais fonte independente.
  *  - CERTIFICADO: todo dia cabe em B+480 (musculação) após a adaptação;
  *  - NAO_AVALIADO_ENTREGAVEL: algum dia é NAO_AVALIADO — entregue com motivos, nunca certificado;
+ *  - ENTREGUE_SEM_CERTIFICACAO: o dia FOI medido e NÃO cabe, e ainda assim é entregue;
  *  - INCOMPATIVEL: nem o menor plano com cobertura coube (MAX > limite operacional);
  *  - ERRO_ALOCADOR: o plano realocado violou um invariante (rede de segurança do alocador vivo).
+ *
+ * 🔴 D3 (diagnóstico 2026-09-10, §6.4) — por que ENTREGUE_SEM_CERTIFICACAO existe. O plano do
+ * editor guiado é *soft* por política declarada: não é reduzido, não perde exercício, não é
+ * bloqueado. Só que o terminal do ramo manual olhava apenas `motivosNaoAvaliados` e devolvia
+ * CERTIFICADO para um dia que o próprio motor mediu em 9 h 52 contra um orçamento de 1 h —
+ * contradição interna no mesmo objeto.
+ *
+ * 🔒 Nenhum dos três terminais existentes dizia a verdade deste caso: CERTIFICADO afirma que
+ * cabe; NAO_AVALIADO_ENTREGAVEL afirma que não foi avaliado (foi); INCOMPATIVEL afirma que nem
+ * o menor plano com cobertura coube — capacidade que o caminho manual **nunca mede**, porque
+ * por política ele não reduz. Este quarto estado afirma só o que foi medido: entregue, medido,
+ * não cabe. `diasAcimaDoLimite` são os índices em `duracaoDias` — a tela aponta o dia sem
+ * recalcular nada.
  */
 export type ResultadoGeracaoRotina =
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
-  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[] }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[] }
+  | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[] }
   | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
   | {
       tipo: 'ERRO_ALOCADOR';
@@ -61,7 +76,7 @@ export interface RotinaCustom {
   /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
   origem: 'usuario';
   /** `diaId` explícito passou a ser gravado pelo editor. Ausente só em rotina legada; o montador deriva uma vez da agenda e preserva compatibilidade. */
-  dias: { nome: string; diaId?: Weekday; exercicioIds: string[] }[];
+  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number> }[];
 }
 
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
@@ -218,6 +233,8 @@ export interface SlotExercicio {
    * (a UI usa o min da prescrição / estado da progressão).
    */
   series?: number;
+  /** Explicit manual choice (visual laboratory, author request 2026-09-10). */
+  seriesDefinidasPeloUsuario?: boolean;
   /**
    * 🔒 Descanso entre séries DESTE exercício, em segundos (cofre §🕐, DF 2026-07-31).
    *
@@ -364,6 +381,22 @@ export interface RotinaSemanal {
   distribuicaoCardio?: DistribuicaoCardioSemanal;
   /** Fatos independentes usados pelo crítico para reconstruir e validar a distribuição observada. */
   fatosDistribuicaoCardio?: EntradaDistribuicaoSemana;
+  /**
+   * 🔴 D4 (2026-09-10) — PLANEJADO, ENTREGUE e FALTANTE da semana de cardio, em segundos.
+   *
+   * A perda já era medida (`duracaoDescartadaSegundos` por contrato) e nunca virava número
+   * legível nem frase: a meta caía abaixo do piso semanal em silêncio, e o cartão do Painel
+   * chamava de "prescrito" a soma do ENTREGUE — a barra fechava 123/123 com prescrição de 160.
+   *
+   * `faltante = max(0, prescrito − entregue)` fecha a conta por construção. O detalhe por
+   * prescrição continua em `distribuicaoCardio.contratosPorPrescricao[].duracaoDescartadaSegundos`.
+   * Ausente quando a meta não é em minutos (massa) ou nenhum dia foi oferecido.
+   */
+  cardioSemana?: {
+    prescritoSegundos: number;
+    entregueSegundos: number;
+    faltanteSegundos: number;
+  };
   /**
    * 🔒 C1.1-D F19 — diferença factual entre o baseline e o plano terminal: slots removidos,
    * volume e frequência por dias reais. Não decide a política de volume/frequência (C2/C3).

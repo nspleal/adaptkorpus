@@ -1,7 +1,7 @@
 import LegalLayout from '@/components/legal/LegalLayout';
 import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, AValidar } from '@/components/legal/ui';
 
-export const metadata = { title: 'Reembolso · Evokorpus' };
+export const metadata = { title: 'Reembolso · Adaptkorpus' };
 
 /**
  * 🔒 `/reembolso` — RECRIADA em 2026-08-11 (DF do autor), depois de ter sido removida em
@@ -42,7 +42,7 @@ export default function Reembolso() {
     >
       <SecaoLegal id="s-hoje" titulo="Como é hoje">
         <Paragrafo mb>
-          <Forte>O Evokorpus está em beta e não cobra nada.</Forte> Não existe assinatura, não existe
+          <Forte>O Adaptkorpus está em beta e não cobra nada.</Forte> Não existe assinatura, não existe
           checkout e nenhum meio de pagamento é pedido em lugar nenhum do app.
         </Paragrafo>
         <Paragrafo mb>

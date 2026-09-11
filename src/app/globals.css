@@ -479,3 +479,95 @@ body {
   .evk-proxima-refeicao { animation: none; }
   .evk-folha-refeicao { animation: none; }
 }
+/* App usability pass: scoped to the internal panel, never the landing. */
+.ak-app button, .ak-app input, .ak-app select, .ak-app summary { touch-action: manipulation; }
+.ak-app button:not(:disabled) { min-height: 44px; }
+.ak-app :is(button, input, select, summary, a):focus-visible { outline: 3px solid #BDFF00; outline-offset: 3px; }
+.ak-app .evk-painel-tab { flex-shrink: 0; }
+.ak-app { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .ak-app .ak-exercise-heading { flex-direction: column; }
+  .ak-app .evk-painel-topo { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ak-app, .ak-app *, .ak-app *::before, .ak-app *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+/* Exercise ordering: only the handle captures touch, leaving the page free to scroll. */
+.ak-order-row { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(234,229,219,.18); border-radius: 14px; background: #12321f; transition: border-color .16s ease, box-shadow .16s ease, scale .16s ease; }
+.ak-order-content { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; flex-wrap: wrap; }
+.ak-drag-handle { flex-shrink: 0; display: grid; place-items: center; width: 44px; min-height: 48px; padding: 0; border: 1px solid rgba(234,229,219,.24); border-radius: 10px; background: rgba(234,229,219,.06); color: #EAE5DB; touch-action: none; cursor: grab; user-select: none; }
+.ak-drag-handle:disabled { opacity: .35; cursor: default; }
+.ak-app .ak-drag-handle { touch-action: none; }
+.ak-order-row:focus-within { border-color: #BDFF00; }
+@media (hover: hover) { .ak-order-row:has(.ak-drag-handle:not(:disabled):hover) { scale: 1.01; border-color: #BDFF00; box-shadow: 0 5px 16px #0003; } }
+.ak-order-dragging { z-index: 5; border-color: #BDFF00; background: #1a4128; box-shadow: 0 14px 32px #0008; scale: 1.015; }
+.ak-order-dragging .ak-drag-handle { cursor: grabbing; color: #BDFF00; }
+.ak-drop-before::before, .ak-drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 3px; border-radius: 4px; background: #BDFF00; }
+.ak-drop-before::before { top: -7px; } .ak-drop-after::after { bottom: -7px; }
+@media (max-width: 480px) { .ak-order-content > div:first-child { flex-basis: 100% !important; } }
+@media (prefers-reduced-motion: reduce) { .ak-order-row { transition: none; scale: 1 !important; } }
+/* Roomy exercise library on desktop, bottom sheet on touch-sized screens. */
+.ak-library-overlay { position: fixed; inset: 0; z-index: 220; display: flex; align-items: center; justify-content: center; padding: 28px; background: rgba(7,18,11,.76); backdrop-filter: blur(6px); }
+.ak-library-panel { width: min(1160px, 100%); height: min(940px, 92dvh); display: flex; flex-direction: column; min-height: 0; padding: 28px; color: #EAE5DB; background: linear-gradient(150deg,#122f1e,#101710); border: 1px solid rgba(234,229,219,.24); border-radius: 24px; box-shadow: 0 24px 100px #0008; }
+.ak-library-context { flex-shrink: 0; margin: 2px 0 16px; font-size: .82rem; line-height: 1.5; color: rgba(234,229,219,.78); }
+.ak-library-context p { margin: 3px 0; }
+.ak-library-context strong { color: #EAE5DB; }
+.ak-library-results { overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; padding: 4px 12px 16px 4px; align-content: start; align-items: start; }
+.ak-library-exercise { display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 20px; background: rgba(234,229,219,.04); border: 1px solid rgba(234,229,219,.2); border-radius: 16px; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.ak-library-exercise > button { align-self: flex-start; min-width: 130px; }
+.ak-library-exercise[data-selected="true"] { border-color: #BDFF00; background: rgba(189,255,0,.07); }
+.ak-library-exercise:focus-within { border-color: #BDFF00; }
+.ak-library-instructions { border-top: 1px solid rgba(234,229,219,.14); padding-top: 10px; }
+.ak-library-instructions summary { padding: 10px 0; min-height: 44px; cursor: pointer; font-size: .88rem; font-weight: 600; }
+.ak-library-instructions p { margin: 8px 0; font-size: .9rem; line-height: 1.75; color: rgba(234,229,219,.85); }
+.ak-library-panel button { min-height: 44px; transition: border-color .16s ease, box-shadow .16s ease, background .16s ease, transform .16s ease; }
+.ak-library-panel :is(button,input,summary):focus-visible { outline: 2px solid #BDFF00; outline-offset: 3px; }
+.ak-library-empty { grid-column: 1/-1; padding: 20px; line-height: 1.6; }
+.ak-library-empty button { margin: 6px 12px 6px 0; }
+.ak-library-filters, .ak-library-results { scrollbar-width: thin; scrollbar-color: rgba(234,229,219,.3) transparent; }
+.ak-library-filters:hover, .ak-library-filters:focus-within, .ak-library-results:hover { scrollbar-color: #BDFF00 rgba(189,255,0,.06); }
+.ak-library-panel ::-webkit-scrollbar { width: 9px; height: 9px; }
+.ak-library-panel ::-webkit-scrollbar-thumb { background: rgba(234,229,219,.3); border-radius: 10px; }
+.ak-library-panel ::-webkit-scrollbar-thumb:hover { background: #BDFF00; box-shadow: 0 0 8px #bdff0060; }
+@media (hover: hover) {
+  .ak-library-filters button:hover { border-color: #BDFF00 !important; background: rgba(189,255,0,.12) !important; box-shadow: 0 0 12px #bdff001f; transform: translateY(-1px); }
+  .ak-library-exercise:hover { background: rgba(234,229,219,.08); border-color: rgba(189,255,0,.65); box-shadow: 0 4px 18px #0003; }
+  .ak-library-panel button:not(:disabled):hover, .ak-library-instructions summary:hover { box-shadow: 0 0 12px #bdff0026; }
+}
+@media (min-width: 1000px) { .ak-library-filters { flex-wrap: wrap; } }
+@media (max-width: 700px) {
+  .ak-library-overlay { padding: 0; align-items: flex-end; }
+  .ak-library-panel { height: 94dvh; padding: 16px; border-radius: 22px 22px 0 0; }
+  .ak-library-results { grid-template-columns: minmax(0,1fr); gap: 12px; padding-right: 8px; }
+  .ak-library-exercise { padding: 16px; }
+  .ak-library-context { font-size: .76rem; margin-bottom: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .ak-library-panel *, .ak-library-exercise { transition: none !important; transform: none !important; } }
+
+/* Shared feedback for the app and its portalled library; static content stays still. */
+:is(.ak-app-interactions, .ak-library-panel) :is(button, a[href], summary, [role="button"]):not(.ak-drag-handle) {
+  transition: box-shadow .18s ease, filter .18s ease, translate .18s ease, border-color .18s ease, background-color .18s ease;
+}
+:is(.ak-app-interactions, .ak-library-panel) :is(button, summary, [role="button"]):not(:disabled):not([aria-disabled="true"]) { cursor: pointer; }
+:is(.ak-app-interactions, .ak-library-panel) :is(input, select, textarea) { transition: box-shadow .18s ease, border-color .18s ease; }
+:is(.ak-app-interactions, .ak-library-panel) :is(button, a[href], summary, input, select, textarea, [role="button"]):focus-visible {
+  outline: 2px solid #BDFF00; outline-offset: 3px;
+}
+:is(.ak-app-interactions, .ak-library-panel) :is(input, select, textarea):focus-visible { box-shadow: 0 0 0 4px #bdff0017; }
+@media (hover: hover) and (pointer: fine) {
+  :is(.ak-app-interactions, .ak-library-panel) :is(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):not(.ak-drag-handle):hover {
+    translate: 0 -1px; filter: brightness(1.1); box-shadow: 0 0 0 1px #bdff0047, 0 4px 16px #0003;
+  }
+  :is(.ak-app-interactions, .ak-library-panel) :is(a[href], summary):hover { filter: brightness(1.15); text-decoration: underline; text-underline-offset: 4px; }
+  :is(.ak-app-interactions, .ak-library-panel) :is(input, select, textarea):not(:disabled):not([readonly]):hover { box-shadow: 0 0 0 1px #bdff0052; }
+  .ak-app-interactions .hov-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 20px #0003; }
+  .ak-app-interactions .hov-btn:hover { transform: none; }
+  .ak-app-interactions ::-webkit-scrollbar-thumb:hover { background-color: #BDFF00; }
+}
+:is(.ak-app-interactions, .ak-library-panel) :is(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):not(.ak-drag-handle):active {
+  translate: 0 1px; filter: brightness(.94); box-shadow: 0 0 0 1px #bdff0052;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.ak-app-interactions, .ak-library-panel) :is(button, a[href], summary, input, select, textarea, [role="button"], .hov-lift) { transition: none !important; translate: none !important; }
+  .ak-app-interactions :is(.hov-lift, .hov-btn):hover { transform: none !important; }
+}

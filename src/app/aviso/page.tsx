@@ -1,7 +1,7 @@
 import LegalLayout from '@/components/legal/LegalLayout';
 import { SecaoLegal, Paragrafo, Lista, ItemLista, Forte, DISCLAIMER } from '@/components/legal/ui';
 
-export const metadata = { title: 'Aviso · Evokorpus' };
+export const metadata = { title: 'Aviso · Adaptkorpus' };
 
 const TOC = [
   { id: 's-aviso', label: 'O aviso' },
@@ -32,7 +32,7 @@ export default function Aviso() {
       </SecaoLegal>
 
       <SecaoLegal id="s-limites" titulo="Limites da ferramenta" ultima>
-        <Paragrafo mb>O Evokorpus <Forte>não promete resultado, número ou prazo</Forte>. As estimativas de calorias e cargas são <Forte>pontos de partida</Forte>, não metas exatas — você ajusta conforme a sua realidade.</Paragrafo>
+        <Paragrafo mb>O Adaptkorpus <Forte>não promete resultado, número ou prazo</Forte>. As estimativas de calorias e cargas são <Forte>pontos de partida</Forte>, não metas exatas — você ajusta conforme a sua realidade.</Paragrafo>
         <Paragrafo>Para dúvidas clínicas, nutricionais ou de treino específicas do seu caso, procure profissionais habilitados.</Paragrafo>
       </SecaoLegal>
     </LegalLayout>
