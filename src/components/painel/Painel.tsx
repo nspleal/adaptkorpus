@@ -315,15 +315,36 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    */
   useEffect(() => {
     const semente: RegistroPeso = { dataISO: null, kg: perfil.pesoKg };
-    const locais = lerPesos();
-    if (locais.length > 0) setPesos([semente, ...locais]);
+    const noMount = lerPesos();
+    if (noMount.length > 0) setPesos([semente, ...noMount]);
     let vivo = true;
     const hoje = hojeISO();
     // Conta fotografada na IDA: troca de conta durante a espera invalida a resposta.
     const contaDaChamada = escopoLocal();
     const mesmaGaveta = () => vivo && painelVivoRef.current && contaDaChamada === contaLocalRef.current;
     void carregarPesosServidor().then((doServidor) => {
+      // 🔴 A GUARDA VEM ANTES DA LEITURA, e não é ordem acidental: `lerPesos()` resolve a
+      // chave pelo escopo VIGENTE (`chaveLocal`), então ler antes de conferir a conta seria
+      // abrir a gaveta de quem entrou depois. Desmontado ou conta trocada: não lê e não grava.
       if (!mesmaGaveta() || !doServidor) return;
+      /**
+       * 🔴 R2, 2ª volta (conferência focal de `6847571`): a série local é relida AQUI, no
+       * instante da resposta — não a fotografia do mount.
+       *
+       * O que a revisão reproduziu no corpo REAL deste efeito: `lerPesos()` acontecia antes do
+       * GET; quem se pesava enquanto o GET estava pendente tinha o ponto novo apagado por
+       * `substituirPesos(serie)`, porque a reconciliação recebia a lista velha — e o ponto nem
+       * entrava em `pendentes`, então perdia também a cópia de recuperação se o POST falhasse.
+       * Um GET que devolve uma série sem o registro novo é resposta VÁLIDA (a consulta começou
+       * antes dele); o erro era tratá-la como se fosse o estado atual do cliente.
+       *
+       * ⚠️ O ponto novo pode aparecer em `pendentes` mesmo com o POST dele já em vôo, e isso é
+       * seguro de propósito: o dia é arbitrado pelo índice único do banco, então o segundo POST
+       * com o MESMO par (dia, kg) volta `IDEMPOTENTE` e com peso diferente volta `RECUSADO_DIA`
+       * — nunca duplica. Uma requisição extra numa corrida rara é preço barato por não perder
+       * a pesagem de alguém.
+       */
+      const locais = lerPesos();
       const { serie, pendentes, pesoDeHoje } = reconciliarSeriePesos(locais, doServidor, hoje);
       setPesos([semente, ...substituirPesos(serie)]);
       // 🔴 R2 — CONVERGÊNCIA histórico → perfil. Só o dia corrente governa: é ele que a

@@ -120,15 +120,27 @@ export function linhaDaBiblioteca(ex: Exercise, prescricao: PrescricaoFITT | nul
  * existe autoridade. Copiando um DIA do plano existe: slots com 1 e 5 séries viravam 3 e 3.
  *
  * 🔒 A autoridade é `seriesDoSlot` (fonte única desde D9): ela devolve o que o MOTOR decidiu
- * para o slot, já com a rampa do mesociclo e o deload aplicados, sem piso e sem régua
- * própria. Nada de séries inventadas aqui — `|| linha.sets.length` só cobre o slot que chega
- * SEM série decidida (`?? 0` de `seriesDoSlot` é ausência honesta), e nesse caso o default da
- * biblioteca é o mesmo de antes.
+ * para o slot, já com a rampa do mesociclo e o deload aplicados, sem piso e sem régua própria.
+ *
+ * ⚠️ SOBRE O FALLBACK, com precisão (conferência focal de `6847571`): `seriesDoSlot` colapsa
+ * "slot sem série decidida" e "slot com série zero" no MESMO `0` (`slot.series ?? 0`), então o
+ * fallback cobre os DOIS casos — **não** só a ausência, como este comentário já afirmou. Não dá
+ * para distinguir daqui, e ler `sl.series` direto criaria a segunda autoridade sobre séries que
+ * D9 removeu; então a distinção não existe por decisão de arquitetura, não por esquecimento.
+ *
+ * 🔒 O fallback é INALCANÇÁVEL no fluxo real, e isso é medido, não suposto — ver
+ * `__auditoria__/regressao-R3b-series-zero-nao-alcanca-o-modelo.test.ts`: a varredura do espaço
+ * de planos (objetivo × nível × equipamento × dias × tempo × semana × retomada) não acha um
+ * slot com série `0` ou ausente, e série manual fora de faixa (`0`, negativa, fracionária, acima
+ * do teto) é RECUSADA pelo montador, que decide por conta própria e marca
+ * `seriesDefinidasPeloUsuario` como não-definida. Se algum dia o motor passar a emitir zero,
+ * aquele teste quebra ALTO — é a hora de decidir o que a cópia faz, não de inventar aqui.
  */
 export function linhasDoModelo(dia: DiaTreino, prescricao: PrescricaoFITT | null): ExForm[] {
   return dia.slots.map((sl) => {
     const linha = linhaDaBiblioteca(sl.exercicio, prescricao, true);
-    const nSets = seriesDoSlot(sl) || linha.sets.length;
+    const doPlano = seriesDoSlot(sl);
+    const nSets = doPlano > 0 ? doPlano : linha.sets.length;
     // reps default = TOPO da faixa prescrita (composto/isolado), editável; carga em branco.
     // Isométrico segue em SEGUNDOS (`repUnit`) e sem reps pré-preenchidas, como antes.
     const comp = sl.padrao !== 'isolado';
