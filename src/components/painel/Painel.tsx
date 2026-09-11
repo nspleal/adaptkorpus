@@ -57,13 +57,14 @@ import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
-import EditorTreino, { PainelCritico, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
+import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
+import { unificarAvisos } from '@/lib/avisos-unificados';
 import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
-  CardapioItem, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, RotinaCustom, Sexo,
+  CardapioItem, DiaNaoAtendido, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, RotinaCustom, Sexo,
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 import { chaveLocal } from '@/lib/escopo-local';
@@ -77,6 +78,12 @@ import { useAbaVoltavel, useCamadaVoltavel, useVoltarDoNavegador } from '@/lib/u
 export interface PerfilResumo {
   /** Avisos de recuperação do perfil; não são parâmetros do motor nem dados de saúde. */
   avisosHidratacao?: string[];
+  /**
+   * 🔴 D11 — campos ESSENCIAIS que a hidratação não conseguiu ler. Presente e não-vazio ⇒ a
+   * geração fica SUSPENSA (`lib/plano`) e a tela oferece a correção. Não é dado de saúde: são
+   * nomes de campo. O valor ilegível continua no perfil — nada é apagado.
+   */
+  camposInvalidos?: string[];
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
   preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
@@ -1169,6 +1176,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const criticoPlano: Avaliacao | null = (() => {
     if (rotinaDias.length === 0 || !prescricaoEfetiva) return null;
     const ctx = {
+      semana: ciclo.semanaEfetiva,
       nivel: perfil.nivelExperiencia,
       objetivo: prescricaoEfetiva.objetivoEfetivo ?? perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin,
@@ -1648,6 +1656,48 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
+/**
+ * 🔴 D14 (auditoria 2026-09-11) — A AGENDA SOLICITADA × A ENTREGA EFETIVA.
+ *
+ * Medido no snapshot `a40f8af`: um dia de força com `slots: []` era entregue como sessão,
+ * contado em `diasForcaAgendados` e media 0 s — sustentando o selo verde de "cabe nos
+ * limites". A pessoa podia abrir e iniciar uma sessão sem nenhum exercício.
+ *
+ * 🔒 O dia NÃO some do plano: ele sai da lista de sessões e aparece aqui, nomeado e com o
+ * motivo. Nada é redistribuído para tapar o buraco — cardio não ocupa o dia e exercício fora
+ * do equipamento declarado continua fora.
+ */
+function DiasNaoAtendidos({ dias }: { dias?: DiaNaoAtendido[] }) {
+  if (!dias || dias.length === 0) return null;
+  const porque = (m: DiaNaoAtendido['motivo']) =>
+    m === 'EQUIPAMENTO' ? 'com o equipamento que você marcou no perfil, não há exercício novo para este dia'
+      : m === 'TETO_SEMANAL' ? 'os grupos deste dia já alcançaram o volume previsto para a semana'
+        : 'o desenho deste dia ficou sem exercício disponível';
+  return (
+    <section
+      aria-label="Dias da sua agenda que não viraram sessão"
+      style={{ background: 'rgba(13,40,24,.4)', border: '1px solid rgba(234,179,8,.45)', borderRadius: 16, padding: 15, marginBottom: 16 }}
+    >
+      <p role="status" style={{ margin: '0 0 6px', fontSize: '.9rem', fontWeight: 600, lineHeight: 1.5, color: 'rgba(234,229,219,.9)' }}>
+        <span aria-hidden style={{ marginRight: 6 }}>🟡</span>
+        {dias.length === 1 ? 'Um dia da sua agenda não virou sessão nesta semana.' : `${dias.length} dias da sua agenda não viraram sessão nesta semana.`}
+      </p>
+      <ul style={{ margin: 0, padding: '0 0 0 18px', fontSize: '.86rem', lineHeight: 1.55, color: 'rgba(234,229,219,.8)' }}>
+        {dias.map((d, i) => (
+          <li key={`${d.nome}-${i}`}>
+            <strong>{d.diaId ? DIA_LABEL[d.diaId].full : d.nome}</strong>
+            {d.diaId ? ` · ${d.nome}` : ''} — {porque(d.motivo)}.
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: '10px 0 0', fontSize: '.84rem', lineHeight: 1.5, color: 'rgba(234,229,219,.65)' }}>
+        Seus dias continuam como você marcou no perfil. Não movemos o treino para outro dia nem colocamos exercício
+        que não cabe no seu equipamento só para preencher.
+      </p>
+    </section>
+  );
+}
+
 function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
@@ -1693,7 +1743,10 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
       {/* 🔴 D1 — a saída do MOTOR (veredito da geração + avisos honestos + conta do cardio).
           Vem antes do crítico de propósito: o crítico fala do DESENHO da semana; este fala do
           que a geração conseguiu (ou não) entregar. */}
-      <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} />
+      <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} avisos={unificarAvisos(rotina, criticoPlano && { recomendacoes: recomendacoesVisiveis(criticoPlano, true), avisos: criticoPlano.avisos }).avisosMotor} />
+      {/* 🔴 D14 — o dia PEDIDO que não virou sessão continua na tela, com o motivo. O que ele
+          não tem é botão de iniciar ou registrar: não existe sessão vazia para começar. */}
+      <DiasNaoAtendidos dias={rotina?.diasNaoAtendidos} />
       {criticoPlano && <section aria-label="Avaliação semanal do plano"><p style={{ fontSize: ".84rem", color: "rgba(234,229,219,.75)" }}>Resumo da semana inteira — atualizado ao alterar exercícios ou séries. Selecionar um dia não altera esta avaliação.</p><PainelCritico avaliacao={criticoPlano} compacto /></section>}
       {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
           mesma de quem não avisou (nada avançou, nada foi remarcado). */}
@@ -1811,7 +1864,20 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
         </div>
         </section>
       ))}
-      <p style={{ margin: '4px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Seu retorno ajusta o próximo treino. Iniciante não treina até a falha — a carga sobe por dupla progressão guiada pelo seu feedback.</p>
+      {/* 🔴 D15 (auditoria 2026-09-11) — A REGRA DE INICIANTE SEGUE O CAMPO DA PRESCRIÇÃO.
+          Esta frase era renderizada INCONDICIONALMENTE: o intermediário e o avançado liam a
+          cláusula do iniciante sobre falha como se fosse a regra deles, e
+          `prescricao.semFalhaIniciante` — que existe exatamente para carregar esta regra —
+          tinha ZERO consumidores em `src/components` + `src/app`.
+          🔒 O que é geral continua geral (o retorno ajusta o treino; a carga sobe por dupla
+          progressão). O que muda é só a cláusula do iniciante. Para os outros níveis NÃO
+          entra recomendação de falha nenhuma: o motor não prescreve isso, e inventar aqui
+          seria trocar um texto errado por outro. */}
+      <p style={{ margin: '4px 2px 0', fontSize: '.88rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>
+        {prescricao.semFalhaIniciante
+          ? 'Seu retorno ajusta o próximo treino. Iniciante não treina até a falha — a carga sobe por dupla progressão guiada pelo seu feedback.'
+          : 'Seu retorno ajusta o próximo treino. A carga sobe por dupla progressão guiada pelo seu feedback.'}
+      </p>
       {/* Cardio (Bloco 1): o motor já prescrevia cardio na tabela 1.1 — o app é que não
           deixava registrar. A seção mora aqui, na aba Treino, como o design desenhou. */}
       <CardioSemana {...cardio} />

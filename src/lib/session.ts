@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { sanearBlocosDeTreino } from '@/lib/validation/perfil-resumo';
+import { sanearPerfilHidratado } from '@/lib/validation/perfil-resumo';
 import { EQUIPAMENTOS_CASA } from '@/lib/engine';
 import { diasPadrao } from '@/lib/semana';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
@@ -113,13 +113,17 @@ function normalizarPerfil(p: PerfilResumo): PerfilResumo {
     equipamentosCasa = equipamento === 'casa' ? [...EQUIPAMENTOS_CASA] : [];
   }
   /**
+   * 🔴 D11 (2026-09-11) — os ESCALARES entravam crus pelo mesmo caminho: um
+   * `nivelExperiencia` fora do enum derrubava `montar()` com TypeError e o error boundary
+   * relia o mesmo blob a cada "Tentar de novo". Agora a porta é `sanearPerfilHidratado`.
+   *
    * 🔴 D6 (2026-09-10) — os quatro blocos de TREINO entravam CRUS daqui para o motor:
    * `preferencias: { banidos: [] }` (sem `trocas`) num blob antigo lançava
    * `TypeError: prefs.trocas is not iterable` e o app ficava sem plano nenhum, sem mensagem.
    * A régua é a MESMA do `PUT /api/dados/perfil` — bloco que não passa é removido, e ausência
    * é o default que o motor já sabe tratar.
    */
-  return sanearBlocosDeTreino({ ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length });
+  return sanearPerfilHidratado({ ...p, equipamento, equipamentosCasa, treinoDias, naoCurto, favoritos, pratosCansados, diasDisponiveis: treinoDias.length });
 }
 
 /** Encerra a sessão local (logout). Perfil e fotografia de entrada saem por `limparDadosLocais`. */

@@ -36,7 +36,7 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
-import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, DiaNaoAtendido, Faixa, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
@@ -122,6 +122,17 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modal
 
 /** Padrões independentes que o adaptador temporal exige de toda realocação. */
 const COBERTURA_TEMPORAL_OBRIGATORIA = ['puxar', 'empurrar', 'agachar'] as const;
+
+/**
+ * 🔴 D13 — a última semana de RAMPA do mesociclo: o plano-base com que a semana de deload se
+ * compara. Derivada da constante do deload, não um número novo.
+ */
+const SEMANA_BASE_DO_DELOAD = (DELOAD_SEMANAS_DEFAULT - 1) as OpcoesSemana['semana'];
+
+/** Capacidade ENTREGUE por um plano = maior nº de slots de um dia (a régua do reduce-to-fit). */
+function capacidadeEntregue(plano: RotinaSemanal): number {
+  return Math.max(0, ...plano.dias.map((d) => d.slots.length));
+}
 
 /** 🔒 C1 §6 — um dia estoura o LIMITE OPERACIONAL (B+480) mesmo com o descanso no piso? */
 export function precisaReduzir(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): boolean {
@@ -237,9 +248,43 @@ export function montarRotina(
   const { split, dias: templates } = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
   // 🔒 C1 — o teto de slots vem da tabela f(tempo), MAS o reduce-to-fit (override 2) pode pedir
   // menos slots reexecutando o alocador; aí o override manda (nunca acima da tabela).
-  const budgetPorDia = Math.min(
+  const budgetDaTabela = Math.min(
     semanaCiclo?.budgetSlotsOverride ?? Number.POSITIVE_INFINITY,
     orcamentoSlotsDoDia(perfil.tempoPorSessaoMin),
+  );
+  /**
+   * 🔴 D13 (auditoria 2026-09-11) — O CORTE DE SÉRIES NÃO PODE SER ANULADO POR MAIS EXERCÍCIOS.
+   *
+   * Medido em 42 dos 1.458 perfis varridos: a semana 6 entregava volume IGUAL OU MAIOR que a
+   * semana 5 com `semana.deload = true` na tela (pior caso: 20 séries em 5 slots → 32 séries
+   * em 16 slots). O mecanismo não é o `aplicarDeload` — é a interação dele com o reduce-to-fit:
+   * séries menores baratearam cada slot, o dia passou a caber com a capacidade CHEIA da tabela
+   * e o alocador recolocou exercícios. O corte por exercício era devolvido em cardinalidade.
+   *
+   * 🔒 O PLANO-BASE COMPARÁVEL, declarado: as MESMAS entradas e restrições (perfil, biblioteca,
+   * favoritos, preferências, execuções, oferta de cardio), mudando só a semana do mesociclo
+   * para a última de RAMPA. A capacidade terminal dele passa a ser o teto da semana de deload.
+   * Assim a estrutura fica onde a spec já a queria — *"mesmos slots, mesmos dias; só as séries
+   * rampam"* — e a redução das séries chega inteira ao volume entregue.
+   *
+   * ⚠️ Um TETO, não um alvo: o reduce-to-fit da semana de deload continua livre para reduzir
+   * mais se precisar, e nenhuma banda percentual é imposta à saída. Capacidade-base zero (não
+   * há plano-base com o que comparar) não cria teto nenhum.
+   */
+  const capacidadeBaseDoDeload = deloadAgendado
+    && perfil.rotinaCustom == null
+    && semanaCiclo != null
+    && semanaCiclo.budgetSlotsOverride == null
+    && !semanaCiclo.tentativaTemporalInterna
+    ? capacidadeEntregue(montarRotina(
+        prescricao, perfil, exercises, favoritos,
+        { ...semanaCiclo, semana: SEMANA_BASE_DO_DELOAD },
+        preferencias, escolhasExecucao, diasOferecidosCardio,
+      ))
+    : 0;
+  const budgetPorDia = Math.min(
+    budgetDaTabela,
+    capacidadeBaseDoDeload > 0 ? capacidadeBaseDoDeload : Number.POSITIVE_INFINITY,
   );
 
   /**
@@ -291,6 +336,8 @@ export function montarRotina(
   // acontece cedo; a certificação/distribuição vem depois, quando as funções canônicas existem.
   let diasUsuarioCustom: DiaTreino[] | null = null;
   const avisosCustom: string[] = [];
+  /** 🔴 D14 — dias do desenho manual que ficaram sem exercício elegível (antes, sumiam). */
+  const diasNaoAtendidosCustom: DiaNaoAtendido[] = [];
   if (custom && custom.dias.length > 0) {
     const porId = new Map(pool.map((e) => [e.id, e]));
     const diasUsuario = custom.dias
@@ -310,15 +357,24 @@ export function montarRotina(
               ? { execucaoSelecionada: resolverExecucao(e.id, e.execucao, escolhasExecucao.get(e.id)) }
               : {}),
           })),
-      }))
-      .filter((d) => d.slots.length > 0);
-    if (diasUsuario.length > 0) {
+      }));
+    /**
+     * 🔴 D14 — o dia que a pessoa DESENHOU e ficou sem exercício elegível já era descartado
+     * aqui, em silêncio: ela montava o dia, recarregava e ele simplesmente não estava mais lá.
+     * Ele continua fora das sessões entregues (não há sessão vazia para iniciar), mas agora é
+     * DECLARADO, com motivo, em vez de sumir.
+     */
+    diasNaoAtendidosCustom.push(...diasUsuario
+      .filter((d) => d.slots.length === 0)
+      .map((d) => ({ nome: d.nome, ...(d.diaId ? { diaId: d.diaId } : {}), motivo: 'DESENHO_VAZIO' as const })));
+    const diasUsuarioComExercicio = diasUsuario.filter((d) => d.slots.length > 0);
+    if (diasUsuarioComExercicio.length > 0) {
       // 🔒 O teto de sessões de força do NÍVEL continua valendo (trilho da §1.2). Quando
       // morde, o excedente é dito — nunca cortado em silêncio.
-      const cortados = diasUsuario.slice(diasForca);
-      const mantidos = diasUsuario.slice(0, diasForca);
+      const cortados = diasUsuarioComExercicio.slice(diasForca);
+      const mantidos = diasUsuarioComExercicio.slice(0, diasForca);
       if (cortados.length > 0) {
-        avisosCustom.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
+        avisosCustom.push(`Seu treino tem ${diasUsuarioComExercicio.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
       }
       // DF②: exercícios, ordem e quantidade do usuário ficam intactos. O caminho canônico
       // certifica duração e recomenda cardio mais abaixo; nunca aplica reduce-to-fit ao manual.
@@ -441,6 +497,8 @@ export function montarRotina(
    * proíbe, e o segundo pipeline envelheceria sozinho.
    */
   function montarSaida(diasTreino: DiaTreino[], split: string): RotinaSemanal {
+    /** 🔴 D16 — fatos estruturais dos avisos de cobertura desta montagem (paralelos à prosa). */
+    const fatosCobertura: FatoCoberturaGrupo[] = [];
     // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
     // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
     // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
@@ -799,23 +857,50 @@ export function montarRotina(
           // Catálogo-limitado (não alcança nem no teto, e um item do checklist fecha) ⇒ a
           // frase que aponta o equipamento mínimo. Senão (orçamento/estrutural) ⇒ a de sempre.
           const cat = classificarCoberturaCatalogo(exercises, g, perfil.nivelExperiencia, objetivoEf, perfil.equipamento, perfil.equipamentosCasa);
-          avisos.push(cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
+          const texto = cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`;
+          avisos.push(texto);
+          /**
+           * 🔴 D16 — o FATO viaja junto do aviso. Sem ele, a única forma de saber se o crítico
+           * está dizendo a mesma coisa seria comparar frases — e frase igual não prova fato
+           * igual, nem frase diferente prova fato diferente.
+           */
+          fatosCobertura.push({
+            grupo: g, semana: semanaCiclo.semana, escopo: 'semana', metrica: 'series_ponderadas',
+            limiar: 'mev', alvo: piso, valor: ponderado.get(g) ?? 0, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
+          });
         }
       }
     }
 
+    /**
+     * 🔴 D14 — DIA VAZIO NÃO É SESSÃO ENTREGUE. Ele sai de `dias` (e portanto da certificação
+     * de duração, que media 0 s e dizia "cabe") e passa a ser declarado em
+     * `diasNaoAtendidos`, com o mesmo motivo que o aviso do motor já nomeia. O dia pedido pela
+     * pessoa NÃO some do plano: some da contagem de entrega.
+     */
+    const diasEntregues = diasTreino.filter((d) => d.slots.length > 0);
+    const diasNaoAtendidos: DiaNaoAtendido[] = diasTreino
+      .filter((d) => d.slots.length === 0)
+      .map((d) => ({
+        nome: d.nome,
+        ...(d.diaId ? { diaId: d.diaId } : {}),
+        motivo: d.motivoDoCorte ?? ('DESENHO_VAZIO' as const),
+        ...(d.slotsNaoPreenchidos != null ? { slotsPedidos: d.slotsNaoPreenchidos } : {}),
+      }));
     return {
-      diasForcaAgendados: diasForca,
+      diasForcaAgendados: diasEntregues.length,
       diasCardioRecuperacao,
       diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito),
       split,
-      dias: diasTreino,
+      dias: diasEntregues,
+      ...(diasNaoAtendidos.length > 0 ? { diasNaoAtendidos } : {}),
       // 🔒 B2: o ramo que agiu vai junto do plano — a tela não recalcula nem adivinha.
       ...(foco && decisaoFoco
         ? { foco: { grupo: foco.grupo, compensa: foco.compensa, degrau: decisaoFoco.degrau, motivo: decisaoFoco.motivo, series: decisaoFoco.series } }
         : {}),
       cardio: prescricao.cardio,
       avisos,
+      ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
       ...(semanaCiclo
         ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
@@ -856,6 +941,9 @@ export function montarRotina(
     // veio abaixo do orçamento" (que também acontece por reserva não honrada, inclusive em
     // academia, e não é corte por catálogo).
     ...(d.naoPreenchidos > 0 ? { slotsNaoPreenchidos: d.naoPreenchidos } : {}),
+    // 🔴 D14 — a causa viaja com o dia: o mesmo `motivoCurto` que decide qual aviso sai.
+    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo' ? { motivoDoCorte: 'EQUIPAMENTO' as const } : {}),
+    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'teto' ? { motivoDoCorte: 'TETO_SEMANAL' as const } : {}),
     slots: d.slots.map((s) => ({
       // O padrão do slot é o do EXERCÍCIO escolhido (o template agora é de grupos): tudo
       // que lê `slot.padrao` (classe de descanso, faixa de reps, ordem do foco) continua
@@ -1065,14 +1153,30 @@ export function montarRotina(
     const acimaDoLimite = (final.duracaoDias ?? [])
       .map((d, i) => (d.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL' ? i : -1))
       .filter((i) => i >= 0);
-    const rgCertificado: ResultadoGeracaoRotina = rg.tipo === 'CERTIFICADO' && acimaDoLimite.length > 0
-      ? { tipo: 'ENTREGUE_SEM_CERTIFICACAO', diasAcimaDoLimite: acimaDoLimite }
-      : rg;
+    /**
+     * 🔴 D12 — a CONDIÇÃO DE CERTIFICAÇÃO, unificada. `precisaReduzir` (o ramo automático) já
+     * tratava `LIMITE_INDETERMINADO` como "não cabe"; o guard aqui não. Agora os dois dizem a
+     * mesma coisa — e a frase separa o que foi medido do que ficou em aberto.
+     */
+    const podemUltrapassar = (final.duracaoDias ?? [])
+      .map((d, i) => (d.estadoLimite === 'LIMITE_INDETERMINADO' ? i : -1))
+      .filter((i) => i >= 0);
+    const rgCertificado: ResultadoGeracaoRotina =
+      rg.tipo === 'CERTIFICADO' && (acimaDoLimite.length > 0 || podemUltrapassar.length > 0)
+        ? {
+            tipo: 'ENTREGUE_SEM_CERTIFICACAO',
+            diasAcimaDoLimite: acimaDoLimite,
+            ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
+          }
+        : rg;
     const resultadoFinal: ResultadoGeracaoRotina =
       prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rgCertificado.tipo !== 'INCOMPATIVEL'
         ? {
             tipo: 'NAO_AVALIADO_ENTREGAVEL',
             ...(acimaDoLimite.length > 0 ? { diasAcimaDoLimite: acimaDoLimite } : {}),
+            // 🔴 D12 — estado combinado: cardio sem duração E dia que pode estourar. Os dois
+            // fatos convivem no mesmo terminal; suprimir um deles é escolher qual verdade contar.
+            ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
             motivos: [...new Set([
               ...(rgCertificado.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rgCertificado.motivos : []),
               'CARDIO_SEM_DURACAO',
@@ -1094,10 +1198,15 @@ export function montarRotina(
     avisos.push(...avisosCustom);
     decisaoFoco = null;
     compensadorValido = null;
+    const saidaCustom = montarSaida(diasUsuarioCustom, 'Meu treino');
+    const naoAtendidosCustom = [...(saidaCustom.diasNaoAtendidos ?? []), ...diasNaoAtendidosCustom];
     const rotinaCustomEstrutural = {
-      ...montarSaida(diasUsuarioCustom, 'Meu treino'),
-      diasForcaAgendados: diasUsuarioCustom.length,
-      diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length),
+      ...saidaCustom,
+      // 🔴 D14 — a contagem de entrega vem de `montarSaida`, que já excluiu o dia vazio. O
+      // override antigo (`diasUsuarioCustom.length`) contava o dia desenhado, não o entregue.
+      // E o dia NÃO ATENDIDO não vira dia de recuperação: seria a redistribuição silenciosa.
+      diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length - naoAtendidosCustom.length),
+      ...(naoAtendidosCustom.length > 0 ? { diasNaoAtendidos: naoAtendidosCustom } : {}),
     };
     // Author request 2026-09-10 supersedes the old editor's non-editable sets.
     // Apply before duration certification; recovery never increases its assigned volume.

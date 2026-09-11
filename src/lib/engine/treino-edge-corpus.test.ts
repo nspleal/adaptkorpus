@@ -76,7 +76,17 @@ describe('error-hunt: corpus do motor de treino', () => {
 
               // Rotina: dias de força = min(dias, teto do nível).
               const diasForcaEsp = Math.min(dias, vol.sessoes[1]);
-              if (r.rotina.diasForcaAgendados !== diasForcaEsp) viol.push(`diasForca ${rot}: ${r.rotina.diasForcaAgendados} esp ${diasForcaEsp}`);
+              /**
+               * ✏️ CORREÇÃO FUNDAMENTADA DA EXPECTATIVA (D14, 2026-09-11). O oráculo antigo
+               * lia `diasForcaAgendados` como a agenda SOLICITADA. D14 separou as duas contas:
+               * o contador passou a ser a entrega EFETIVA, porque um dia sem exercício nenhum
+               * era contado como sessão, recebia `duracaoDias = {min 0, max 0}` e sustentava o
+               * selo de CERTIFICADO. A agenda solicitada continua verificada — agora pela soma
+               * com os dias declarados como não atendidos, que é MAIS do que se checava antes.
+               */
+              const naoAtendidos = r.rotina.diasNaoAtendidos?.length ?? 0;
+              if (r.rotina.diasForcaAgendados + naoAtendidos !== diasForcaEsp) viol.push(`agenda solicitada ${rot}: ${r.rotina.diasForcaAgendados}+${naoAtendidos} esp ${diasForcaEsp}`);
+              if (r.rotina.diasForcaAgendados !== r.rotina.dias.length) viol.push(`entrega ${rot}: contador ${r.rotina.diasForcaAgendados}, planos ${r.rotina.dias.length}`);
               if (r.rotina.diasCardioRecuperacao !== dias - diasForcaEsp) viol.push(`diasCardio ${rot}`);
 
               // Invariantes do montador.

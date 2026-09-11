@@ -36,6 +36,18 @@ function nomesDosDias(rotina: Pick<RotinaSemanal, 'dias'>, indices: readonly num
 }
 
 /**
+ * 🔴 D12 — a frase da INCERTEZA. Separada de propósito da frase do excesso medido: o dia com
+ * `LIMITE_INDETERMINADO` tem `min ≤ limite < max`, isto é, depende de quanto a pessoa demora
+ * dentro da faixa estimada. Afirmar excesso aqui seria inventar a medição que faltou.
+ */
+function podeUltrapassar(rotina: Pick<RotinaSemanal, 'dias'>, indices: readonly number[]): string {
+  const nomes = nomesDosDias(rotina, indices);
+  return indices.length <= 1
+    ? `${nomes} pode passar do seu tempo, dependendo do ritmo`
+    : `${nomes} podem passar do seu tempo, dependendo do ritmo`;
+}
+
+/**
  * O veredito da geração, em uma frase que a pessoa entende — sem jargão de discriminante e
  * sem prometer o que o motor não mediu.
  */
@@ -61,14 +73,30 @@ export function vereditoDoPlano(
         detalhe: [
           rg.motivos.length > 0 ? `Motivos: ${rg.motivos.map(m => m === 'CARDIO_SEM_DURACAO' ? 'cardio sem duração definida' : m).join(', ')}.` : '',
           rg.diasAcimaDoLimite?.length ? `Acima do limite de tempo: ${nomesDosDias(rotina, rg.diasAcimaDoLimite)}.` : '',
+          rg.diasPodemUltrapassar?.length ? `${podeUltrapassar(rotina, rg.diasPodemUltrapassar)}.` : '',
         ].filter(Boolean).join(' ') || undefined,
       };
-    case 'ENTREGUE_SEM_CERTIFICACAO':
+    /**
+     * 🔴 D12 — DUAS AFIRMAÇÕES DIFERENTES, DUAS FRASES DIFERENTES. `ACIMA_DO_LIMITE_OPERACIONAL`
+     * é excesso MEDIDO (`min > limite`); `LIMITE_INDETERMINADO` é `min ≤ limite < max` — o dia
+     * PODE caber. Dizer "acima do limite" no segundo caso afirmaria um excesso que o motor não
+     * mediu, que é o mesmo defeito de D12 com o sinal trocado.
+     */
+    case 'ENTREGUE_SEM_CERTIFICACAO': {
+      const certo = rg.diasAcimaDoLimite.length > 0;
+      const incerto = (rg.diasPodemUltrapassar ?? []).length > 0;
       return {
         tom: 'atencao',
-        titulo: 'O plano foi gerado, mas há dias acima do limite de tempo.',
-        detalhe: `Acima do limite: ${nomesDosDias(rotina, rg.diasAcimaDoLimite)}. Revise o tempo disponível e as séries exibidas antes de iniciar.`,
+        titulo: certo
+          ? 'O plano foi gerado, mas há dias acima do limite de tempo.'
+          : 'O plano foi gerado, mas não dá para garantir que todo dia caiba no seu tempo.',
+        detalhe: [
+          certo ? `Acima do limite: ${nomesDosDias(rotina, rg.diasAcimaDoLimite)}.` : '',
+          incerto ? `${podeUltrapassar(rotina, rg.diasPodemUltrapassar!)}.` : '',
+          'Revise o tempo disponível e as séries exibidas antes de iniciar.',
+        ].filter(Boolean).join(' '),
       };
+    }
     case 'INCOMPATIVEL':
       return {
         tom: 'bloqueio',

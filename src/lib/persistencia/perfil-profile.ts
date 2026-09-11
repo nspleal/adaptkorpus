@@ -1,5 +1,5 @@
 import type { PerfilResumo } from '@/components/painel/Painel';
-import { sanearBlocosDeTreino } from '@/lib/validation/perfil-resumo';
+import { sanearPerfilHidratado } from '@/lib/validation/perfil-resumo';
 
 /**
  * Mapeador PURO `PerfilResumo` ↔ linha da tabela `public.profile` (DF 2026-07-05).
@@ -154,13 +154,18 @@ export function linhaComConsentimentos<T extends object>(
 
 /** Linha de `profile` → `PerfilResumo` (inverso fiel de `perfilParaLinha`). */
 export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
-  const pref = row.preferencias;
+  const pref = row.preferencias && typeof row.preferencias === 'object' && !Array.isArray(row.preferencias)
+    ? row.preferencias : {} as PreferenciasPerfil;
   /**
    * 🔴 D6 (2026-09-10) — o jsonb `preferencias` de uma linha LEGADA guarda qualquer forma, e
-   * este é o inverso do PUT: o que sai daqui vai direto ao motor. `sanearBlocosDeTreino`
+   * este é o inverso do PUT: o que sai daqui vai direto ao motor. `sanearPerfilHidratado`
    * aplica a mesma régua do schema de escrita — bloco inválido some, o perfil segue.
+   *
+   * 🔴 D11 (2026-09-11): a régua passou a alcançar também os ESCALARES. O GET de perfil só
+   * exige `preferencias?.nivelExperiencia` TRUTHY e o cliente não valida o corpo recebido —
+   * a barreira que existe na API pública não existia no caminho que o app de fato usa.
    */
-  return sanearBlocosDeTreino({
+  return sanearPerfilHidratado({
     sexo: row.sexo,
     idade: row.idade,
     alturaCm: row.altura_cm,

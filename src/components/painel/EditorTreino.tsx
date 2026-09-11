@@ -259,9 +259,21 @@ function CampoSeries({ nome, valor, onMudar }: { nome: string; valor: number; on
  * O PLACAR + as sugestões + os avisos. Mesmo componente no editor e (compacto) no plano
  * salvo — DF②: *"o crítico permanece visível no plano custom, não só na montagem"*.
  */
+/**
+ * 🔴 D16 (auditoria 2026-09-11) — O QUE O CRÍTICO REALMENTE MOSTRA, em fonte única.
+ *
+ * No plano salvo o crítico é COMPACTO: ele exibe uma recomendação. Quem decide suprimir o eco
+ * do motor (`lib/avisos-unificados`) precisa comparar contra o que a tela EXIBE, não contra a
+ * lista inteira — senão um fato cuja fala do crítico ficou de fora do compacto sairia das duas
+ * listas e desapareceria da tela. Uma régua só, aqui, para os dois consumidores.
+ */
+export function recomendacoesVisiveis(avaliacao: Pick<Avaliacao, 'recomendacoes'>, compacto: boolean): ItemCritico[] {
+  return compacto ? avaliacao.recomendacoes.slice(0, 1) : [...avaliacao.recomendacoes];
+}
+
 export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Avaliacao; compacto?: boolean }) {
   const { placar, recomendacoes, avisos } = avaliacao;
-  const visiveis = compacto ? recomendacoes.slice(0, 1) : recomendacoes;
+  const visiveis = recomendacoesVisiveis(avaliacao, compacto);
   return (
     <div style={{ background: 'rgba(13,40,24,.4)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: 15, marginBottom: 16 }}>
       {!compacto && (

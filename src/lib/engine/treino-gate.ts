@@ -6,10 +6,20 @@
  * = 16≤IMC<18.5 + emagrecimento → redireciona objetivo p/ Saúde (treino conservador).
  * Precedência: ROTEAR > RESTRINGIR > PERMITIR. Fail-safe: input implausível → ROTEAR.
  */
-import { PLAUSIBILIDADE } from './constants';
+import { DOMINIOS, flagsSaudeLegiveis, noDominio, PLAUSIBILIDADE } from './constants';
 import { calcularIMC } from './formulas';
 import { IMC_LIMITES } from './treino-constants';
 import type { PerfilTreino, ResultadoGateTreino } from './treino-types';
+
+/** 🔴 D11 — espelho de `health-gate · categoricosIlegiveis` para os campos do treino. */
+function categoricosIlegiveis(p: PerfilTreino): string[] {
+  const fora: string[] = [];
+  if (!noDominio(p.objetivo, DOMINIOS.objetivo)) fora.push('objetivo');
+  if (!noDominio(p.nivelExperiencia, DOMINIOS.nivelExperiencia)) fora.push('experiência de treino');
+  if (!noDominio(p.equipamento, DOMINIOS.equipamento)) fora.push('onde você treina');
+  if (!flagsSaudeLegiveis(p.flagsSaude)) fora.push('condições de saúde');
+  return fora;
+}
 
 function inputImplausivel(p: PerfilTreino): boolean {
   const okPeso = p.pesoKg >= PLAUSIBILIDADE.pesoKg.min && p.pesoKg <= PLAUSIBILIDADE.pesoKg.max;
@@ -23,6 +33,7 @@ function inputImplausivel(p: PerfilTreino): boolean {
 function condicaoClinica(p: PerfilTreino): string[] {
   const f = p.flagsSaude;
   const m: string[] = [];
+  if (f == null) return m;
   if (f.gestacaoAmamentacao) m.push('gestação/amamentação');
   if (f.renal) m.push('condição renal');
   if (f.cardiaca) m.push('condição cardíaca');
@@ -33,6 +44,16 @@ function condicaoClinica(p: PerfilTreino): string[] {
 
 /** Avalia o gate de treino. Função PURA e determinística. */
 export function avaliarGateTreino(perfil: PerfilTreino): ResultadoGateTreino {
+  const ilegiveis = categoricosIlegiveis(perfil);
+  if (ilegiveis.length > 0) {
+    return {
+      comportamento: 'ROTEAR',
+      objetivoEfetivo: perfil.objetivo,
+      motivos: [`dados do perfil ilegíveis: ${ilegiveis.join(', ')}`],
+      avisos: ['Confira os dados do seu perfil antes de gerar um plano.'],
+      derivados: { imc: NaN },
+    };
+  }
   if (inputImplausivel(perfil)) {
     return {
       comportamento: 'ROTEAR',

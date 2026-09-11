@@ -9,7 +9,11 @@ import type { EquipamentoCasa, Alergeno, EquipamentoDisp } from '@/lib/data/type
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
-import { lerSessao, salvarSessao } from '@/lib/session';
+import { lerSessao, lerSessaoCompleta, salvarSessao } from '@/lib/session';
+import { carregarPerfilServidor } from '@/lib/persistencia/sync';
+import { carregarFonteCorrecao, mesclarPerfilCorrigido, persistirCorrecao, type FonteCorrecao } from '@/lib/persistencia/recuperacao-perfil';
+import { supabaseConfigurado } from '@/lib/supabase/env';
+import { ROTULOS_CAMPOS_PERFIL } from '@/lib/validation/perfil-resumo';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
@@ -71,6 +75,12 @@ const HEALTH: { id: string; q: string; fem?: boolean }[] = [
   { id: 'diabetes', q: 'Tem diabetes?' },
 ];
 
+const ETAPA_DO_CAMPO: Record<string, number> = {
+  sexo: 1, idade: 1, alturaCm: 1, pesoKg: 1, flagsSaude: 2, objetivo: 3,
+  nivelAtividade: 4, nivelExperiencia: 5, equipamento: 6, tempoPorSessaoMin: 6,
+  treinoDias: 6, diasDisponiveis: 6, alergenos: 7, preferencia: 7,
+};
+
 type Fase = 'wizard' | 'gerando' | 'resultado';
 type SimNaoV = 'sim' | 'nao';
 
@@ -79,13 +89,47 @@ export default function Onboarding() {
   // Já tem sessão? O cadastro de perfil é só da 1ª vez — manda direto pra área logada
   // (edições posteriores são só pela aba "Editar perfil"). Evita reabrir o wizard no reload/voltar.
   const [checando, setChecando] = useState(true);
+  /**
+   * 🔴 D11 (auditoria 2026-09-11) — MODO CORREÇÃO (`/onboarding?corrigir=1`).
+   *
+   * Sem ele, a recuperação do perfil ilegível seria outro laço: `/app` mandaria a pessoa para
+   * cá e o guard acima a mandaria de volta para `/app`. Aqui o questionário reescreve os
+   * ESCALARES e o resto do perfil é PRESERVADO na mesclagem — inclusive `rotinaCustom`, o
+   * treino que a pessoa montou à mão, que o `resumo` do wizard não carrega.
+   *
+   * ⚠️ `window.location.search` em vez de `useSearchParams`: a leitura acontece dentro do
+   * efeito (cliente), e assim a página não passa a exigir uma fronteira de Suspense no build.
+   */
+  const [modoCorrecao, setModoCorrecao] = useState(false);
+  const perfilPreservado = useRef<PerfilResumo | null>(null);
+  const fonteCorrecao = useRef<FonteCorrecao | null>(null);
+  const [erroLeitura, setErroLeitura] = useState(false);
+  const [camposAConfirmar, setCamposAConfirmar] = useState<string[]>([]);
   useEffect(() => {
     // 🔒 Escopo primeiro (ver `escopo-local.ts`): sem ele, `lerSessao` leria a chave sem
     // sufixo — que pode ser de outra conta que usou este navegador.
-    void resolverEscopoLocal().then(() => {
-      if (lerSessao()) router.replace('/app');
-      else setChecando(false);
-    });
+    let vivo = true;
+    void resolverEscopoLocal().then(async () => {
+      const corrigindo = new URLSearchParams(window.location.search).get('corrigir') === '1';
+      if (corrigindo) {
+        setModoCorrecao(true);
+        const fonte = await carregarFonteCorrecao(lerSessaoCompleta(), supabaseConfigurado(), carregarPerfilServidor);
+        if (!vivo) return;
+        if (!fonte) { setErroLeitura(true); setChecando(false); return; }
+        fonteCorrecao.current = fonte;
+        perfilPreservado.current = fonte.perfil;
+        setCamposAConfirmar(fonte.perfil.camposInvalidos ?? []);
+        preencherComOQueFoiLido(fonte.perfil);
+      } else if (lerSessao()) {
+        // 🔴 D11 — o ÚNICO caso em que ter sessão não devolve a pessoa para `/app`: ela veio
+        // de lá porque o perfil não pôde ser lido. Mandá-la de volta seria o laço outra vez.
+        if (!corrigindo) { router.replace('/app'); return; }
+      }
+      setChecando(false);
+    }).catch(() => { if (vivo) { setErroLeitura(true); setChecando(false); } });
+    return () => { vivo = false; };
+    // Só no mount: reabrir este efeito sobrescreveria o que a pessoa já digitou.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const [terms, setTerms] = useState<[boolean, boolean, boolean]>([false, false, false]);
@@ -112,6 +156,42 @@ export default function Onboarding() {
   const addFood = (id: string) => setNaoCurto((p) => (p.includes(id) ? p : [...p, id]));
   const removeFood = (id: string) => setNaoCurto((p) => p.filter((x) => x !== id));
 
+  /**
+   * 🔒 D11 — só o que FOI LIDO volta para a tela. Campo marcado em `camposInvalidos` fica com
+   * o default do wizard, para a pessoa escolher de novo: pré-preencher um campo ilegível
+   * seria mostrar como escolha dela um valor que o app não conseguiu ler.
+   */
+  function preencherComOQueFoiLido(p: PerfilResumo) {
+    const ilegivel = new Set(p.camposInvalidos ?? []);
+    const ok = (campo: string) => !ilegivel.has(campo);
+    if (ok('sexo')) setSexo(p.sexo);
+    if (ok('idade')) setIdade(String(p.idade));
+    else setIdade('');
+    if (ok('alturaCm')) setAltura(String(p.alturaCm));
+    else setAltura('');
+    if (ok('pesoKg')) setPeso(String(p.pesoKg));
+    else setPeso('');
+    if (ok('objetivo')) setObjetivo(p.objetivo);
+    if (ok('nivelAtividade')) setAtividade(p.nivelAtividade);
+    if (ok('nivelExperiencia')) setExperiencia(p.nivelExperiencia);
+    if (ok('equipamento')) setLocal(p.equipamento === 'academia' ? 'academia' : 'casa');
+    if (ok('equipamentosCasa') && p.equipamentosCasa) setEquipsCasa([...p.equipamentosCasa]);
+    if (ok('treinoDias') && p.treinoDias?.length) setTreinoDias([...p.treinoDias]);
+    if (ok('tempoPorSessaoMin')) setTempo(p.tempoPorSessaoMin);
+    if (ok('preferencia')) setPadrao(p.preferencia ?? '');
+    if (p.orcamento != null) setOrcamento(p.orcamento);
+    if (ok('alergenos')) setAlergias([...p.alergenos]);
+    setNaoCurto([...(p.naoCurto ?? [])]);
+    if (ok('flagsSaude')) {
+      const f = p.flagsSaude;
+      setHealthAns({
+        gestante: f.gestacaoAmamentacao ? 'sim' : 'nao', renal: f.renal ? 'sim' : 'nao',
+        cardiaca: f.cardiaca ? 'sim' : 'nao', lesao: f.lesao ? 'sim' : 'nao',
+        diabetes: f.diabetes ? 'sim' : 'nao',
+      });
+    }
+  }
+
   const [step, setStep] = useState(0);
   const [fase, setFase] = useState<Fase>('wizard');
   const [erro, setErro] = useState('');
@@ -126,6 +206,7 @@ export default function Onboarding() {
   const reqHealth = HEALTH.filter((q) => !q.fem || sexo === 'feminino');
 
   function canCont(): boolean {
+    if (camposAConfirmar.some((c) => ETAPA_DO_CAMPO[c] === step)) return false;
     if (step === 0) return terms.every(Boolean);
     if (step === 1) { const i = +idade, a = +altura, p = +peso; return i >= 18 && i <= 100 && a >= 100 && a <= 250 && p >= 30 && p <= 300; }
     if (step === 2) return reqHealth.every((q) => healthAns[q.id]);
@@ -153,7 +234,17 @@ export default function Onboarding() {
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto, orcamento };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], orcamento, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
+    const doWizard: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], orcamento, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
+    /**
+     * 🔒 D11 — MODO CORREÇÃO: o que se grava é o perfil ANTERIOR com os escalares reescritos
+     * por cima. Gravar só o que o wizard coleta apagaria `rotinaCustom`, `preferencias`,
+     * `foco`, `favoritos` e a âncora do mesociclo — nada disso passa pelo questionário.
+     * Fora da correção, `resumo` é exatamente o que sempre foi.
+     */
+    const anterior = perfilPreservado.current;
+    const resumo: PerfilResumo = anterior
+      ? mesclarPerfilCorrigido(anterior, doWizard)
+      : doWizard;
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
@@ -164,7 +255,15 @@ export default function Onboarding() {
       setGenPct(pct);
       if (pct >= 100) {
         if (giRef.current) clearInterval(giRef.current);
-        setTimeout(() => {
+        setTimeout(async () => {
+          // A correção só troca o cache e navega após confirmação remota.
+          let entradaCorrigida = fonteCorrecao.current?.entradaPlano;
+          if (anterior && fonteCorrecao.current) {
+            const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
+            const resultado = await persistirCorrecao(fonteCorrecao.current, resumo, consent, salvarPerfilServidor);
+            if (!resultado.ok) { setErro(resultado.mensagem); setFase('wizard'); return; }
+            entradaCorrigida = resultado.entradaPlano;
+          }
           // 🔒 Cofre, DF 2026-07-27 ("`ROTEAR` = MODO DIÁRIO"): TODO desfecho cria sessão e
           // perfil — inclusive o Gate B. Antes o ROTEAR não criava nada, e a pessoa ficava
           // presa na porta: era por isso que ela não entrava. O que o roteado não recebe é
@@ -184,11 +283,12 @@ export default function Onboarding() {
             local: resumo.equipamento,
             dias_declarados: resumo.diasDisponiveis,
           });
-          salvarSessao(resumo);
+          salvarSessao(resumo, entradaCorrigida);
           // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
           // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
           // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
-          void salvarPerfilServidor(resumo, 0, undefined, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+          const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
+          if (!anterior) void salvarPerfilServidor(resumo, 0, undefined, consent);
           // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
           if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
           else router.replace('/app');
@@ -201,6 +301,13 @@ export default function Onboarding() {
 
   // Enquanto checa a sessão (evita piscar o wizard antes do redirect para /app).
   if (checando) return <div style={{ minHeight: '100vh', background: '#0D2818' }} />;
+  if (erroLeitura) return (
+    <main style={{ padding: 24, maxWidth: 620, margin: 'auto' }}>
+      <h1>Não conseguimos carregar seu perfil para correção</h1>
+      <p role="alert">Nenhum dado foi substituído. Confira sua conexão e tente carregar novamente.</p>
+      <button onClick={() => window.location.reload()}>Carregar novamente</button>
+    </main>
+  );
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
@@ -210,6 +317,12 @@ export default function Onboarding() {
         <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px 56px', animation: `evkScreenIn .5s ${EASE}` }}>
           <div style={{ width: '100%', maxWidth: 620 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 30 }}><Logo size={26} /><Marca size="1.05rem" /></div>
+            {modoCorrecao && (
+              <p role="status" style={{ margin: '0 0 22px', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(234,179,8,.45)', background: 'rgba(234,179,8,.08)', fontSize: '.9rem', lineHeight: 1.55, color: 'rgba(234,229,219,.85)' }}>
+                Estamos <strong>conferindo seus dados</strong>. O que pôde ser lido já está preenchido; confirme ou corrija e seu
+                plano volta. Seu treino montado e suas preferências continuam salvos.
+              </p>
+            )}
 
             {/* stepper */}
             <div style={{ marginBottom: 30 }}>
@@ -236,7 +349,16 @@ export default function Onboarding() {
               </div>
             </div>
 
-            {erro && <p style={{ color: '#E5484D', fontSize: '.9rem', marginTop: 14 }}>{erro}</p>}
+            {camposAConfirmar.some((c) => ETAPA_DO_CAMPO[c] === step) && (
+              <section role="alert" style={{ marginTop: 16 }}>
+                <p>Não foi possível ler: {camposAConfirmar.filter((c) => ETAPA_DO_CAMPO[c] === step).map((c) => ROTULOS_CAMPOS_PERFIL[c] ?? c).join(', ')}.
+                  Os valores iniciais do formulário não são dados recuperados. Confira suas escolhas antes de confirmar.</p>
+                <button type="button" onClick={() => setCamposAConfirmar((cs) => cs.filter((c) => ETAPA_DO_CAMPO[c] !== step))}>
+                  Confirmo os dados desta etapa
+                </button>
+              </section>
+            )}
+            {erro && <p role="alert" style={{ color: '#E5484D', fontSize: '.9rem', marginTop: 14 }}>{erro}</p>}
 
             {/* footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, gap: 14 }}>

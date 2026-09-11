@@ -74,3 +74,40 @@ export const PLAUSIBILIDADE = {
   alturaCm: { min: 100, max: 250 },
   idade: { min: 18, max: 100 },
 } as const;
+
+/**
+ * 🔴 D11 (auditoria 2026-09-11) — DOMÍNIOS DOS CAMPOS CATEGÓRICOS que os gates consomem.
+ *
+ * Os gates já declaram a postura *"na dúvida (input implausível) → ROTEAR"* e a aplicavam só
+ * aos NÚMEROS. Medido no snapshot `a40f8af`: `nivelExperiencia: "profissional"`,
+ * `objetivo: "hipertrofia"` ou `flagsSaude: null` atravessavam o gate e estouravam adiante
+ * (`TypeError: Cannot read properties of undefined (reading 'seriesPorExercicio')`). Um valor
+ * fora destas listas não é "outro treino": é entrada sobre a qual o motor nada pode afirmar.
+ *
+ * 🔒 Listas, não schemas: `engine/` é puro e não depende de zod (a borda é que valida). O
+ * teste do fio (`plano-fio`) é quem trava a igualdade destes valores com os do schema.
+ */
+export const DOMINIOS = {
+  sexo: ['masculino', 'feminino'],
+  nivelAtividade: ['sedentario', 'leve', 'moderado', 'intenso', 'muito_intenso'],
+  objetivo: ['emagrecimento', 'massa', 'saude'],
+  nivelExperiencia: ['iniciante', 'intermediario', 'avancado'],
+  equipamento: ['nenhum', 'casa', 'academia'],
+} as const;
+
+/** As cinco flags do gate. `null`, ausente ou não-booleana ⇒ nada a afirmar sobre saúde. */
+export const FLAGS_SAUDE_OBRIGATORIAS = [
+  'gestacaoAmamentacao', 'renal', 'cardiaca', 'lesao', 'diabetes',
+] as const;
+
+/** `true` quando TODA flag existe e é booleana. Nunca assume `false` ("saudável"). */
+export function flagsSaudeLegiveis(f: unknown): boolean {
+  if (f == null || typeof f !== 'object') return false;
+  const o = f as Record<string, unknown>;
+  return FLAGS_SAUDE_OBRIGATORIAS.every((k) => typeof o[k] === 'boolean');
+}
+
+/** `true` quando o valor está no domínio declarado. */
+export function noDominio(valor: unknown, dominio: readonly string[]): boolean {
+  return typeof valor === 'string' && dominio.includes(valor);
+}

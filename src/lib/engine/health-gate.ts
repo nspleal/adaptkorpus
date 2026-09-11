@@ -13,13 +13,30 @@
  * Postura fail-safe: na dúvida (input implausível) → ROTEAR.
  */
 import {
+  DOMINIOS,
   FATOR_OBJETIVO,
+  flagsSaudeLegiveis,
   IMC as IMC_LIMITES,
+  noDominio,
   PISO_SEGURO,
   PLAUSIBILIDADE,
 } from './constants';
 import { calcularGET, calcularIMC, calcularTMB } from './formulas';
 import type { PerfilUsuario, ResultadoGate } from './types';
+
+/**
+ * 🔴 D11 — CAMPO CATEGÓRICO FORA DO DOMÍNIO. A postura fail-safe do gate já valia para os
+ * números; ela vale igualmente aqui. Devolve os campos ilegíveis (para o motivo dizer quais),
+ * nunca um default: assumir `flagsSaude` toda `false` seria declarar a pessoa saudável.
+ */
+function categoricosIlegiveis(p: PerfilUsuario): string[] {
+  const fora: string[] = [];
+  if (!noDominio(p.sexo, DOMINIOS.sexo)) fora.push('sexo');
+  if (!noDominio(p.nivelAtividade, DOMINIOS.nivelAtividade)) fora.push('nível de atividade');
+  if (!noDominio(p.objetivo, DOMINIOS.objetivo)) fora.push('objetivo');
+  if (!flagsSaudeLegiveis(p.flagsSaude)) fora.push('condições de saúde');
+  return fora;
+}
 
 function inputImplausivel(p: PerfilUsuario): boolean {
   const pesoOk =
@@ -37,6 +54,7 @@ function inputImplausivel(p: PerfilUsuario): boolean {
 function condicaoClinica(p: PerfilUsuario): string[] {
   const motivos: string[] = [];
   const f = p.flagsSaude;
+  if (f == null) return motivos;
   if (f.gestacaoAmamentacao) motivos.push('gestação/amamentação');
   if (f.renal) motivos.push('condição renal');
   if (f.cardiaca) motivos.push('condição cardíaca');
@@ -50,6 +68,18 @@ function condicaoClinica(p: PerfilUsuario): string[] {
  */
 export function avaliarGateSaude(perfil: PerfilUsuario): ResultadoGate {
   const pisoSeguro = PISO_SEGURO[perfil.sexo];
+
+  // --- Fail-safe: campo categórico ilegível → ROTEAR antes de qualquer cálculo. ----
+  const ilegiveis = categoricosIlegiveis(perfil);
+  if (ilegiveis.length > 0) {
+    return {
+      comportamento: 'ROTEAR',
+      motivos: [`dados do perfil ilegíveis: ${ilegiveis.join(', ')}`],
+      avisos: ['Confira os dados do seu perfil antes de gerar um plano.'],
+      derivados: { imc: NaN, tmb: NaN, get: NaN, pisoSeguro },
+      objetivoEfetivo: perfil.objetivo,
+    };
+  }
 
   // --- Fail-safe: input implausível → ROTEAR antes de qualquer cálculo. -------
   if (inputImplausivel(perfil)) {

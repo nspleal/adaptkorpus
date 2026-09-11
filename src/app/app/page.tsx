@@ -17,6 +17,7 @@ import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { hojeISO, lerPesos } from '@/lib/treino-historico';
 import { normalizarEntradaPlanoVisivel, opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
+import { ROTULOS_CAMPOS_PERFIL } from '@/lib/validation/perfil-resumo';
 import { EVENTO_PLANO_ATUALIZADO, reconciliarConfirmacaoLocal, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
 
 /**
@@ -40,9 +41,20 @@ type PendenciaPersistencia =
   | { tipo: 'VERSAO_OU_HASH'; perfil: PerfilResumo; entrada: EntradaPlanoVisivel }
   | { tipo: 'FALHA'; perfil: PerfilResumo; entrada: EntradaPlanoVisivel };
 
+/**
+ * 🔴 D11 (auditoria 2026-09-11) — O LAÇO SEM SAÍDA, FECHADO.
+ *
+ * Medido no snapshot `a40f8af`: um escalar fora do domínio lançava `TypeError` dentro de
+ * `montar()` (esta função nunca teve try/catch), o painel caía no error boundary global e o
+ * botão **"Tentar de novo" relia o mesmo blob** — a pessoa ficava sem app até limpar os dados
+ * do site. Agora a hidratação MARCA o perfil (`camposInvalidos`), `recomputarPlano` suspende a
+ * geração e esta tela oferece a correção. Não há "tentar de novo" que repita o mesmo erro:
+ * o único caminho adiante é rever os campos, porque é isso que mudou o estado.
+ */
 export default function AppPage() {
   const router = useRouter();
   const [estado, setEstado] = useState<Estado | null>(null);
+  const [perfilSuspenso, setPerfilSuspenso] = useState<PerfilResumo | null>(null);
   const [pronto, setPronto] = useState(false);
   const [pendenciaPersistencia, setPendenciaPersistencia] = useState<PendenciaPersistencia | null>(null);
   const [painelEpoch, setPainelEpoch] = useState(0);
@@ -80,6 +92,9 @@ export default function AppPage() {
     // Monta o painel a partir de um perfil resolvido (local ou do servidor).
     function montar(perfil: PerfilResumo, revision = 0, entradaPlano?: EntradaPlanoVisivel) {
       if (!vivo) return;
+      // 🔒 D11 — geração suspensa: nada é apagado e o onboarding NÃO é reaberto por conta
+      // própria (ele devolveria a pessoa para cá, que é o laço em outra roupa).
+      if (perfil.camposInvalidos?.length) { setPerfilSuspenso(perfil); setPronto(true); return; }
       // 🔒 Leva D: o plano é gerado com o peso RESOLVIDO (média de 7 dias + histereses), não
       // com o `perfil.pesoKg` cru. É seguro ler o storage aqui — no caminho com backend
       // `montar` só roda depois de `resolverEscopoLocal()`, então a gaveta já é a certa.
@@ -137,7 +152,11 @@ export default function AppPage() {
       const doServidor = await carregarPerfilServidor();
       if (!vivo) return;
       if (doServidor && doServidor !== 'sem_perfil') {
-        salvarSessao(doServidor.perfil, doServidor.entradaPlano); // cache local (2º device ganha os dados na hora)
+        // 🔒 D11 — perfil do servidor ilegível NÃO sobrescreve o cache local: o cache pode ser
+        // a última cópia boa, e trocá-la por dado corrompido é perda, não sincronização.
+        if (!doServidor.perfil.camposInvalidos?.length) {
+          salvarSessao(doServidor.perfil, doServidor.entradaPlano); // cache local (2º device ganha os dados na hora)
+        }
         montar(doServidor.perfil, doServidor.revision, doServidor.entradaPlano);
         return;
       }
@@ -250,6 +269,8 @@ export default function AppPage() {
   async function recarregarVersaoSalva() {
     const servidor = await carregarPerfilServidor();
     if (!servidor || servidor === 'sem_perfil') return;
+    // 🔒 D11 — mesma regra do mount: versão ilegível não vira cache nem plano.
+    if (servidor.perfil.camposInvalidos?.length) { setPerfilSuspenso(servidor.perfil); setPendenciaPersistencia(null); return; }
     salvarSessao(servidor.perfil, servidor.entradaPlano);
     revisaoRef.current = servidor.revision;
     revisaoRemotaPendenteRef.current = null;
@@ -289,7 +310,9 @@ export default function AppPage() {
     }
   }
 
-  if (!pronto || !estado) return <Splash />;
+  if (!pronto) return <Splash />;
+  if (perfilSuspenso) return <PerfilPrecisaDeCorrecao perfil={perfilSuspenso} onCorrigir={() => router.push('/onboarding?corrigir=1')} />;
+  if (!estado) return <Splash />;
 
   return (
     <div className="ak-app-interactions">
@@ -331,6 +354,41 @@ export default function AppPage() {
         onPerfilChange={persistirMudanca}
         onSair={() => { void sairDaConta().finally(() => router.replace('/')); }}
       />
+    </div>
+  );
+}
+
+/**
+ * 🔴 D11 — a RECUPERAÇÃO. Diz o que não foi lido, garante que nada foi apagado e leva a um
+ * lugar onde a pessoa CONSEGUE consertar (o questionário, em modo correção, que reescreve os
+ * escalares e preserva o resto do perfil — inclusive o treino montado à mão).
+ *
+ * ⚠️ Sem botão de "tentar de novo": reler o mesmo blob dá o mesmo resultado, e oferecer isso
+ * era exatamente o laço medido na auditoria.
+ */
+function PerfilPrecisaDeCorrecao({ perfil, onCorrigir }: { perfil: PerfilResumo; onCorrigir: () => void }) {
+  const campos = (perfil.camposInvalidos ?? []).map((c) => ROTULOS_CAMPOS_PERFIL[c] ?? c);
+  return (
+    <div style={{ minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <section role="alert" style={{ maxWidth: 560, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,179,8,.45)', borderRadius: 16, padding: 24 }}>
+        <h1 style={{ margin: '0 0 12px', fontSize: '1.3rem', fontWeight: 700 }}>Precisamos conferir alguns dados do seu perfil</h1>
+        <p style={{ margin: '0 0 12px', fontSize: '.95rem', lineHeight: 1.6, color: 'rgba(234,229,219,.8)' }}>
+          Não conseguimos ler {campos.length === 1 ? 'este campo' : 'estes campos'}: <strong>{campos.join(', ')}</strong>.
+          Preferimos não montar um plano com informação incompleta a inventar um valor no lugar do seu.
+        </p>
+        <p style={{ margin: '0 0 20px', fontSize: '.9rem', lineHeight: 1.6, color: 'rgba(234,229,219,.65)' }}>
+          <strong>Nada foi apagado.</strong> O resto do seu perfil — inclusive o treino que você montou — continua salvo
+          e volta assim que estes campos forem confirmados.
+        </p>
+        <button
+          type="button"
+          onClick={onCorrigir}
+          className="hov-btn"
+          style={{ cursor: 'pointer', background: '#BDFF00', color: '#0D2818', border: 'none', borderRadius: 12, padding: '13px 24px', fontWeight: 700, fontSize: '.98rem' }}
+        >
+          Conferir meus dados
+        </button>
+      </section>
     </div>
   );
 }

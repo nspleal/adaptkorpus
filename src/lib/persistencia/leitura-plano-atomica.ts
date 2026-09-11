@@ -6,7 +6,7 @@
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
 import { entradaPlanoVisivelSchema } from '@/lib/validation/plano-entrada';
-import { perfilResumoSchema } from '@/lib/validation/perfil-resumo';
+import { perfilResumoSchema, sanearPerfilHidratado } from '@/lib/validation/perfil-resumo';
 
 export type LeituraPlanoAtomica = {
   perfil: PerfilResumo;
@@ -36,4 +36,19 @@ export function leituraAtomicaDoPlanoCas(raw: unknown): LeituraPlanoAtomica | nu
     revision: cas.revision as number,
     entradaPlano: opcoes.data,
   };
+}
+
+/** Recuperação usa o MESMO snapshot/revisão; não o mistura com a tabela profile ou o cache. */
+export function leituraParaCorrecaoDoPlanoCas(raw: unknown): LeituraPlanoAtomica | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const cas = raw as { revision?: unknown; payload?: { entrada?: { perfil?: unknown; opcoes?: unknown } } };
+  if (!Number.isSafeInteger(cas.revision) || (cas.revision as number) < 1) return null;
+  const entrada = cas.payload?.entrada;
+  const p = entrada?.perfil;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  const opcoes = entradaPlanoVisivelSchema.safeParse(entrada?.opcoes);
+  if (!opcoes.success) return null;
+  const perfil = sanearPerfilHidratado(p as Record<string, unknown>) as unknown as PerfilResumo;
+  if (!perfil.camposInvalidos?.length) return null;
+  return { perfil, revision: cas.revision as number, entradaPlano: opcoes.data };
 }

@@ -13,6 +13,10 @@ import { vereditoDoPlano, type TomVeredito } from '@/lib/veredito-motor';
  * testado em Node) e os avisos são renderizados **verbatim**, na ordem em que o motor os
  * emitiu. Filtrar ou reescrever aqui recriaria o segundo sistema de avisos que D1 existe para
  * acabar — o `critico.ts` já é o outro, e ele fala do DESENHO, não da geração.
+ *
+ * 🔴 D16 (auditoria 2026-09-11) — a lista pode chegar por `avisos`, já unificada por
+ * `lib/avisos-unificados` (PURO, testado em Node). A regra continua fora daqui: este
+ * componente segue renderizando verbatim o que recebe, sem decidir o que cabe na tela.
  */
 
 const COR: Record<TomVeredito, { borda: string; texto: string; marca: string; papel: 'status' | 'alert' }> = {
@@ -21,12 +25,14 @@ const COR: Record<TomVeredito, { borda: string; texto: string; marca: string; pa
   bloqueio: { borda: 'rgba(229,72,77,.5)', texto: '#E5484D', marca: '🔴', papel: 'alert' },
 };
 
-export default function AvisosMotor({ rotina, tempoPorSessaoMin }: {
+export default function AvisosMotor({ rotina, tempoPorSessaoMin, avisos: avisosRecebidos }: {
   rotina: RotinaSemanal | null | undefined;
   tempoPorSessaoMin: number;
+  /** D16: lista já unificada. Ausente = a do motor, como sempre foi. */
+  avisos?: string[];
 }) {
   const veredito = vereditoDoPlano(rotina, tempoPorSessaoMin);
-  const avisos = rotina?.avisos ?? [];
+  const avisos = avisosRecebidos ?? rotina?.avisos ?? [];
   /**
    * ⚠️ A conta do cardio (planejado / entregue / faltante) NÃO é montada aqui. Ela sai do
    * motor como aviso, e o motor é a única autoridade sobre ela — uma linha própria nesta tela

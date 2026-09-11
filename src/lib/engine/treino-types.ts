@@ -35,11 +35,27 @@ import type { Weekday } from '../semana';
  * por política ele não reduz. Este quarto estado afirma só o que foi medido: entregue, medido,
  * não cabe. `diasAcimaDoLimite` são os índices em `duracaoDias` — a tela aponta o dia sem
  * recalcular nada.
+ *
+ * 🔴 D12 (auditoria 2026-09-11) — "PODE ULTRAPASSAR" NÃO É "ULTRAPASSOU".
+ *
+ * O guard de D3 só rebaixava `ACIMA_DO_LIMITE_OPERACIONAL`, e o ramo manual não passa por
+ * `precisaReduzir` — que no ramo automático trata `LIMITE_INDETERMINADO` como motivo para
+ * REDUZIR. O mesmo estado significava "reduza" num produtor e "certificado" no outro: um dia
+ * medido em `min 3840 / max 4200` contra limite `4080` recebia 🟢 *"a duração calculada está
+ * dentro dos limites"* enquanto o crítico dizia, na mesma tela, que o dia levava 53 min.
+ *
+ * 🔒 A condição de certificação passou a ser UMA só, nos dois produtores: `CERTIFICADO` exige
+ * todo dia em `DENTRO_DO_LIMITE` ou `DENTRO_DA_TOLERANCIA` (a tolerância de +480 s que já
+ * existia segue valendo — ela não é incerteza, é folga medida).
+ *
+ * ⚠️ `diasPodemUltrapassar` é um campo PRÓPRIO justamente para a frase não mentir:
+ * `LIMITE_INDETERMINADO` é `min ≤ limite < max` — o dia pode caber. Reaproveitar
+ * `diasAcimaDoLimite` afirmaria excesso onde só há incerteza.
  */
 export type ResultadoGeracaoRotina =
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
-  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[] }
-  | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[] }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[]; diasPodemUltrapassar?: number[] }
+  | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[]; diasPodemUltrapassar?: number[] }
   | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
   | {
       tipo: 'ERRO_ALOCADOR';
@@ -273,6 +289,52 @@ export interface DiaTreino {
    * de casa ancora, e é dele que sai o aviso "seu equipamento disponível limita este dia".
    */
   slotsNaoPreenchidos?: number;
+  /**
+   * 🔴 D14 — QUAL regra deixou o dia curto, para o dia NÃO ATENDIDO poder dizer o porquê sem
+   * a tela reconstruir a causa. Mesmo vocabulário dos dois avisos que o montador já emite.
+   */
+  motivoDoCorte?: 'EQUIPAMENTO' | 'TETO_SEMANAL';
+}
+
+/**
+ * 🔴 D14 (auditoria 2026-09-11) — O DIA PEDIDO QUE NÃO VIROU SESSÃO.
+ *
+ * Medido no snapshot `a40f8af`: `dias[0] = { nome: "Push", slots: [], slotsNaoPreenchidos: 3 }`
+ * era contado em `diasForcaAgendados`, recebia `duracaoDias[0] = {CALCULADO, DENTRO_DO_LIMITE,
+ * min 0, max 0}` e o plano inteiro saía `CERTIFICADO` 🟢 — um dia de 0 s sustentando o selo de
+ * que "cabe nos limites", e uma sessão vazia oferecida para iniciar.
+ *
+ * 🔒 O dia continua VISÍVEL e o motivo continua DITO (o aviso do motor já nomeava o dia). O que
+ * muda é que ele deixa de ser contado como entrega: sai de `dias`, sai de `diasForcaAgendados`
+ * e sai da certificação de duração. Nada é redistribuído para preencher — cardio não ocupa o
+ * dia, e exercício fora do equipamento declarado continua fora.
+ */
+/**
+ * 🔴 D16 — um grupo abaixo do piso de volume da semana, como FATO. `causa` distingue as duas
+ * frases que o motor pode emitir: `catalogo` aponta o equipamento que fecharia a conta (é
+ * informação que só o motor tem), `orcamento` é a frase genérica — a que o crítico repete com
+ * números. Diferenças legítimas se preservam porque estão no fato, não na prosa.
+ */
+export interface FatoCoberturaGrupo {
+  grupo: GrupoPrimario;
+  semana: SemanaCiclo;
+  escopo: 'semana';
+  metrica: 'series_ponderadas';
+  limiar: 'mev';
+  alvo: number;
+  valor?: number;
+  causa: 'catalogo' | 'orcamento';
+  /** O texto exato que foi para `rotina.avisos` — a chave de remoção, sem reescrever nada. */
+  aviso: string;
+}
+
+export interface DiaNaoAtendido {
+  nome: string;
+  diaId?: Weekday;
+  /** `DESENHO_VAZIO` = o desenho manual daquele dia ficou sem exercício elegível. */
+  motivo: 'EQUIPAMENTO' | 'TETO_SEMANAL' | 'DESENHO_VAZIO';
+  /** Quantos slots o template pediu e ninguém pôde preencher (quando o motor mediu). */
+  slotsPedidos?: number;
 }
 
 /**
@@ -332,6 +394,18 @@ export interface RotinaSemanal {
   diasCardio: DiaCardio[];
   cardio: CardioPrescricao;
   avisos: string[];
+  /**
+   * 🔴 D16 (auditoria 2026-09-11) — o FATO por trás de cada aviso de cobertura de grupo. Existe
+   * para que a apresentação possa decidir se o crítico está dizendo a MESMA coisa comparando
+   * grupo, semana, escopo, métrica e limiar — e não comparando frases.
+   */
+  fatosCobertura?: FatoCoberturaGrupo[];
+  /**
+   * 🔴 D14 — dias da agenda que NÃO viraram sessão. Ausente quando todos foram atendidos.
+   * `dias.length + diasNaoAtendidos.length + diasCardioRecuperacao` = agenda SOLICITADA;
+   * `dias.length` = entrega EFETIVA. São contas diferentes de propósito.
+   */
+  diasNaoAtendidos?: DiaNaoAtendido[];
   /**
    * 🔒 B2 — QUAL RAMO DO FOCO AGIU (DF 2026-08-14). A tela DIZ o degrau; trocar o foco e não
    * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em

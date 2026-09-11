@@ -15,7 +15,7 @@ import { consentimentosSchema, perfilResumoSchema } from '@/lib/validation/perfi
 import type { PerfilResumo } from '@/components/painel/Painel';
 import { entradaPlanoVisivelSchema } from '@/lib/validation/plano-entrada';
 import { comandoCommitDePlano, aggregateIdDePlano } from '@/lib/plano-cas-comando';
-import { leituraAtomicaDoPlanoCas } from '@/lib/persistencia/leitura-plano-atomica';
+import { leituraAtomicaDoPlanoCas, leituraParaCorrecaoDoPlanoCas } from '@/lib/persistencia/leitura-plano-atomica';
 import { persistirPlanoComCAS } from '@/lib/persistencia/plano-cas';
 import { RepositorioSupabasePlanoCAS, type ClienteSupabaseCAS } from '@/lib/persistencia/plano-cas-supabase';
 import { FORMULA_DURACAO_VERSION } from '@/lib/engine';
@@ -49,7 +49,7 @@ export async function GET() {
     .maybeSingle();
   if (erroCas) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
   if (cas) {
-    const leitura = leituraAtomicaDoPlanoCas(cas);
+    const leitura = leituraAtomicaDoPlanoCas(cas) ?? leituraParaCorrecaoDoPlanoCas(cas);
     if (!leitura) return NextResponse.json({ error: 'snapshot_plano_invalido' }, { status: 500 });
     return NextResponse.json(leitura);
   }
@@ -57,7 +57,7 @@ export async function GET() {
   const { data, error } = await ctx.supabase.from('profile').select('*').eq('id', ctx.user.id).maybeSingle();
   if (error) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
   // Linha inexistente OU criada sem o bloco de preferências (parcial) = sem perfil usável.
-  if (!data || !data.sexo || !data.preferencias?.nivelExperiencia) {
+  if (!data || (!data.sexo && !data.preferencias)) {
     return NextResponse.json({ error: 'sem_perfil' }, { status: 404 });
   }
   // Legado sem C1 continua legível; o primeiro save o promove ao contrato novo.

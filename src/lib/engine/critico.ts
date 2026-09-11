@@ -75,6 +75,22 @@ export interface ItemCritico {
   severidade: SeveridadeAviso;
   /** Frase pronta para a tela — linguagem de sugestão/educação, nunca de resultado. */
   texto: string;
+  /**
+   * 🔴 D16 (auditoria 2026-09-11) — O FATO, não só a frase. O mesmo fato ("grupo X abaixo do
+   * mínimo desta semana") era dito por dois sistemas, com números diferentes em cada um.
+   * Para decidir se duas falas são a MESMA, é preciso comparar grupo, semana, escopo, métrica
+   * e limiar — comparar texto acharia igualdade onde não há e diferença onde não importa.
+   * Ausente nos itens que não descrevem volume por grupo.
+   */
+  fato?: {
+    semana?: number;
+    valor?: number;
+    grupo: GrupoPrimario;
+    escopo: 'semana';
+    metrica: 'series_ponderadas';
+    limiar: 'mev' | 'mrv';
+    alvo: number;
+  };
 }
 
 export interface Avaliacao {
@@ -98,6 +114,7 @@ export interface Avaliacao {
 }
 
 export interface ContextoCritico {
+  semana?: number;
   nivel: NivelExperiencia;
   objetivo: Objetivo;
   /** Minutos por sessão do perfil — o aviso de sessão longa compara com isto. */
@@ -160,7 +177,7 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
  * E grupo abaixo ⇒ sugere mover UM exercício. Linguagem de sugestão ("tente"), nunca de
  * prescrição nem de resultado.
  */
-export function recomendacoes(placar: readonly LinhaPlacar[]): ItemCritico[] {
+export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number): ItemCritico[] {
   const itens: ItemCritico[] = [];
   const acima = [...placar].filter((l) => l.status === 'acima_mrv').sort((a, b) => b.ponderado - a.ponderado);
   const abaixo = [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
@@ -179,6 +196,7 @@ export function recomendacoes(placar: readonly LinhaPlacar[]): ItemCritico[] {
       codigo: 'grupo_abaixo_do_minimo',
       severidade: 'recomendacao',
       texto: `${l.rotulo} está abaixo da faixa mínima desta semana (${l.ponderado} de ${l.mev} séries).`,
+      fato: { grupo: l.grupo, semana, valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev },
     });
   }
   return itens;
@@ -266,7 +284,7 @@ export function avisos(
 /** A avaliação completa — o que a tela consome, no editor e no plano salvo (DF②). */
 export function avaliarSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): Avaliacao {
   const placar = placarDaSemana(dias, ctx);
-  return { placar, recomendacoes: recomendacoes(placar), avisos: avisos(dias, placar, ctx) };
+  return { placar, recomendacoes: recomendacoes(placar, ctx.semana), avisos: avisos(dias, placar, ctx) };
 }
 
 /** Compara resultados sem depender da identidade do objeto nem de serialização incidental. */
@@ -370,8 +388,15 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   if (rotina.diasForcaAgendados !== forcaEsperada || rotina.dias.length !== forcaEsperada) {
     motivosEstruturais.push(`dias de força divergentes: fatos ${forcaEsperada}, contador ${rotina.diasForcaAgendados}, planos ${rotina.dias.length}`);
   }
-  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada) {
-    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada}, contador ${rotina.diasCardioRecuperacao}`);
+  /**
+   * 🔴 D14 — a agenda SOLICITADA se reparte em três, não em duas: sessões entregues, dias de
+   * recuperação e dias NÃO ATENDIDOS. Sem a terceira parcela, o dia que ficou sem exercício
+   * apareceria aqui como "recuperação" — que é justamente a redistribuição silenciosa que a
+   * decisão proíbe.
+   */
+  const naoAtendidos = rotina.diasNaoAtendidos?.length ?? 0;
+  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada - naoAtendidos) {
+    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada - naoAtendidos}, contador ${rotina.diasCardioRecuperacao}`);
   }
   if (finais.length !== horizonteEsperado) {
     motivosEstruturais.push(`horizonte final: esperado ${horizonteEsperado}, recebido ${finais.length}`);
