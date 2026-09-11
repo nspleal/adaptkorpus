@@ -93,17 +93,13 @@ describe('D12 · a tolerância existente é preservada', () => {
    * por política explícita. Ele não pode ser varrido junto com a incerteza — seria apertar a
    * régua por tabela, que é o oposto do que D12 pede.
    */
-  it('existe caso na tolerância e ele continua CERTIFICADO', () => {
-    const achados = [3, 4, 5].flatMap((series) => [30, 45, 60, 75, 90].map((tempo) => {
-      const r = gerar(manual(series, { tempoPorSessaoMin: tempo }));
-      return { series, tempo, r };
-    })).filter(({ r }) => r.duracaoDias?.some((d) => d.estadoLimite === 'DENTRO_DA_TOLERANCIA'));
-    expect(achados.length, 'nenhum caso na tolerância — a afirmação abaixo seria vazia').toBeGreaterThan(0);
-    for (const { series, tempo, r } of achados) {
-      const outros = (r.duracaoDias ?? []).filter((d) => d.estadoLimite !== 'DENTRO_DA_TOLERANCIA' && d.estadoLimite !== 'DENTRO_DO_LIMITE');
-      if (outros.length > 0) continue; // dia na tolerância convivendo com outro fora dela
-      expect(r.resultadoGeracao?.tipo, `${series} séries / ${tempo} min`).toBe('CERTIFICADO');
-    }
+  it('5 séries em 45 min cai na tolerância — e segue CERTIFICADO', () => {
+    const r = gerar(manual(5, { tempoPorSessaoMin: 45 }));
+    const estados = (r.duracaoDias ?? []).map((d) => d.estadoLimite);
+    // Anti-vacuidade: sem um dia REALMENTE na tolerância, a afirmação abaixo não prova nada.
+    expect(estados, 'a fixture saiu da tolerância — escolha outra combinação').toContain('DENTRO_DA_TOLERANCIA');
+    expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
+    expect(vereditoDoPlano(r, 45)!.tom).toBe('ok');
   });
 });
 

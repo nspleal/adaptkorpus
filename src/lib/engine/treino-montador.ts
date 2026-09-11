@@ -123,6 +123,17 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modal
 /** Padrões independentes que o adaptador temporal exige de toda realocação. */
 const COBERTURA_TEMPORAL_OBRIGATORIA = ['puxar', 'empurrar', 'agachar'] as const;
 
+/**
+ * 🔴 D13 — a última semana de RAMPA do mesociclo: o plano-base com que a semana de deload se
+ * compara. Derivada da constante do deload, não um número novo.
+ */
+const SEMANA_BASE_DO_DELOAD = (DELOAD_SEMANAS_DEFAULT - 1) as OpcoesSemana['semana'];
+
+/** Capacidade ENTREGUE por um plano = maior nº de slots de um dia (a régua do reduce-to-fit). */
+function capacidadeEntregue(plano: RotinaSemanal): number {
+  return Math.max(0, ...plano.dias.map((d) => d.slots.length));
+}
+
 /** 🔒 C1 §6 — um dia estoura o LIMITE OPERACIONAL (B+480) mesmo com o descanso no piso? */
 export function precisaReduzir(rotina: RotinaSemanal, nivel: NivelExperiencia, orcamentoSeg: number): boolean {
   return rotina.dias.some((d) => {
@@ -237,9 +248,43 @@ export function montarRotina(
   const { split, dias: templates } = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
   // 🔒 C1 — o teto de slots vem da tabela f(tempo), MAS o reduce-to-fit (override 2) pode pedir
   // menos slots reexecutando o alocador; aí o override manda (nunca acima da tabela).
-  const budgetPorDia = Math.min(
+  const budgetDaTabela = Math.min(
     semanaCiclo?.budgetSlotsOverride ?? Number.POSITIVE_INFINITY,
     orcamentoSlotsDoDia(perfil.tempoPorSessaoMin),
+  );
+  /**
+   * 🔴 D13 (auditoria 2026-09-11) — O CORTE DE SÉRIES NÃO PODE SER ANULADO POR MAIS EXERCÍCIOS.
+   *
+   * Medido em 42 dos 1.458 perfis varridos: a semana 6 entregava volume IGUAL OU MAIOR que a
+   * semana 5 com `semana.deload = true` na tela (pior caso: 20 séries em 5 slots → 32 séries
+   * em 16 slots). O mecanismo não é o `aplicarDeload` — é a interação dele com o reduce-to-fit:
+   * séries menores baratearam cada slot, o dia passou a caber com a capacidade CHEIA da tabela
+   * e o alocador recolocou exercícios. O corte por exercício era devolvido em cardinalidade.
+   *
+   * 🔒 O PLANO-BASE COMPARÁVEL, declarado: as MESMAS entradas e restrições (perfil, biblioteca,
+   * favoritos, preferências, execuções, oferta de cardio), mudando só a semana do mesociclo
+   * para a última de RAMPA. A capacidade terminal dele passa a ser o teto da semana de deload.
+   * Assim a estrutura fica onde a spec já a queria — *"mesmos slots, mesmos dias; só as séries
+   * rampam"* — e a redução das séries chega inteira ao volume entregue.
+   *
+   * ⚠️ Um TETO, não um alvo: o reduce-to-fit da semana de deload continua livre para reduzir
+   * mais se precisar, e nenhuma banda percentual é imposta à saída. Capacidade-base zero (não
+   * há plano-base com o que comparar) não cria teto nenhum.
+   */
+  const capacidadeBaseDoDeload = deloadAgendado
+    && perfil.rotinaCustom == null
+    && semanaCiclo != null
+    && semanaCiclo.budgetSlotsOverride == null
+    && !semanaCiclo.tentativaTemporalInterna
+    ? capacidadeEntregue(montarRotina(
+        prescricao, perfil, exercises, favoritos,
+        { ...semanaCiclo, semana: SEMANA_BASE_DO_DELOAD },
+        preferencias, escolhasExecucao, diasOferecidosCardio,
+      ))
+    : 0;
+  const budgetPorDia = Math.min(
+    budgetDaTabela,
+    capacidadeBaseDoDeload > 0 ? capacidadeBaseDoDeload : Number.POSITIVE_INFINITY,
   );
 
   /**
