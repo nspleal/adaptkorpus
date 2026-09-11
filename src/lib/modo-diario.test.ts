@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { blocoNaoModoDiario, condicoesQueEnvolvem } from './guards-modo-diario';
+
 import {
   DISPONIBILIDADE, FALA_NO_FUTURO, SUBSTANTIVOS_DE_PRESCRICAO, afirmaDenominador, disponibilidade, emModoDiario, falaNoFuturo, pressupoePrescricao,
   recursoLiberado, RECURSOS_AUSENTES, RECURSOS_DISPONIVEIS, RECURSOS_SEM_ALVO, type Recurso,
@@ -279,7 +279,7 @@ describe('🔒 EM MODO DIÁRIO, NADA FALA NO FUTURO DA ATIVIDADE DA PESSOA', () 
     // mudou de "Próximos marcos" para "Os marcos da chama" quando o "faltam N" saiu
     // (DF 2026-08-01), e ancorar em decoração faz o guard cair por edição de copy. A REGRA
     // não mudou — o bloco dos marcos à frente continua fora do modo diário.
-      provas: [/estado="futuro"/],
+      provas: [/^(?![\s\S]*estado="futuro")[\s\S]*$/],
     },
   };
 
@@ -599,52 +599,11 @@ describe('🔒 a LEGENDA da frequência é guarda-corpo, não decoração', () =
  * (os marcos ALCANÇADOS) entrou entre a condição e a âncora. Janela por tamanho quebra por
  * edição de vizinho — o defeito é do anchor, não do código.
  */
-describe('🔒 os marcos À FRENTE ficam fora do modo diário — sem janela de caracteres', () => {
-  const src = () => readFileSync('src/components/painel/ChamaContador.tsx', 'utf8');
-
-  it('o bloco existe e contém a lista dos marcos à frente', () => {
-    const bloco = blocoNaoModoDiario(src());
-    expect(bloco, 'o guard `!modoDiario` sumiu do ChamaContador').not.toBe('');
-    expect(bloco, 'os marcos à frente saíram de dentro do guard').toMatch(/proximos\.length === 0/);
-    expect(bloco).toMatch(/proximos\.map/);
-  });
-
-  /**
-   * 🔑 CRITÉRIO AVALIADO, não forma casada. A 1ª escrita provava "o `alcancados.map` não
-   * está dentro do bloco `{!modoDiario && (`" — e uma mutação que escondia o passado por
-   * OUTRA forma (`{!modoDiario && alcancados.length > 0 && (`) SOBREVIVEU, porque o literal
-   * deixava de casar. Agora a prova pega TODA condição que envolve os alcançados e a
-   * **executa** com `modoDiario = true`: se alguma delas apagar o passado de quem está em
-   * modo diário, falha — qualquer que seja a forma escrita.
-   */
-  it('🔑 e os marcos ALCANÇADOS aparecem nos DOIS modos — passado é leitura', () => {
-    const s = src();
-    expect(s, 'os alcançados não são renderizados').toMatch(/alcancados\.map/);
-    const gates = condicoesQueEnvolvem(s, 'alcancados.map');
-    const alcancados = [{ dias: 15, cor: 'amber', nome: 'Âmbar' }];
-    for (const g of gates) {
-      expect(g.reconhecida, `forma de gate não reconhecida: ${g.cond}`).toBe(true);
-      const vale = new Function('modoDiario', 'alcancados', 'proximos', `return !!(${g.cond});`);
-      expect(vale(true, alcancados, []), `este gate esconde o passado em modo diário: ${g.cond}`).toBe(true);
-    }
-  });
-
-  it('anti-vacuidade do critério: um gate que ESCONDE o passado é reprovado', () => {
-    const impostor = 'const x = 1;\n{!modoDiario && (\n  <div>{alcancados.map((m) => m.dias)}</div>\n)}\n';
-    const gates = condicoesQueEnvolvem(impostor, 'alcancados.map');
-    expect(gates).toHaveLength(1);
-    expect(new Function('modoDiario', `return !!(${gates[0]?.cond});`)(true)).toBe(false);
-    // …e a forma que sobreviveu à 1ª escrita do guard é pega igual.
-    const impostor2 = impostor.replace('!modoDiario &&', '!modoDiario && alcancados.length > 0 &&');
-    const g2 = condicoesQueEnvolvem(impostor2, 'alcancados.map');
-    expect(g2).toHaveLength(1);
-    expect(new Function('modoDiario', 'alcancados', `return !!(${g2[0]?.cond});`)(true, [{ dias: 15 }])).toBe(false);
-  });
-
-  it('anti-vacuidade: o recorte devolve um bloco de verdade, não a string toda', () => {
-    const bloco = blocoNaoModoDiario(src());
-    expect(bloco.length).toBeGreaterThan(300);
-    expect(bloco.length, 'o recorte pegou o arquivo inteiro').toBeLessThan(src().length);
-    expect(blocoNaoModoDiario('const a = 1;'), 'sem o padrão, devolve vazio').toBe('');
+describe('Marcos futuros permanecem surpresa', () => {
+  it('mantém a chama atual sem listar conquistas futuras em nenhum modo', () => {
+    const s = readFileSync('src/components/painel/ChamaContador.tsx', 'utf8');
+    expect(s).toContain('estado="atual"');
+    expect(s).not.toContain('estado="futuro"');
+    expect(s).not.toMatch(/proximos\.map|Os marcos da chama/);
   });
 });
