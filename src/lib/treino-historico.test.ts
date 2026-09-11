@@ -99,10 +99,13 @@ describe('pesos locais (evk_pesos — fix: pesos eram só memória)', () => {
     try {
       expect(lerPesos()).toEqual([]);
       // 🔒 Leva D: a série carrega DATA. A data é carimbada aqui (UI), não no motor.
-      expect(registrarPesoLocal(80, '2026-07-30')).toEqual([{ dataISO: '2026-07-30', kg: 80 }]);
-      expect(registrarPesoLocal(79.5, '2026-07-31')).toEqual([
-        { dataISO: '2026-07-30', kg: 80 }, { dataISO: '2026-07-31', kg: 79.5 },
-      ]);
+      // 🔒 2026-09-11: o retorno passou a ser um DESFECHO (um registro por dia civil local).
+      expect(registrarPesoLocal(80, '2026-07-30'))
+        .toEqual({ tipo: 'REGISTRADO', pesos: [{ dataISO: '2026-07-30', kg: 80 }] });
+      expect(registrarPesoLocal(79.5, '2026-07-31')).toEqual({
+        tipo: 'REGISTRADO',
+        pesos: [{ dataISO: '2026-07-30', kg: 80 }, { dataISO: '2026-07-31', kg: 79.5 }],
+      });
       expect(lerPesos()).toEqual([
         { dataISO: '2026-07-30', kg: 80 }, { dataISO: '2026-07-31', kg: 79.5 },
       ]);

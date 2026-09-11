@@ -286,7 +286,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
         // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
         // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
-        for (const v of locais) void registrarPesoServidor(v.kg, v.dataISO);
+        // 🔒 Conflito de sincronização é TRATADO, não descartado: se o servidor já tinha um
+        // registro naquele dia, ele venceu (o primeiro vale) e a cópia local se alinha ao
+        // peso aceito. Sem isto, a série local e a do servidor divergiriam em silêncio.
+        for (const v of locais) {
+          void registrarPesoServidor(v.kg, v.dataISO).then((r) => {
+            if (r.tipo !== 'RECUSADO_DIA' || r.pesoKg == null || !v.dataISO) return;
+            const aceito = r.pesoKg;
+            substituirPesos(lerPesos().map((x) => (x.dataISO === v.dataISO ? { ...x, kg: aceito } : x)));
+            setPesos((p) => p.map((x) => (x.dataISO === v.dataISO ? { ...x, kg: aceito } : x)));
+          });
+        }
       }
     });
     return () => { vivo = false; };
@@ -884,14 +894,74 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return n;
   }
 
-  const registrarPeso = (v: number) => {
-    if (!Number.isFinite(v) || v < 30 || v > 300) return;
+  /**
+   * 🔒 O PESO DO PERFIL PASSA A SEGUIR O REGISTRO (decisão do autor, 2026-09-11).
+   *
+   * Preserva todos os demais campos (`...perfil`) e persiste pelo caminho normal, que já tem
+   * fila, revisão e bloqueio por conflito (`persistirMudanca` em `app/page.tsx`).
+   *
+   * 🔴 O QUE ESTA FUNÇÃO NÃO FAZ, DE PROPÓSITO:
+   *  · **não reancora** — `reancorarPesoDoPlanoLocal` segue exclusivo do *Editar perfil*
+   *    (spec §4, DF 2026-07-31). A âncora do motor continua andando só pela sua própria
+   *    política: ≥ 3 pesagens em 7 dias, no máximo 1×/semana, com as duas histereses;
+   *  · **não recomputa o plano** — nada de `recomputarPlano` aqui: uma pesagem não regera
+   *    cardápio nem rotina;
+   *  · **não mexe no ciclo** — mesociclo e deload seguem lendo treino resistido.
+   * `entradaDoPlano` já carimba o `pesoEfetivoKg` com o `pesoMotorKg` VIGENTE, então
+   * persistir o perfil não move a âncora nem no servidor.
+   */
+  function aplicarPesoNoPerfil(pesoKg: number) {
+    if (!Number.isFinite(pesoKg) || pesoKg === perfil.pesoKg) return;
+    const novo: PerfilResumo = { ...perfil, pesoKg };
+    setPerfil(novo);
+    notificarPerfil(novo);
+  }
+
+  /** Recusa da segunda pesagem do dia — mensagem mínima; o desenho fica com o autor. */
+  const [avisoPeso, setAvisoPeso] = useState<string | null>(null);
+
+  type ResultadoPesoUI =
+    | { tipo: 'REGISTRADO' }
+    | { tipo: 'IDEMPOTENTE' }
+    | { tipo: 'RECUSADO_DIA'; registradoKg: number }
+    | { tipo: 'INVALIDO' };
+
+  const registrarPeso = (v: number): ResultadoPesoUI => {
+    if (!Number.isFinite(v) || v < 30 || v > 300) return { tipo: 'INVALIDO' };
     // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
     // servidor no campo `data` do log — é ela que permite a janela de 7 dias.
+    // 🔒 `hojeISO` = `diaLocalISO`: DIA CIVIL LOCAL, a mesma convenção do resto do app.
     const dia = hojeISO();
+
+    const local = registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
+    if (local.tipo === 'RECUSADO_DIA') {
+      // 🔒 Não grava, não substitui o primeiro e NÃO toca o perfil.
+      setAvisoPeso(`Você já registrou ${local.registradoKg} kg hoje. Só um registro por dia — o próximo pode ser amanhã.`);
+      return { tipo: 'RECUSADO_DIA', registradoKg: local.registradoKg };
+    }
+    if (local.tipo === 'IDEMPOTENTE') {
+      // Reenvio do mesmo peso no mesmo dia: nada a fazer, e não é erro.
+      setAvisoPeso(null);
+      return { tipo: 'IDEMPOTENTE' };
+    }
+
+    setAvisoPeso(null);
     setPesos((p) => [...p, { dataISO: dia, kg: v }]);
-    registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
-    void registrarPesoServidor(v, dia); // write-through com a data (no-op sem backend)
+    aplicarPesoNoPerfil(v);
+    void registrarPesoServidor(v, dia).then((r) => {
+      // 🔒 Sem perda silenciosa: `FALHA` mantém o registro local pendente (offline-first) e
+      // a re-subida do mount o envia depois. Só a RECUSA do servidor reconcilia.
+      if (r.tipo !== 'RECUSADO_DIA') return;
+      const aceito = r.pesoKg;
+      if (aceito == null) return;
+      // Outra aba/dispositivo venceu a corrida e o banco manteve o PRIMEIRO registro do dia.
+      // O cliente se alinha ao que foi aceito — histórico e perfil juntos, nunca divergentes.
+      substituirPesos(lerPesos().map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
+      setPesos((p) => p.map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
+      aplicarPesoNoPerfil(aceito);
+      setAvisoPeso(`Outro dispositivo já havia registrado ${aceito} kg hoje. Mantivemos esse registro.`);
+    });
+    return { tipo: 'REGISTRADO' };
   };
 
   const prescricao = treino.prescricao;
@@ -1371,7 +1441,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             onRegistrarTreino={() => setRegistrando(true)}
             onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             onRegistrarRefeicao={() => irAba('dieta')}
-            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} />}
+            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} aviso={avisoPeso} />}
           />
         )}
         {!vista && aba === 'hoje' && !modoDiario && (
@@ -1417,7 +1487,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                 notificarPerfil(perfil, { diasOferecidosCardio: proximaOferta });
               }}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} avisoPeso={avisoPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {!vista && <AvisosHidratacao avisos={perfil.avisosHidratacao} />}
@@ -1469,7 +1539,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
-          <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
+          <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
                 `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
             <FrequenciaGrupos
@@ -1562,9 +1632,10 @@ function CartaoRetomada({ estado }: { estado: EstadoRetomada }) {
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, avisoPeso, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
-  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
+  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => { tipo: string } | void;
+  avisoPeso?: string | null;
   onRegistrarTreino: () => void; deload: boolean;
   /** Semana do mesociclo (v2 §6): contador "Semana X/6 do ciclo". */
   semanaCiclo?: number;
@@ -1649,7 +1720,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
           <p style={{ margin: 0, fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>É um guia, não uma meta exata.</p>
         </div>
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
     </div>
   );
 }
@@ -1956,7 +2027,7 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPesoPlano }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null }) {
+function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => { tipo: string } | void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
   const atual = pesos[pesos.length - 1]!;
   const variacao = atual - pesos[0]!;
   return (
@@ -1973,7 +2044,7 @@ function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPeso
         <Grafico pesos={pesos} />
         {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
       {/* 🔒 Leva D — o AVISO DO RECÁLCULO. Não é subtítulo nem promessa: é o relato de um
           fato já ocorrido, no passado, sobre o APP (nunca sobre a pessoa e nunca no futuro).
           Só aparece quando o peso do plano realmente deixou de ser o do perfil — a string
@@ -2318,7 +2389,16 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
  * 🔴 NÃO reintroduza `modoDiario` aqui: o subtítulo segue unificado, e a diferença entre os
  * modos mora na nota, que é outra frase e outro lugar.
  */
-function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void }) {
+/**
+ * `onRegistrar` devolve o desfecho para a linha saber se limpa o campo. Recusa MANTÉM o que
+ * a pessoa digitou — apagar o número sem explicar é a forma silenciosa de recusar.
+ * ⚠️ Desabilitar o botão NÃO é a trava: a trava é o índice único do banco. Esta linha só
+ * conta o que aconteceu.
+ */
+function RegistrarPesoRow({ onRegistrar, aviso }: {
+  onRegistrar: (v: number) => { tipo: string } | void;
+  aviso?: string | null;
+}) {
   const [v, setV] = useState('');
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
@@ -2328,8 +2408,11 @@ function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void })
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />
-        <button onClick={() => { onRegistrar(Number(v)); setV(''); }} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>Registrar peso</button>
+        <button onClick={() => { const r = onRegistrar(Number(v)); if (!r || r.tipo !== 'RECUSADO_DIA') setV(''); }} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>Registrar peso</button>
       </div>
+      {aviso && (
+        <div role="status" style={{ flexBasis: '100%', fontSize: '.85rem', color: 'rgba(234,229,219,.75)' }}>{aviso}</div>
+      )}
     </div>
   );
 }

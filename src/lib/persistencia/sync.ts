@@ -129,13 +129,45 @@ export async function carregarPesosServidor(): Promise<RegistroPeso[] | null> {
   const r = await getJson<{ pesos: RegistroPeso[] }>('/api/dados/peso');
   return r?.pesos ?? null;
 }
+export type ResultadoPesoServidor =
+  /** Primeiro registro do dia — aceito e gravado. */
+  | { tipo: 'REGISTRADO' }
+  /** Reenvio do MESMO peso no MESMO dia: nada duplicou e nada falhou. */
+  | { tipo: 'IDEMPOTENTE'; pesoKg: number }
+  /** Segunda tentativa do dia com peso diferente: o servidor RECUSOU e manteve o primeiro. */
+  | { tipo: 'RECUSADO_DIA'; pesoKg: number | null }
+  /** Rede/backend indisponível — o registro local permanece pendente, sem perda. */
+  | { tipo: 'FALHA' };
+
 /**
  * 🔒 `dataISO` vai junto (Leva D). O caso que obriga: a re-subida das pesagens que ficaram
  * só no navegador. Sem a data, todas chegariam carimbadas com o dia da sincronização e a
  * janela de 7 dias leria uma série que não aconteceu. Ausente = o banco usa `current_date`.
+ *
+ * 🔒 O retorno deixou de ser booleano (2026-09-11): com um registro por dia, "não gravou"
+ * passou a ter DOIS significados opostos — recusa legítima e falha de rede. Colapsá-los em
+ * `false` é exatamente como uma sincronização perde um registro em silêncio.
  */
-export async function registrarPesoServidor(pesoKg: number, dataISO?: string | null): Promise<boolean> {
-  return enviarJson('/api/dados/peso', 'POST', { pesoKg, ...(dataISO ? { dataISO } : {}) });
+export async function registrarPesoServidor(pesoKg: number, dataISO?: string | null): Promise<ResultadoPesoServidor> {
+  if (!supabaseConfigurado()) return { tipo: 'FALHA' };
+  const r = await fetchComRetry401('/api/dados/peso', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pesoKg, ...(dataISO ? { dataISO } : {}) }),
+  });
+  if (!r) return { tipo: 'FALHA' };
+  const corpo = await r.json().catch(() => null) as
+    { estado?: string; pesoKg?: unknown } | null;
+  if (r.status === 409 || corpo?.estado === 'RECUSADO_DIA') {
+    const kg = Number(corpo?.pesoKg);
+    return { tipo: 'RECUSADO_DIA', pesoKg: Number.isFinite(kg) ? kg : null };
+  }
+  if (!r.ok) return { tipo: 'FALHA' };
+  if (corpo?.estado === 'IDEMPOTENTE') {
+    const kg = Number(corpo?.pesoKg);
+    return { tipo: 'IDEMPOTENTE', pesoKg: Number.isFinite(kg) ? kg : pesoKg };
+  }
+  return { tipo: 'REGISTRADO' };
 }
 
 // ---- acesso (allowlist/assinatura) -------------------------------------------
