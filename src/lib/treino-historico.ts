@@ -252,14 +252,48 @@ export function lerPesosKg(): number[] {
 }
 
 /**
+ * 🔒 UM REGISTRO DE PESO POR DIA CIVIL LOCAL (decisão do autor, 2026-09-11).
+ *
+ * O "dia" é o `dataISO` já carimbado pela UI com `diaLocalISO` — a MESMA convenção que o
+ * resto do app usa para "hoje" (`hojeISO`). Não é janela móvel de 24 h nem data UTC: o
+ * `toISOString().slice(0,10)` é justamente o bug que `lib/dia-local.ts` existe para evitar.
+ *
+ * Registro LEGADO (`dataISO: null`) não tem dia conhecido e por isso nunca bloqueia.
+ */
+export function pesoDoDia(pesos: readonly RegistroPeso[], dataISO: string): RegistroPeso | null {
+  if (!dataISO) return null;
+  return pesos.find((p) => p.dataISO === dataISO) ?? null;
+}
+
+/**
+ * Resultado do registro local. `IDEMPOTENTE` é o reenvio do MESMO peso no MESMO dia (retry,
+ * duplo clique, reload): não duplica e não é erro. `RECUSADO_DIA` é a segunda tentativa com
+ * peso diferente — não grava, não substitui o primeiro e não deixa o chamador tocar o perfil.
+ */
+export type ResultadoRegistroPeso =
+  | { tipo: 'REGISTRADO'; pesos: RegistroPeso[] }
+  | { tipo: 'IDEMPOTENTE'; pesos: RegistroPeso[]; registradoKg: number }
+  | { tipo: 'RECUSADO_DIA'; pesos: RegistroPeso[]; registradoKg: number };
+
+/**
  * Acrescenta um peso à cópia local, com a data do dia. Write-through: o servidor recebe em
  * paralelo. A gravação já migra o formato — os legados são reescritos com `dataISO: null`,
  * sem perder ponto nenhum.
+ *
+ * ⚠️ A trava local é conveniência de UI; a trava REAL é o índice único do banco
+ * (`logs_peso_por_dia_unico`), que é o que alcança duas abas e dois dispositivos.
  */
-export function registrarPesoLocal(pesoKg: number, dataISO: string = hojeISO()): RegistroPeso[] {
-  const todos = [...lerPesos(), { dataISO, kg: pesoKg }];
+export function registrarPesoLocal(pesoKg: number, dataISO: string = hojeISO()): ResultadoRegistroPeso {
+  const atuais = lerPesos();
+  const existente = pesoDoDia(atuais, dataISO);
+  if (existente) {
+    return existente.kg === pesoKg
+      ? { tipo: 'IDEMPOTENTE', pesos: atuais, registradoKg: existente.kg }
+      : { tipo: 'RECUSADO_DIA', pesos: atuais, registradoKg: existente.kg };
+  }
+  const todos = [...atuais, { dataISO, kg: pesoKg }];
   try { localStorage.setItem(chaveLocal(KEY_PESOS), JSON.stringify(todos)); } catch { /* storage indisponível */ }
-  return todos;
+  return { tipo: 'REGISTRADO', pesos: todos };
 }
 
 /** Substitui a cópia local pela série do SERVIDOR (hidratação com servidor não-vazio). */
