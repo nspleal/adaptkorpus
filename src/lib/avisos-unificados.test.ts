@@ -78,7 +78,7 @@ describe('D16 · o eco sai, o fato fica dito uma vez', () => {
 });
 
 describe('D16 · diferenças legítimas são preservadas', () => {
-  it.each([{ semana: 2 }, { valor: 9 }, { valor: undefined }])('não apaga medição de outra semana, diferente ou ausente: %j', (alteracao) => {
+  it.each([{ semana: 2 as const }, { valor: 9 }, { valor: undefined }])('não apaga medição de outra semana, diferente ou ausente: %j', (alteracao) => {
     const f = fato(alteracao);
     expect(unificarAvisos(rotinaCom([f.aviso], [f]), avaliacaoCom([itemCritico()])).avisosMotor).toEqual([f.aviso]);
   });
