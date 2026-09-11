@@ -75,6 +75,20 @@ export interface ItemCritico {
   severidade: SeveridadeAviso;
   /** Frase pronta para a tela — linguagem de sugestão/educação, nunca de resultado. */
   texto: string;
+  /**
+   * 🔴 D16 (auditoria 2026-09-11) — O FATO, não só a frase. O mesmo fato ("grupo X abaixo do
+   * mínimo desta semana") era dito por dois sistemas, com números diferentes em cada um.
+   * Para decidir se duas falas são a MESMA, é preciso comparar grupo, semana, escopo, métrica
+   * e limiar — comparar texto acharia igualdade onde não há e diferença onde não importa.
+   * Ausente nos itens que não descrevem volume por grupo.
+   */
+  fato?: {
+    grupo: GrupoPrimario;
+    escopo: 'semana';
+    metrica: 'series_ponderadas';
+    limiar: 'mev' | 'mrv';
+    alvo: number;
+  };
 }
 
 export interface Avaliacao {
@@ -179,6 +193,7 @@ export function recomendacoes(placar: readonly LinhaPlacar[]): ItemCritico[] {
       codigo: 'grupo_abaixo_do_minimo',
       severidade: 'recomendacao',
       texto: `${l.rotulo} está abaixo da faixa mínima desta semana (${l.ponderado} de ${l.mev} séries).`,
+      fato: { grupo: l.grupo, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev },
     });
   }
   return itens;

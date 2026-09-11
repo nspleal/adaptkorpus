@@ -309,6 +309,24 @@ export interface DiaTreino {
  * e sai da certificação de duração. Nada é redistribuído para preencher — cardio não ocupa o
  * dia, e exercício fora do equipamento declarado continua fora.
  */
+/**
+ * 🔴 D16 — um grupo abaixo do piso de volume da semana, como FATO. `causa` distingue as duas
+ * frases que o motor pode emitir: `catalogo` aponta o equipamento que fecharia a conta (é
+ * informação que só o motor tem), `orcamento` é a frase genérica — a que o crítico repete com
+ * números. Diferenças legítimas se preservam porque estão no fato, não na prosa.
+ */
+export interface FatoCoberturaGrupo {
+  grupo: GrupoPrimario;
+  semana: SemanaCiclo;
+  escopo: 'semana';
+  metrica: 'series_ponderadas';
+  limiar: 'mev';
+  alvo: number;
+  causa: 'catalogo' | 'orcamento';
+  /** O texto exato que foi para `rotina.avisos` — a chave de remoção, sem reescrever nada. */
+  aviso: string;
+}
+
 export interface DiaNaoAtendido {
   nome: string;
   diaId?: Weekday;
@@ -375,6 +393,12 @@ export interface RotinaSemanal {
   diasCardio: DiaCardio[];
   cardio: CardioPrescricao;
   avisos: string[];
+  /**
+   * 🔴 D16 (auditoria 2026-09-11) — o FATO por trás de cada aviso de cobertura de grupo. Existe
+   * para que a apresentação possa decidir se o crítico está dizendo a MESMA coisa comparando
+   * grupo, semana, escopo, métrica e limiar — e não comparando frases.
+   */
+  fatosCobertura?: FatoCoberturaGrupo[];
   /**
    * 🔴 D14 — dias da agenda que NÃO viraram sessão. Ausente quando todos foram atendidos.
    * `dias.length + diasNaoAtendidos.length + diasCardioRecuperacao` = agenda SOLICITADA;

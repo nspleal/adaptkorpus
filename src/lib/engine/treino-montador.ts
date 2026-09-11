@@ -36,7 +36,7 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
-import type { DiaCardio, DiaNaoAtendido, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, DiaNaoAtendido, Faixa, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
@@ -497,6 +497,8 @@ export function montarRotina(
    * proíbe, e o segundo pipeline envelheceria sozinho.
    */
   function montarSaida(diasTreino: DiaTreino[], split: string): RotinaSemanal {
+    /** 🔴 D16 — fatos estruturais dos avisos de cobertura desta montagem (paralelos à prosa). */
+    const fatosCobertura: FatoCoberturaGrupo[] = [];
     // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
     // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
     // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
@@ -855,7 +857,17 @@ export function montarRotina(
           // Catálogo-limitado (não alcança nem no teto, e um item do checklist fecha) ⇒ a
           // frase que aponta o equipamento mínimo. Senão (orçamento/estrutural) ⇒ a de sempre.
           const cat = classificarCoberturaCatalogo(exercises, g, perfil.nivelExperiencia, objetivoEf, perfil.equipamento, perfil.equipamentosCasa);
-          avisos.push(cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`);
+          const texto = cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`;
+          avisos.push(texto);
+          /**
+           * 🔴 D16 — o FATO viaja junto do aviso. Sem ele, a única forma de saber se o crítico
+           * está dizendo a mesma coisa seria comparar frases — e frase igual não prova fato
+           * igual, nem frase diferente prova fato diferente.
+           */
+          fatosCobertura.push({
+            grupo: g, semana: semanaCiclo.semana, escopo: 'semana', metrica: 'series_ponderadas',
+            limiar: 'mev', alvo: piso, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
+          });
         }
       }
     }
@@ -888,6 +900,7 @@ export function montarRotina(
         : {}),
       cardio: prescricao.cardio,
       avisos,
+      ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
       ...(semanaCiclo
         ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
