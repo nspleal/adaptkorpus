@@ -27,6 +27,7 @@ import { aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
 import { medirEntregaDoFoco } from '@/lib/foco-entrega';
 import { fraseDoFoco } from '@/lib/foco-copy';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
+import { identidadesDe } from '@/lib/exercicio-identidade';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -1351,8 +1352,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
+        {/* 🔒 D18 — o plano INTEIRO vai para o registro. Antes só `diaDeHoje` ia, e ele é
+            `undefined` sempre que hoje não é dia agendado: o plano existia, mas a tela só
+            oferecia "Montar do zero". `rotinaDias` é a mesma lista que a aba Treino
+            desenha, então o que se registra é o que se vê. */}
         <RegistrarTreino
           diaHoje={diaDeHoje}
+          diasDoPlano={rotinaDias}
+          idxDeHoje={sessaoHojeIdx}
+          estadoPlano={rotinaDias.length === 0 ? 'sem-plano' : 'pronto'}
           prescricao={prescricaoEfetiva}
           progresso={progresso}
           exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
@@ -1573,6 +1581,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             banidos: new Set(perfil.preferencias?.banidos ?? []),
           }}
           grupoInicial={rotinaDias[biblioteca.d]!.slots[biblioteca.s]!.exercicio.grupoPrimario ?? null}
+          /* 🔒 D19 — a troca é a OUTRA porta para o mesmo dia: trocar o slot s por um
+             exercício que já ocupa outro slot do MESMO dia produz exatamente a duplicata
+             que a trava existe para impedir. O slot em troca fica de fora da marcação (é o
+             que está saindo) e nenhum outro dia é consultado. */
+          jaAdicionados={identidadesDe(
+            rotinaDias[biblioteca.d]!.slots
+              .filter((_, i) => i !== biblioteca.s)
+              .map((sl) => sl.exercicio),
+          )}
           onEscolher={(ex) => { const { d, s } = biblioteca; setBiblioteca(null); aplicarEx(d, s, ex); }}
           onDesbanir={(id) => desbanirExercicio(id)}
           onFechar={() => setBiblioteca(null)}

@@ -1,6 +1,17 @@
 /**
  * GERADO a partir dos dados do autor (xlsx) — NÃO editar à mão.
  * Fonte: cofre (banco-alimentos / ranking-exercicios). Validado Δ≈0.
+ *
+ * ✍️ EXCEÇÃO DECLARADA — D20, 2026-09-11: dois RÓTULOS foram desambiguados à mão. Nenhum
+ * id, movimento, grupo, padrão, equipamento, nível, tier ou instrução mudou; se o gerador
+ * rodar de novo a partir do xlsx, estas duas linhas voltam ao estado ambíguo e a mudança
+ * precisa ser reaplicada (ou feita na planilha de origem).
+ *   · e49  "Puxada alta (pulldown)"  → "Puxada alta na polia (lat pulldown)"
+ *   · e126 "Pullover na polia"       → "Pullover na polia (pulldown de braços estendidos)"
+ * Motivo: "pulldown" sozinho nomeia os DOIS na academia. e49 é puxada vertical com flexão
+ * de cotovelo (padrão `puxar`); e126 é o de braços estendidos (padrão `isolado`), como a
+ * própria instrução dele já dizia ("braços quase estendidos… num arco"). Os dois movimentos
+ * já existiam e já estavam corretos: o que se corrigiu foi o nome, não a identidade.
  */
 import type { Exercise } from './types';
 import { LATERALIDADE, LATERALIDADE_ESCOLHA } from './lateralidade';
@@ -742,7 +753,7 @@ const EXERCISES_RAW: Omit<Exercise, 'execucao'>[] = [
   },
   {
     "id": "e49",
-    "nomePt": "Puxada alta (pulldown)",
+    "nomePt": "Puxada alta na polia (lat pulldown)",
     "nomeEn": "Lat Pulldown",
     "grupoMuscular": "Costas (dorsais)",
     "grupoPrimario": "costas",
@@ -1928,8 +1939,8 @@ const EXERCISES_RAW: Omit<Exercise, 'execucao'>[] = [
   },
   {
     "id": "e126",
-    "nomePt": "Pullover na polia",
-    "nomeEn": "Cable Pullover",
+    "nomePt": "Pullover na polia (pulldown de braços estendidos)",
+    "nomeEn": "Cable Pullover (Straight-Arm Pulldown)",
     "grupoMuscular": "Dorsais, peito",
     "grupoPrimario": "costas",
     "padraoMovimento": "isolado",

@@ -68,7 +68,7 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
   e46: "BILATERAL", // Remada baixa (na polia)
   e47: "BILATERAL", // Remada na máquina
   e48: "BILATERAL", // Remada no Smith
-  e49: "BILATERAL", // Puxada alta (pulldown)
+  e49: "BILATERAL", // Puxada alta na polia (lat pulldown)
   e50: "BILATERAL", // Puxada triângulo (pegada fechada)
   e51: "UNILATERAL_DOIS_LADOS", // Puxada unilateral na polia
   e52: "BILATERAL", // Elevação lateral
@@ -148,7 +148,7 @@ export const LATERALIDADE: Record<string, ExecucaoLateralidade> = {
   e123: "BILATERAL", // Flexora no banco romano (glute-ham raise)
   e124: "BILATERAL", // Rosca scott na máquina
   e125: "BILATERAL", // Pullover
-  e126: "BILATERAL", // Pullover na polia
+  e126: "BILATERAL", // Pullover na polia (pulldown de braços estendidos)
   e127: "BILATERAL", // Cadeira abdutora
   e128: "UNILATERAL_DOIS_LADOS", // Abdução de quadril na polia
   e129: "BILATERAL", // Cadeira adutora
