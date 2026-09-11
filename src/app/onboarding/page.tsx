@@ -10,6 +10,8 @@ import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
 import { lerSessao, salvarSessao } from '@/lib/session';
+import { carregarPerfilServidor } from '@/lib/persistencia/sync';
+import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
@@ -71,6 +73,19 @@ const HEALTH: { id: string; q: string; fem?: boolean }[] = [
   { id: 'diabetes', q: 'Tem diabetes?' },
 ];
 
+/**
+ * 🔴 D11 — a correção precisa alcançar o SERVIDOR. Corrigir só o cache local deixaria a linha
+ * ilegível no `profile`, e o boot server-first traria a corrupção de volta no próximo reload:
+ * o laço outra vez. A revisão esperada é lida na hora; um conflito é reenviado UMA vez com a
+ * revisão que o servidor informou — fila e conflitos continuam sendo assunto do `/app`.
+ */
+async function subirPerfilCorrigido(perfil: PerfilResumo, consentimentos: Consentimentos): Promise<void> {
+  const atual = await carregarPerfilServidor();
+  const revisao = atual && atual !== 'sem_perfil' ? atual.revision : 0;
+  const r = await salvarPerfilServidor(perfil, revisao, undefined, consentimentos);
+  if (r.tipo === 'CONFLITO_REVISAO') await salvarPerfilServidor(perfil, r.revisaoAtual, undefined, consentimentos);
+}
+
 type Fase = 'wizard' | 'gerando' | 'resultado';
 type SimNaoV = 'sim' | 'nao';
 
@@ -79,13 +94,38 @@ export default function Onboarding() {
   // Já tem sessão? O cadastro de perfil é só da 1ª vez — manda direto pra área logada
   // (edições posteriores são só pela aba "Editar perfil"). Evita reabrir o wizard no reload/voltar.
   const [checando, setChecando] = useState(true);
+  /**
+   * 🔴 D11 (auditoria 2026-09-11) — MODO CORREÇÃO (`/onboarding?corrigir=1`).
+   *
+   * Sem ele, a recuperação do perfil ilegível seria outro laço: `/app` mandaria a pessoa para
+   * cá e o guard acima a mandaria de volta para `/app`. Aqui o questionário reescreve os
+   * ESCALARES e o resto do perfil é PRESERVADO na mesclagem — inclusive `rotinaCustom`, o
+   * treino que a pessoa montou à mão, que o `resumo` do wizard não carrega.
+   *
+   * ⚠️ `window.location.search` em vez de `useSearchParams`: a leitura acontece dentro do
+   * efeito (cliente), e assim a página não passa a exigir uma fronteira de Suspense no build.
+   */
+  const [modoCorrecao, setModoCorrecao] = useState(false);
+  const perfilPreservado = useRef<PerfilResumo | null>(null);
   useEffect(() => {
     // 🔒 Escopo primeiro (ver `escopo-local.ts`): sem ele, `lerSessao` leria a chave sem
     // sufixo — que pode ser de outra conta que usou este navegador.
     void resolverEscopoLocal().then(() => {
-      if (lerSessao()) router.replace('/app');
-      else setChecando(false);
+      if (lerSessao()) {
+        // 🔴 D11 — o ÚNICO caso em que ter sessão não devolve a pessoa para `/app`: ela veio
+        // de lá porque o perfil não pôde ser lido. Mandá-la de volta seria o laço outra vez.
+        const corrigindo = new URLSearchParams(window.location.search).get('corrigir') === '1';
+        if (!corrigindo) { router.replace('/app'); return; }
+        // Releitura deliberada: o guard acima é a ordem que `escopo-local.test` trava.
+        const salvo = lerSessao()!;
+        perfilPreservado.current = salvo;
+        setModoCorrecao(true);
+        preencherComOQueFoiLido(salvo);
+      }
+      setChecando(false);
     });
+    // Só no mount: reabrir este efeito sobrescreveria o que a pessoa já digitou.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const [terms, setTerms] = useState<[boolean, boolean, boolean]>([false, false, false]);
@@ -111,6 +151,39 @@ export default function Onboarding() {
   const toggleDia = (w: Weekday) => setTreinoDias((p) => (p.includes(w) ? p.filter((x) => x !== w) : [...p, w].sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))));
   const addFood = (id: string) => setNaoCurto((p) => (p.includes(id) ? p : [...p, id]));
   const removeFood = (id: string) => setNaoCurto((p) => p.filter((x) => x !== id));
+
+  /**
+   * 🔒 D11 — só o que FOI LIDO volta para a tela. Campo marcado em `camposInvalidos` fica com
+   * o default do wizard, para a pessoa escolher de novo: pré-preencher um campo ilegível
+   * seria mostrar como escolha dela um valor que o app não conseguiu ler.
+   */
+  function preencherComOQueFoiLido(p: PerfilResumo) {
+    const ilegivel = new Set(p.camposInvalidos ?? []);
+    const ok = (campo: string) => !ilegivel.has(campo);
+    if (ok('sexo')) setSexo(p.sexo);
+    if (ok('idade')) setIdade(String(p.idade));
+    if (ok('alturaCm')) setAltura(String(p.alturaCm));
+    if (ok('pesoKg')) setPeso(String(p.pesoKg));
+    if (ok('objetivo')) setObjetivo(p.objetivo);
+    if (ok('nivelAtividade')) setAtividade(p.nivelAtividade);
+    if (ok('nivelExperiencia')) setExperiencia(p.nivelExperiencia);
+    if (ok('equipamento')) setLocal(p.equipamento === 'academia' ? 'academia' : 'casa');
+    if (ok('equipamentosCasa') && p.equipamentosCasa) setEquipsCasa([...p.equipamentosCasa]);
+    if (ok('treinoDias') && p.treinoDias?.length) setTreinoDias([...p.treinoDias]);
+    if (ok('tempoPorSessaoMin')) setTempo(p.tempoPorSessaoMin);
+    if (ok('preferencia')) setPadrao(p.preferencia ?? '');
+    if (p.orcamento != null) setOrcamento(p.orcamento);
+    if (ok('alergenos')) setAlergias([...p.alergenos]);
+    setNaoCurto([...(p.naoCurto ?? [])]);
+    if (ok('flagsSaude')) {
+      const f = p.flagsSaude;
+      setHealthAns({
+        gestante: f.gestacaoAmamentacao ? 'sim' : 'nao', renal: f.renal ? 'sim' : 'nao',
+        cardiaca: f.cardiaca ? 'sim' : 'nao', lesao: f.lesao ? 'sim' : 'nao',
+        diabetes: f.diabetes ? 'sim' : 'nao',
+      });
+    }
+  }
 
   const [step, setStep] = useState(0);
   const [fase, setFase] = useState<Fase>('wizard');
@@ -153,7 +226,17 @@ export default function Onboarding() {
     const restricoes = { alergenos: p.alergenos as Alergeno[], preferencia: p.preferenciaAlimentar ?? null, excluirAlimentoIds: naoCurto, orcamento };
     const perfil: PerfilUsuario = { sexo: p.sexo, pesoKg: p.pesoKg, alturaCm: p.alturaCm, idade: p.idade, nivelAtividade: p.nivelAtividade, objetivo: p.objetivo, flagsSaude: p.flagsSaude };
     const d = gerarDieta(perfil, { recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED, restricoes });
-    const resumo: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], orcamento, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
+    const doWizard: PerfilResumo = { sexo: p.sexo, idade: p.idade, alturaCm: p.alturaCm, pesoKg: p.pesoKg, objetivo: p.objetivo, nivelAtividade: p.nivelAtividade, nivelExperiencia: experiencia, equipamento: local, preferencia: p.preferenciaAlimentar ?? null, alergenos: p.alergenos as Alergeno[], orcamento, diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, treinoDias, naoCurto, pratosCansados: [], flagsSaude: p.flagsSaude, equipamentosCasa: local === 'casa' ? equipsCasa : [] };
+    /**
+     * 🔒 D11 — MODO CORREÇÃO: o que se grava é o perfil ANTERIOR com os escalares reescritos
+     * por cima. Gravar só o que o wizard coleta apagaria `rotinaCustom`, `preferencias`,
+     * `foco`, `favoritos` e a âncora do mesociclo — nada disso passa pelo questionário.
+     * Fora da correção, `resumo` é exatamente o que sempre foi.
+     */
+    const anterior = perfilPreservado.current;
+    const resumo: PerfilResumo = anterior
+      ? { ...anterior, ...doWizard, camposInvalidos: undefined, avisosHidratacao: undefined }
+      : doWizard;
     setDieta(d);
 
     setFase('gerando'); setGenPct(0); window.scrollTo(0, 0);
@@ -188,7 +271,9 @@ export default function Onboarding() {
           // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
           // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
           // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
-          void salvarPerfilServidor(resumo, 0, undefined, { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] });
+          const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
+          if (anterior) void subirPerfilCorrigido(resumo, consent);
+          else void salvarPerfilServidor(resumo, 0, undefined, consent);
           // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
           if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
           else router.replace('/app');
@@ -210,6 +295,12 @@ export default function Onboarding() {
         <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px 56px', animation: `evkScreenIn .5s ${EASE}` }}>
           <div style={{ width: '100%', maxWidth: 620 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 30 }}><Logo size={26} /><Marca size="1.05rem" /></div>
+            {modoCorrecao && (
+              <p role="status" style={{ margin: '0 0 22px', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(234,179,8,.45)', background: 'rgba(234,179,8,.08)', fontSize: '.9rem', lineHeight: 1.55, color: 'rgba(234,229,219,.85)' }}>
+                Estamos <strong>conferindo seus dados</strong>. O que pôde ser lido já está preenchido; confirme ou corrija e seu
+                plano volta. Seu treino montado e suas preferências continuam salvos.
+              </p>
+            )}
 
             {/* stepper */}
             <div style={{ marginBottom: 30 }}>

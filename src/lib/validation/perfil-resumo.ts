@@ -6,6 +6,7 @@
  */
 import { z } from 'zod';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
+import { diasPadrao } from '@/lib/semana';
 
 /**
  * 🔴 Grupos primários (12 valores anatômicos — DF 2026-07-27). Espelho de `GrupoPrimario`
@@ -213,3 +214,188 @@ export const consentimentosSchema = z.object({
   aceiteTermos: z.boolean(),
   aceiteLgpd: z.boolean(),
 });
+
+/**
+ * 🔴 D11 (auditoria 2026-09-11, snapshot `a40f8af`) — SANEAMENTO DOS CAMPOS ESCALARES.
+ *
+ * D6 fechou os QUATRO blocos de treino e deixou os escalares crus nos dois caminhos de
+ * hidratação. Medido: `nivelExperiencia: "profissional"`, `objetivo: "hipertrofia"` ou
+ * `flagsSaude: null` lançavam `TypeError` dentro de `montar()` e o app caía no error
+ * boundary EM LAÇO ("Tentar de novo" relê o mesmo blob); `treinoDias` com um valor fora do
+ * domínio encolhia a agenda de 4 para 1 dia e `tempoPorSessaoMin: 1e9` certificava verde —
+ * os dois com `avisosHidratacao = 0`.
+ *
+ * 🔒 A régua NÃO é nova: é o próprio `perfilResumoSchema` (o contrato do PUT), campo a campo.
+ * Três políticas, e a diferença entre elas é sobre o que se pode afirmar sem inventar:
+ *
+ *  · ESSENCIAL — o motor não tem como seguir sem o campo e NÃO existe valor legítimo a
+ *    assumir. O valor ilegível é PRESERVADO como está (nada é apagado), o perfil é marcado
+ *    em `camposInvalidos` e a GERAÇÃO É SUSPENSA com oferta de correção. Assumir "saudável",
+ *    "iniciante" ou 240 min aqui seria esconder a corrupção atrás de um plano plausível.
+ *  · FAIXA DO GATE — `idade`/`alturaCm`/`pesoKg` têm dono a jusante: o gate de saúde já
+ *    ROTEIA fora de faixa (e é assim que um perfil legado de 17 anos continua sendo roteado,
+ *    não "corrompido"). Aqui a régua é só a FORMA (número finito) — a mesma decisão que a
+ *    `rotinaCustom` já tomou em D6.
+ *  · RECUPERÁVEL — lista cujos itens se avaliam um a um: o item ilegível sai, os irmãos
+ *    ficam, e a perda é DITA. Nenhuma lista é apagada inteira por um item.
+ */
+
+/** Rótulos de tela dos campos do perfil (a UI não redigita nomes de campo). */
+export const ROTULOS_CAMPOS_PERFIL: Record<string, string> = {
+  sexo: 'sexo',
+  idade: 'idade',
+  alturaCm: 'altura',
+  pesoKg: 'peso',
+  objetivo: 'objetivo',
+  nivelAtividade: 'nível de atividade',
+  nivelExperiencia: 'experiência de treino',
+  equipamento: 'onde você treina',
+  tempoPorSessaoMin: 'tempo por sessão',
+  treinoDias: 'dias de treino',
+  diasDisponiveis: 'dias disponíveis',
+  preferencia: 'preferência alimentar',
+  alergenos: 'alergias',
+  flagsSaude: 'condições de saúde',
+  equipamentosCasa: 'equipamento de casa',
+  naoCurto: 'alimentos que você não curte',
+  favoritos: 'exercícios favoritos',
+  pratosCansados: 'pratos em descanso',
+  orcamento: 'orçamento da dieta',
+  cardioFavorito: 'modalidade de cardio',
+  tecnicasAvancadas: 'técnicas avançadas',
+  modoForca: 'modo força',
+  mesocicloInicio: 'início do ciclo',
+  deloadAte: 'semana de alívio',
+  reconhecidoEm: 'registro de pausa',
+};
+
+/**
+ * ESSENCIAIS pela régua de ESCRITA do próprio app. Um valor fora daqui não foi gravado por
+ * nenhuma versão deste app — só corrupção, edição manual do storage ou dado estrangeiro.
+ */
+const ESCALARES_ESSENCIAIS = {
+  sexo: perfilResumoSchema.shape.sexo,
+  objetivo: perfilResumoSchema.shape.objetivo,
+  nivelAtividade: perfilResumoSchema.shape.nivelAtividade,
+  nivelExperiencia: perfilResumoSchema.shape.nivelExperiencia,
+  equipamento: perfilResumoSchema.shape.equipamento,
+  tempoPorSessaoMin: perfilResumoSchema.shape.tempoPorSessaoMin,
+  flagsSaude: perfilResumoSchema.shape.flagsSaude,
+  /** Lista de SEGURANÇA: descartar um alergênio em silêncio é pior do que suspender. */
+  alergenos: perfilResumoSchema.shape.alergenos,
+  /** Ausência ≡ onívoro (é o que `null` já significa); valor fora do par é corrupção. */
+  preferencia: perfilResumoSchema.shape.preferencia.optional().transform((v) => v ?? null),
+} as const;
+
+/** 🔒 FORMA aqui, FAIXA no gate de saúde — que já ROTEIA e tem a frase para explicar. */
+const NUMEROS_COM_GATE = {
+  idade: z.number().finite(),
+  alturaCm: z.number().finite(),
+  pesoKg: z.number().finite(),
+} as const;
+
+/** Item a item: o ilegível sai, o irmão fica. Nenhuma lista some inteira por um item. */
+const LISTAS_RECUPERAVEIS = {
+  equipamentosCasa: perfilResumoSchema.shape.equipamentosCasa.unwrap().element,
+  naoCurto: z.string(),
+  favoritos: z.string(),
+  pratosCansados: z.object({ id: z.string(), ate: z.string() }),
+} as const;
+
+/** Opcionais: presente e ilegível ⇒ some (a ausência já é um estado que o motor trata). */
+const OPCIONAIS_DESCARTAVEIS = {
+  orcamento: perfilResumoSchema.shape.orcamento,
+  cardioFavorito: perfilResumoSchema.shape.cardioFavorito,
+  tecnicasAvancadas: perfilResumoSchema.shape.tecnicasAvancadas,
+  modoForca: perfilResumoSchema.shape.modoForca,
+  mesocicloInicio: perfilResumoSchema.shape.mesocicloInicio,
+  deloadAte: perfilResumoSchema.shape.deloadAte,
+  reconhecidoEm: perfilResumoSchema.shape.reconhecidoEm,
+} as const;
+
+const DIA_DA_SEMANA = perfilResumoSchema.shape.treinoDias.element;
+
+/** Aviso da SUSPENSÃO — diz o que houve, que nada foi apagado, e que há conserto. */
+export const AVISO_PERFIL_SUSPENSO =
+  'Não foi possível ler alguns dados do seu perfil, e por isso não geramos um plano com informação incompleta. '
+  + 'Nada foi apagado: corrija os campos indicados e o plano volta.';
+
+const avisoRecuperado = (rotulo: string) =>
+  `Não foi possível recuperar todas as suas escolhas de ${rotulo}. Mantivemos o que pôde ser lido; confira essas opções antes de treinar.`;
+
+/**
+ * Hidratação COMPLETA do perfil: os quatro blocos de treino (D6) + escalares, listas e
+ * opcionais (D11). Porta única das DUAS bordas que recebem dado cru — o blob do
+ * `localStorage` (`session · normalizarPerfil`) e o jsonb da linha `profile`
+ * (`persistencia/perfil-profile · linhaParaPerfil`).
+ */
+export function sanearPerfilHidratado<T extends Record<string, unknown>>(perfil: T): T {
+  const comBlocos = sanearBlocosDeTreino(perfil);
+  const saneado: Record<string, unknown> = { ...comBlocos };
+  // Marca antiga nunca sobrevive à releitura: quem decide é esta passagem, sempre.
+  delete saneado.camposInvalidos;
+  const invalidos = new Set<string>();
+  const avisos = new Set<string>(
+    Array.isArray(comBlocos.avisosHidratacao)
+      ? comBlocos.avisosHidratacao.filter((v): v is string => typeof v === 'string')
+      : [],
+  );
+
+  for (const [chave, schema] of Object.entries({ ...ESCALARES_ESSENCIAIS, ...NUMEROS_COM_GATE })) {
+    const r = schema.safeParse(saneado[chave]);
+    // 🔒 O valor ILEGÍVEL FICA no perfil. Apagá-lo tiraria da pessoa a única pista do que
+    // corrigir — e o campo apagado voltaria ao servidor no próximo save.
+    if (r.success) saneado[chave] = r.data;
+    else invalidos.add(chave);
+  }
+
+  for (const [chave, item] of Object.entries(LISTAS_RECUPERAVEIS)) {
+    const bruto = saneado[chave];
+    if (bruto == null) continue;
+    if (!Array.isArray(bruto)) {
+      saneado[chave] = [];
+      avisos.add(avisoRecuperado(ROTULOS_CAMPOS_PERFIL[chave] ?? chave));
+      continue;
+    }
+    const mantidos = bruto.flatMap((v) => {
+      const r = item.safeParse(v);
+      return r.success ? [r.data] : [];
+    });
+    if (mantidos.length !== bruto.length) avisos.add(avisoRecuperado(ROTULOS_CAMPOS_PERFIL[chave] ?? chave));
+    saneado[chave] = mantidos;
+  }
+
+  for (const [chave, schema] of Object.entries(OPCIONAIS_DESCARTAVEIS)) {
+    if (saneado[chave] == null) continue;
+    if (schema.safeParse(saneado[chave]).success) continue;
+    delete saneado[chave];
+    avisos.add(avisoRecuperado(ROTULOS_CAMPOS_PERFIL[chave] ?? chave));
+  }
+
+  // --- Agenda: os dias pedidos são preservados; o que não é dia da semana é DITO. --------
+  const diasBrutos = saneado.treinoDias;
+  const diasLidos = Array.isArray(diasBrutos)
+    ? diasBrutos.flatMap((v) => { const r = DIA_DA_SEMANA.safeParse(v); return r.success ? [r.data] : []; })
+    : [];
+  const perdeuDia = Array.isArray(diasBrutos) ? diasLidos.length !== diasBrutos.length : diasBrutos != null;
+  const contagem = z.number().int().min(1).max(7).safeParse(saneado.diasDisponiveis);
+  if (diasLidos.length > 0) {
+    saneado.treinoDias = diasLidos;
+    saneado.diasDisponiveis = diasLidos.length;
+  } else if (contagem.success) {
+    // Retrocompat DECLARADA (sessões antigas não tinham `treinoDias`): a contagem válida
+    // deriva a agenda padrão — a MESMA regra que `session · normalizarPerfil` já aplicava.
+    saneado.treinoDias = diasPadrao(contagem.data);
+    saneado.diasDisponiveis = contagem.data;
+  } else {
+    invalidos.add('treinoDias');
+  }
+  if (perdeuDia) avisos.add(avisoRecuperado(ROTULOS_CAMPOS_PERFIL.treinoDias!));
+
+  if (invalidos.size > 0) avisos.add(AVISO_PERFIL_SUSPENSO);
+  return {
+    ...(saneado as T),
+    ...(invalidos.size > 0 ? { camposInvalidos: [...invalidos].sort() } : {}),
+    ...(avisos.size > 0 ? { avisosHidratacao: [...avisos] } : {}),
+  };
+}

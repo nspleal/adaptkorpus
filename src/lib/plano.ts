@@ -5,13 +5,14 @@
  * perfil). Puro: sem 'use client', sem relógio próprio (o retorno de 21 dias dos pratos
  * cansados é resolvido por `pratosCansadosAtivos`, que recebe a data de quem chama).
  */
-import { gerarDieta, gerarTreino } from '@/lib/engine';
+import { avaliarGateSaude, avaliarGateTreino, gerarDieta, gerarTreino } from '@/lib/engine';
 import type { OpcoesSemana, PerfilTreino, PerfilUsuario, ResultadoMotor, ResultadoTreino } from '@/lib/engine';
 import type { ExecucaoLateralidade } from '@/lib/data/types';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { pratosCansadosAtivos } from '@/lib/rotacao-pratos';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { Weekday } from '@/lib/semana';
+import { AVISO_PERFIL_SUSPENSO, ROTULOS_CAMPOS_PERFIL } from '@/lib/validation/perfil-resumo';
 
 export function recomputarPlano(
   perfil: PerfilResumo,
@@ -91,9 +92,41 @@ export function recomputarPlano(
     // 🏃 C2: a modalidade escolhida alimenta o slot do dia excedente de cardio.
     ...(perfil.cardioFavorito ? { cardioFavorito: perfil.cardioFavorito } : {}),
   };
+  /**
+   * 🔴 D11 (auditoria 2026-09-11) — A GERAÇÃO É SUSPENSA, NÃO ADIVINHADA.
+   *
+   * `camposInvalidos` vem da hidratação (`sanearPerfilHidratado`) e lista os campos
+   * ESSENCIAIS que não puderam ser lidos. Aqui não se escolhe um valor por conta própria:
+   * "iniciante", "saudável" ou 240 min/sessão devolveriam um plano plausível construído sobre
+   * dado que ninguém configurou — com selo verde de certificação, como foi medido.
+   *
+   * 🔒 A suspensão reusa o terminal que o motor já tem para "não gera plano" (`ROTEAR`), com
+   * o motivo nomeando os campos. Os `derivados` vêm do gate REAL — nada é inventado; o que se
+   * substitui é só o terminal. O perfil não é apagado, e quem oferece a correção é a tela.
+   *
+   * ⚠️ Fica AQUI, na borda do app, e não no gate do motor: `gerarTreino` com
+   * `tempoPorSessaoMin: 1` é um contrato legítimo do motor (testado em
+   * `c1-caminho-publico`), e roteá-lo dentro do engine trocaria um defeito por uma regressão.
+   */
+  const camposInvalidos = (perfil as { camposInvalidos?: string[] }).camposInvalidos ?? [];
+  if (camposInvalidos.length > 0) {
+    const nomeados = camposInvalidos.map((c) => ROTULOS_CAMPOS_PERFIL[c] ?? c).join(', ');
+    const motivos = [`dados do perfil ilegíveis: ${nomeados}`];
+    const avisos = [AVISO_PERFIL_SUSPENSO];
+    return {
+      dieta: {
+        gate: { ...avaliarGateSaude(perfilU), comportamento: 'ROTEAR', motivos, avisos },
+        plano: null,
+        cardapio: null,
+      },
+      treino: {
+        gate: { ...avaliarGateTreino(perfilT), comportamento: 'ROTEAR', motivos, avisos },
+        prescricao: null,
+        rotina: null,
+      },
+    };
+  }
   // Preferências relaxáveis na geração do cardápio: "não curto" (nível do alimento) +
-  // "Cansei deste prato" (nível do prato, só os ainda em descanso — o retorno de 21 dias é
-  // resolvido aqui, fora do motor). Ambas cedem antes de deixar o cardápio sem fechar.
   const restricoes = {
     alergenos: perfil.alergenos, preferencia: perfil.preferencia,
     excluirAlimentoIds: perfil.naoCurto ?? [],

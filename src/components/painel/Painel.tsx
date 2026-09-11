@@ -77,6 +77,12 @@ import { useAbaVoltavel, useCamadaVoltavel, useVoltarDoNavegador } from '@/lib/u
 export interface PerfilResumo {
   /** Avisos de recuperação do perfil; não são parâmetros do motor nem dados de saúde. */
   avisosHidratacao?: string[];
+  /**
+   * 🔴 D11 — campos ESSENCIAIS que a hidratação não conseguiu ler. Presente e não-vazio ⇒ a
+   * geração fica SUSPENSA (`lib/plano`) e a tela oferece a correção. Não é dado de saúde: são
+   * nomes de campo. O valor ilegível continua no perfil — nada é apagado.
+   */
+  camposInvalidos?: string[];
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
   preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
