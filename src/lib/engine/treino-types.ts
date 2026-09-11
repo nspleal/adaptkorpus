@@ -322,6 +322,7 @@ export interface FatoCoberturaGrupo {
   metrica: 'series_ponderadas';
   limiar: 'mev';
   alvo: number;
+  valor?: number;
   causa: 'catalogo' | 'orcamento';
   /** O texto exato que foi para `rotina.avisos` — a chave de remoção, sem reescrever nada. */
   aviso: string;

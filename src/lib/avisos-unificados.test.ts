@@ -24,7 +24,7 @@ import { recomendacoesVisiveis } from '@/components/painel/EditorTreino';
 
 const fato = (over: Partial<FatoCoberturaGrupo> = {}): FatoCoberturaGrupo => ({
   grupo: 'ombros', semana: 1, escopo: 'semana', metrica: 'series_ponderadas',
-  limiar: 'mev', alvo: 13, causa: 'orcamento',
+  limiar: 'mev', alvo: 13, valor: 10, causa: 'orcamento',
   aviso: 'Atenção: o volume de ombros ficou abaixo do mínimo desta semana.',
   ...over,
 });
@@ -32,7 +32,7 @@ const fato = (over: Partial<FatoCoberturaGrupo> = {}): FatoCoberturaGrupo => ({
 const itemCritico = (over: Partial<ItemCritico> = {}): ItemCritico => ({
   codigo: 'grupo_abaixo_do_minimo', severidade: 'recomendacao',
   texto: 'Ombros está abaixo da faixa mínima desta semana (10 de 13 séries).',
-  fato: { grupo: 'ombros', escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: 13 },
+  fato: { grupo: 'ombros', semana: 1, valor: 10, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: 13 },
   ...over,
 });
 
@@ -78,6 +78,10 @@ describe('D16 · o eco sai, o fato fica dito uma vez', () => {
 });
 
 describe('D16 · diferenças legítimas são preservadas', () => {
+  it.each([{ semana: 2 }, { valor: 9 }, { valor: undefined }])('não apaga medição de outra semana, diferente ou ausente: %j', (alteracao) => {
+    const f = fato(alteracao);
+    expect(unificarAvisos(rotinaCom([f.aviso], [f]), avaliacaoCom([itemCritico()])).avisosMotor).toEqual([f.aviso]);
+  });
   it('a frase de CATÁLOGO diz a causa e sobrevive mesmo com o crítico falando do grupo', () => {
     const f = fato({
       causa: 'catalogo',
@@ -123,7 +127,7 @@ describe('D16 · no plano de verdade', () => {
       holdSeg: d.slots.map((s) => s.holdSeg),
     })),
     {
-      nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
+      nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo, semana: 1,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin,
       diasDaSemanaIdx: perfil.treinoDias!.map((w) => ORDEM_SEMANA.indexOf(w)),
       seriesPadrao: 2,

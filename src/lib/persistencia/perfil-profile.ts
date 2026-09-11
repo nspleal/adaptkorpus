@@ -154,7 +154,8 @@ export function linhaComConsentimentos<T extends object>(
 
 /** Linha de `profile` → `PerfilResumo` (inverso fiel de `perfilParaLinha`). */
 export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
-  const pref = row.preferencias;
+  const pref = row.preferencias && typeof row.preferencias === 'object' && !Array.isArray(row.preferencias)
+    ? row.preferencias : {} as PreferenciasPerfil;
   /**
    * 🔴 D6 (2026-09-10) — o jsonb `preferencias` de uma linha LEGADA guarda qualquer forma, e
    * este é o inverso do PUT: o que sai daqui vai direto ao motor. `sanearPerfilHidratado`

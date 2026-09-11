@@ -37,10 +37,11 @@ export interface AvisosUnificados {
 /** Dois itens falam do mesmo fato? A comparação é campo a campo, e exige TODOS iguais. */
 function mesmoFato(
   a: NonNullable<ItemCritico['fato']>,
-  b: { grupo: string; escopo: string; metrica: string; limiar: string; alvo: number },
+  b: { grupo: string; semana: number; valor?: number; escopo: string; metrica: string; limiar: string; alvo: number },
 ): boolean {
   return a.grupo === b.grupo && a.escopo === b.escopo && a.metrica === b.metrica
-    && a.limiar === b.limiar && a.alvo === b.alvo;
+    && a.limiar === b.limiar && a.alvo === b.alvo
+    && a.semana === b.semana && Number.isFinite(a.valor) && a.valor === b.valor;
 }
 
 export function unificarAvisos(

@@ -130,7 +130,9 @@ describe('a porta do modo diário está aberta (o defeito vivo da Leva 2)', () =
   it('o onboarding CRIA sessão no ROTEAR — o `salvarSessao` não fica dentro do `else`', () => {
     const src = semComentarios('src/app/onboarding/page.tsx');
     // O ramo do gate agora só escolhe a TELA; a sessão é salva antes, para todos.
-    expect(src).toMatch(/salvarSessao\(resumo\);[\s\S]{0,400}comportamento === 'ROTEAR'/);
+    // A correção conserva também a entrada do plano; o salvamento continua
+    // incondicional em relação ao ramo ROTEAR.
+    expect(src).toMatch(/salvarSessao\(resumo, entradaCorrigida\);[\s\S]{0,400}comportamento === 'ROTEAR'/);
     // A regressão que este teste existe para pegar: voltar a condicionar a criação da conta.
     expect(src).not.toMatch(/ROTEAR'\)\s*\{\s*setFase\('resultado'\);\s*\}\s*else\s*\{[\s\S]{0,200}salvarSessao/);
   });

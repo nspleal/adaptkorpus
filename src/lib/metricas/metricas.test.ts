@@ -216,7 +216,7 @@ describe('🔑 CALL SITES — cada evento sai do ato que ele mede', () => {
   });
 
   it('`plano_gerado` sai junto do plano, no onboarding', () => {
-    expect(onboarding).toMatch(/registrarEvento\('plano_gerado'[\s\S]{0,400}salvarSessao\(resumo\);/);
+    expect(onboarding).toMatch(/registrarEvento\('plano_gerado'[\s\S]{0,400}salvarSessao\(resumo, entradaCorrigida\);/);
   });
 
   it('`refeicao_marcada` sai no ato da marcação', () => {

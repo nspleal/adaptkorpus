@@ -83,6 +83,8 @@ export interface ItemCritico {
    * Ausente nos itens que não descrevem volume por grupo.
    */
   fato?: {
+    semana?: number;
+    valor?: number;
     grupo: GrupoPrimario;
     escopo: 'semana';
     metrica: 'series_ponderadas';
@@ -112,6 +114,7 @@ export interface Avaliacao {
 }
 
 export interface ContextoCritico {
+  semana?: number;
   nivel: NivelExperiencia;
   objetivo: Objetivo;
   /** Minutos por sessão do perfil — o aviso de sessão longa compara com isto. */
@@ -174,7 +177,7 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
  * E grupo abaixo ⇒ sugere mover UM exercício. Linguagem de sugestão ("tente"), nunca de
  * prescrição nem de resultado.
  */
-export function recomendacoes(placar: readonly LinhaPlacar[]): ItemCritico[] {
+export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number): ItemCritico[] {
   const itens: ItemCritico[] = [];
   const acima = [...placar].filter((l) => l.status === 'acima_mrv').sort((a, b) => b.ponderado - a.ponderado);
   const abaixo = [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
@@ -193,7 +196,7 @@ export function recomendacoes(placar: readonly LinhaPlacar[]): ItemCritico[] {
       codigo: 'grupo_abaixo_do_minimo',
       severidade: 'recomendacao',
       texto: `${l.rotulo} está abaixo da faixa mínima desta semana (${l.ponderado} de ${l.mev} séries).`,
-      fato: { grupo: l.grupo, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev },
+      fato: { grupo: l.grupo, semana, valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev },
     });
   }
   return itens;
@@ -281,7 +284,7 @@ export function avisos(
 /** A avaliação completa — o que a tela consome, no editor e no plano salvo (DF②). */
 export function avaliarSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): Avaliacao {
   const placar = placarDaSemana(dias, ctx);
-  return { placar, recomendacoes: recomendacoes(placar), avisos: avisos(dias, placar, ctx) };
+  return { placar, recomendacoes: recomendacoes(placar, ctx.semana), avisos: avisos(dias, placar, ctx) };
 }
 
 /** Compara resultados sem depender da identidade do objeto nem de serialização incidental. */

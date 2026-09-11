@@ -1176,6 +1176,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const criticoPlano: Avaliacao | null = (() => {
     if (rotinaDias.length === 0 || !prescricaoEfetiva) return null;
     const ctx = {
+      semana: ciclo.semanaEfetiva,
       nivel: perfil.nivelExperiencia,
       objetivo: prescricaoEfetiva.objetivoEfetivo ?? perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin,

@@ -866,7 +866,7 @@ export function montarRotina(
            */
           fatosCobertura.push({
             grupo: g, semana: semanaCiclo.semana, escopo: 'semana', metrica: 'series_ponderadas',
-            limiar: 'mev', alvo: piso, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
+            limiar: 'mev', alvo: piso, valor: ponderado.get(g) ?? 0, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
           });
         }
       }

@@ -230,8 +230,10 @@ describe('D11 · a recuperação é utilizável e NÃO repete o mesmo erro', () 
   });
 
   it('a correção preserva o perfil anterior e alcança o servidor (senão o reload traz a corrupção de volta)', () => {
-    expect(onboarding).toMatch(/\{ \.\.\.anterior, \.\.\.doWizard, camposInvalidos: undefined, avisosHidratacao: undefined \}/);
-    expect(onboarding).toMatch(/subirPerfilCorrigido\(resumo, consent\)/);
+    // A mescla e o CAS têm testes comportamentais em recuperacao-perfil.test.ts.
+    // Aqui guardamos a ligação com a tela e a espera antes de gravar o cache.
+    expect(onboarding).toContain('mesclarPerfilCorrigido(anterior, doWizard)');
+    expect(onboarding).toMatch(/await persistirCorrecao\([\s\S]*if \(!resultado.ok\)[\s\S]*return;[\s\S]*salvarSessao\(resumo, entradaCorrigida\)/);
   });
 
   it('o perfil corrigido volta a gerar plano (a saída do laço existe de fato)', () => {

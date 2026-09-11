@@ -9,9 +9,11 @@ import type { EquipamentoCasa, Alergeno, EquipamentoDisp } from '@/lib/data/type
 import { FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import { consentimentoSchema, perfilSchema } from '@/lib/validation/profile';
 import { type PerfilResumo } from '@/components/painel/Painel';
-import { lerSessao, salvarSessao } from '@/lib/session';
+import { lerSessao, lerSessaoCompleta, salvarSessao } from '@/lib/session';
 import { carregarPerfilServidor } from '@/lib/persistencia/sync';
-import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
+import { carregarFonteCorrecao, mesclarPerfilCorrigido, persistirCorrecao, type FonteCorrecao } from '@/lib/persistencia/recuperacao-perfil';
+import { supabaseConfigurado } from '@/lib/supabase/env';
+import { ROTULOS_CAMPOS_PERFIL } from '@/lib/validation/perfil-resumo';
 import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverEscopoLocal } from '@/lib/escopo-local';
 import { salvarPerfilServidor } from '@/lib/persistencia/sync';
@@ -73,18 +75,11 @@ const HEALTH: { id: string; q: string; fem?: boolean }[] = [
   { id: 'diabetes', q: 'Tem diabetes?' },
 ];
 
-/**
- * 🔴 D11 — a correção precisa alcançar o SERVIDOR. Corrigir só o cache local deixaria a linha
- * ilegível no `profile`, e o boot server-first traria a corrupção de volta no próximo reload:
- * o laço outra vez. A revisão esperada é lida na hora; um conflito é reenviado UMA vez com a
- * revisão que o servidor informou — fila e conflitos continuam sendo assunto do `/app`.
- */
-async function subirPerfilCorrigido(perfil: PerfilResumo, consentimentos: Consentimentos): Promise<void> {
-  const atual = await carregarPerfilServidor();
-  const revisao = atual && atual !== 'sem_perfil' ? atual.revision : 0;
-  const r = await salvarPerfilServidor(perfil, revisao, undefined, consentimentos);
-  if (r.tipo === 'CONFLITO_REVISAO') await salvarPerfilServidor(perfil, r.revisaoAtual, undefined, consentimentos);
-}
+const ETAPA_DO_CAMPO: Record<string, number> = {
+  sexo: 1, idade: 1, alturaCm: 1, pesoKg: 1, flagsSaude: 2, objetivo: 3,
+  nivelAtividade: 4, nivelExperiencia: 5, equipamento: 6, tempoPorSessaoMin: 6,
+  treinoDias: 6, diasDisponiveis: 6, alergenos: 7, preferencia: 7,
+};
 
 type Fase = 'wizard' | 'gerando' | 'resultado';
 type SimNaoV = 'sim' | 'nao';
@@ -107,23 +102,32 @@ export default function Onboarding() {
    */
   const [modoCorrecao, setModoCorrecao] = useState(false);
   const perfilPreservado = useRef<PerfilResumo | null>(null);
+  const fonteCorrecao = useRef<FonteCorrecao | null>(null);
+  const [erroLeitura, setErroLeitura] = useState(false);
+  const [camposAConfirmar, setCamposAConfirmar] = useState<string[]>([]);
   useEffect(() => {
     // 🔒 Escopo primeiro (ver `escopo-local.ts`): sem ele, `lerSessao` leria a chave sem
     // sufixo — que pode ser de outra conta que usou este navegador.
-    void resolverEscopoLocal().then(() => {
-      if (lerSessao()) {
+    let vivo = true;
+    void resolverEscopoLocal().then(async () => {
+      const corrigindo = new URLSearchParams(window.location.search).get('corrigir') === '1';
+      if (corrigindo) {
+        setModoCorrecao(true);
+        const fonte = await carregarFonteCorrecao(lerSessaoCompleta(), supabaseConfigurado(), carregarPerfilServidor);
+        if (!vivo) return;
+        if (!fonte) { setErroLeitura(true); setChecando(false); return; }
+        fonteCorrecao.current = fonte;
+        perfilPreservado.current = fonte.perfil;
+        setCamposAConfirmar(fonte.perfil.camposInvalidos ?? []);
+        preencherComOQueFoiLido(fonte.perfil);
+      } else if (lerSessao()) {
         // 🔴 D11 — o ÚNICO caso em que ter sessão não devolve a pessoa para `/app`: ela veio
         // de lá porque o perfil não pôde ser lido. Mandá-la de volta seria o laço outra vez.
-        const corrigindo = new URLSearchParams(window.location.search).get('corrigir') === '1';
         if (!corrigindo) { router.replace('/app'); return; }
-        // Releitura deliberada: o guard acima é a ordem que `escopo-local.test` trava.
-        const salvo = lerSessao()!;
-        perfilPreservado.current = salvo;
-        setModoCorrecao(true);
-        preencherComOQueFoiLido(salvo);
       }
       setChecando(false);
-    });
+    }).catch(() => { if (vivo) { setErroLeitura(true); setChecando(false); } });
+    return () => { vivo = false; };
     // Só no mount: reabrir este efeito sobrescreveria o que a pessoa já digitou.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
@@ -162,8 +166,11 @@ export default function Onboarding() {
     const ok = (campo: string) => !ilegivel.has(campo);
     if (ok('sexo')) setSexo(p.sexo);
     if (ok('idade')) setIdade(String(p.idade));
+    else setIdade('');
     if (ok('alturaCm')) setAltura(String(p.alturaCm));
+    else setAltura('');
     if (ok('pesoKg')) setPeso(String(p.pesoKg));
+    else setPeso('');
     if (ok('objetivo')) setObjetivo(p.objetivo);
     if (ok('nivelAtividade')) setAtividade(p.nivelAtividade);
     if (ok('nivelExperiencia')) setExperiencia(p.nivelExperiencia);
@@ -199,6 +206,7 @@ export default function Onboarding() {
   const reqHealth = HEALTH.filter((q) => !q.fem || sexo === 'feminino');
 
   function canCont(): boolean {
+    if (camposAConfirmar.some((c) => ETAPA_DO_CAMPO[c] === step)) return false;
     if (step === 0) return terms.every(Boolean);
     if (step === 1) { const i = +idade, a = +altura, p = +peso; return i >= 18 && i <= 100 && a >= 100 && a <= 250 && p >= 30 && p <= 300; }
     if (step === 2) return reqHealth.every((q) => healthAns[q.id]);
@@ -235,7 +243,7 @@ export default function Onboarding() {
      */
     const anterior = perfilPreservado.current;
     const resumo: PerfilResumo = anterior
-      ? { ...anterior, ...doWizard, camposInvalidos: undefined, avisosHidratacao: undefined }
+      ? mesclarPerfilCorrigido(anterior, doWizard)
       : doWizard;
     setDieta(d);
 
@@ -247,7 +255,15 @@ export default function Onboarding() {
       setGenPct(pct);
       if (pct >= 100) {
         if (giRef.current) clearInterval(giRef.current);
-        setTimeout(() => {
+        setTimeout(async () => {
+          // A correção só troca o cache e navega após confirmação remota.
+          let entradaCorrigida = fonteCorrecao.current?.entradaPlano;
+          if (anterior && fonteCorrecao.current) {
+            const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
+            const resultado = await persistirCorrecao(fonteCorrecao.current, resumo, consent, salvarPerfilServidor);
+            if (!resultado.ok) { setErro(resultado.mensagem); setFase('wizard'); return; }
+            entradaCorrigida = resultado.entradaPlano;
+          }
           // 🔒 Cofre, DF 2026-07-27 ("`ROTEAR` = MODO DIÁRIO"): TODO desfecho cria sessão e
           // perfil — inclusive o Gate B. Antes o ROTEAR não criava nada, e a pessoa ficava
           // presa na porta: era por isso que ela não entrava. O que o roteado não recebe é
@@ -267,13 +283,12 @@ export default function Onboarding() {
             local: resumo.equipamento,
             dias_declarados: resumo.diasDisponiveis,
           });
-          salvarSessao(resumo);
+          salvarSessao(resumo, entradaCorrigida);
           // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
           // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
           // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
           const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
-          if (anterior) void subirPerfilCorrigido(resumo, consent);
-          else void salvarPerfilServidor(resumo, 0, undefined, consent);
+          if (!anterior) void salvarPerfilServidor(resumo, 0, undefined, consent);
           // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
           if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
           else router.replace('/app');
@@ -286,6 +301,13 @@ export default function Onboarding() {
 
   // Enquanto checa a sessão (evita piscar o wizard antes do redirect para /app).
   if (checando) return <div style={{ minHeight: '100vh', background: '#0D2818' }} />;
+  if (erroLeitura) return (
+    <main style={{ padding: 24, maxWidth: 620, margin: 'auto' }}>
+      <h1>Não conseguimos carregar seu perfil para correção</h1>
+      <p role="alert">Nenhum dado foi substituído. Confira sua conexão e tente carregar novamente.</p>
+      <button onClick={() => window.location.reload()}>Carregar novamente</button>
+    </main>
+  );
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', width: '100%', overflowX: 'hidden', background: '#0D2818', color: '#EAE5DB' }}>
@@ -327,7 +349,16 @@ export default function Onboarding() {
               </div>
             </div>
 
-            {erro && <p style={{ color: '#E5484D', fontSize: '.9rem', marginTop: 14 }}>{erro}</p>}
+            {camposAConfirmar.some((c) => ETAPA_DO_CAMPO[c] === step) && (
+              <section role="alert" style={{ marginTop: 16 }}>
+                <p>Não foi possível ler: {camposAConfirmar.filter((c) => ETAPA_DO_CAMPO[c] === step).map((c) => ROTULOS_CAMPOS_PERFIL[c] ?? c).join(', ')}.
+                  Os valores iniciais do formulário não são dados recuperados. Confira suas escolhas antes de confirmar.</p>
+                <button type="button" onClick={() => setCamposAConfirmar((cs) => cs.filter((c) => ETAPA_DO_CAMPO[c] !== step))}>
+                  Confirmo os dados desta etapa
+                </button>
+              </section>
+            )}
+            {erro && <p role="alert" style={{ color: '#E5484D', fontSize: '.9rem', marginTop: 14 }}>{erro}</p>}
 
             {/* footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, gap: 14 }}>

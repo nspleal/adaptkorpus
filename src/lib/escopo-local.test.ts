@@ -193,7 +193,13 @@ describe('os pontos de entrada resolvem o escopo ANTES de ler o local', () => {
 
   it('/onboarding resolve o escopo antes do `lerSessao` do boot', () => {
     const src = readFileSync('src/app/onboarding/page.tsx', 'utf8');
-    expect(src).toMatch(/resolverEscopoLocal\(\)\.then\(\(\) => \{\s*\n\s*if \(lerSessao\(\)\)/);
+    // O boot agora também carrega a correção remota; ambas as leituras locais
+    // continuam dentro do callback que só inicia após resolver a conta.
+    const boot = src.indexOf('resolverEscopoLocal().then(async () => {');
+    expect(boot).toBeGreaterThan(-1);
+    for (const leitura of ['lerSessaoCompleta()', 'lerSessao()']) {
+      expect(src.indexOf(leitura, boot)).toBeGreaterThan(boot);
+    }
   });
 });
 
