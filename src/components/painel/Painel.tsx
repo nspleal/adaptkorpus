@@ -17,6 +17,9 @@ import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerP
 import { reancorarPesoDoPlanoLocal, resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
+import { escopoLocal } from '@/lib/escopo-local';
+import { noDominioDoPeso } from '@/lib/peso-dominio';
+import { reconciliarPerfilComPesoAceito, reconciliarSeriePesos } from '@/lib/peso-reconciliacao';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
@@ -204,6 +207,28 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const router = useRouter();
   // Plano e perfil viram estado para suportar "Editar perfil → recalcular" em runtime.
   const [perfil, setPerfil] = useState<PerfilResumo>(perfilProp);
+  /**
+   * 🔴 R1 — PERFIL CORRENTE PARA CÓDIGO ASSÍNCRONO. Um callback de rede guarda o `perfil` do
+   * render em que foi criado; quando a resposta volta, esse objeto pode estar duas edições
+   * atrás. Espalhá-lo (`{ ...perfil }`) não erra só o peso: restaura todos os outros campos.
+   *
+   * Este ref é escrito de forma SÍNCRONA em `notificarPerfil` — por onde toda mudança de
+   * perfil do Painel passa — e re-sincronizado a cada commit como rede de segurança. Assim
+   * duas respostas na mesma tarefa compõem em vez de se atropelarem, e nada disso precisa de
+   * efeito colateral dentro de um updater do `setState` (que o React pode reexecutar).
+   */
+  const perfilRef = useRef(perfilProp);
+  useEffect(() => { perfilRef.current = perfil; }, [perfil]);
+  /** Conta dona da gaveta local; `null` = modo mock/deslogado. Ver `escopo-local.ts`. */
+  const contaLocalRef = useRef<string | null>(null);
+  useEffect(() => { contaLocalRef.current = escopoLocal(); });
+  /**
+   * 🔴 R1 — resposta que volta depois do unmount não escreve estado nem dispara persistência.
+   * O ref é do PAINEL inteiro (não de um efeito), porque o callback nasce num handler de
+   * clique, fora de qualquer efeito com cleanup.
+   */
+  const painelVivoRef = useRef(true);
+  useEffect(() => { painelVivoRef.current = true; return () => { painelVivoRef.current = false; }; }, []);
   const [dieta, setDieta] = useState<ResultadoMotor>(dietaProp);
   const [treino, setTreino] = useState<ResultadoTreino>(treinoProp);
   /** Oferta pertence ao INPUT do plano salvo, nunca às preferências permanentes do perfil. */
@@ -269,35 +294,60 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // entra sem data e por isso nunca conta na janela de 7 dias — só aparece no gráfico.
   const [pesos, setPesos] = useState<RegistroPeso[]>([{ dataISO: null, kg: perfil.pesoKg }]);
   const pesosKg = pesos.map((p) => p.kg);
-  // Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
-  // resetavam a cada reload quando o write-through falhava); depois o servidor:
-  //  - servidor NÃO-vazio vence (2º device coerente) e renova a cópia local;
-  //  - servidor vazio com local não-vazio → mantém o local e RE-SOBE cada peso (retry
-  //    dos writes silenciosamente perdidos); GET falho (null) → local fica.
+  /**
+   * Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
+   * resetavam a cada reload quando o write-through falhava); depois o servidor.
+   *
+   * 🔴 R2 (revisão conjunta 2026-09-11) — a hidratação era um `if/else` que perdia dado nos
+   * dois ramos:
+   *  · servidor NÃO-vazio SUBSTITUÍA a série local inteira: a pesagem feita offline, ainda
+   *    não enviada, desaparecia no reload;
+   *  · o reenvio existia SÓ no ramo de servidor vazio: um POST de peso que funcionou com um
+   *    PUT de perfil que falhou nunca era reparado, e o perfil ficava atrás do histórico
+   *    (o boot do perfil é server-first — o cache local não segura a diferença).
+   *
+   * Agora há UM caminho: `reconciliarSeriePesos` funde por DIA (servidor vence no dia que
+   * tem; dia só-local é PENDENTE, fica na série e é reenviado) e o peso do DIA CORRENTE
+   * reconcilia o perfil. Pesagem de OUTRO dia nunca vira peso atual.
+   *
+   * 🔒 Âncora e ciclo intactos: nada aqui chama `reancorarPesoDoPlanoLocal` nem
+   * `recomputarPlano`. GET falho (`null`) → o local fica como está, sem reenvio às cegas.
+   */
   useEffect(() => {
     const semente: RegistroPeso = { dataISO: null, kg: perfil.pesoKg };
     const locais = lerPesos();
     if (locais.length > 0) setPesos([semente, ...locais]);
     let vivo = true;
+    const hoje = hojeISO();
+    // Conta fotografada na IDA: troca de conta durante a espera invalida a resposta.
+    const contaDaChamada = escopoLocal();
+    const mesmaGaveta = () => vivo && painelVivoRef.current && contaDaChamada === contaLocalRef.current;
     void carregarPesosServidor().then((doServidor) => {
-      if (!vivo || !doServidor) return;
-      if (doServidor.length > 0) {
-        setPesos([semente, ...substituirPesos(doServidor)]);
-      } else if (locais.length > 0) {
-        // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
-        // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
-        // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
-        // 🔒 Conflito de sincronização é TRATADO, não descartado: se o servidor já tinha um
-        // registro naquele dia, ele venceu (o primeiro vale) e a cópia local se alinha ao
-        // peso aceito. Sem isto, a série local e a do servidor divergiriam em silêncio.
-        for (const v of locais) {
-          void registrarPesoServidor(v.kg, v.dataISO).then((r) => {
-            if (r.tipo !== 'RECUSADO_DIA' || r.pesoKg == null || !v.dataISO) return;
-            const aceito = r.pesoKg;
-            substituirPesos(lerPesos().map((x) => (x.dataISO === v.dataISO ? { ...x, kg: aceito } : x)));
-            setPesos((p) => p.map((x) => (x.dataISO === v.dataISO ? { ...x, kg: aceito } : x)));
-          });
-        }
+      if (!mesmaGaveta() || !doServidor) return;
+      const { serie, pendentes, pesoDeHoje } = reconciliarSeriePesos(locais, doServidor, hoje);
+      setPesos([semente, ...substituirPesos(serie)]);
+      // 🔴 R2 — CONVERGÊNCIA histórico → perfil. Só o dia corrente governa: é ele que a
+      // decisão "o perfil segue o registro" cobre, e adotar um dia antigo seria a regressão
+      // que a revisão proíbe explicitamente.
+      if (pesoDeHoje != null) {
+        aplicarPesoNoPerfil(pesoDeHoje, { respostaDe: hoje, governa: hoje, contaDaChamada });
+      }
+      // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
+      // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
+      // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
+      // 🔒 Conflito de sincronização é TRATADO, não descartado: se o servidor já tinha um
+      // registro naquele dia, ele venceu (o primeiro vale) e a cópia local se alinha ao
+      // peso aceito. Sem isto, a série local e a do servidor divergiriam em silêncio.
+      for (const v of pendentes) {
+        void registrarPesoServidor(v.kg, v.dataISO).then((r) => {
+          if (!mesmaGaveta()) return;
+          if (r.tipo !== 'RECUSADO_DIA' || r.pesoKg == null || !v.dataISO) return;
+          const aceito = r.pesoKg;
+          alinharSerieAoPesoAceito(v.dataISO, aceito);
+          // Reenvio de um dia ANTIGO conserta o ponto daquele dia e não encosta no perfil;
+          // `governa: hoje` é o que garante isso, sem um segundo `if` para esquecer.
+          aplicarPesoNoPerfil(aceito, { respostaDe: v.dataISO, governa: hoje, contaDaChamada });
+        });
       }
     });
     return () => { vivo = false; };
@@ -911,11 +961,39 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * `entradaDoPlano` já carimba o `pesoEfetivoKg` com o `pesoMotorKg` VIGENTE, então
    * persistir o perfil não move a âncora nem no servidor.
    */
-  function aplicarPesoNoPerfil(pesoKg: number) {
-    if (!Number.isFinite(pesoKg) || pesoKg === perfil.pesoKg) return;
-    const novo: PerfilResumo = { ...perfil, pesoKg };
+  /**
+   * 🔴 R1 — RECONCILIA CONTRA O PERFIL ATUAL, não contra o capturado no render.
+   *
+   * `respostaDe` é o dia da resposta e `governa` é o dia cuja pesagem manda no perfil; a
+   * decisão inteira (desmontado, troca de conta, valor fora do domínio, dia antigo, já
+   * convergido) vive em `decidirPerfilAposResposta`, testável sem renderizar.
+   *
+   * Devolve `true` quando mexeu no perfil — quem chama usa isso para a mensagem.
+   */
+  function aplicarPesoNoPerfil(
+    pesoKg: unknown,
+    ctx?: { respostaDe: string | null; governa: string; contaDaChamada: string | null },
+  ): boolean {
+    const dia = ctx?.governa ?? hojeISO();
+    // Base = perfil CORRENTE (`perfilRef`): edições feitas durante a espera sobrevivem.
+    const { perfil: novo } = reconciliarPerfilComPesoAceito(perfilRef.current, {
+      pesoAceito: pesoKg,
+      diaDaResposta: ctx?.respostaDe ?? dia,
+      diaGovernante: dia,
+      montado: painelVivoRef.current,
+      contaDaChamada: ctx?.contaDaChamada ?? contaLocalRef.current,
+      contaAgora: contaLocalRef.current,
+    });
+    if (!novo) return false;
     setPerfil(novo);
-    notificarPerfil(novo);
+    notificarPerfil(novo); // também sincroniza `perfilRef` de forma síncrona
+    return true;
+  }
+
+  /** Alinha a cópia local e a série exibida ao peso que o servidor ACEITOU naquele dia. */
+  function alinharSerieAoPesoAceito(dia: string, aceito: number) {
+    substituirPesos(lerPesos().map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
+    setPesos((p) => p.map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
   }
 
   /** Recusa da segunda pesagem do dia — mensagem mínima; o desenho fica com o autor. */
@@ -928,7 +1006,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     | { tipo: 'INVALIDO' };
 
   const registrarPeso = (v: number): ResultadoPesoUI => {
-    if (!Number.isFinite(v) || v < 30 || v > 300) return { tipo: 'INVALIDO' };
+    // 🔒 Domínio do peso: fonte única (`lib/peso-dominio`), a MESMA faixa que a rota aplica.
+    if (!noDominioDoPeso(v)) return { tipo: 'INVALIDO' };
     // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
     // servidor no campo `data` do log — é ela que permite a janela de 7 dias.
     // 🔒 `hojeISO` = `diaLocalISO`: DIA CIVIL LOCAL, a mesma convenção do resto do app.
@@ -948,18 +1027,23 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
     setAvisoPeso(null);
     setPesos((p) => [...p, { dataISO: dia, kg: v }]);
-    aplicarPesoNoPerfil(v);
+    aplicarPesoNoPerfil(v, { respostaDe: dia, governa: dia, contaDaChamada: contaLocalRef.current });
+    // 🔴 R1 — a conta é fotografada NA IDA: se a pessoa trocar de conta durante a espera, a
+    // resposta é da conta antiga e não pode escrever na gaveta da nova.
+    const contaDaChamada = contaLocalRef.current;
     void registrarPesoServidor(v, dia).then((r) => {
       // 🔒 Sem perda silenciosa: `FALHA` mantém o registro local pendente (offline-first) e
       // a re-subida do mount o envia depois. Só a RECUSA do servidor reconcilia.
       if (r.tipo !== 'RECUSADO_DIA') return;
+      if (!painelVivoRef.current || contaDaChamada !== contaLocalRef.current) return;
+      // 🔴 R4 — `pesoKg: null` é "não sei qual peso está registrado", não zero: não alinha
+      // série nem perfil, e não inventa aviso com um número que não existe.
       const aceito = r.pesoKg;
       if (aceito == null) return;
       // Outra aba/dispositivo venceu a corrida e o banco manteve o PRIMEIRO registro do dia.
       // O cliente se alinha ao que foi aceito — histórico e perfil juntos, nunca divergentes.
-      substituirPesos(lerPesos().map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
-      setPesos((p) => p.map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
-      aplicarPesoNoPerfil(aceito);
+      alinharSerieAoPesoAceito(dia, aceito);
+      aplicarPesoNoPerfil(aceito, { respostaDe: dia, governa: dia, contaDaChamada });
       setAvisoPeso(`Outro dispositivo já havia registrado ${aceito} kg hoje. Mantivemos esse registro.`);
     });
     return { tipo: 'REGISTRADO' };
@@ -1159,6 +1243,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     sobrescrever?: { pesoEfetivoKg?: number; diasOferecidosCardio?: Weekday[] },
   ) {
     const entrada = entradaDoPlano(novoPerfil, sobrescrever);
+    // 🔴 R1 — o ref acompanha a mudança AQUI, antes do próximo render: todo `setPerfil` do
+    // Painel é acompanhado de `notificarPerfil`, então este é o ponto único que mantém o
+    // perfil corrente disponível para callbacks assíncronos já criados.
+    perfilRef.current = novoPerfil;
     ultimaEntradaEnviadaRef.current = entrada;
     onPerfilChange?.(novoPerfil, entrada);
   }

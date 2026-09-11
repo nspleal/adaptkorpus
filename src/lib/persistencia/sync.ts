@@ -9,6 +9,7 @@
  * engolidos — nunca derrubam a UI nem logam conteúdo (dado de saúde).
  */
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { pesoKgDaResposta } from '@/lib/peso-dominio';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RegistroPeso, SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
@@ -158,14 +159,20 @@ export async function registrarPesoServidor(pesoKg: number, dataISO?: string | n
   if (!r) return { tipo: 'FALHA' };
   const corpo = await r.json().catch(() => null) as
     { estado?: string; pesoKg?: unknown } | null;
+  /**
+   * 🔴 R4 — TIPO E DOMÍNIO ANTES DA CONVERSÃO (`pesoKgDaResposta`). `Number(null)` é `0` e
+   * `Number.isFinite(0)` é `true`: a recusa sem peso conhecido devolvia `pesoKg: 0`, e o
+   * chamador escrevia esse zero no histórico e no perfil. Agora o desconhecido chega como
+   * `null`, e quem consome `RECUSADO_DIA` já tem o ramo que NÃO toca em nada quando é `null`.
+   */
   if (r.status === 409 || corpo?.estado === 'RECUSADO_DIA') {
-    const kg = Number(corpo?.pesoKg);
-    return { tipo: 'RECUSADO_DIA', pesoKg: Number.isFinite(kg) ? kg : null };
+    return { tipo: 'RECUSADO_DIA', pesoKg: pesoKgDaResposta(corpo?.pesoKg) };
   }
   if (!r.ok) return { tipo: 'FALHA' };
   if (corpo?.estado === 'IDEMPOTENTE') {
-    const kg = Number(corpo?.pesoKg);
-    return { tipo: 'IDEMPOTENTE', pesoKg: Number.isFinite(kg) ? kg : pesoKg };
+    // Idempotente = o servidor confirma que o registro do dia é ESTE. Sem peso legível na
+    // resposta, o peso enviado é a única leitura honesta — nunca zero.
+    return { tipo: 'IDEMPOTENTE', pesoKg: pesoKgDaResposta(corpo?.pesoKg) ?? pesoKg };
   }
   return { tipo: 'REGISTRADO' };
 }

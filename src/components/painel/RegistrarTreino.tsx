@@ -10,6 +10,7 @@ import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progress
 import CalibracaoModal, { type PayloadCalibracao } from './CalibracaoModal';
 import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
+import { seriesDoSlot } from '@/lib/series-treino';
 
 /**
  * Registrar treino feito — porte FIEL do formulário do design
@@ -112,17 +113,30 @@ export function linhaDaBiblioteca(ex: Exercise, prescricao: PrescricaoFITT | nul
  *
  * `prescricao` ausente não cancela a cópia: o plano continua sendo o ponto de partida, só
  * sem pré-preencher reps (antes, prescrição nula sumia com o cartão inteiro).
+ *
+ * 🔴 R3 (revisão conjunta 2026-09-11) — AS SÉRIES SÃO DO PLANO, não da prescrição. A cópia
+ * herdava o número de `linhaDaBiblioteca` (`prescricao.seriesPorExercicio.min`, ou 3), que é
+ * o default de quem adiciona um exercício da BIBLIOTECA — ali não existe slot, logo não
+ * existe autoridade. Copiando um DIA do plano existe: slots com 1 e 5 séries viravam 3 e 3.
+ *
+ * 🔒 A autoridade é `seriesDoSlot` (fonte única desde D9): ela devolve o que o MOTOR decidiu
+ * para o slot, já com a rampa do mesociclo e o deload aplicados, sem piso e sem régua
+ * própria. Nada de séries inventadas aqui — `|| linha.sets.length` só cobre o slot que chega
+ * SEM série decidida (`?? 0` de `seriesDoSlot` é ausência honesta), e nesse caso o default da
+ * biblioteca é o mesmo de antes.
  */
 export function linhasDoModelo(dia: DiaTreino, prescricao: PrescricaoFITT | null): ExForm[] {
   return dia.slots.map((sl) => {
     const linha = linhaDaBiblioteca(sl.exercicio, prescricao, true);
-    if (!prescricao) return linha;
+    const nSets = seriesDoSlot(sl) || linha.sets.length;
     // reps default = TOPO da faixa prescrita (composto/isolado), editável; carga em branco.
+    // Isométrico segue em SEGUNDOS (`repUnit`) e sem reps pré-preenchidas, como antes.
     const comp = sl.padrao !== 'isolado';
-    const reps = linha.repUnit === 'reps'
+    const reps = prescricao && linha.repUnit === 'reps'
       ? String((comp ? prescricao.repsComposto : prescricao.repsIsolado).max)
       : '';
-    return { ...linha, sets: linha.sets.map(() => ({ reps, kg: '', rir: '' })) };
+    // `Array.from` cria `sets` NOVOS: editar o registro não alcança o plano (regra de D18).
+    return { ...linha, sets: Array.from({ length: nSets }, () => ({ reps, kg: '', rir: '' })) };
   });
 }
 
