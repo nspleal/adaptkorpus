@@ -571,3 +571,9 @@ body {
   :is(.ak-app-interactions, .ak-library-panel) :is(button, a[href], summary, input, select, textarea, [role="button"], .hov-lift) { transition: none !important; translate: none !important; }
   .ak-app-interactions :is(.hov-lift, .hov-btn):hover { transform: none !important; }
 }
+
+.ak-order-block { cursor: grab; touch-action: pan-x; user-select: none; }
+.ak-order-block input { user-select: text; cursor: text; }
+.ak-order-block:focus-visible { outline: 2px solid #BDFF00; outline-offset: -2px; }
+.ak-order-block.ak-order-dragging { cursor: grabbing; scale: 1; }
+@media (hover: hover) and (pointer: fine) { .ak-order-block:hover { border-color: #BDFF00; box-shadow: inset 0 0 0 1px #bdff0033; background: #183e27; } }
