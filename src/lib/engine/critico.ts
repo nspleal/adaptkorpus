@@ -370,8 +370,15 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   if (rotina.diasForcaAgendados !== forcaEsperada || rotina.dias.length !== forcaEsperada) {
     motivosEstruturais.push(`dias de força divergentes: fatos ${forcaEsperada}, contador ${rotina.diasForcaAgendados}, planos ${rotina.dias.length}`);
   }
-  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada) {
-    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada}, contador ${rotina.diasCardioRecuperacao}`);
+  /**
+   * 🔴 D14 — a agenda SOLICITADA se reparte em três, não em duas: sessões entregues, dias de
+   * recuperação e dias NÃO ATENDIDOS. Sem a terceira parcela, o dia que ficou sem exercício
+   * apareceria aqui como "recuperação" — que é justamente a redistribuição silenciosa que a
+   * decisão proíbe.
+   */
+  const naoAtendidos = rotina.diasNaoAtendidos?.length ?? 0;
+  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada - naoAtendidos) {
+    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada - naoAtendidos}, contador ${rotina.diasCardioRecuperacao}`);
   }
   if (finais.length !== horizonteEsperado) {
     motivosEstruturais.push(`horizonte final: esperado ${horizonteEsperado}, recebido ${finais.length}`);

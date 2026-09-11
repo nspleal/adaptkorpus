@@ -63,7 +63,7 @@ import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefe
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
-  CardapioItem, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, RotinaCustom, Sexo,
+  CardapioItem, DiaNaoAtendido, DiaTreino, DivisaoPreferida, NivelAtividade, NivelExperiencia, Objetivo, ResultadoMotor, ResultadoTreino, RotinaCustom, Sexo,
 } from '@/lib/engine';
 import type { Alergeno, EquipamentoCasa, EquipamentoDisp, Exercise, RecipeMacros } from '@/lib/data/types';
 import { chaveLocal } from '@/lib/escopo-local';
@@ -1654,6 +1654,48 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
 
 /* ════════════════════ Treino ════════════════════ */
 
+/**
+ * 🔴 D14 (auditoria 2026-09-11) — A AGENDA SOLICITADA × A ENTREGA EFETIVA.
+ *
+ * Medido no snapshot `a40f8af`: um dia de força com `slots: []` era entregue como sessão,
+ * contado em `diasForcaAgendados` e media 0 s — sustentando o selo verde de "cabe nos
+ * limites". A pessoa podia abrir e iniciar uma sessão sem nenhum exercício.
+ *
+ * 🔒 O dia NÃO some do plano: ele sai da lista de sessões e aparece aqui, nomeado e com o
+ * motivo. Nada é redistribuído para tapar o buraco — cardio não ocupa o dia e exercício fora
+ * do equipamento declarado continua fora.
+ */
+function DiasNaoAtendidos({ dias }: { dias?: DiaNaoAtendido[] }) {
+  if (!dias || dias.length === 0) return null;
+  const porque = (m: DiaNaoAtendido['motivo']) =>
+    m === 'EQUIPAMENTO' ? 'com o equipamento que você marcou no perfil, não há exercício novo para este dia'
+      : m === 'TETO_SEMANAL' ? 'os grupos deste dia já alcançaram o volume previsto para a semana'
+        : 'o desenho deste dia ficou sem exercício disponível';
+  return (
+    <section
+      aria-label="Dias da sua agenda que não viraram sessão"
+      style={{ background: 'rgba(13,40,24,.4)', border: '1px solid rgba(234,179,8,.45)', borderRadius: 16, padding: 15, marginBottom: 16 }}
+    >
+      <p role="status" style={{ margin: '0 0 6px', fontSize: '.9rem', fontWeight: 600, lineHeight: 1.5, color: 'rgba(234,229,219,.9)' }}>
+        <span aria-hidden style={{ marginRight: 6 }}>🟡</span>
+        {dias.length === 1 ? 'Um dia da sua agenda não virou sessão nesta semana.' : `${dias.length} dias da sua agenda não viraram sessão nesta semana.`}
+      </p>
+      <ul style={{ margin: 0, padding: '0 0 0 18px', fontSize: '.86rem', lineHeight: 1.55, color: 'rgba(234,229,219,.8)' }}>
+        {dias.map((d, i) => (
+          <li key={`${d.nome}-${i}`}>
+            <strong>{d.diaId ? DIA_LABEL[d.diaId].full : d.nome}</strong>
+            {d.diaId ? ` · ${d.nome}` : ''} — {porque(d.motivo)}.
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: '10px 0 0', fontSize: '.84rem', lineHeight: 1.5, color: 'rgba(234,229,219,.65)' }}>
+        Seus dias continuam como você marcou no perfil. Não movemos o treino para outro dia nem colocamos exercício
+        que não cabe no seu equipamento só para preencher.
+      </p>
+    </section>
+  );
+}
+
 function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
@@ -1700,6 +1742,9 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
           Vem antes do crítico de propósito: o crítico fala do DESENHO da semana; este fala do
           que a geração conseguiu (ou não) entregar. */}
       <AvisosMotor rotina={rotina} tempoPorSessaoMin={tempoPorSessaoMin} />
+      {/* 🔴 D14 — o dia PEDIDO que não virou sessão continua na tela, com o motivo. O que ele
+          não tem é botão de iniciar ou registrar: não existe sessão vazia para começar. */}
+      <DiasNaoAtendidos dias={rotina?.diasNaoAtendidos} />
       {criticoPlano && <section aria-label="Avaliação semanal do plano"><p style={{ fontSize: ".84rem", color: "rgba(234,229,219,.75)" }}>Resumo da semana inteira — atualizado ao alterar exercícios ou séries. Selecionar um dia não altera esta avaliação.</p><PainelCritico avaliacao={criticoPlano} compacto /></section>}
       {/* O aviso entra entre o cabeçalho da aba e a lista — e a lista abaixo é EXATAMENTE a
           mesma de quem não avisou (nada avançou, nada foi remarcado). */}

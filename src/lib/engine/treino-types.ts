@@ -289,6 +289,33 @@ export interface DiaTreino {
    * de casa ancora, e é dele que sai o aviso "seu equipamento disponível limita este dia".
    */
   slotsNaoPreenchidos?: number;
+  /**
+   * 🔴 D14 — QUAL regra deixou o dia curto, para o dia NÃO ATENDIDO poder dizer o porquê sem
+   * a tela reconstruir a causa. Mesmo vocabulário dos dois avisos que o montador já emite.
+   */
+  motivoDoCorte?: 'EQUIPAMENTO' | 'TETO_SEMANAL';
+}
+
+/**
+ * 🔴 D14 (auditoria 2026-09-11) — O DIA PEDIDO QUE NÃO VIROU SESSÃO.
+ *
+ * Medido no snapshot `a40f8af`: `dias[0] = { nome: "Push", slots: [], slotsNaoPreenchidos: 3 }`
+ * era contado em `diasForcaAgendados`, recebia `duracaoDias[0] = {CALCULADO, DENTRO_DO_LIMITE,
+ * min 0, max 0}` e o plano inteiro saía `CERTIFICADO` 🟢 — um dia de 0 s sustentando o selo de
+ * que "cabe nos limites", e uma sessão vazia oferecida para iniciar.
+ *
+ * 🔒 O dia continua VISÍVEL e o motivo continua DITO (o aviso do motor já nomeava o dia). O que
+ * muda é que ele deixa de ser contado como entrega: sai de `dias`, sai de `diasForcaAgendados`
+ * e sai da certificação de duração. Nada é redistribuído para preencher — cardio não ocupa o
+ * dia, e exercício fora do equipamento declarado continua fora.
+ */
+export interface DiaNaoAtendido {
+  nome: string;
+  diaId?: Weekday;
+  /** `DESENHO_VAZIO` = o desenho manual daquele dia ficou sem exercício elegível. */
+  motivo: 'EQUIPAMENTO' | 'TETO_SEMANAL' | 'DESENHO_VAZIO';
+  /** Quantos slots o template pediu e ninguém pôde preencher (quando o motor mediu). */
+  slotsPedidos?: number;
 }
 
 /**
@@ -348,6 +375,12 @@ export interface RotinaSemanal {
   diasCardio: DiaCardio[];
   cardio: CardioPrescricao;
   avisos: string[];
+  /**
+   * 🔴 D14 — dias da agenda que NÃO viraram sessão. Ausente quando todos foram atendidos.
+   * `dias.length + diasNaoAtendidos.length + diasCardioRecuperacao` = agenda SOLICITADA;
+   * `dias.length` = entrega EFETIVA. São contas diferentes de propósito.
+   */
+  diasNaoAtendidos?: DiaNaoAtendido[];
   /**
    * 🔒 B2 — QUAL RAMO DO FOCO AGIU (DF 2026-08-14). A tela DIZ o degrau; trocar o foco e não
    * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em

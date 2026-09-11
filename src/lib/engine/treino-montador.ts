@@ -36,7 +36,7 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
-import type { DiaCardio, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, DiaNaoAtendido, Faixa, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
@@ -336,6 +336,8 @@ export function montarRotina(
   // acontece cedo; a certificação/distribuição vem depois, quando as funções canônicas existem.
   let diasUsuarioCustom: DiaTreino[] | null = null;
   const avisosCustom: string[] = [];
+  /** 🔴 D14 — dias do desenho manual que ficaram sem exercício elegível (antes, sumiam). */
+  const diasNaoAtendidosCustom: DiaNaoAtendido[] = [];
   if (custom && custom.dias.length > 0) {
     const porId = new Map(pool.map((e) => [e.id, e]));
     const diasUsuario = custom.dias
@@ -355,15 +357,24 @@ export function montarRotina(
               ? { execucaoSelecionada: resolverExecucao(e.id, e.execucao, escolhasExecucao.get(e.id)) }
               : {}),
           })),
-      }))
-      .filter((d) => d.slots.length > 0);
-    if (diasUsuario.length > 0) {
+      }));
+    /**
+     * 🔴 D14 — o dia que a pessoa DESENHOU e ficou sem exercício elegível já era descartado
+     * aqui, em silêncio: ela montava o dia, recarregava e ele simplesmente não estava mais lá.
+     * Ele continua fora das sessões entregues (não há sessão vazia para iniciar), mas agora é
+     * DECLARADO, com motivo, em vez de sumir.
+     */
+    diasNaoAtendidosCustom.push(...diasUsuario
+      .filter((d) => d.slots.length === 0)
+      .map((d) => ({ nome: d.nome, ...(d.diaId ? { diaId: d.diaId } : {}), motivo: 'DESENHO_VAZIO' as const })));
+    const diasUsuarioComExercicio = diasUsuario.filter((d) => d.slots.length > 0);
+    if (diasUsuarioComExercicio.length > 0) {
       // 🔒 O teto de sessões de força do NÍVEL continua valendo (trilho da §1.2). Quando
       // morde, o excedente é dito — nunca cortado em silêncio.
-      const cortados = diasUsuario.slice(diasForca);
-      const mantidos = diasUsuario.slice(0, diasForca);
+      const cortados = diasUsuarioComExercicio.slice(diasForca);
+      const mantidos = diasUsuarioComExercicio.slice(0, diasForca);
       if (cortados.length > 0) {
-        avisosCustom.push(`Seu treino tem ${diasUsuario.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
+        avisosCustom.push(`Seu treino tem ${diasUsuarioComExercicio.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} últimos ficaram fora desta semana.`);
       }
       // DF②: exercícios, ordem e quantidade do usuário ficam intactos. O caminho canônico
       // certifica duração e recomenda cardio mais abaixo; nunca aplica reduce-to-fit ao manual.
@@ -849,12 +860,28 @@ export function montarRotina(
       }
     }
 
+    /**
+     * 🔴 D14 — DIA VAZIO NÃO É SESSÃO ENTREGUE. Ele sai de `dias` (e portanto da certificação
+     * de duração, que media 0 s e dizia "cabe") e passa a ser declarado em
+     * `diasNaoAtendidos`, com o mesmo motivo que o aviso do motor já nomeia. O dia pedido pela
+     * pessoa NÃO some do plano: some da contagem de entrega.
+     */
+    const diasEntregues = diasTreino.filter((d) => d.slots.length > 0);
+    const diasNaoAtendidos: DiaNaoAtendido[] = diasTreino
+      .filter((d) => d.slots.length === 0)
+      .map((d) => ({
+        nome: d.nome,
+        ...(d.diaId ? { diaId: d.diaId } : {}),
+        motivo: d.motivoDoCorte ?? ('DESENHO_VAZIO' as const),
+        ...(d.slotsNaoPreenchidos != null ? { slotsPedidos: d.slotsNaoPreenchidos } : {}),
+      }));
     return {
-      diasForcaAgendados: diasForca,
+      diasForcaAgendados: diasEntregues.length,
       diasCardioRecuperacao,
       diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito),
       split,
-      dias: diasTreino,
+      dias: diasEntregues,
+      ...(diasNaoAtendidos.length > 0 ? { diasNaoAtendidos } : {}),
       // 🔒 B2: o ramo que agiu vai junto do plano — a tela não recalcula nem adivinha.
       ...(foco && decisaoFoco
         ? { foco: { grupo: foco.grupo, compensa: foco.compensa, degrau: decisaoFoco.degrau, motivo: decisaoFoco.motivo, series: decisaoFoco.series } }
@@ -901,6 +928,9 @@ export function montarRotina(
     // veio abaixo do orçamento" (que também acontece por reserva não honrada, inclusive em
     // academia, e não é corte por catálogo).
     ...(d.naoPreenchidos > 0 ? { slotsNaoPreenchidos: d.naoPreenchidos } : {}),
+    // 🔴 D14 — a causa viaja com o dia: o mesmo `motivoCurto` que decide qual aviso sai.
+    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo' ? { motivoDoCorte: 'EQUIPAMENTO' as const } : {}),
+    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'teto' ? { motivoDoCorte: 'TETO_SEMANAL' as const } : {}),
     slots: d.slots.map((s) => ({
       // O padrão do slot é o do EXERCÍCIO escolhido (o template agora é de grupos): tudo
       // que lê `slot.padrao` (classe de descanso, faixa de reps, ordem do foco) continua
@@ -1155,10 +1185,15 @@ export function montarRotina(
     avisos.push(...avisosCustom);
     decisaoFoco = null;
     compensadorValido = null;
+    const saidaCustom = montarSaida(diasUsuarioCustom, 'Meu treino');
+    const naoAtendidosCustom = [...(saidaCustom.diasNaoAtendidos ?? []), ...diasNaoAtendidosCustom];
     const rotinaCustomEstrutural = {
-      ...montarSaida(diasUsuarioCustom, 'Meu treino'),
-      diasForcaAgendados: diasUsuarioCustom.length,
-      diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length),
+      ...saidaCustom,
+      // 🔴 D14 — a contagem de entrega vem de `montarSaida`, que já excluiu o dia vazio. O
+      // override antigo (`diasUsuarioCustom.length`) contava o dia desenhado, não o entregue.
+      // E o dia NÃO ATENDIDO não vira dia de recuperação: seria a redistribuição silenciosa.
+      diasCardioRecuperacao: Math.max(0, dias - diasUsuarioCustom.length - naoAtendidosCustom.length),
+      ...(naoAtendidosCustom.length > 0 ? { diasNaoAtendidos: naoAtendidosCustom } : {}),
     };
     // Author request 2026-09-10 supersedes the old editor's non-editable sets.
     // Apply before duration certification; recovery never increases its assigned volume.
