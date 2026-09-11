@@ -35,11 +35,27 @@ import type { Weekday } from '../semana';
  * por política ele não reduz. Este quarto estado afirma só o que foi medido: entregue, medido,
  * não cabe. `diasAcimaDoLimite` são os índices em `duracaoDias` — a tela aponta o dia sem
  * recalcular nada.
+ *
+ * 🔴 D12 (auditoria 2026-09-11) — "PODE ULTRAPASSAR" NÃO É "ULTRAPASSOU".
+ *
+ * O guard de D3 só rebaixava `ACIMA_DO_LIMITE_OPERACIONAL`, e o ramo manual não passa por
+ * `precisaReduzir` — que no ramo automático trata `LIMITE_INDETERMINADO` como motivo para
+ * REDUZIR. O mesmo estado significava "reduza" num produtor e "certificado" no outro: um dia
+ * medido em `min 3840 / max 4200` contra limite `4080` recebia 🟢 *"a duração calculada está
+ * dentro dos limites"* enquanto o crítico dizia, na mesma tela, que o dia levava 53 min.
+ *
+ * 🔒 A condição de certificação passou a ser UMA só, nos dois produtores: `CERTIFICADO` exige
+ * todo dia em `DENTRO_DO_LIMITE` ou `DENTRO_DA_TOLERANCIA` (a tolerância de +480 s que já
+ * existia segue valendo — ela não é incerteza, é folga medida).
+ *
+ * ⚠️ `diasPodemUltrapassar` é um campo PRÓPRIO justamente para a frase não mentir:
+ * `LIMITE_INDETERMINADO` é `min ≤ limite < max` — o dia pode caber. Reaproveitar
+ * `diasAcimaDoLimite` afirmaria excesso onde só há incerteza.
  */
 export type ResultadoGeracaoRotina =
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
-  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[] }
-  | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[] }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[]; diasPodemUltrapassar?: number[] }
+  | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[]; diasPodemUltrapassar?: number[] }
   | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
   | {
       tipo: 'ERRO_ALOCADOR';

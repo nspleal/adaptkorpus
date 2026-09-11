@@ -1065,14 +1065,30 @@ export function montarRotina(
     const acimaDoLimite = (final.duracaoDias ?? [])
       .map((d, i) => (d.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL' ? i : -1))
       .filter((i) => i >= 0);
-    const rgCertificado: ResultadoGeracaoRotina = rg.tipo === 'CERTIFICADO' && acimaDoLimite.length > 0
-      ? { tipo: 'ENTREGUE_SEM_CERTIFICACAO', diasAcimaDoLimite: acimaDoLimite }
-      : rg;
+    /**
+     * 🔴 D12 — a CONDIÇÃO DE CERTIFICAÇÃO, unificada. `precisaReduzir` (o ramo automático) já
+     * tratava `LIMITE_INDETERMINADO` como "não cabe"; o guard aqui não. Agora os dois dizem a
+     * mesma coisa — e a frase separa o que foi medido do que ficou em aberto.
+     */
+    const podemUltrapassar = (final.duracaoDias ?? [])
+      .map((d, i) => (d.estadoLimite === 'LIMITE_INDETERMINADO' ? i : -1))
+      .filter((i) => i >= 0);
+    const rgCertificado: ResultadoGeracaoRotina =
+      rg.tipo === 'CERTIFICADO' && (acimaDoLimite.length > 0 || podemUltrapassar.length > 0)
+        ? {
+            tipo: 'ENTREGUE_SEM_CERTIFICACAO',
+            diasAcimaDoLimite: acimaDoLimite,
+            ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
+          }
+        : rg;
     const resultadoFinal: ResultadoGeracaoRotina =
       prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rgCertificado.tipo !== 'INCOMPATIVEL'
         ? {
             tipo: 'NAO_AVALIADO_ENTREGAVEL',
             ...(acimaDoLimite.length > 0 ? { diasAcimaDoLimite: acimaDoLimite } : {}),
+            // 🔴 D12 — estado combinado: cardio sem duração E dia que pode estourar. Os dois
+            // fatos convivem no mesmo terminal; suprimir um deles é escolher qual verdade contar.
+            ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
             motivos: [...new Set([
               ...(rgCertificado.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rgCertificado.motivos : []),
               'CARDIO_SEM_DURACAO',
