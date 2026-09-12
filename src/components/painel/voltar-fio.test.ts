@@ -41,7 +41,8 @@ describe('🔴 o Voltar está ligado no painel', () => {
     const registros = [...codigo.matchAll(/useCamadaVoltavel\(([^,]+),/g)].map((m) => m[1]!.trim());
     const faltando = camadas.filter((c) => !registros.some((r) => new RegExp(`\\b${c}\\b`).test(r)));
     expect(faltando, `sobreposição sem Voltar: ${faltando.join(', ')}`).toEqual([]);
-    expect(registros.length).toBeGreaterThanOrEqual(camadas.length);
+    expect(registros).toContain('menu || editando'); // Uma entrada contínua evita fechar o editor ao recolher o menu.
+    expect(registros.length).toBeGreaterThanOrEqual(camadas.length - 1);
   });
 
   it('cada camada registrada tem um nome distinto (a pilha é diagnosticável)', () => {
@@ -50,7 +51,7 @@ describe('🔴 o Voltar está ligado no painel', () => {
     const nomes = codigo.split('\n')
       .map((l) => l.match(/useCamadaVoltavel\(.*'([^']+)'\s*\);/)?.[1])
       .filter((x): x is string => Boolean(x));
-    expect(nomes.length).toBeGreaterThanOrEqual(12);
+    expect(nomes.length).toBeGreaterThanOrEqual(11);
     expect(new Set(nomes).size, `nomes repetidos em ${nomes.join(', ')}`).toBe(nomes.length);
   });
 });

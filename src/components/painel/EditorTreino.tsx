@@ -149,24 +149,15 @@ export default function EditorTreino({
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {ORDEM_SEMANA.map((w, wi) => {
-                const ocupadoPorOutro = dias.some((outro, outroIndice) => outroIndice !== i && outro.weekdayIdx === wi);
-                return (
-                  <button
-                    key={w}
-                    type="button"
-                    disabled={ocupadoPorOutro}
-                    onClick={() => !ocupadoPorOutro && mut(i, (x) => ({ ...x, weekdayIdx: wi }))}
-                    aria-pressed={d.weekdayIdx === wi}
-                    title={ocupadoPorOutro ? 'Já existe um treino neste dia' : undefined}
-                    style={{ ...pill(d.weekdayIdx === wi), opacity: ocupadoPorOutro ? .35 : 1, cursor: ocupadoPorOutro ? 'not-allowed' : 'pointer' }}
-                  >
-                    {DIA_LABEL[w].abbr}
-                  </button>
-                );
-              })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+              <strong style={{ color: '#BDFF00' }}>{DIA_LABEL[ORDEM_SEMANA[d.weekdayIdx]!].full}</strong>
+              <details><summary style={{ cursor: 'pointer', padding: '10px 0' }}>Trocar o dia</summary>
+                <label>Dia do treino <select aria-label={`Dia de ${d.nome}`} value={d.weekdayIdx} onChange={(e) => { mut(i, x => ({ ...x, weekdayIdx: Number(e.target.value) })); e.currentTarget.closest('details')?.removeAttribute('open'); }} style={{ padding: 10, borderRadius: 10, background: '#12321f', color: '#EAE5DB' }}>
+                  {ORDEM_SEMANA.map((w, wi) => <option key={w} value={wi} disabled={dias.some((outro, k) => k !== i && outro.weekdayIdx === wi)}>{DIA_LABEL[w].full}</option>)}
+                </select></label>
+              </details>
             </div>
+
 
             <p style={{ color: 'rgba(234,229,219,.8)', fontSize: '.85rem' }}>{d.exercicios.length} exercícios · {d.exercicios.length ? previsto[dias.slice(0, i).filter((dia) => dia.exercicios.length).length]?.series?.reduce<number>((n, s) => n + (s ?? 0), 0) ?? 0 : 0} séries previstas</p>
             {d.exercicios.length === 0 && (
@@ -317,12 +308,6 @@ const corDoStatus = (s: string) =>
   : s === 'acima_mrv' ? { marca: '🔴', borda: 'rgba(229,72,77,.45)', texto: '#E5484D' }
   : { marca: '⚪', borda: 'rgba(234,229,219,.2)', texto: 'rgba(234,229,219,.62)' };
 
-const pill = (ativo: boolean): CSSProperties => ({
-  background: ativo ? 'rgba(189,255,0,.14)' : 'none',
-  border: `1px solid ${ativo ? 'rgba(189,255,0,.5)' : 'rgba(234,229,219,.18)'}`,
-  color: ativo ? '#BDFF00' : 'rgba(234,229,219,.75)',
-  fontWeight: 600, fontSize: '.8rem', padding: '6px 10px', borderRadius: 999, cursor: 'pointer', minWidth: 44,
-});
 const btnGhost: CSSProperties = {
   background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB',
   fontWeight: 600, fontSize: '.88rem', padding: '11px 15px', borderRadius: 12, cursor: 'pointer',

@@ -120,8 +120,8 @@ describe('recursos `sem_alvo` — o desenho de alvo está atrás do guard', () =
         // DF 2026-08-01) e media DISTÂNCIA em caracteres. O pareamento condição↔bloco agora
         // é provado por casamento de chaves em `modo-diario.test.ts` — aqui fica só a
         // existência do elemento visual.
-        /estado="futuro"/,
-        /\{proximos\.map\(/,
+        /^(?![\s\S]*estado="futuro")[\s\S]*$/,
+        /^(?![\s\S]*proximos\.map)[\s\S]*$/,
       ],
     },
   };

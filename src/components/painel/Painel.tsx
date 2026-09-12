@@ -2,8 +2,9 @@
 
 import { seriesDoSlot } from '@/lib/series-treino';
 import ResumoSeries from './ResumoSeries';
+import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRef } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
@@ -35,7 +36,7 @@ import { identidadesDe } from '@/lib/exercicio-identidade';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
-import { minutosAcumulados, registrosDaSemana, type RegistroCardioDatado } from '@/lib/cardio-semana';
+import { minutosAcumulados, registrosDaSemana } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
 import FrequenciaGrupos from './FrequenciaGrupos';
 import FiqueiDoente, { AvisoPausaReconhecida } from './FiqueiDoente';
@@ -182,8 +183,8 @@ function fmtDataCurta(dataISO: string): string {
   return m && d ? `${d} ${MES_CURTO[m - 1]}` : dataISO;
 }
 
-type Aba = 'hoje' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
-const ABAS_VALIDAS = new Set<Aba>(['hoje', 'treino', 'dieta', 'progresso', 'historico', 'perfil']);
+type Aba = 'hoje' | 'cardio' | 'treino' | 'dieta' | 'progresso' | 'historico' | 'perfil';
+const ABAS_VALIDAS = new Set<Aba>(['hoje', 'cardio', 'treino', 'dieta', 'progresso', 'historico', 'perfil']);
 type SessaoLog = SessaoHistorico; // ResumoSessao + { n, dataISO } (persistido em evk_treinos)
 type Feedback = 'facil' | 'na_medida' | 'dificil';
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
@@ -1404,7 +1405,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function sinalizarFadiga() {
     aplicarNovoHistorico(registrarSinalFadiga());
   }
-  const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
+  const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'cardio', label: 'Cardio' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   // 🔒 As 6 abas ficam em MODO DIÁRIO: todas continuam com conteúdo real (registro ou leitura
   // do registro). Sumir com abas seria o "cadeado" que a DF proíbe — o que some é o conteúdo
   // de prescrição dentro delas, não a navegação.
@@ -1420,9 +1421,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * é camada" — para nenhuma sobreposição nova nascer fora da regra. A ordem aqui não importa:
    * a pilha ordena por instante de abertura, então o Voltar sempre fecha a de cima.
    */
-  useCamadaVoltavel(menu, () => setMenu(false), 'menu');
+  useCamadaVoltavel(menu || editando, () => { setMenu(false); setEditando(false); }, 'menu-ou-editar-perfil');
   useCamadaVoltavel(vista === 'compras', () => setVista(null), 'compras');
-  useCamadaVoltavel(editando, () => setEditando(false), 'editar-perfil');
+
   useCamadaVoltavel(registrando, () => setRegistrando(false), 'registrar-treino');
   useCamadaVoltavel(registrandoCardio, () => { setCardioPre(null); setRegistrandoCardio(false); }, 'registrar-cardio');
   useCamadaVoltavel(sessaoDia !== null, () => setSessaoDia(null), 'sessao-guiada');
@@ -1605,16 +1606,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
             {/* 🔒 C1.1-B: o seletor controlado nomeia dias reais e fica isolado nesta montagem. */}
-            <OfertaCardio
-              value={diasOferecidosCardio}
-              onChange={(proximaOferta) => {
-                setDiasOferecidosCardio(proximaOferta);
-                const { treino: nt } = recomputarPlano(perfil, opcoesDoPlano({ diasOferecidosCardio: proximaOferta }));
-                setTreino(nt);
-                setRotinaDias(nt.rotina?.dias ?? []);
-                notificarPerfil(perfil, { diasOferecidosCardio: proximaOferta });
-              }}
-            />
             <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} avisoPeso={avisoPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
@@ -1650,18 +1641,48 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           />
         )}
         {!vista && aba === 'treino' && !editorDias && (prescricao
-          ? <TreinoTab dias={rotinaDias} rotina={treino.rotina ?? null} tempoPorSessaoMin={perfil.tempoPorSessaoMin} prescricao={prescricaoEfetiva ?? prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} cardio={propsCardio} onMontar={abrirEditor} criticoPlano={criticoPlano} />
+          ? <TreinoTab dias={rotinaDias} rotina={treino.rotina ?? null} tempoPorSessaoMin={perfil.tempoPorSessaoMin} prescricao={prescricaoEfetiva ?? prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} onMontar={abrirEditor} criticoPlano={criticoPlano} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
                   mora dentro da TreinoTab, então em modo diário ele precisa existir aqui.
                   Sem isto, o roteado ficaria sem onde registrar treino: o oposto da DF. */}
               <TreinoDiario onRegistrarTreino={() => setRegistrando(true)} />
-              <CardioSemana {...propsCardio} />
+
             </div>
           ))}
         {/* 🔒 MODO DIÁRIO: a aba Dieta é só o registro das 4 refeições — sem cardápio, sem
             prato, sem `~X kcal`, sem macro, sem troca e sem lista de compras (tudo plano). */}
+
+        {!vista && aba === 'cardio' && (
+          <section style={sec} aria-label="Cardio">
+            <div style={{ ...kicker, color: '#BDFF00' }}>Seu movimento</div>
+            <h2 style={{ fontSize: '1.8rem', margin: '8px 0 12px' }}>Cardio</h2>
+            {!modoDiario && <>
+              <p style={{ color: 'rgba(234,229,219,.75)', lineHeight: 1.6 }}>Escolha os dias disponíveis e confira o cardio previsto no seu plano.</p>
+                          <OfertaCardio
+              value={diasOferecidosCardio}
+              onChange={(proximaOferta) => {
+                setDiasOferecidosCardio(proximaOferta);
+                const { treino: nt } = recomputarPlano(perfil, opcoesDoPlano({ diasOferecidosCardio: proximaOferta }));
+                setTreino(nt);
+                setRotinaDias(nt.rotina?.dias ?? []);
+                notificarPerfil(perfil, { diasOferecidosCardio: proximaOferta });
+              }}
+            />
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, margin: '20px 0' }}>
+                {(treino.rotina?.diasCardio ?? []).map((dia, i) => <article key={dia.diaId ?? i} style={{ ...cardSoft, padding: 20 }}>
+                  <div style={kicker}>{dia.diaId ? DIA_LABEL[dia.diaId as Weekday]?.full : 'Cardio planejado'}</div>
+                  <h3 style={{ margin: '10px 0' }}>{ROTULO_MODALIDADE[dia.modalidade as ModalidadeCardio]}</h3>
+                  <p>{dia.minutos != null ? formatarDuracaoMinutos(dia.minutos) : 'Duração conforme o plano'}</p>
+                  <button type="button" onClick={() => { setCardioPre(dia); setRegistrandoCardio(true); window.scrollTo(0, 0); }} style={{ padding: '10px 16px', borderRadius: 10, background: '#BDFF00', color: '#0D2818', border: 'none', fontWeight: 700 }}>Registrar cardio</button>
+                </article>)}
+              </div>
+            </>}
+            <CardioSemana {...propsCardio} />
+          </section>
+        )}
         {!vista && aba === 'dieta' && modoDiario && (
           <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
         )}
@@ -1906,7 +1927,7 @@ function DiasNaoAtendidos({ dias }: { dias?: DiaNaoAtendido[] }) {
   );
 }
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, cardio, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -1920,12 +1941,6 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   criticoPlano: Avaliacao | null;
   rotina: RotinaSemanal | null;
   tempoPorSessaoMin: number;
-  /** Cardio (Bloco 1): a seção da semana mora na aba Treino, como o design desenhou. */
-  cardio: {
-    registros: readonly RegistroCardioDatado[]; meta: MetaCardio | null;
-    retomada?: { semana: number; totalSemanas: number } | null;
-    hojeISO: string; acumuladoMin: number; objetivo: PerfilResumo['objetivo']; onRegistrar: () => void;
-  };
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   const [diaSelecionado, setDiaSelecionado] = useState(0);
@@ -2088,7 +2103,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
       </p>
       {/* Cardio (Bloco 1): o motor já prescrevia cardio na tabela 1.1 — o app é que não
           deixava registrar. A seção mora aqui, na aba Treino, como o design desenhou. */}
-      <CardioSemana {...cardio} />
+
       {/* Entrada do "Fiquei doente" no PÉ da aba, abaixo da nota do RIR: é o único controle
           de NÍVEL DE ABA, e reusa o vocabulário do "Trocar" (que segue por exercício, dentro
           do cartão — nada foi duplicado nem movido). Continua aqui nos cinco estados. */}
