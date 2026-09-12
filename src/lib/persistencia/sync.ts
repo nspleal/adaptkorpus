@@ -9,6 +9,7 @@
  * engolidos — nunca derrubam a UI nem logam conteúdo (dado de saúde).
  */
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { pesoKgDaResposta } from '@/lib/peso-dominio';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RegistroPeso, SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
@@ -129,13 +130,51 @@ export async function carregarPesosServidor(): Promise<RegistroPeso[] | null> {
   const r = await getJson<{ pesos: RegistroPeso[] }>('/api/dados/peso');
   return r?.pesos ?? null;
 }
+export type ResultadoPesoServidor =
+  /** Primeiro registro do dia — aceito e gravado. */
+  | { tipo: 'REGISTRADO' }
+  /** Reenvio do MESMO peso no MESMO dia: nada duplicou e nada falhou. */
+  | { tipo: 'IDEMPOTENTE'; pesoKg: number }
+  /** Segunda tentativa do dia com peso diferente: o servidor RECUSOU e manteve o primeiro. */
+  | { tipo: 'RECUSADO_DIA'; pesoKg: number | null }
+  /** Rede/backend indisponível — o registro local permanece pendente, sem perda. */
+  | { tipo: 'FALHA' };
+
 /**
  * 🔒 `dataISO` vai junto (Leva D). O caso que obriga: a re-subida das pesagens que ficaram
  * só no navegador. Sem a data, todas chegariam carimbadas com o dia da sincronização e a
  * janela de 7 dias leria uma série que não aconteceu. Ausente = o banco usa `current_date`.
+ *
+ * 🔒 O retorno deixou de ser booleano (2026-09-11): com um registro por dia, "não gravou"
+ * passou a ter DOIS significados opostos — recusa legítima e falha de rede. Colapsá-los em
+ * `false` é exatamente como uma sincronização perde um registro em silêncio.
  */
-export async function registrarPesoServidor(pesoKg: number, dataISO?: string | null): Promise<boolean> {
-  return enviarJson('/api/dados/peso', 'POST', { pesoKg, ...(dataISO ? { dataISO } : {}) });
+export async function registrarPesoServidor(pesoKg: number, dataISO?: string | null): Promise<ResultadoPesoServidor> {
+  if (!supabaseConfigurado()) return { tipo: 'FALHA' };
+  const r = await fetchComRetry401('/api/dados/peso', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pesoKg, ...(dataISO ? { dataISO } : {}) }),
+  });
+  if (!r) return { tipo: 'FALHA' };
+  const corpo = await r.json().catch(() => null) as
+    { estado?: string; pesoKg?: unknown } | null;
+  /**
+   * 🔴 R4 — TIPO E DOMÍNIO ANTES DA CONVERSÃO (`pesoKgDaResposta`). `Number(null)` é `0` e
+   * `Number.isFinite(0)` é `true`: a recusa sem peso conhecido devolvia `pesoKg: 0`, e o
+   * chamador escrevia esse zero no histórico e no perfil. Agora o desconhecido chega como
+   * `null`, e quem consome `RECUSADO_DIA` já tem o ramo que NÃO toca em nada quando é `null`.
+   */
+  if (r.status === 409 || corpo?.estado === 'RECUSADO_DIA') {
+    return { tipo: 'RECUSADO_DIA', pesoKg: pesoKgDaResposta(corpo?.pesoKg) };
+  }
+  if (!r.ok) return { tipo: 'FALHA' };
+  if (corpo?.estado === 'IDEMPOTENTE') {
+    // Idempotente = o servidor confirma que o registro do dia é ESTE. Sem peso legível na
+    // resposta, o peso enviado é a única leitura honesta — nunca zero.
+    return { tipo: 'IDEMPOTENTE', pesoKg: pesoKgDaResposta(corpo?.pesoKg) ?? pesoKg };
+  }
+  return { tipo: 'REGISTRADO' };
 }
 
 // ---- acesso (allowlist/assinatura) -------------------------------------------

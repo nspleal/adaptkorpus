@@ -17,6 +17,10 @@ import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerP
 import { reancorarPesoDoPlanoLocal, resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
+import { escopoLocal } from '@/lib/escopo-local';
+import { noDominioDoPeso } from '@/lib/peso-dominio';
+import { fraseSemComparacao, resumoPesoExibido, rotuloVariacao, type ResumoPesoExibido } from '@/lib/peso-progresso';
+import { reconciliarPerfilComPesoAceito, reconciliarSeriePesos } from '@/lib/peso-reconciliacao';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
 import { alvoDaSemana, aplicarRetomada, estadoDoCiclo, rirAlvoDaSemana, semanaDoCiclo, type EstadoRetomada } from '@/lib/engine';
@@ -27,6 +31,7 @@ import { aplicarFocoCore, type FocoGrupo } from '@/lib/engine/trilhos';
 import { medirEntregaDoFoco } from '@/lib/foco-entrega';
 import { fraseDoFoco } from '@/lib/foco-copy';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
+import { identidadesDe } from '@/lib/exercicio-identidade';
 import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
@@ -203,6 +208,28 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const router = useRouter();
   // Plano e perfil viram estado para suportar "Editar perfil → recalcular" em runtime.
   const [perfil, setPerfil] = useState<PerfilResumo>(perfilProp);
+  /**
+   * 🔴 R1 — PERFIL CORRENTE PARA CÓDIGO ASSÍNCRONO. Um callback de rede guarda o `perfil` do
+   * render em que foi criado; quando a resposta volta, esse objeto pode estar duas edições
+   * atrás. Espalhá-lo (`{ ...perfil }`) não erra só o peso: restaura todos os outros campos.
+   *
+   * Este ref é escrito de forma SÍNCRONA em `notificarPerfil` — por onde toda mudança de
+   * perfil do Painel passa — e re-sincronizado a cada commit como rede de segurança. Assim
+   * duas respostas na mesma tarefa compõem em vez de se atropelarem, e nada disso precisa de
+   * efeito colateral dentro de um updater do `setState` (que o React pode reexecutar).
+   */
+  const perfilRef = useRef(perfilProp);
+  useEffect(() => { perfilRef.current = perfil; }, [perfil]);
+  /** Conta dona da gaveta local; `null` = modo mock/deslogado. Ver `escopo-local.ts`. */
+  const contaLocalRef = useRef<string | null>(null);
+  useEffect(() => { contaLocalRef.current = escopoLocal(); });
+  /**
+   * 🔴 R1 — resposta que volta depois do unmount não escreve estado nem dispara persistência.
+   * O ref é do PAINEL inteiro (não de um efeito), porque o callback nasce num handler de
+   * clique, fora de qualquer efeito com cleanup.
+   */
+  const painelVivoRef = useRef(true);
+  useEffect(() => { painelVivoRef.current = true; return () => { painelVivoRef.current = false; }; }, []);
   const [dieta, setDieta] = useState<ResultadoMotor>(dietaProp);
   const [treino, setTreino] = useState<ResultadoTreino>(treinoProp);
   /** Oferta pertence ao INPUT do plano salvo, nunca às preferências permanentes do perfil. */
@@ -267,26 +294,92 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // 🔒 A série carrega DATA (Leva D). O 1º item é a SEMENTE do perfil, não uma pesagem:
   // entra sem data e por isso nunca conta na janela de 7 dias — só aparece no gráfico.
   const [pesos, setPesos] = useState<RegistroPeso[]>([{ dataISO: null, kg: perfil.pesoKg }]);
-  const pesosKg = pesos.map((p) => p.kg);
-  // Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
-  // resetavam a cada reload quando o write-through falhava); depois o servidor:
-  //  - servidor NÃO-vazio vence (2º device coerente) e renova a cópia local;
-  //  - servidor vazio com local não-vazio → mantém o local e RE-SOBE cada peso (retry
-  //    dos writes silenciosamente perdidos); GET falho (null) → local fica.
+  /**
+   * 🔴 F3 — o que a TELA diz sobre peso sai DAQUI. Antes ela recebia `pesos.map(p => p.kg)`,
+   * que inclui a SEMENTE sem data (o peso do perfil): contá-la dizia "2 registros" com uma
+   * pesagem só, e fazia a variação mudar de −1 para 0 no reload, porque a semente é o peso
+   * do perfil de ANTES e de DEPOIS do registro. `resumoPesoExibido` conta só pesagens
+   * datadas e declara a referência da variação.
+   *
+   * 🔒 A série com a semente continua intacta em `pesos` — é dela que a ÂNCORA do motor
+   * vive (`resolverPesoDoPlanoLocal`, que já ignora registro sem data na janela de 7 dias).
+   */
+  const resumoPeso = resumoPesoExibido(pesos, perfil.pesoKg);
+  /**
+   * Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
+   * resetavam a cada reload quando o write-through falhava); depois o servidor.
+   *
+   * 🔴 R2 (revisão conjunta 2026-09-11) — a hidratação era um `if/else` que perdia dado nos
+   * dois ramos:
+   *  · servidor NÃO-vazio SUBSTITUÍA a série local inteira: a pesagem feita offline, ainda
+   *    não enviada, desaparecia no reload;
+   *  · o reenvio existia SÓ no ramo de servidor vazio: um POST de peso que funcionou com um
+   *    PUT de perfil que falhou nunca era reparado, e o perfil ficava atrás do histórico
+   *    (o boot do perfil é server-first — o cache local não segura a diferença).
+   *
+   * Agora há UM caminho: `reconciliarSeriePesos` funde por DIA (servidor vence no dia que
+   * tem; dia só-local é PENDENTE, fica na série e é reenviado) e o peso do DIA CORRENTE
+   * reconcilia o perfil. Pesagem de OUTRO dia nunca vira peso atual.
+   *
+   * 🔒 Âncora e ciclo intactos: nada aqui chama `reancorarPesoDoPlanoLocal` nem
+   * `recomputarPlano`. GET falho (`null`) → o local fica como está, sem reenvio às cegas.
+   */
   useEffect(() => {
     const semente: RegistroPeso = { dataISO: null, kg: perfil.pesoKg };
-    const locais = lerPesos();
-    if (locais.length > 0) setPesos([semente, ...locais]);
+    const noMount = lerPesos();
+    if (noMount.length > 0) setPesos([semente, ...noMount]);
     let vivo = true;
+    const hoje = hojeISO();
+    // Conta fotografada na IDA: troca de conta durante a espera invalida a resposta.
+    const contaDaChamada = escopoLocal();
+    const mesmaGaveta = () => vivo && painelVivoRef.current && contaDaChamada === contaLocalRef.current;
     void carregarPesosServidor().then((doServidor) => {
-      if (!vivo || !doServidor) return;
-      if (doServidor.length > 0) {
-        setPesos([semente, ...substituirPesos(doServidor)]);
-      } else if (locais.length > 0) {
-        // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
-        // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
-        // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
-        for (const v of locais) void registrarPesoServidor(v.kg, v.dataISO);
+      // 🔴 A GUARDA VEM ANTES DA LEITURA, e não é ordem acidental: `lerPesos()` resolve a
+      // chave pelo escopo VIGENTE (`chaveLocal`), então ler antes de conferir a conta seria
+      // abrir a gaveta de quem entrou depois. Desmontado ou conta trocada: não lê e não grava.
+      if (!mesmaGaveta() || !doServidor) return;
+      /**
+       * 🔴 R2, 2ª volta (conferência focal de `6847571`): a série local é relida AQUI, no
+       * instante da resposta — não a fotografia do mount.
+       *
+       * O que a revisão reproduziu no corpo REAL deste efeito: `lerPesos()` acontecia antes do
+       * GET; quem se pesava enquanto o GET estava pendente tinha o ponto novo apagado por
+       * `substituirPesos(serie)`, porque a reconciliação recebia a lista velha — e o ponto nem
+       * entrava em `pendentes`, então perdia também a cópia de recuperação se o POST falhasse.
+       * Um GET que devolve uma série sem o registro novo é resposta VÁLIDA (a consulta começou
+       * antes dele); o erro era tratá-la como se fosse o estado atual do cliente.
+       *
+       * ⚠️ O ponto novo pode aparecer em `pendentes` mesmo com o POST dele já em vôo, e isso é
+       * seguro de propósito: o dia é arbitrado pelo índice único do banco, então o segundo POST
+       * com o MESMO par (dia, kg) volta `IDEMPOTENTE` e com peso diferente volta `RECUSADO_DIA`
+       * — nunca duplica. Uma requisição extra numa corrida rara é preço barato por não perder
+       * a pesagem de alguém.
+       */
+      const locais = lerPesos();
+      const { serie, pendentes, pesoDeHoje } = reconciliarSeriePesos(locais, doServidor, hoje);
+      setPesos([semente, ...substituirPesos(serie)]);
+      // 🔴 R2 — CONVERGÊNCIA histórico → perfil. Só o dia corrente governa: é ele que a
+      // decisão "o perfil segue o registro" cobre, e adotar um dia antigo seria a regressão
+      // que a revisão proíbe explicitamente.
+      if (pesoDeHoje != null) {
+        aplicarPesoNoPerfil(pesoDeHoje, { respostaDe: hoje, governa: hoje, contaDaChamada });
+      }
+      // 🔒 A data VAI JUNTO (Leva D): sem ela, a re-subida carimbaria toda a série com o
+      // dia em que a rede voltou — uma semana virando um ponto só, e a janela de 7 dias
+      // lendo algo que não aconteceu. Registro legado (sem data) sobe sem data mesmo.
+      // 🔒 Conflito de sincronização é TRATADO, não descartado: se o servidor já tinha um
+      // registro naquele dia, ele venceu (o primeiro vale) e a cópia local se alinha ao
+      // peso aceito. Sem isto, a série local e a do servidor divergiriam em silêncio.
+      for (const v of pendentes) {
+        void registrarPesoServidor(v.kg, v.dataISO).then((r) => {
+          if (!mesmaGaveta()) return;
+          if (r.tipo !== 'RECUSADO_DIA' || r.pesoKg == null || !v.dataISO) return;
+          const aceito = r.pesoKg;
+          alinharSerieAoPesoAceito(v.dataISO, aceito);
+          // Reenvio de um dia ANTIGO conserta o ponto daquele dia e não encosta no perfil;
+          // `governa: hoje` é o que garante isso, sem um segundo `if` para esquecer.
+          aplicarPesoNoPerfil(aceito, { respostaDe: v.dataISO, governa: hoje, contaDaChamada });
+        });
       }
     });
     return () => { vivo = false; };
@@ -884,14 +977,108 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return n;
   }
 
-  const registrarPeso = (v: number) => {
-    if (!Number.isFinite(v) || v < 30 || v > 300) return;
+  /**
+   * 🔒 O PESO DO PERFIL PASSA A SEGUIR O REGISTRO (decisão do autor, 2026-09-11).
+   *
+   * Preserva todos os demais campos (`...perfil`) e persiste pelo caminho normal, que já tem
+   * fila, revisão e bloqueio por conflito (`persistirMudanca` em `app/page.tsx`).
+   *
+   * 🔴 O QUE ESTA FUNÇÃO NÃO FAZ, DE PROPÓSITO:
+   *  · **não reancora** — `reancorarPesoDoPlanoLocal` segue exclusivo do *Editar perfil*
+   *    (spec §4, DF 2026-07-31). A âncora do motor continua andando só pela sua própria
+   *    política: ≥ 3 pesagens em 7 dias, no máximo 1×/semana, com as duas histereses;
+   *  · **não recomputa o plano** — nada de `recomputarPlano` aqui: uma pesagem não regera
+   *    cardápio nem rotina;
+   *  · **não mexe no ciclo** — mesociclo e deload seguem lendo treino resistido.
+   * `entradaDoPlano` já carimba o `pesoEfetivoKg` com o `pesoMotorKg` VIGENTE, então
+   * persistir o perfil não move a âncora nem no servidor.
+   */
+  /**
+   * 🔴 R1 — RECONCILIA CONTRA O PERFIL ATUAL, não contra o capturado no render.
+   *
+   * `respostaDe` é o dia da resposta e `governa` é o dia cuja pesagem manda no perfil; a
+   * decisão inteira (desmontado, troca de conta, valor fora do domínio, dia antigo, já
+   * convergido) vive em `decidirPerfilAposResposta`, testável sem renderizar.
+   *
+   * Devolve `true` quando mexeu no perfil — quem chama usa isso para a mensagem.
+   */
+  function aplicarPesoNoPerfil(
+    pesoKg: unknown,
+    ctx?: { respostaDe: string | null; governa: string; contaDaChamada: string | null },
+  ): boolean {
+    const dia = ctx?.governa ?? hojeISO();
+    // Base = perfil CORRENTE (`perfilRef`): edições feitas durante a espera sobrevivem.
+    const { perfil: novo } = reconciliarPerfilComPesoAceito(perfilRef.current, {
+      pesoAceito: pesoKg,
+      diaDaResposta: ctx?.respostaDe ?? dia,
+      diaGovernante: dia,
+      montado: painelVivoRef.current,
+      contaDaChamada: ctx?.contaDaChamada ?? contaLocalRef.current,
+      contaAgora: contaLocalRef.current,
+    });
+    if (!novo) return false;
+    setPerfil(novo);
+    notificarPerfil(novo); // também sincroniza `perfilRef` de forma síncrona
+    return true;
+  }
+
+  /** Alinha a cópia local e a série exibida ao peso que o servidor ACEITOU naquele dia. */
+  function alinharSerieAoPesoAceito(dia: string, aceito: number) {
+    substituirPesos(lerPesos().map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
+    setPesos((p) => p.map((x) => (x.dataISO === dia ? { ...x, kg: aceito } : x)));
+  }
+
+  /** Recusa da segunda pesagem do dia — mensagem mínima; o desenho fica com o autor. */
+  const [avisoPeso, setAvisoPeso] = useState<string | null>(null);
+
+  type ResultadoPesoUI =
+    | { tipo: 'REGISTRADO' }
+    | { tipo: 'IDEMPOTENTE' }
+    | { tipo: 'RECUSADO_DIA'; registradoKg: number }
+    | { tipo: 'INVALIDO' };
+
+  const registrarPeso = (v: number): ResultadoPesoUI => {
+    // 🔒 Domínio do peso: fonte única (`lib/peso-dominio`), a MESMA faixa que a rota aplica.
+    if (!noDominioDoPeso(v)) return { tipo: 'INVALIDO' };
     // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
     // servidor no campo `data` do log — é ela que permite a janela de 7 dias.
+    // 🔒 `hojeISO` = `diaLocalISO`: DIA CIVIL LOCAL, a mesma convenção do resto do app.
     const dia = hojeISO();
+
+    const local = registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
+    if (local.tipo === 'RECUSADO_DIA') {
+      // 🔒 Não grava, não substitui o primeiro e NÃO toca o perfil.
+      setAvisoPeso(`Você já registrou ${local.registradoKg} kg hoje. Só um registro por dia — o próximo pode ser amanhã.`);
+      return { tipo: 'RECUSADO_DIA', registradoKg: local.registradoKg };
+    }
+    if (local.tipo === 'IDEMPOTENTE') {
+      // Reenvio do mesmo peso no mesmo dia: nada a fazer, e não é erro.
+      setAvisoPeso(null);
+      return { tipo: 'IDEMPOTENTE' };
+    }
+
+    setAvisoPeso(null);
     setPesos((p) => [...p, { dataISO: dia, kg: v }]);
-    registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
-    void registrarPesoServidor(v, dia); // write-through com a data (no-op sem backend)
+    aplicarPesoNoPerfil(v, { respostaDe: dia, governa: dia, contaDaChamada: contaLocalRef.current });
+    // 🔴 R1 — a conta é fotografada NA IDA: se a pessoa trocar de conta durante a espera, a
+    // resposta é da conta antiga e não pode escrever na gaveta da nova.
+    const contaDaChamada = contaLocalRef.current;
+    void registrarPesoServidor(v, dia).then((r) => {
+      // 🔒 Sem perda silenciosa: `FALHA` mantém o registro local pendente (offline-first) e
+      // a re-subida do mount o envia depois. Só a RECUSA do servidor reconcilia.
+      if (r.tipo !== 'RECUSADO_DIA') return;
+      if (!painelVivoRef.current || contaDaChamada !== contaLocalRef.current) return;
+      // 🔴 R4 — `pesoKg: null` é "não sei qual peso está registrado", não zero: não alinha
+      // série nem perfil, e não inventa aviso com um número que não existe.
+      const aceito = r.pesoKg;
+      if (aceito == null) return;
+      // Outra aba/dispositivo venceu a corrida e o banco manteve o PRIMEIRO registro do dia.
+      // O cliente se alinha ao que foi aceito — histórico e perfil juntos, nunca divergentes.
+      alinharSerieAoPesoAceito(dia, aceito);
+      aplicarPesoNoPerfil(aceito, { respostaDe: dia, governa: dia, contaDaChamada });
+      setAvisoPeso(`Outro dispositivo já havia registrado ${aceito} kg hoje. Mantivemos esse registro.`);
+    });
+    return { tipo: 'REGISTRADO' };
   };
 
   const prescricao = treino.prescricao;
@@ -1088,6 +1275,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     sobrescrever?: { pesoEfetivoKg?: number; diasOferecidosCardio?: Weekday[] },
   ) {
     const entrada = entradaDoPlano(novoPerfil, sobrescrever);
+    // 🔴 R1 — o ref acompanha a mudança AQUI, antes do próximo render: todo `setPerfil` do
+    // Painel é acompanhado de `notificarPerfil`, então este é o ponto único que mantém o
+    // perfil corrente disponível para callbacks assíncronos já criados.
+    perfilRef.current = novoPerfil;
     ultimaEntradaEnviadaRef.current = entrada;
     onPerfilChange?.(novoPerfil, entrada);
   }
@@ -1281,8 +1472,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     return (
       <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
+        {/* 🔒 D18 — o plano INTEIRO vai para o registro. Antes só `diaDeHoje` ia, e ele é
+            `undefined` sempre que hoje não é dia agendado: o plano existia, mas a tela só
+            oferecia "Montar do zero". `rotinaDias` é a mesma lista que a aba Treino
+            desenha, então o que se registra é o que se vê. */}
         <RegistrarTreino
           diaHoje={diaDeHoje}
+          diasDoPlano={rotinaDias}
+          idxDeHoje={sessaoHojeIdx}
+          estadoPlano={rotinaDias.length === 0 ? 'sem-plano' : 'pronto'}
           prescricao={prescricaoEfetiva}
           progresso={progresso}
           exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)}
@@ -1371,7 +1569,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             onRegistrarTreino={() => setRegistrando(true)}
             onRegistrarCardio={() => { setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             onRegistrarRefeicao={() => irAba('dieta')}
-            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} />}
+            pesoSlot={<RegistrarPesoRow onRegistrar={registrarPeso} aviso={avisoPeso} />}
           />
         )}
         {!vista && aba === 'hoje' && !modoDiario && (
@@ -1417,7 +1615,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                 notificarPerfil(perfil, { diasOferecidosCardio: proximaOferta });
               }}
             />
-            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
+            <Hoje dieta={dieta} cardTotais={cardTotais} dia={diaDeHoje} mostrarC={mostrarC} onFecharC={() => setMostrarC(false)} onComecar={() => sessaoHojeIdx != null ? iniciarSessaoGuiada(sessaoHojeIdx) : irAbaHist('treino')} onRegistrar={registrarPeso} avisoPeso={avisoPeso} onRegistrarTreino={() => setRegistrando(true)} deload={deloadAtivo} semanaCiclo={ciclo.semanaEfetiva} onSinalFadiga={sinalizarFadiga} retomada={retomada} />
           </div>
         )}
         {!vista && <AvisosHidratacao avisos={perfil.avisosHidratacao} />}
@@ -1469,7 +1667,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
-          <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
+          <Progresso resumo={resumoPeso} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
                 `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
             <FrequenciaGrupos
@@ -1484,7 +1682,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesosKg} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : irAbaHist('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} resumoPeso={resumoPeso} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : irAbaHist('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
@@ -1503,6 +1701,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             banidos: new Set(perfil.preferencias?.banidos ?? []),
           }}
           grupoInicial={rotinaDias[biblioteca.d]!.slots[biblioteca.s]!.exercicio.grupoPrimario ?? null}
+          /* 🔒 D19 — a troca é a OUTRA porta para o mesmo dia: trocar o slot s por um
+             exercício que já ocupa outro slot do MESMO dia produz exatamente a duplicata
+             que a trava existe para impedir. O slot em troca fica de fora da marcação (é o
+             que está saindo) e nenhum outro dia é consultado. */
+          jaAdicionados={identidadesDe(
+            rotinaDias[biblioteca.d]!.slots
+              .filter((_, i) => i !== biblioteca.s)
+              .map((sl) => sl.exercicio),
+          )}
           onEscolher={(ex) => { const { d, s } = biblioteca; setBiblioteca(null); aplicarEx(d, s, ex); }}
           onDesbanir={(id) => desbanirExercicio(id)}
           onFechar={() => setBiblioteca(null)}
@@ -1562,9 +1769,10 @@ function CartaoRetomada({ estado }: { estado: EstadoRetomada }) {
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
+function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, avisoPeso, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
-  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => void;
+  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => { tipo: string } | void;
+  avisoPeso?: string | null;
   onRegistrarTreino: () => void; deload: boolean;
   /** Semana do mesociclo (v2 §6): contador "Semana X/6 do ciclo". */
   semanaCiclo?: number;
@@ -1649,7 +1857,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
           <p style={{ margin: 0, fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>É um guia, não uma meta exata.</p>
         </div>
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
     </div>
   );
 }
@@ -1956,24 +2164,30 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPesoPlano }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null }) {
-  const atual = pesos[pesos.length - 1]!;
-  const variacao = atual - pesos[0]!;
+function Progresso({ resumo, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { resumo: ResumoPesoExibido; treinos: number; onRegistrar: (v: number) => { tipo: string } | void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
+  // 🔴 F3 — número só quando há duas pesagens datadas. Sem isso, a tela EXIBE a ausência
+  // (`—` + frase), em vez de um valor tirado do peso do perfil.
+  const variacao = rotuloVariacao(resumo.variacao);
   return (
     <div style={sec}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 20 }}>
-        <Stat rotulo="Peso atual" valor={atual.toFixed(1)} un="kg" />
-        <Stat rotulo="Variação" valor={`${variacao >= 0 ? '+' : ''}${variacao.toFixed(1)}`} un="kg" cor="#BDFF00" />
+        <Stat rotulo={resumo.atualEhPesagem ? 'Peso atual' : 'Peso do perfil'} valor={resumo.atualKg.toFixed(1)} un="kg" />
+        <Stat rotulo="Variação" valor={variacao ?? '—'} un={variacao ? 'kg' : undefined} cor="#BDFF00" />
         <Stat rotulo="Treinos avaliados" valor={String(treinos)} />
       </div>
+      {resumo.variacao.tipo === 'SEM_COMPARACAO' && (
+        <p style={{ margin: '-8px 0 18px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>
+          {fraseSemComparacao(resumo.variacao.motivo)}
+        </p>
+      )}
       {/* O cartão de marco 7/30 saiu (substituído pelo contador da Hoje — handoff §Substituição);
           o total acumulado já aparece no stat acima, sem reintroduzir níveis. */}
       <div style={{ ...cardSoft, padding: 24, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
-        <Grafico pesos={pesos} />
-        {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{resumo.registros} registro{resumo.registros === 1 ? '' : 's'}</span></div>
+        {resumo.registros > 0 && <Grafico pesos={resumo.serieKg} />}
+        {resumo.registros < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>{resumo.registros === 0 ? 'Registre um peso para a linha começar.' : 'Registre mais pesos para ver a linha evoluir.'}</p>}
       </div>
-      <RegistrarPesoRow onRegistrar={onRegistrar} />
+      <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
       {/* 🔒 Leva D — o AVISO DO RECÁLCULO. Não é subtítulo nem promessa: é o relato de um
           fato já ocorrido, no passado, sobre o APP (nunca sobre a pessoa e nunca no futuro).
           Só aparece quando o peso do plano realmente deixou de ser o do perfil — a string
@@ -1996,8 +2210,8 @@ function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPeso
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino, modoDiario }: {
-  sessoes: SessaoLog[]; pesos: number[]; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
+function Historico({ sessoes, resumoPeso, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino, modoDiario }: {
+  sessoes: SessaoLog[]; resumoPeso: ResumoPesoExibido; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
   onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void; onRegistrarTreino: () => void;
   /** Modo diário: o histórico é leitura do registro (liberada), mas sem enquadrar nada
    *  como "% do plano" — não existe plano contra o qual comparar. */
@@ -2083,9 +2297,11 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
       {sub === 'peso' && (
         <div style={{ ...cardSoft, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
-          <Grafico pesos={pesos} />
-          {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Seu peso inicial já está aqui — registre de novo na aba Progresso para ver a curva.</p>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{resumoPeso.registros} registro{resumoPeso.registros === 1 ? '' : 's'}</span></div>
+          {resumoPeso.registros > 0 && <Grafico pesos={resumoPeso.serieKg} />}
+          {/* 🔴 F3 — a frase antiga ("Seu peso inicial já está aqui") era a semente falando:
+              com zero pesagens nada estava ali, e com uma o inicial É a pesagem. */}
+          {resumoPeso.registros < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>{resumoPeso.registros === 0 ? 'Nenhuma pesagem registrada ainda — registre na aba Progresso para a curva começar.' : 'Uma pesagem registrada. Registre de novo na aba Progresso para ver a curva.'}</p>}
         </div>
       )}
     </div>
@@ -2318,7 +2534,16 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
  * 🔴 NÃO reintroduza `modoDiario` aqui: o subtítulo segue unificado, e a diferença entre os
  * modos mora na nota, que é outra frase e outro lugar.
  */
-function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void }) {
+/**
+ * `onRegistrar` devolve o desfecho para a linha saber se limpa o campo. Recusa MANTÉM o que
+ * a pessoa digitou — apagar o número sem explicar é a forma silenciosa de recusar.
+ * ⚠️ Desabilitar o botão NÃO é a trava: a trava é o índice único do banco. Esta linha só
+ * conta o que aconteceu.
+ */
+function RegistrarPesoRow({ onRegistrar, aviso }: {
+  onRegistrar: (v: number) => { tipo: string } | void;
+  aviso?: string | null;
+}) {
   const [v, setV] = useState('');
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
@@ -2328,8 +2553,11 @@ function RegistrarPesoRow({ onRegistrar }: { onRegistrar: (v: number) => void })
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />
-        <button onClick={() => { onRegistrar(Number(v)); setV(''); }} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>Registrar peso</button>
+        <button onClick={() => { const r = onRegistrar(Number(v)); if (!r || r.tipo !== 'RECUSADO_DIA') setV(''); }} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>Registrar peso</button>
       </div>
+      {aviso && (
+        <div role="status" style={{ flexBasis: '100%', fontSize: '.85rem', color: 'rgba(234,229,219,.75)' }}>{aviso}</div>
+      )}
     </div>
   );
 }

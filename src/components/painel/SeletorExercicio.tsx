@@ -7,6 +7,7 @@ import { exercicioDisponivel } from '@/lib/engine/equipamento';
 import { dificuldadesLiberadas } from '@/lib/engine/treino';
 import { secundariosDe } from '@/lib/engine/secundarios';
 import { ROTULO_GRUPO, ROTULO_PADRAO } from '@/lib/frequencia-grupos';
+import { identidadeCanonica } from '@/lib/exercicio-identidade';
 import type { EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import type { NivelExperiencia } from '@/lib/engine';
 
@@ -47,6 +48,7 @@ export interface ContextoSeletor {
 
 export default function SeletorExercicio({
   exercises, ctx, onEscolher, onEscolherVarios, onDesbanir, onFechar, titulo = 'Biblioteca de exercícios', grupoInicial = null,
+  jaAdicionados,
 }: {
   exercises: readonly Exercise[];
   ctx: ContextoSeletor;
@@ -57,6 +59,16 @@ export default function SeletorExercicio({
   onFechar: () => void;
   titulo?: string;
   grupoInicial?: GrupoPrimario | null;
+  /**
+   * 🔒 D19 — identidades canônicas JÁ presentes no dia em edição. O item continua VISÍVEL
+   * (esconder faria a lista mentir sobre a biblioteca, mesma razão dos banidos), mas vem
+   * marcado "Já neste treino" e não é selecionável.
+   *
+   * Estado DIFERENTE de "Selecionado", que é escolha desta abertura e se desfaz num toque.
+   * Isto aqui é a APARÊNCIA da trava; a trava que decide é `adicionarSemDuplicar`, no call
+   * site — mesmo que esta marcação falhe, a inclusão duplicada não passa.
+   */
+  jaAdicionados?: ReadonlySet<string>;
 }) {
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState<Exercise[]>([]);
@@ -151,12 +163,14 @@ export default function SeletorExercicio({
           {lista.map((ex) => {
             const banido = ctx.banidos.has(ex.id);
             const favorito = ctx.favoritos.has(ex.id);
+            const noTreino = jaAdicionados?.has(identidadeCanonica(ex)) ?? false;
             const sec = secundariosDe(ex).map((g) => ROTULO_GRUPO[g] ?? g);
             return (
-              <article key={ex.id} className="ak-library-exercise" data-selected={selecionados.some((item) => item.id === ex.id)} aria-label={ex.nomePt} style={{ borderColor: banido ? 'rgba(229,72,77,.5)' : undefined }}>
+              <article key={ex.id} className="ak-library-exercise" data-selected={selecionados.some((item) => item.id === ex.id)} data-no-treino={noTreino || undefined} aria-label={ex.nomePt} style={{ borderColor: banido ? 'rgba(229,72,77,.5)' : undefined, opacity: noTreino ? 0.62 : undefined }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '.98rem', fontWeight: 600 }}>{ex.nomePt}</span>
+                    {noTreino && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.75)', border: '1px solid rgba(234,229,219,.35)', borderRadius: 6, padding: '2px 6px' }}>Já neste treino</span>}
                     {favorito && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', border: '1px solid rgba(189,255,0,.4)', borderRadius: 6, padding: '2px 6px' }}>Favorito</span>}
                     {banido && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#E5484D', border: '1px solid rgba(229,72,77,.4)', borderRadius: 6, padding: '2px 6px' }}>Fora do meu plano</span>}
                   </div>
@@ -172,6 +186,13 @@ export default function SeletorExercicio({
                 </details>
                 {banido && onDesbanir ? (
                   <button onClick={() => onDesbanir(ex.id)} style={botao} aria-label={`Trazer ${ex.nomePt} de volta`}>Trazer de volta</button>
+                ) : noTreino ? (
+                  <button
+                    type="button"
+                    disabled
+                    style={{ ...botao, background: 'rgba(234,229,219,.06)', color: 'rgba(234,229,219,.6)', minHeight: 44, cursor: 'not-allowed' }}
+                    aria-label={`${ex.nomePt} já está neste treino`}
+                  >Já neste treino</button>
                 ) : (
                   <button
                     onClick={() => onEscolherVarios

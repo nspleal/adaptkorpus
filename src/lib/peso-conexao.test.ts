@@ -122,9 +122,17 @@ describe('🔒 a série de pesos carrega DATA — nas duas pontas', () => {
     // E o servidor tem de aceitar o campo — senão o cliente manda para o vazio.
     const rota = semComentarios(ROTA);
     expect(rota).toMatch(/dataISO\?: unknown/);
-    expect(rota, 'a data do cliente não chega ao insert').toMatch(/data: dataOk/);
-    // 🔒 Só passado: data futura tem de cair no default do banco, nunca entrar na janela.
-    expect(rota).toMatch(/d <= hoje/);
+    // 🔄 2026-09-11: a gravação passou a ser a RPC `registrar_peso_dia` (um registro por
+    // dia, sob índice único). A propriedade defendida é a MESMA — o dia do CLIENTE chega
+    // ao banco —, só mudou o nome do parâmetro: `data: dataOk` → `p_dia: dataOk`.
+    expect(rota, 'a data do cliente não chega à gravação').toMatch(/p_dia: dataOk/);
+    expect(rota, 'a gravação passa pela RPC que arbitra o dia').toMatch(/registrar_peso_dia/);
+    // 🔒 Continua BOUNDED: data muito futura cai no default do banco e nunca entra na
+    // janela. O teto virou `hoje_utc + 1` porque o dia é o CIVIL LOCAL da pessoa e quem
+    // vive em fuso à frente de UTC está legitimamente num dia maior que o do servidor —
+    // recusá-lo seria aplicar UTC à revelia da regra.
+    expect(rota).toMatch(/d <= amanhaUtc/);
+    expect(rota).toMatch(/amanhaUtc = new Date\(Date\.now\(\) \+ 86_400_000\)/);
   });
 
   it('TODA subida do Painel leva a data — inclusive a re-subida do que ficou local', () => {

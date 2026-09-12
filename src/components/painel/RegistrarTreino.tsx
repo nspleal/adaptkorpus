@@ -10,6 +10,7 @@ import { exercicioEfetivo, type ProgressoExercicio } from '@/lib/treino-progress
 import CalibracaoModal, { type PayloadCalibracao } from './CalibracaoModal';
 import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
+import { seriesDoSlot } from '@/lib/series-treino';
 
 /**
  * Registrar treino feito — porte FIEL do formulário do design
@@ -27,7 +28,7 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const PADRAO_LABEL: Record<string, string> = { empurrar: 'Empurrar', puxar: 'Puxar', agachar: 'Agachar', dobradica_quadril: 'Dobradiça de quadril', core: 'Core', cardio: 'Cardio', isolado: 'Isolado' };
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
-interface ExForm {
+export interface ExForm {
   uid: string;
   refId: string | null;      // id da biblioteca (e{n}) ou null se personalizado
   nome: string;
@@ -51,8 +52,116 @@ const chipStyle = (active: boolean): CSSProperties => ({ padding: '8px 12px', bo
 let seq = 0;
 const newUid = () => `exf${++seq}`;
 
-export default function RegistrarTreino({ diaHoje, prescricao, progresso, exercicioPorId, onCalibrar, onCancelar, onSalvar, onVerHistorico }: {
+/**
+ * 🔒 D18 — estado da LEITURA do plano, não do plano. Os três casos que o registro
+ * confundia num só ("não mostre o cartão") são fatos diferentes e merecem frases
+ * diferentes: ainda não sei / sei que não há / não consegui ler.
+ */
+export type EstadoPlano = 'carregando' | 'pronto' | 'sem-plano' | 'erro';
+
+/** Um dia do plano oferecido como MODELO de registro. */
+export interface ModeloDeRegistro {
+  /** Índice no plano — identidade do modelo nesta tela. */
+  idx: number;
+  nome: string;
+  /** Quantos exercícios o modelo copia. */
+  qtd: number;
+  /** true quando este é o dia agendado para hoje (só ordena e rotula; não filtra). */
+  ehHoje: boolean;
+}
+
+/**
+ * Modelos oferecidos na partida. Um dia SEM exercício não vira modelo: copiar zero
+ * exercícios não é ponto de partida, é a lista vazia que "Montar do zero" já dá (mesma
+ * regra de D14 — dia sem exercício não é sessão).
+ *
+ * O dia de hoje, quando existe, vem primeiro e marcado; os demais seguem a ordem do plano.
+ * Nenhum dia é escondido: a tela mostrava só hoje, e era esse o defeito.
+ */
+export function modelosDoPlano(dias: readonly DiaTreino[] = [], idxDeHoje: number | null = null): ModeloDeRegistro[] {
+  const modelos = dias
+    .map((d, idx) => ({ idx, nome: d.nome, qtd: d.slots.length, ehHoje: idx === idxDeHoje }))
+    .filter((m) => m.qtd > 0);
+  return [...modelos].sort((a, b) => Number(b.ehHoje) - Number(a.ehHoje) || a.idx - b.idx);
+}
+
+/**
+ * Uma linha do formulário a partir de um exercício da biblioteca. Era método do componente;
+ * virou função de módulo para que a CÓPIA do modelo (D18) seja verificável sem renderizar.
+ */
+export function linhaDaBiblioteca(ex: Exercise, prescricao: PrescricaoFITT | null, prefill: boolean): ExForm {
+  // Isométricos registram SEGUNDOS e são time-only (sem carga); o resto segue a regra do
+  // player: peso corporal não tem coluna de carga.
+  const repUnit = repUnitDe(ex.id);
+  const comCarga = temCargaProgressivel(ex);
+  const nSets = prefill && prescricao ? prescricao.seriesPorExercicio.min : 3;
+  const repsDefault = prefill && prescricao && repUnit === 'reps' ? String(prescricao.repsComposto.max) : '';
+  return {
+    uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga: comCarga, repUnit,
+    dica: ex.comoFazer, variacao: '',
+    sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '', rir: '' })),
+    chip: null,
+  };
+}
+
+/**
+ * 🔒 D18 — CÓPIA de um dia do plano para o formulário de registro.
+ *
+ * Tudo que sai daqui é estrutura nova: o `DiaTreino` de entrada nunca é mantido por
+ * referência, nem seus slots, nem os `sets`. Editar o registro (tirar exercício, mudar
+ * reps, lançar carga) portanto NÃO altera o plano — que é a regra do pedido.
+ *
+ * `prescricao` ausente não cancela a cópia: o plano continua sendo o ponto de partida, só
+ * sem pré-preencher reps (antes, prescrição nula sumia com o cartão inteiro).
+ *
+ * 🔴 R3 (revisão conjunta 2026-09-11) — AS SÉRIES SÃO DO PLANO, não da prescrição. A cópia
+ * herdava o número de `linhaDaBiblioteca` (`prescricao.seriesPorExercicio.min`, ou 3), que é
+ * o default de quem adiciona um exercício da BIBLIOTECA — ali não existe slot, logo não
+ * existe autoridade. Copiando um DIA do plano existe: slots com 1 e 5 séries viravam 3 e 3.
+ *
+ * 🔒 A autoridade é `seriesDoSlot` (fonte única desde D9): ela devolve o que o MOTOR decidiu
+ * para o slot, já com a rampa do mesociclo e o deload aplicados, sem piso e sem régua própria.
+ *
+ * ⚠️ SOBRE O FALLBACK, com precisão (conferência focal de `6847571`): `seriesDoSlot` colapsa
+ * "slot sem série decidida" e "slot com série zero" no MESMO `0` (`slot.series ?? 0`), então o
+ * fallback cobre os DOIS casos — **não** só a ausência, como este comentário já afirmou. Não dá
+ * para distinguir daqui, e ler `sl.series` direto criaria a segunda autoridade sobre séries que
+ * D9 removeu; então a distinção não existe por decisão de arquitetura, não por esquecimento.
+ *
+ * 🔒 O fallback é INALCANÇÁVEL no fluxo real, e isso é medido, não suposto — ver
+ * `__auditoria__/regressao-R3b-series-zero-nao-alcanca-o-modelo.test.ts`: a varredura do espaço
+ * de planos (objetivo × nível × equipamento × dias × tempo × semana × retomada) não acha um
+ * slot com série `0` ou ausente, e série manual fora de faixa (`0`, negativa, fracionária, acima
+ * do teto) é RECUSADA pelo montador, que decide por conta própria e marca
+ * `seriesDefinidasPeloUsuario` como não-definida. Se algum dia o motor passar a emitir zero,
+ * aquele teste quebra ALTO — é a hora de decidir o que a cópia faz, não de inventar aqui.
+ */
+export function linhasDoModelo(dia: DiaTreino, prescricao: PrescricaoFITT | null): ExForm[] {
+  return dia.slots.map((sl) => {
+    const linha = linhaDaBiblioteca(sl.exercicio, prescricao, true);
+    const doPlano = seriesDoSlot(sl);
+    const nSets = doPlano > 0 ? doPlano : linha.sets.length;
+    // reps default = TOPO da faixa prescrita (composto/isolado), editável; carga em branco.
+    // Isométrico segue em SEGUNDOS (`repUnit`) e sem reps pré-preenchidas, como antes.
+    const comp = sl.padrao !== 'isolado';
+    const reps = prescricao && linha.repUnit === 'reps'
+      ? String((comp ? prescricao.repsComposto : prescricao.repsIsolado).max)
+      : '';
+    // `Array.from` cria `sets` NOVOS: editar o registro não alcança o plano (regra de D18).
+    return { ...linha, sets: Array.from({ length: nSets }, () => ({ reps, kg: '', rir: '' })) };
+  });
+}
+
+export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null, estadoPlano = 'pronto', prescricao, progresso, exercicioPorId, onCalibrar, onCancelar, onSalvar, onVerHistorico }: {
+  /** Dia agendado para HOJE, quando hoje é dia de treino. Só rotula/ordena o modelo. */
   diaHoje?: DiaTreino;
+  /**
+   * 🔒 D18 — TODOS os dias do plano. Antes só `diaHoje` chegava aqui, então registrar um
+   * treino fora do dia agendado só oferecia "Montar do zero" mesmo com o plano cheio.
+   */
+  diasDoPlano?: readonly DiaTreino[];
+  idxDeHoje?: number | null;
+  estadoPlano?: EstadoPlano;
   prescricao: PrescricaoFITT | null;
   /** Progressão atual (pré-preenche a calibração "Muito fácil"). */
   progresso?: Record<string, ProgressoExercicio>;
@@ -69,6 +178,8 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
   const [dataISO, setDataISO] = useState(() => hojeISO());
   const [hora, setHora] = useState(() => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; });
   const [startMode, setStartMode] = useState<'plano' | 'zero' | null>(null);
+  /** Nome do dia copiado — a frase "Ponto de partida" precisa dizer QUAL modelo. */
+  const [modeloNome, setModeloNome] = useState<string | null>(null);
   const [exs, setExs] = useState<ExForm[]>([]);
   const [obs, setObs] = useState('');
   const [status, setStatus] = useState<'editando' | 'salvando' | 'salvo'>('editando');
@@ -81,38 +192,49 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
 
   const maxDate = hojeISO();
 
+  /**
+   * 🔒 D18 — os dias oferecidos como modelo. `diasDoPlano` é a fonte; `diaHoje` sozinho
+   * é aceito como compatibilidade para quem ainda não passa o plano inteiro, para que
+   * nenhuma porta fique PIOR do que era.
+   */
+  const diasDisponiveis = useMemo<readonly DiaTreino[]>(
+    () => diasDoPlano ?? (diaHoje ? [diaHoje] : []),
+    [diasDoPlano, diaHoje],
+  );
+  const idxHojeEfetivo = diasDoPlano ? idxDeHoje : (diaHoje ? 0 : null);
+  const modelos = useMemo(
+    () => modelosDoPlano(diasDisponiveis, idxHojeEfetivo),
+    [diasDisponiveis, idxHojeEfetivo],
+  );
+  /**
+   * Estado EFETIVO: uma leitura pronta que não trouxe nenhum modelo utilizável é ausência
+   * real de plano, e precisa dizer isso — não pode continuar se passando por "pronto" e
+   * mostrando só "Montar do zero" sem explicação, que era o defeito relatado.
+   * 'carregando' e 'erro' são preservados como vieram: não se converte desconhecimento
+   * em ausência.
+   */
+  const estadoEfetivo: EstadoPlano = estadoPlano === 'pronto' && modelos.length === 0 ? 'sem-plano' : estadoPlano;
+
   const equipOptions = useMemo(() => [...new Set(EXERCISES_SEED.map((e) => e.equipamentoDetalhe).filter(Boolean))] as string[], []);
   const padraoOptions = useMemo(() => [...new Set(EXERCISES_SEED.map((e) => e.padraoMovimento))], []);
 
-  function entradaDaBiblioteca(ex: Exercise, prefill: boolean): ExForm {
-    // Isométricos registram SEGUNDOS e são time-only (sem carga); o resto segue a regra do
-    // player: peso corporal não tem coluna de carga.
-    const repUnit = repUnitDe(ex.id);
-    const comCarga = temCargaProgressivel(ex);
-    const nSets = prefill && prescricao ? prescricao.seriesPorExercicio.min : 3;
-    const repsDefault = prefill && prescricao && repUnit === 'reps' ? String(prescricao.repsComposto.max) : '';
-    return {
-      uid: newUid(), refId: ex.id, nome: ex.nomePt, custom: false, temCarga: comCarga, repUnit,
-      dica: ex.comoFazer, variacao: '',
-      sets: Array.from({ length: nSets }, () => ({ reps: repsDefault, kg: '', rir: '' })),
-      chip: null,
-    };
+  const entradaDaBiblioteca = (ex: Exercise, prefill: boolean) => linhaDaBiblioteca(ex, prescricao, prefill);
+
+  /**
+   * 🔒 D18 — escolher um modelo COPIA o dia para o formulário. `linhasDoModelo` devolve
+   * estruturas novas (nenhuma referência do plano é reaproveitada), então ajustar o que foi
+   * realmente feito não toca o plano. E nada é gravado aqui: só a confirmação final chama
+   * `onSalvar`; cancelar sai sem registro.
+   */
+  function escolherModelo(idx: number) {
+    const dia = diasDisponiveis[idx];
+    if (!dia) { escolherZero(); return; }
+    setStartMode('plano');
+    setModeloNome(dia.nome);
+    setExs(linhasDoModelo(dia, prescricao));
   }
 
-  function escolherPartida(mode: 'plano' | 'zero') {
-    if (mode === 'plano' && diaHoje && prescricao) {
-      const lista = diaHoje.slots.map((sl) => {
-        const comp = sl.padrao !== 'isolado';
-        const e = entradaDaBiblioteca(sl.exercicio, true);
-        // reps default = TOPO da faixa prescrita (composto/isolado), editável; carga em branco.
-        const reps = String((comp ? prescricao.repsComposto : prescricao.repsIsolado).max);
-        return { ...e, sets: e.sets.map(() => ({ reps, kg: '', rir: '' })) };
-      });
-      setStartMode('plano'); setExs(lista);
-    } else {
-      setStartMode('zero'); setExs([]);
-    }
-  }
+  function escolherZero() { setStartMode('zero'); setModeloNome(null); setExs([]); }
 
   const addedRefs = useMemo(() => new Set(exs.map((e) => e.refId).filter(Boolean)), [exs]);
   const filtrados = useMemo(() => {
@@ -175,7 +297,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
   function registrarOutro() {
     setDataISO(hojeISO());
     const d = new Date(); setHora(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
-    setStartMode(null); setExs([]); setObs(''); setStatus('editando');
+    setStartMode(null); setModeloNome(null); setExs([]); setObs(''); setStatus('editando');
     setPickerOpen(false); setQuery(''); setFEquip(''); setFPadrao(''); setCustomOpen(false); setCustomName('');
     window.scrollTo(0, 0);
   }
@@ -223,15 +345,30 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
             {startMode === null ? (
               <div style={{ marginBottom: 26 }}>
                 <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.72)', marginBottom: 12 }}>Como você quer começar?</div>
+                {/* 🔒 D18 — carregando / ausência real / falha de leitura são fatos
+                    diferentes e recebem frases diferentes. Em TODOS eles "Montar do zero"
+                    continua disponível: nenhum estado do plano impede registrar o treino. */}
+                {estadoEfetivo === 'carregando' && (
+                  <p role="status" style={{ margin: '0 0 12px', fontSize: '.86rem', color: 'rgba(234,229,219,.6)' }}>Carregando seu plano… os treinos aparecem aqui assim que ele chegar.</p>
+                )}
+                {estadoEfetivo === 'sem-plano' && (
+                  <p role="status" style={{ margin: '0 0 12px', fontSize: '.86rem', color: 'rgba(234,229,219,.6)' }}>Você ainda não tem treinos no plano para usar como modelo.</p>
+                )}
+                {estadoEfetivo === 'erro' && (
+                  <p role="alert" style={{ margin: '0 0 12px', fontSize: '.86rem', color: '#ffb4a5' }}>Não foi possível ler seu plano agora, então não dá para dizer se você tem treinos nele. Registrar do zero continua funcionando.</p>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
-                  {diaHoje && prescricao && (
-                    <div onClick={() => escolherPartida('plano')} className="evk-start-card" style={{ cursor: 'pointer', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 16, padding: 20 }}>
+                  {estadoEfetivo === 'pronto' && modelos.map((m) => (
+                    <div key={m.idx} role="button" tabIndex={0} onClick={() => escolherModelo(m.idx)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); escolherModelo(m.idx); } }} className="evk-start-card" aria-label={`Usar o treino ${m.nome} do plano como modelo`} style={{ cursor: 'pointer', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 16, padding: 20 }}>
                       <svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" /></svg>
-                      <div style={{ fontWeight: 700, fontSize: '1.02rem', marginBottom: 6 }}>Usar o treino do plano</div>
-                      <div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Pré-preenche os exercícios de hoje ({diaHoje.nome}) — você só ajusta reps e cargas reais.</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: '1.02rem' }}>{m.nome}</div>
+                        {m.ehHoje && <span style={{ fontSize: '.66rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#BDFF00', border: '1px solid rgba(189,255,0,.4)', borderRadius: 6, padding: '2px 6px' }}>Hoje</span>}
+                      </div>
+                      <div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Copia os {m.qtd} exercício{m.qtd === 1 ? '' : 's'} deste dia — você ajusta o que fez de verdade. Seu plano não muda.</div>
                     </div>
-                  )}
-                  <div onClick={() => escolherPartida('zero')} className="evk-start-card" style={{ cursor: 'pointer', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 16, padding: 20 }}>
+                  ))}
+                  <div role="button" tabIndex={0} onClick={escolherZero} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); escolherZero(); } }} className="evk-start-card" aria-label="Montar do zero" style={{ cursor: 'pointer', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 16, padding: 20 }}>
                     <svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}><circle cx={12} cy={12} r={9} stroke="#BDFF00" strokeWidth={1.8} /><path d="M12 8v8M8 12h8" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" /></svg>
                     <div style={{ fontWeight: 700, fontSize: '1.02rem', marginBottom: 6 }}>Montar do zero</div>
                     <div style={{ fontSize: '.86rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Comece uma lista vazia e adicione exatamente o que você treinou.</div>
@@ -240,7 +377,7 @@ export default function RegistrarTreino({ diaHoje, prescricao, progresso, exerci
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 20, fontSize: '.86rem', color: 'rgba(234,229,219,.55)' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5 9-11" stroke="#16A34A" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>Ponto de partida: {startMode === 'plano' ? 'o treino do plano.' : 'do zero.'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 20, fontSize: '.86rem', color: 'rgba(234,229,219,.55)' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5 9-11" stroke="#16A34A" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>Ponto de partida: {startMode === 'plano' ? `${modeloNome ?? 'o treino'}, copiado do plano (o plano não muda).` : 'do zero.'}</div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
                   <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.72)' }}>Exercícios</div>

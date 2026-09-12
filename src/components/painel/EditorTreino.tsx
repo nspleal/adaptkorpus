@@ -8,6 +8,7 @@ import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import SeletorExercicio, { type ContextoSeletor } from './SeletorExercicio';
+import { adicionarSemDuplicar, identidadesDe } from '@/lib/exercicio-identidade';
 import ResumoSeries from './ResumoSeries';
 import OrdemExercicios from './OrdemExercicios';
 
@@ -214,12 +215,17 @@ export default function EditorTreino({
         {!diasUnicos && <p style={{ margin: '10px 2px 0', fontSize: '.84rem', color: '#ffb4a5' }}>Escolha dias diferentes: por enquanto, cada dia comporta um treino.</p>}
       </div>
 
+      {/* 🔒 D19 — a trava mora na OPERAÇÃO: os dois caminhos de inclusão (clique individual
+          e "Adicionar selecionados") passam pela mesma `adicionarSemDuplicar`. A marcação
+          "Já neste treino" é só a aparência disso, e o dia continua sendo o escopo: o mesmo
+          exercício em OUTRO dia não é tocado, e duplicata já gravada não é removida. */}
       {abrindoEm != null && (
         <SeletorExercicio
           exercises={exercises}
           ctx={ctxSeletor}
-          onEscolher={(ex) => { mut(abrindoEm, (d) => ({ ...d, exercicios: [...d.exercicios, ex] })); setAbrindoEm(null); }}
-          onEscolherVarios={(selecionados) => { mut(abrindoEm, (d) => ({ ...d, exercicios: [...d.exercicios, ...selecionados.filter((ex) => !d.exercicios.some((atual) => atual.id === ex.id))] })); setAbrindoEm(null); }}
+          jaAdicionados={identidadesDe(dias[abrindoEm]?.exercicios ?? [])}
+          onEscolher={(ex) => { mut(abrindoEm, (d) => ({ ...d, exercicios: adicionarSemDuplicar(d.exercicios, [ex]).lista })); setAbrindoEm(null); }}
+          onEscolherVarios={(selecionados) => { mut(abrindoEm, (d) => ({ ...d, exercicios: adicionarSemDuplicar(d.exercicios, selecionados).lista })); setAbrindoEm(null); }}
           onDesbanir={onDesbanir}
           onFechar={() => setAbrindoEm(null)}
         />
