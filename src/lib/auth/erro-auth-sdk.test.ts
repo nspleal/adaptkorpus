@@ -173,8 +173,8 @@ describe('caminho real do /cadastro — resposta HTTP → SDK → copy', () => {
     expect(erro?.name).toBe('AuthRetryableFetchError');
     expect(erro?.status).toBe(status);
     expect(recusa.motivo).toBe('servidor');
-    expect(recusa.texto).toMatch(/Não é a sua conexão/i);
-    expect(recusa.texto).not.toMatch(/Verifique sua conexão/i);
+    expect(recusa.texto).toBe('O servidor de contas não respondeu como esperado. Tente de novo em instantes.');
+    expect(recusa.texto).not.toMatch(/conex[ãa]o/i);
   });
 
   it('429 do servidor vira limite de tentativas', async () => {
@@ -244,23 +244,65 @@ describe('caminho real do /redefinir — resposta HTTP → SDK → copy', () => 
     expect(recusa.texto).not.toMatch(/link/i);
   });
 
-  it('🔴 sessão expirada: AÍ SIM o link novo', async () => {
+  it('🔴 sessão expirada: orienta o link novo, sem AFIRMAR que ele expirou', async () => {
     const { recusa } = await salvarSenhaCom(
       respostaErro(401, { code: 401, error_code: 'session_expired', msg: 'Session expired' }),
       'Adaptkorpus2026',
     );
     expect(recusa.motivo).toBe('sessao-invalida');
-    expect(recusa.texto).toMatch(/link de redefinição/i);
+    expect(recusa.texto).toMatch(/Peça um novo link de redefinição/i);
+    expect(recusa.texto).not.toMatch(/expirou ou já foi usado/i);
   });
 
-  it('session_not_found: o SDK converte em AuthSessionMissingError e a copy é a mesma', async () => {
+  /** 🔑 A afirmação sobre o link é reservada ao artefato de uso único do e-mail. */
+  it('otp_expired: aí sim, "o link expirou ou já foi usado"', async () => {
+    const { erro, recusa } = await salvarSenhaCom(
+      respostaErro(401, { code: 401, error_code: 'otp_expired', msg: 'Email link is invalid or has expired' }),
+      'Adaptkorpus2026',
+    );
+    expect(erro?.code).toBe('otp_expired');
+    expect(recusa.motivo).toBe('link-expirado');
+    expect(recusa.texto).toMatch(/link de redefinição expirou ou já foi usado/i);
+  });
+
+  it('session_not_found: o SDK converte em AuthSessionMissingError e a copy orienta sem afirmar', async () => {
     const { erro, recusa } = await salvarSenhaCom(
       respostaErro(404, { code: 404, error_code: 'session_not_found', msg: 'Session from session_id claim in JWT does not exist' }),
       'Adaptkorpus2026',
     );
     expect(erro?.name).toBe('AuthSessionMissingError');
     expect(recusa.motivo).toBe('sessao-invalida');
-    expect(recusa.texto).toMatch(/link de redefinição/i);
+    expect(recusa.texto).toMatch(/Peça um novo link/i);
+    expect(recusa.texto).not.toMatch(/expirou ou já foi usado/i);
+  });
+
+  /**
+   * 🔴 OS TRÊS CASOS QUE O CODEX REPRODUZIU (2ª volta), agora passando pelo SDK de verdade.
+   * Antes, o fallback por status transformava os três em "o link expirou ou já foi usado".
+   */
+  it.each([
+    ['insufficient_aal', 403, 'reautenticacao'],
+    ['reauthentication_needed', 401, 'reautenticacao'],
+    ['codigo_novo', 403, 'desconhecido'],
+  ] as const)('%s (%i) → %s, e nunca mais história de link', async (code, status, motivo) => {
+    const { erro, recusa } = await salvarSenhaCom(
+      respostaErro(status, { code: status, error_code: code, msg: 'not authorized' }),
+      'Adaptkorpus2026',
+    );
+    expect(erro?.code).toBe(code);
+    expect(erro?.status).toBe(status);
+    expect(recusa.motivo).toBe(motivo);
+    expect(recusa.texto).not.toMatch(/link/i);
+  });
+
+  it('a confirmação extra de identidade aponta o suporte e não promete tela nova', async () => {
+    const { recusa } = await salvarSenhaCom(
+      respostaErro(401, { code: 401, error_code: 'reauthentication_needed', msg: 'A reauthentication is needed' }),
+      'Adaptkorpus2026',
+    );
+    expect(recusa.texto).toMatch(/confirmação extra de identidade/i);
+    expect(recusa.texto).toMatch(/suporte/i);
+    expect(recusa.texto).not.toMatch(/MFA|autenticador|c[óo]digo de verifica/i);
   });
 
   it('a senha nova também é validada pelo servidor aqui, e a recusa nomeia o requisito', async () => {

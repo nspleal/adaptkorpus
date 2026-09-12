@@ -46,7 +46,9 @@ export type MotivoRecusa =
   | 'limite-tentativas'
   | 'rede'
   | 'servidor'
+  | 'link-expirado'
   | 'sessao-invalida'
+  | 'reautenticacao'
   | 'nao-validado'
   | 'desconhecido';
 
@@ -92,9 +94,31 @@ function acao(contexto: ContextoAuth): string {
 }
 
 /**
- * 🔒 SESSÃO INVÁLIDA — os códigos que significam "a autorização desta requisição não vale
- * mais". Em `/redefinir` isso é sempre a mesma história concreta: o link do e-mail expirou,
- * já foi usado, ou foi aberto em outro navegador.
+ * 🔴 O LINK, DE VERDADE (revisão Codex, 2026-09-12 — 2ª volta).
+ *
+ * Só estes códigos sustentam a afirmação *"o link expirou ou já foi usado"*: todos descrevem
+ * o artefato de uso único que o e-mail carrega — o OTP e o estado do fluxo PKCE que
+ * `/auth/callback` troca por sessão.
+ *  · `otp_expired` — "OTP code for this sign-in has expired."
+ *  · `flow_state_expired` / `flow_state_not_found` — o estado PKCE expirou ou já foi limpo
+ *    (e é limpo justamente porque a requisição anterior o consumiu).
+ *  · `bad_code_verifier` — o verificador não casa com o fluxo iniciado.
+ */
+const CODIGOS_LINK = new Set([
+  'otp_expired',
+  'flow_state_expired',
+  'flow_state_not_found',
+  'bad_code_verifier',
+]);
+
+/**
+ * 🔒 SESSÃO AUSENTE OU INVÁLIDA — a autorização desta requisição não vale mais.
+ *
+ * ⚠️ Parecido, mas NÃO é o mesmo fato que o de cima: a sessão pode ter caído por logout em
+ * outra aba, por revogação, por relógio fora de hora. Afirmar "o link expirou ou já foi
+ * usado" aqui seria contar uma história que o código não sustenta — e mandar a pessoa
+ * conferir a caixa de entrada por um motivo que pode não ser o dela. A orientação de
+ * recuperação é a mesma; a AFIRMAÇÃO sobre o link, não.
  */
 const CODIGOS_SESSAO = new Set([
   'session_not_found',
@@ -103,11 +127,28 @@ const CODIGOS_SESSAO = new Set([
   'refresh_token_already_used',
   'bad_jwt',
   'no_authorization',
-  'flow_state_not_found',
-  'flow_state_expired',
-  'otp_expired',
-  'reauthentication_needed',
   'user_not_found',
+]);
+
+/**
+ * 🔴 CONFIRMAÇÃO EXTRA DE IDENTIDADE — não é sessão expirada (revisão Codex).
+ *
+ *  · `reauthentication_needed` — "A user needs to reauthenticate to change their password.
+ *    Ask the user to reauthenticate by calling the supabase.auth.reauthenticate() API."
+ *  · `insufficient_aal` — "the user must have a higher Authenticator Assurance Level."
+ *
+ * Os dois dizem que FALTA UM PASSO, não que a autorização morreu. Pedir link novo não resolve
+ * nenhum dos dois: a pessoa repetiria o fluxo e bateria na mesma parede.
+ *
+ * 🔒 A copy NÃO promete o passo. `reauthenticate()` e MFA não existem neste app, e anunciar
+ * uma tela que não há é o mesmo defeito que esta leva inteira veio consertar. O caminho
+ * honesto é o que já existe: o suporte.
+ */
+const CODIGOS_REAUTENTICACAO = new Set([
+  'reauthentication_needed',
+  'reauth_nonce_missing',
+  'reauthentication_not_valid',
+  'insufficient_aal',
 ]);
 
 /**
@@ -142,7 +183,7 @@ export function traduzirErroAuth(erro: unknown, senha: string, contexto: Context
    */
   if (erro.name === 'AuthRetryableFetchError') {
     if (typeof erro.status === 'number' && erro.status >= 500) {
-      return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Não é a sua conexão — tente de novo em instantes.' };
+      return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Tente de novo em instantes.' };
     }
     return { motivo: 'rede', campo: null, texto: 'Não conseguimos falar com o servidor. Verifique sua conexão e tente de novo.' };
   }
@@ -156,8 +197,16 @@ export function traduzirErroAuth(erro: unknown, senha: string, contexto: Context
     return { motivo: 'senha-fraca', campo: 'senha', texto: textoSenhaFraca(senha, razoesDaSenha(erro)) };
   }
 
+  if (erro.code && CODIGOS_LINK.has(erro.code)) {
+    return { motivo: 'link-expirado', campo: null, texto: textoLink(contexto) };
+  }
+
   if (erro.code && CODIGOS_SESSAO.has(erro.code)) {
     return { motivo: 'sessao-invalida', campo: null, texto: textoSessao(contexto) };
+  }
+
+  if (erro.code && CODIGOS_REAUTENTICACAO.has(erro.code)) {
+    return { motivo: 'reautenticacao', campo: null, texto: textoReautenticacao(contexto) };
   }
 
   switch (erro.code) {
@@ -186,7 +235,7 @@ export function traduzirErroAuth(erro: unknown, senha: string, contexto: Context
       return {
         motivo: 'email-sem-envio',
         campo: null,
-        texto: 'Nosso serviço de e-mail ainda não consegue enviar mensagens para este endereço — é uma limitação do envio, não do seu convite. Fale com o suporte para concluir por outro caminho.',
+        texto: 'Nosso serviço de e-mail ainda não consegue enviar mensagens para este endereço — é uma limitação do envio, não do seu convite. Fale com o suporte.',
       };
 
     case 'signup_disabled':
@@ -209,7 +258,7 @@ export function traduzirErroAuth(erro: unknown, senha: string, contexto: Context
 
     case 'unexpected_failure':
     case 'request_timeout':
-      return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Não é a sua conexão — tente de novo em instantes.' };
+      return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Tente de novo em instantes.' };
 
     default:
       break;
@@ -220,21 +269,54 @@ export function traduzirErroAuth(erro: unknown, senha: string, contexto: Context
     return { motivo: 'limite-tentativas', campo: null, texto: 'Muitas tentativas seguidas. Espere alguns minutos e tente de novo.' };
   }
   if (typeof erro.status === 'number' && erro.status >= 500) {
-    return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Não é a sua conexão — tente de novo em instantes.' };
+    return { motivo: 'servidor', campo: null, texto: 'O servidor de contas não respondeu como esperado. Tente de novo em instantes.' };
   }
-  if (erro.status === 401 || erro.status === 403) {
-    return { motivo: 'sessao-invalida', campo: null, texto: textoSessao(contexto) };
-  }
+  /**
+   * 🔴 AQUI HAVIA UM FALLBACK QUE TRANSFORMAVA QUALQUER 401/403 EM "o link expirou" — e era
+   * falso (revisão Codex, 2026-09-12, 2ª volta): `insufficient_aal` (403), um código novo
+   * qualquer em 403 e `reauthentication_needed` (401) todos saíam dizendo isso, e nenhum dos
+   * três decorre do link. Status sozinho não é significado: 401/403 dizem "não autorizado",
+   * não dizem POR QUÊ. O que não tem código conhecido cai no genérico neutro abaixo.
+   */
   return generico;
 }
 
 /**
- * Sessão que não vale mais. Em `/redefinir` a causa concreta é sempre o link do e-mail, e a
- * saída é pedir outro; em `/cadastro` não há link nenhum, então prometer um seria inventar
- * um caminho que não existe naquela tela.
+ * 🔑 A AFIRMAÇÃO SOBRE O LINK — reservada aos códigos que a sustentam (`CODIGOS_LINK`).
+ *
+ * Em `/cadastro` não existe link nenhum para expirar; prometer um seria inventar um caminho
+ * que aquela tela não tem.
+ */
+function textoLink(contexto: ContextoAuth): string {
+  return contexto === 'salvar-senha'
+    ? 'O link de redefinição expirou ou já foi usado. Peça um novo link e crie a senha por ele.'
+    : 'Este link não vale mais. Comece de novo por esta tela.';
+}
+
+/**
+ * Sessão ausente ou inválida. A ORIENTAÇÃO de recuperação é a mesma do link, mas a frase não
+ * AFIRMA que o link expirou ou foi usado — a sessão pode ter caído por logout em outra aba,
+ * por revogação ou por relógio fora de hora, e contar a história errada manda a pessoa
+ * caçar um e-mail que não é o problema.
+ *
+ * ⚠️ Em `/cadastro` quem está ali ainda **não tem conta**: mandar "entre de novo" como saída
+ * genérica é oferecer uma porta que essa pessoa não consegue abrir (revisão Codex).
  */
 function textoSessao(contexto: ContextoAuth): string {
   return contexto === 'salvar-senha'
-    ? 'O link de redefinição expirou ou já foi usado. Peça um novo link e crie a senha por ele.'
-    : 'Sua sessão não é mais válida. Entre de novo e tente outra vez.';
+    ? 'Não há mais uma sessão válida para salvar a senha. Peça um novo link de redefinição e crie a senha por ele.'
+    : 'A sessão desta página não vale mais. Recarregue a página e tente de novo.';
+}
+
+/**
+ * Confirmação extra de identidade exigida pelo servidor (`reauthentication_needed`,
+ * `insufficient_aal` e parentes).
+ *
+ * 🔒 A copy diz o que é e para onde ir — e NÃO promete um passo que o app não tem. Não há
+ * `reauthenticate()` nem MFA aqui; anunciar uma tela inexistente é o defeito que esta leva
+ * inteira veio consertar. O caminho oferecido é o que já existe: o suporte.
+ */
+function textoReautenticacao(contexto: ContextoAuth): string {
+  const alvo = contexto === 'salvar-senha' ? 'antes de trocar a senha' : 'para continuar';
+  return `Por segurança, o servidor pediu uma confirmação extra de identidade ${alvo}, e este app ainda não oferece esse passo. Fale com o suporte.`;
 }

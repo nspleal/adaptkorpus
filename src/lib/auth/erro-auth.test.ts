@@ -166,11 +166,16 @@ describe('🔴 achado 3 — transporte (status 0) ≠ servidor/gateway (5xx)', (
     expect(r.texto).toMatch(/conex[ãa]o/i);
   });
 
+  /**
+   * A distinção que importa é o MOTIVO e a ausência de acusação à rede. A frase "não é a sua
+   * conexão" saiu na simplificação de copy (2ª volta): negar o que ninguém afirmou é ruído —
+   * basta não culpar a conexão.
+   */
   it.each([500, 501, 502, 503, 504, 520, 530])('status %i é servidor, e a copy NÃO culpa a conexão', (status) => {
     const r = traduzirErroAuth(new AuthRetryableFetchError('Server error', status), 'x', 'criar-conta');
     expect(r.motivo).toBe('servidor');
-    expect(r.texto).toMatch(/Não é a sua conexão/i);
-    expect(r.texto).not.toMatch(/Verifique sua conexão/i);
+    expect(r.texto).toBe('O servidor de contas não respondeu como esperado. Tente de novo em instantes.');
+    expect(r.texto).not.toMatch(/conex[ãa]o/i);
   });
 
   it('o que é lançado fora do SDK (chunk que não baixou) continua sendo rede', () => {
@@ -220,33 +225,71 @@ describe('🔴 achado 4 — /redefinir separa senha igual, limite, servidor, red
     expect(r.texto).not.toMatch(/link/i);
   });
 
+  /**
+   * 🔑 SÓ ESTES sustentam "o link expirou ou já foi usado": descrevem o artefato de uso único
+   * que o e-mail carrega (o OTP e o estado do fluxo PKCE que `/auth/callback` consome).
+   */
+  it.each(['otp_expired', 'flow_state_expired', 'flow_state_not_found', 'bad_code_verifier'])(
+    '%s: aí sim, a afirmação sobre o link',
+    (code) => {
+      const r = traduzirErroAuth(new AuthApiError('link gone', 401, code), 'x', 'salvar-senha');
+      expect(r.motivo).toBe('link-expirado');
+      expect(r.texto).toMatch(/link de redefinição expirou ou já foi usado/i);
+    },
+  );
+
+  /**
+   * 🔴 ACHADO DA 2ª VOLTA. Sessão ausente/inválida ORIENTA a recuperação, mas não AFIRMA que
+   * o link expirou ou foi usado — a sessão pode ter caído por logout em outra aba, revogação
+   * ou relógio fora de hora. Contar a história errada manda a pessoa caçar um e-mail que não
+   * é o problema.
+   */
   it.each([
     'session_expired',
+    'session_not_found',
     'refresh_token_not_found',
     'refresh_token_already_used',
     'bad_jwt',
     'no_authorization',
-    'flow_state_expired',
-    'otp_expired',
-    'reauthentication_needed',
     'user_not_found',
-  ])('%s: aí sim, link novo', (code) => {
+  ])('%s: orienta o link novo, sem afirmar que o link expirou', (code) => {
     const r = traduzirErroAuth(new AuthApiError('session gone', 401, code), 'x', 'salvar-senha');
     expect(r.motivo).toBe('sessao-invalida');
-    expect(r.texto).toMatch(/link/i);
+    expect(r.texto).toMatch(/Peça um novo link/i);
+    expect(r.texto, 'afirmou sobre o link algo que o código não sustenta').not.toMatch(/expirou ou já foi usado/i);
   });
 
   /** `session_not_found` o SDK converte em `AuthSessionMissingError`, que chega SEM `code`. */
   it('AuthSessionMissingError (o que o SDK faz com session_not_found) é sessão inválida', () => {
     const r = traduzirErroAuth(new AuthSessionMissingError(), 'x', 'salvar-senha');
     expect(r.motivo).toBe('sessao-invalida');
-    expect(r.texto).toMatch(/link de redefinição expirou/i);
+    expect(r.texto).toMatch(/Peça um novo link/i);
+    expect(r.texto).not.toMatch(/expirou ou já foi usado/i);
   });
 
-  it('em /cadastro não existe link para pedir — a frase de sessão não inventa um', () => {
-    const r = traduzirErroAuth(new AuthSessionMissingError(), 'x', 'criar-conta');
-    expect(r.motivo).toBe('sessao-invalida');
-    expect(r.texto).not.toMatch(/link/i);
+  /**
+   * 🔴 ACHADO DA 2ª VOLTA. `reauthentication_needed` e `insufficient_aal` dizem que FALTA UM
+   * PASSO, não que a autorização morreu — pedir link novo não resolve nenhum dos dois: a
+   * pessoa repetiria o fluxo e bateria na mesma parede.
+   */
+  it.each([
+    ['reauthentication_needed', 401],
+    ['reauth_nonce_missing', 401],
+    ['reauthentication_not_valid', 401],
+    ['insufficient_aal', 403],
+  ] as const)('%s (%i): confirmação extra de identidade, não expiração de link', (code, status) => {
+    const r = traduzirErroAuth(new AuthApiError('reauth', status, code), 'x', 'salvar-senha');
+    expect(r.motivo).toBe('reautenticacao');
+    expect(r.texto).toMatch(/confirmação extra de identidade/i);
+    expect(r.texto).toMatch(/suporte/i);
+    expect(r.texto, 'não pode virar história de link').not.toMatch(/link/i);
+  });
+
+  /** 🔒 E não promete um passo que o app não tem: não há `reauthenticate()` nem MFA aqui. */
+  it('a copy de reautenticação não anuncia tela, código ou fator que não existe', () => {
+    const { texto } = traduzirErroAuth(new AuthApiError('reauth', 401, 'reauthentication_needed'), 'x', 'salvar-senha');
+    expect(texto).not.toMatch(/MFA|autenticador|c[óo]digo de verifica|token|SMS|aplicativo/i);
+    expect(texto).toMatch(/ainda não oferece esse passo/i);
   });
 
   it('o fallback desconhecido fala de salvar a senha, não de criar conta', () => {
@@ -254,6 +297,77 @@ describe('🔴 achado 4 — /redefinir separa senha igual, limite, servidor, red
     expect(r.motivo).toBe('desconhecido');
     expect(r.texto).toContain('salvar a senha');
     expect(r.texto).not.toMatch(/criar a conta|link/i);
+  });
+});
+
+/**
+ * 🔴 ACHADO DA 2ª VOLTA — O FALLBACK POR STATUS. Havia uma última linha que convertia
+ * QUALQUER 401/403 em "o link expirou ou já foi usado". Reproduzido pelo Codex no módulo
+ * real: `insufficient_aal` (403), um código novo em 403 e `reauthentication_needed` (401)
+ * saíam os três com essa frase, e nenhum dos três decorre do link.
+ *
+ * 🔑 A regra: **status não é significado.** 401/403 dizem "não autorizado", não dizem por quê.
+ * Sem código conhecido, o honesto é o genérico neutro.
+ */
+describe('🔴 2ª volta — 401/403 sem código conhecido não vira história de link', () => {
+  it.each([
+    ['codigo_novo_do_servidor', 403],
+    ['codigo_novo_do_servidor', 401],
+    ['algo_que_ainda_nao_existe', 403],
+  ] as const)('%s (%i) permanece neutro', (code, status) => {
+    const r = traduzirErroAuth(new AuthApiError('nope', status, code), 'x', 'salvar-senha');
+    expect(r.motivo).toBe('desconhecido');
+    expect(r.campo).toBeNull();
+    expect(r.texto).toBe('Não foi possível salvar a senha. Tente de novo em instantes.');
+  });
+
+  it('401/403 SEM code nenhum também permanece neutro', () => {
+    for (const status of [401, 403]) {
+      const r = traduzirErroAuth(new AuthApiError('nope', status, undefined), 'x', 'salvar-senha');
+      expect(r.motivo).toBe('desconhecido');
+      expect(r.texto).not.toMatch(/link/i);
+    }
+  });
+
+  it('os três casos exatos que o Codex reproduziu não dizem mais que o link expirou', () => {
+    const casos = [
+      new AuthApiError('insufficient aal', 403, 'insufficient_aal'),
+      new AuthApiError('novo', 403, 'codigo_novo'),
+      new AuthApiError('reauth', 401, 'reauthentication_needed'),
+    ];
+    for (const erro of casos) {
+      expect(traduzirErroAuth(erro, 'x', 'salvar-senha').texto).not.toMatch(/O link de redefinição expirou ou já foi usado/i);
+    }
+    // …e continuam distintos entre si: dois motivos diferentes, não um balde novo.
+    expect(new Set(casos.map((e) => traduzirErroAuth(e, 'x', 'salvar-senha').motivo)))
+      .toEqual(new Set(['reautenticacao', 'desconhecido']));
+  });
+});
+
+/**
+ * ⚠️ `/cadastro` — quem está ali AINDA NÃO TEM CONTA. Mandar "entre de novo" como saída
+ * genérica oferece uma porta que essa pessoa não consegue abrir (revisão Codex, 2ª volta).
+ */
+describe('🔴 2ª volta — /cadastro não manda entrar quem ainda não tem conta', () => {
+  const ERROS: unknown[] = [
+    new AuthSessionMissingError(),
+    new AuthApiError('session gone', 401, 'session_expired'),
+    new AuthApiError('link gone', 401, 'otp_expired'),
+    new AuthApiError('reauth', 401, 'reauthentication_needed'),
+    new AuthApiError('novo', 403, 'codigo_novo'),
+    new AuthApiError('validation', 400, 'validation_failed'),
+  ];
+
+  it.each(ERROS.map((e, i) => [i, e] as const))('caso %i: nenhuma copy manda a pessoa entrar', (_i, erro) => {
+    const { texto } = traduzirErroAuth(erro, 'x', 'criar-conta');
+    expect(texto, 'mandou entrar alguém que veio criar conta').not.toMatch(/\bEntre\b|\bentrar\b|fa[çc]a login/i);
+  });
+
+  it('a sessão inválida no cadastro orienta o que dá para fazer ali: recarregar', () => {
+    const r = traduzirErroAuth(new AuthSessionMissingError(), 'x', 'criar-conta');
+    expect(r.motivo).toBe('sessao-invalida');
+    expect(r.texto).toMatch(/Recarregue a página/i);
+    expect(r.texto).not.toMatch(/link de redefinição/i);
   });
 });
 
