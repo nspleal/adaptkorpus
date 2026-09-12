@@ -7,6 +7,7 @@ import { exercicioDisponivel } from '@/lib/engine/equipamento';
 import { dificuldadesLiberadas } from '@/lib/engine/treino';
 import { secundariosDe } from '@/lib/engine/secundarios';
 import { ROTULO_GRUPO, ROTULO_PADRAO } from '@/lib/frequencia-grupos';
+import { casaComBusca } from '@/lib/busca-exercicio';
 import { identidadeCanonica } from '@/lib/exercicio-identidade';
 import type { EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import type { NivelExperiencia } from '@/lib/engine';
@@ -35,8 +36,6 @@ const GRUPOS: GrupoPrimario[] = [
   'core', 'biceps', 'triceps', 'panturrilha', 'lombar', 'antebraco',
 ];
 const PADROES_FILTRO: PadraoMovimento[] = ['empurrar', 'puxar', 'agachar', 'dobradica_quadril', 'isolado', 'core'];
-
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export interface ContextoSeletor {
   equipamento: EquipamentoDisp;
@@ -98,14 +97,15 @@ export default function SeletorExercicio({
 
   const lista = useMemo(() => {
     const liberadas = new Set(dificuldadesLiberadas(ctx.nivelExperiencia));
-    const q = norm(busca.trim());
     return exercises
       .filter((e) => e.padraoMovimento !== 'cardio')
       .filter((e) => liberadas.has(e.nivel))
       .filter((e) => (soMeuEquipamento ? exercicioDisponivel(e, ctx.equipamento, ctx.equipamentosCasa) : true))
       .filter((e) => (grupo ? e.grupoPrimario === grupo : true))
       .filter((e) => (padrao ? e.padraoMovimento === padrao : true))
-      .filter((e) => (q ? norm(`${e.nomePt} ${e.grupoMuscular}`).includes(q) : true))
+      // 🔎 Busca na FONTE ÚNICA (`busca-exercicio`): nome em português, nome em inglês e a
+      // lista de músculos. Ler só parte dos campos escondia por omissão, não por regra.
+      .filter((e) => casaComBusca(e, busca))
       .slice()
       .sort((a, b) => {
         // Favoritos primeiro (DF #12), depois tier, depois id — determinístico.
@@ -115,6 +115,47 @@ export default function SeletorExercicio({
         return (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : 1);
       });
   }, [exercises, ctx, busca, grupo, padrao, soMeuEquipamento]);
+
+  /**
+   * 🔒 TRÊS NÚMEROS, NÃO UM (auditoria de visibilidade do catálogo, 2026-09-12). A tela
+   * dizia só "N exercícios encontrados", e um N pequeno ficava indistinguível de catálogo
+   * pequeno. São três coisas diferentes, e a pessoa precisa das três:
+   *  · `exercises.length` — o catálogo inteiro que esta tela recebeu (168 hoje);
+   *  · `teto`             — o que ESTE fluxo pode mostrar (fora o cardio, dentro do nível):
+   *                         é o limite que nenhum chip desliga;
+   *  · `lista.length`     — o que os filtros escolhidos deixaram.
+   */
+  const teto = useMemo(() => {
+    const liberadas = new Set(dificuldadesLiberadas(ctx.nivelExperiencia));
+    return exercises.filter((e) => e.padraoMovimento !== 'cardio' && liberadas.has(e.nivel)).length;
+  }, [exercises, ctx.nivelExperiencia]);
+
+  /** Os filtros LIGADOS, nomeados — "nada combina" tem de dizer o que estava combinando. */
+  const filtrosAtivos = [
+    grupo ? `grupo ${(ROTULO_GRUPO[grupo] ?? grupo).toLowerCase()}` : null,
+    padrao ? `movimento ${(ROTULO_PADRAO[padrao] ?? padrao).toLowerCase()}` : null,
+    busca.trim() ? `busca “${busca.trim()}”` : null,
+    soMeuEquipamento ? 'só o seu equipamento' : null,
+  ].filter((f): f is string => f != null);
+
+  /**
+   * 🔎 O filtro de grupo é por músculo PRINCIPAL — decisão antiga e correta (o secundário
+   * vale 0,5 no placar, não é o alvo do exercício). O que faltava era DIZER quantos ficaram
+   * de fora por isso, em vez de deixar a pessoa concluir que não existem.
+   */
+  const tambemSecundario = useMemo(() => {
+    if (grupo == null) return 0;
+    const liberadas = new Set(dificuldadesLiberadas(ctx.nivelExperiencia));
+    return exercises.filter((e) => e.padraoMovimento !== 'cardio'
+      && liberadas.has(e.nivel)
+      && (soMeuEquipamento ? exercicioDisponivel(e, ctx.equipamento, ctx.equipamentosCasa) : true)
+      && (padrao ? e.padraoMovimento === padrao : true)
+      && casaComBusca(e, busca)
+      && e.grupoPrimario !== grupo
+      && secundariosDe(e).includes(grupo)).length;
+  }, [exercises, ctx, grupo, padrao, busca, soMeuEquipamento]);
+
+  const rotuloNivel = ctx.nivelExperiencia === 'iniciante' ? 'iniciante' : ctx.nivelExperiencia === 'intermediario' ? 'intermediário' : 'avançado';
 
   return typeof document === 'undefined' ? null : createPortal(
     <div ref={dialogo} className="ak-library-overlay" role="dialog" aria-modal="true" aria-label={titulo} onClick={onFechar}>
@@ -127,14 +168,18 @@ export default function SeletorExercicio({
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome ou músculo…"
+          placeholder="Buscar por nome em português ou inglês, ou por músculo…"
           className="input-foco"
           aria-label="Buscar exercício"
           style={{ flexShrink: 0, width: '100%', boxSizing: 'border-box', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.16)', borderRadius: 12, padding: '12px 14px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none', marginBottom: 10 }}
         />
 
         <div className="ak-library-filters" aria-label="Filtrar por músculo principal" style={fileiraChips(4)}>
-          <button type="button" onClick={() => setGrupo(null)} aria-pressed={grupo === null} style={chip(grupo === null)}>Todos</button>
+          {/* 🔒 "Todos os grupos", nunca "Todos": este chip limpa o filtro de GRUPO — ele não
+              devolve o catálogo inteiro (o cardio e o que está acima do nível continuam fora),
+              e "Todos" sozinho prometia o que a lista não entrega. Mesmo par do vizinho
+              "Todos os equipamentos", que também nomeia o filtro que desliga. */}
+          <button type="button" onClick={() => setGrupo(null)} aria-pressed={grupo === null} style={chip(grupo === null)}>Todos os grupos</button>
           {GRUPOS.map((g) => (
             <button key={g} type="button" onClick={() => setGrupo(grupo === g ? null : g)} aria-pressed={grupo === g} style={chip(grupo === g)}>{ROTULO_GRUPO[g] ?? g}</button>
           ))}
@@ -149,13 +194,16 @@ export default function SeletorExercicio({
         </div>
 
         <div className="ak-library-context">
-          <p role="status"><strong>{lista.length} exercícios encontrados</strong> · nível {ctx.nivelExperiencia === 'iniciante' ? 'iniciante' : ctx.nivelExperiencia === 'intermediario' ? 'intermediário' : 'avançado'}{soMeuEquipamento ? ' · seu equipamento' : ' · todos os equipamentos'}</p>
-          <p>Os filtros se combinam. Os grupos consideram o músculo principal. Esta lista mantém o limite do seu nível e não inclui cardio.</p>
+          {/* Sem filtro escolhido, "154 de 154" é ruído: aí o número é um só. Com filtro, os
+              dois números aparecem — e o plural acompanha o TOTAL ("1 de 154 exercícios"). */}
+          <p role="status"><strong>{lista.length === teto ? `${teto} ${teto === 1 ? 'exercício' : 'exercícios'}` : `${lista.length} de ${teto} ${teto === 1 ? 'exercício' : 'exercícios'}`}</strong> · nível {rotuloNivel}{soMeuEquipamento ? ' · seu equipamento' : ' · todos os equipamentos'}</p>
+          <p>O seu nível abre {teto} dos {exercises.length} do catálogo; o resto é cardio ou está acima do seu nível. Filtros ativos: {filtrosAtivos.length > 0 ? filtrosAtivos.join(' · ') : 'nenhum'}.</p>
+          <p>Os filtros se combinam e os grupos consideram o músculo principal.{grupo != null && tambemSecundario > 0 ? ` Outros ${tambemSecundario} trabalham ${(ROTULO_GRUPO[grupo] ?? grupo).toLowerCase()} como músculo secundário e aparecem em “Todos os grupos”.` : ''}</p>
         </div>
         <div style={{ flex: 1, minHeight: 0 }} className="ak-library-results">
           {lista.length === 0 && (
             <div className="ak-library-empty">
-              <p>Nenhum exercício combina com estes filtros. Isso não significa que o grupo esteja vazio na biblioteca.</p>
+              <p>Nenhum exercício combina com {filtrosAtivos.length > 0 ? <>estes filtros ao mesmo tempo: {filtrosAtivos.join(' · ')}</> : 'estes filtros'}. Isso não significa que o grupo esteja vazio na biblioteca — o seu nível abre {teto} dos {exercises.length} do catálogo.</p>
               <button type="button" style={botao} onClick={() => { setBusca(''); setGrupo(null); setPadrao(null); }}>Limpar busca e filtros</button>
               {soMeuEquipamento && <button type="button" style={botao} onClick={() => setSoMeuEquipamento(false)}>Ver outros equipamentos</button>}
             </div>
