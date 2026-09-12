@@ -19,6 +19,7 @@ import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, r
 import { inicialDe } from '@/lib/auth/usuario';
 import { escopoLocal } from '@/lib/escopo-local';
 import { noDominioDoPeso } from '@/lib/peso-dominio';
+import { fraseSemComparacao, resumoPesoExibido, rotuloVariacao, type ResumoPesoExibido } from '@/lib/peso-progresso';
 import { reconciliarPerfilComPesoAceito, reconciliarSeriePesos } from '@/lib/peso-reconciliacao';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { exercicioEfetivo, exerciciosRecentes, feedbackAgregadoPorGrupo, progressoDosExercicios, retomadaDoHistorico, sinaisFadigaDoHistorico, type ProgressoExercicio } from '@/lib/treino-progressao';
@@ -293,7 +294,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // 🔒 A série carrega DATA (Leva D). O 1º item é a SEMENTE do perfil, não uma pesagem:
   // entra sem data e por isso nunca conta na janela de 7 dias — só aparece no gráfico.
   const [pesos, setPesos] = useState<RegistroPeso[]>([{ dataISO: null, kg: perfil.pesoKg }]);
-  const pesosKg = pesos.map((p) => p.kg);
+  /**
+   * 🔴 F3 — o que a TELA diz sobre peso sai DAQUI. Antes ela recebia `pesos.map(p => p.kg)`,
+   * que inclui a SEMENTE sem data (o peso do perfil): contá-la dizia "2 registros" com uma
+   * pesagem só, e fazia a variação mudar de −1 para 0 no reload, porque a semente é o peso
+   * do perfil de ANTES e de DEPOIS do registro. `resumoPesoExibido` conta só pesagens
+   * datadas e declara a referência da variação.
+   *
+   * 🔒 A série com a semente continua intacta em `pesos` — é dela que a ÂNCORA do motor
+   * vive (`resolverPesoDoPlanoLocal`, que já ignora registro sem data na janela de 7 dias).
+   */
+  const resumoPeso = resumoPesoExibido(pesos, perfil.pesoKg);
   /**
    * Pesos: cópia LOCAL primeiro (evk_pesos — fix bloqueador 2026-07-08: eram só memória e
    * resetavam a cada reload quando o write-through falhava); depois o servidor.
@@ -1656,7 +1667,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         )}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
-          <Progresso pesos={pesosKg} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
+          <Progresso resumo={resumoPeso} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
                 `diasForca` = dias de FORÇA agendados: é ele que liga (ou não) a régua de 2×. */}
             <FrequenciaGrupos
@@ -1671,7 +1682,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             />
           </Progresso>
         )}
-        {!vista && aba === 'historico' && <Historico sessoes={sessoes} pesos={pesosKg} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : irAbaHist('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
+        {!vista && aba === 'historico' && <Historico sessoes={sessoes} resumoPeso={resumoPeso} refeicoes={refeicoesDia} logs={registro.logs} notes={registro.notes} onAbrir={(s) => setDetalheSessao(s)} onComecarTreino={() => modoDiario ? setRegistrando(true) : rotinaDias[0] ? iniciarSessaoGuiada(0) : irAbaHist('treino')} onVerDieta={() => irAba('dieta')} onRegistrarTreino={() => setRegistrando(true)} modoDiario={modoDiario} />}
         {!vista && aba === 'perfil' && <Perfil perfil={perfil} onConta={() => router.push('/conta')} onEditar={() => setEditando(true)} modoDiario={modoDiario} />}
       </div>
 
@@ -2153,22 +2164,28 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { pesos: number[]; treinos: number; onRegistrar: (v: number) => { tipo: string } | void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
-  const atual = pesos[pesos.length - 1]!;
-  const variacao = atual - pesos[0]!;
+function Progresso({ resumo, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { resumo: ResumoPesoExibido; treinos: number; onRegistrar: (v: number) => { tipo: string } | void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
+  // 🔴 F3 — número só quando há duas pesagens datadas. Sem isso, a tela EXIBE a ausência
+  // (`—` + frase), em vez de um valor tirado do peso do perfil.
+  const variacao = rotuloVariacao(resumo.variacao);
   return (
     <div style={sec}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 20 }}>
-        <Stat rotulo="Peso atual" valor={atual.toFixed(1)} un="kg" />
-        <Stat rotulo="Variação" valor={`${variacao >= 0 ? '+' : ''}${variacao.toFixed(1)}`} un="kg" cor="#BDFF00" />
+        <Stat rotulo={resumo.atualEhPesagem ? 'Peso atual' : 'Peso do perfil'} valor={resumo.atualKg.toFixed(1)} un="kg" />
+        <Stat rotulo="Variação" valor={variacao ?? '—'} un={variacao ? 'kg' : undefined} cor="#BDFF00" />
         <Stat rotulo="Treinos avaliados" valor={String(treinos)} />
       </div>
+      {resumo.variacao.tipo === 'SEM_COMPARACAO' && (
+        <p style={{ margin: '-8px 0 18px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>
+          {fraseSemComparacao(resumo.variacao.motivo)}
+        </p>
+      )}
       {/* O cartão de marco 7/30 saiu (substituído pelo contador da Hoje — handoff §Substituição);
           o total acumulado já aparece no stat acima, sem reintroduzir níveis. */}
       <div style={{ ...cardSoft, padding: 24, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
-        <Grafico pesos={pesos} />
-        {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Registre mais pesos para ver a linha evoluir.</p>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{resumo.registros} registro{resumo.registros === 1 ? '' : 's'}</span></div>
+        {resumo.registros > 0 && <Grafico pesos={resumo.serieKg} />}
+        {resumo.registros < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>{resumo.registros === 0 ? 'Registre um peso para a linha começar.' : 'Registre mais pesos para ver a linha evoluir.'}</p>}
       </div>
       <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
       {/* 🔒 Leva D — o AVISO DO RECÁLCULO. Não é subtítulo nem promessa: é o relato de um
@@ -2193,8 +2210,8 @@ function Progresso({ pesos, treinos, onRegistrar, children, modoDiario, notaPeso
 
 /* ════════════════════ Histórico ════════════════════ */
 
-function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino, modoDiario }: {
-  sessoes: SessaoLog[]; pesos: number[]; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
+function Historico({ sessoes, resumoPeso, refeicoes, logs, notes, onAbrir, onComecarTreino, onVerDieta, onRegistrarTreino, modoDiario }: {
+  sessoes: SessaoLog[]; resumoPeso: ResumoPesoExibido; refeicoes: string[]; logs: Record<string, StatusRefeicao>; notes: Record<string, string>;
   onAbrir: (s: SessaoLog) => void; onComecarTreino: () => void; onVerDieta: () => void; onRegistrarTreino: () => void;
   /** Modo diário: o histórico é leitura do registro (liberada), mas sem enquadrar nada
    *  como "% do plano" — não existe plano contra o qual comparar. */
@@ -2280,9 +2297,11 @@ function Historico({ sessoes, pesos, refeicoes, logs, notes, onAbrir, onComecarT
 
       {sub === 'peso' && (
         <div style={{ ...cardSoft, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{pesos.length} registro{pesos.length > 1 ? 's' : ''}</span></div>
-          <Grafico pesos={pesos} />
-          {pesos.length < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Seu peso inicial já está aqui — registre de novo na aba Progresso para ver a curva.</p>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}><span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Peso ao longo do tempo</span><span style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.45)' }}>{resumoPeso.registros} registro{resumoPeso.registros === 1 ? '' : 's'}</span></div>
+          {resumoPeso.registros > 0 && <Grafico pesos={resumoPeso.serieKg} />}
+          {/* 🔴 F3 — a frase antiga ("Seu peso inicial já está aqui") era a semente falando:
+              com zero pesagens nada estava ali, e com uma o inicial É a pesagem. */}
+          {resumoPeso.registros < 2 && <p style={{ margin: '10px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>{resumoPeso.registros === 0 ? 'Nenhuma pesagem registrada ainda — registre na aba Progresso para a curva começar.' : 'Uma pesagem registrada. Registre de novo na aba Progresso para ver a curva.'}</p>}
         </div>
       )}
     </div>
