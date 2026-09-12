@@ -94,21 +94,28 @@ function acao(contexto: ContextoAuth): string {
 }
 
 /**
- * 🔴 O LINK, DE VERDADE (revisão Codex, 2026-09-12 — 2ª volta).
+ * 🔴 O LINK, DE VERDADE (revisão Codex, 2026-09-12 — 2ª e 3ª voltas).
  *
- * Só estes códigos sustentam a afirmação *"o link expirou ou já foi usado"*: todos descrevem
- * o artefato de uso único que o e-mail carrega — o OTP e o estado do fluxo PKCE que
- * `/auth/callback` troca por sessão.
+ * Só estes dois sustentam a afirmação *"o link expirou ou já foi usado"*, e o que os une é
+ * que **ambos dizem EXPIROU, com todas as letras**:
  *  · `otp_expired` — "OTP code for this sign-in has expired."
- *  · `flow_state_expired` / `flow_state_not_found` — o estado PKCE expirou ou já foi limpo
- *    (e é limpo justamente porque a requisição anterior o consumiu).
- *  · `bad_code_verifier` — o verificador não casa com o fluxo iniciado.
+ *  · `flow_state_expired` — "PKCE flow state to which the API request relates has expired."
+ *
+ * ⚠️ Saíram daqui na 3ª volta, e o motivo é o mesmo que derrubou o fallback por status:
+ *  · `bad_code_verifier` — "the provided code verifier does not match the expected one.
+ *    Indicates a bug in the implementation of the client library." É DIVERGÊNCIA do
+ *    verificador PKCE — pode ser bug de cliente, fluxo iniciado em outro navegador, aba
+ *    duplicada. Nada disso é um link expirado ou consumido.
+ *  · `flow_state_not_found` — estado NÃO ENCONTRADO. "Not found" tem várias causas (a
+ *    limpeza progressiva é só uma delas); deduzir "logo, foi usado" é a mesma inferência que
+ *    o Codex reprovou nas voltas anteriores.
+ *
+ * Os dois passam a cair no fallback neutro que já existe. Perder precisão é aceitável;
+ * afirmar o que não se sabe, não.
  */
 const CODIGOS_LINK = new Set([
   'otp_expired',
   'flow_state_expired',
-  'flow_state_not_found',
-  'bad_code_verifier',
 ]);
 
 /**

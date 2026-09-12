@@ -226,17 +226,45 @@ describe('🔴 achado 4 — /redefinir separa senha igual, limite, servidor, red
   });
 
   /**
-   * 🔑 SÓ ESTES sustentam "o link expirou ou já foi usado": descrevem o artefato de uso único
-   * que o e-mail carrega (o OTP e o estado do fluxo PKCE que `/auth/callback` consome).
+   * 🔑 SÓ ESTES DOIS sustentam "o link expirou ou já foi usado" — e o que os une é que ambos
+   * dizem EXPIROU, com todas as letras ("OTP code … has expired", "PKCE flow state … has
+   * expired"). A lista encolheu na 3ª volta; ver o bloco de regressão mais abaixo.
    */
-  it.each(['otp_expired', 'flow_state_expired', 'flow_state_not_found', 'bad_code_verifier'])(
-    '%s: aí sim, a afirmação sobre o link',
-    (code) => {
-      const r = traduzirErroAuth(new AuthApiError('link gone', 401, code), 'x', 'salvar-senha');
-      expect(r.motivo).toBe('link-expirado');
-      expect(r.texto).toMatch(/link de redefinição expirou ou já foi usado/i);
-    },
-  );
+  it.each(['otp_expired', 'flow_state_expired'])('%s: aí sim, a afirmação sobre o link', (code) => {
+    const r = traduzirErroAuth(new AuthApiError('link gone', 401, code), 'x', 'salvar-senha');
+    expect(r.motivo).toBe('link-expirado');
+    expect(r.texto).toMatch(/link de redefinição expirou ou já foi usado/i);
+  });
+
+  /**
+   * 🔴 ACHADO DA 3ª VOLTA — classificação falsa que o delta anterior introduziu. Reproduzido
+   * pelo Codex no módulo real: `AuthApiError(403, bad_code_verifier)` dizia "o link de
+   * redefinição expirou ou já foi usado", e não é isso que o código significa:
+   *  · `bad_code_verifier` — "the provided code verifier does not match the expected one.
+   *    Indicates a bug in the implementation of the client library." É DIVERGÊNCIA do
+   *    verificador PKCE: bug de cliente, fluxo iniciado em outro navegador, aba duplicada.
+   *  · `flow_state_not_found` — estado NÃO ENCONTRADO. "Not found" tem várias causas; deduzir
+   *    "logo, foi usado" é a mesma inferência que já foi reprovada no fallback por status.
+   *
+   * 🔑 Os dois voltam ao fallback neutro que já existia. Perder precisão é aceitável; afirmar
+   * o que não se sabe, não.
+   */
+  it.each([
+    ['bad_code_verifier', 403],
+    ['bad_code_verifier', 401],
+    ['flow_state_not_found', 404],
+  ] as const)('%s (%i) NÃO declara expiração nem uso do link', (code, status) => {
+    const r = traduzirErroAuth(new AuthApiError('pkce', status, code), 'x', 'salvar-senha');
+    expect(r.motivo).toBe('desconhecido');
+    expect(r.campo).toBeNull();
+    expect(r.texto).toBe('Não foi possível salvar a senha. Tente de novo em instantes.');
+    expect(r.texto, 'voltou a afirmar sobre o link').not.toMatch(/link/i);
+  });
+
+  it('o caso exato que o Codex reproduziu (403 bad_code_verifier) deixou de mentir', () => {
+    const { texto } = traduzirErroAuth(new AuthApiError('code verifier mismatch', 403, 'bad_code_verifier'), 'x', 'salvar-senha');
+    expect(texto).not.toMatch(/expirou ou já foi usado/i);
+  });
 
   /**
    * 🔴 ACHADO DA 2ª VOLTA. Sessão ausente/inválida ORIENTA a recuperação, mas não AFIRMA que
