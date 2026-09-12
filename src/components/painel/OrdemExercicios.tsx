@@ -24,8 +24,7 @@ export default function OrdemExercicios({ exercicios, onMover, children }: {
     const yDocumento = g.centros[g.de]! + delta;
     let alvo = g.de;
     for (let i = 0; i < g.centros.length; i++) {
-      if (i < g.de && yDocumento < g.centros[i]!) { alvo = i; break; }
-      if (i > g.de && yDocumento > g.centros[i]!) alvo = i;
+      if (Math.abs(yDocumento - g.centros[i]!) < Math.abs(yDocumento - g.centros[alvo]!)) alvo = i;
     }
     g.para = alvo;
     const dy = Math.max(g.min, Math.min(g.max, g.y - g.inicio + window.scrollY - g.scroll));
@@ -56,9 +55,10 @@ export default function OrdemExercicios({ exercicios, onMover, children }: {
             if (e.button !== 0 || !e.isPrimary || exercicios.length < 2 || (e.target as HTMLElement).closest('button,input,select,a,textarea')) return;
             e.currentTarget.focus({ preventScroll: true });
             e.currentTarget.setPointerCapture(e.pointerId);
-            const centros = Array.from(lista.current!.children).map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
             const rects = Array.from(lista.current!.children).map(el => el.getBoundingClientRect());
             const row = rects[k]!;
+            // Centers of the dragged block in each destination, including unequal row heights.
+            const centros = rects.map((r, i) => i <= k ? r.top + row.height / 2 : r.bottom - row.height / 2);
             gesto.current = { de: k, para: k, y: e.clientY, inicio: e.clientY, scroll: window.scrollY, centros, altura: row.height, min: rects[0]!.top - row.top, max: rects[rects.length - 1]!.bottom - row.bottom };
             setArrasto({ de: k, para: k, dy: 0 });
             frame.current = requestAnimationFrame(atualizar);
