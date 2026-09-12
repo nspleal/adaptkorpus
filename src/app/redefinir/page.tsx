@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, btnGhost, EASE, forcaSenha } from '@/components/auth/ui';
+import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, btnGhost, EASE, forcaSenha, RequisitosSenha } from '@/components/auth/ui';
+import { fraseDosFaltantes, requisitosFaltantes, senhaCumprePolitica } from '@/lib/auth/politica-senha';
+import { traduzirErroAuth } from '@/lib/auth/erro-auth';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+
+const ID_REQUISITOS = 'redefinir-requisitos-senha';
 
 /**
  * Redefinir senha (4 estados): request → sent → reset → done. Fluxo real (Supabase):
@@ -63,10 +67,26 @@ export default function RedefinirPage() {
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const { error } = await createClient().auth.updateUser({ password: npw });
-      if (error) { setErro('Não foi possível salvar a senha. Peça um novo link.'); setCarregando(false); return; }
+      if (error) {
+        /**
+         * 🔴 NEM TODA FALHA AQUI É LINK EXPIRADO (revisão Codex). `updateUser({ password })`
+         * passa pela MESMA política de senha do `signUp` — foi ela que produziu o 422 do
+         * cadastro em 11/09/2026 — e ainda pode devolver `same_password`, limite de
+         * tentativas, 5xx do servidor ou queda de transporte. Mandar todas elas para "peça um
+         * novo link" faz a pessoa refazer o fluxo inteiro por um problema que o link não
+         * resolve. Cada uma tem sua frase; só sessão realmente inválida pede link novo.
+         *
+         * 🔒 A senha e a confirmação NÃO são limpas: obrigar a redigitar depois de uma recusa
+         * é a segunda punição pelo mesmo erro. A fase também não muda — quem está em "nova
+         * senha" continua lá, podendo corrigir e tentar de novo.
+         */
+        setErro(traduzirErroAuth(error, npw, 'salvar-senha').texto);
+        setCarregando(false);
+        return;
+      }
       setFase('done');
-    } catch {
-      setErro('Não foi possível salvar a senha agora. Tente de novo.');
+    } catch (e) {
+      setErro(traduzirErroAuth(e, npw, 'salvar-senha').texto);
       setCarregando(false);
     }
   }
@@ -74,7 +94,14 @@ export default function RedefinirPage() {
   const f = forcaSenha(npw);
   const mismatch = npw2.length > 0 && npw !== npw2;
   const match = npw2.length > 0 && npw === npw2;
-  const podeSalvar = npw.length >= 8 && match;
+  /**
+   * 🔴 MESMO GATE DO CADASTRO, PELO MESMO MOTIVO. Era `npw.length >= 8`, e `updateUser` é
+   * validado pela mesma política do servidor: a tela aprovaria uma senha sem número e só
+   * descobriria na recusa. A explicação vem do mesmo módulo, não de uma segunda lista.
+   */
+  const senhaNovaOk = senhaCumprePolitica(npw);
+  const podeSalvar = senhaNovaOk && match;
+  const faltamNaSenha = requisitosFaltantes(npw);
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
@@ -124,25 +151,35 @@ export default function RedefinirPage() {
                 <p style={{ margin: '0 0 22px', color: 'rgba(234,229,219,.62)', fontSize: '.96rem', lineHeight: 1.55 }}>Escolha uma senha forte que você não usa em outro lugar.</p>
                 <label style={labelAuth}>Nova senha</label>
                 <div style={{ position: 'relative', marginBottom: 8 }}>
-                  <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={npw} onChange={(e) => setNpw(e.target.value)} placeholder="Mínimo 8 caracteres" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
+                  <input type={showPw ? 'text' : 'password'} autoComplete="new-password" aria-describedby={ID_REQUISITOS} value={npw} onChange={(e) => setNpw(e.target.value)} placeholder="Crie uma senha" style={{ ...inputAuth, padding: '13px 46px 13px 15px' }} />
                   <button onClick={() => setShowPw((v) => !v)} type="button" style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: 'rgba(234,229,219,.5)', display: 'flex' }}>
                     <svg width={18} height={18} viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth={1.8} /><circle cx={12} cy={12} r={3} stroke="currentColor" strokeWidth={1.8} /></svg>
                   </button>
                 </div>
-                {npw.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, margin: '6px 0 16px' }}>
+                <RequisitosSenha senha={npw} id={ID_REQUISITOS} />
+                {/* 🔒 A força estimada só entra depois dos requisitos — antes ela sugeria
+                    aceitação para uma senha que o servidor recusaria (defeito do cadastro). */}
+                {senhaNovaOk && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, margin: '14px 0 16px' }}>
+                    <span style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.45)' }}>Força estimada</span>
                     <div style={{ flex: 1, height: 5, background: 'rgba(234,229,219,.1)', borderRadius: 99, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: f.pct, background: f.cor, borderRadius: 99, transition: 'width .3s ease, background .3s ease' }} />
                     </div>
-                    <span style={{ fontSize: '.78rem', fontWeight: 700, color: f.cor, minWidth: 60, textAlign: 'right' }}>{f.rotulo}</span>
+                    <span style={{ fontSize: '.78rem', fontWeight: 700, color: f.cor, minWidth: 48, textAlign: 'right' }}>{f.rotulo}</span>
                   </div>
                 )}
                 <label style={{ ...labelAuth, margin: '8px 0 7px' }}>Confirmar nova senha</label>
                 <input type={showPw ? 'text' : 'password'} autoComplete="new-password" value={npw2} onChange={(e) => setNpw2(e.target.value)} placeholder="Repita a senha" style={inputAuth} />
                 {mismatch && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#E5484D' }}>As senhas não coincidem.</p>}
                 {match && <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: '#16A34A' }}>As senhas coincidem.</p>}
-                {erro && <p style={{ margin: '12px 0 0', fontSize: '.85rem', color: '#E5484D' }}>{erro}</p>}
-                <button onClick={salvarSenha} disabled={!podeSalvar || carregando} className="hov-btn" style={{ ...btnNeon, marginTop: 22, opacity: podeSalvar && !carregando ? 1 : 0.4, cursor: podeSalvar && !carregando ? 'pointer' : 'not-allowed' }}>{carregando ? 'Salvando…' : 'Salvar nova senha'}</button>
+                {erro && <p role="alert" style={{ margin: '12px 0 0', fontSize: '.85rem', color: '#E5484D', lineHeight: 1.5 }}>{erro}</p>}
+                {/* 🔒 Botão indisponível diz POR QUÊ — aqui também. */}
+                {npw.length > 0 && !podeSalvar && (
+                  <p id="redefinir-pendencia" style={{ margin: '12px 0 0', fontSize: '.82rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.5 }}>
+                    Para continuar: {faltamNaSenha.length > 0 ? `complete a senha com ${fraseDosFaltantes(faltamNaSenha)}` : 'repita a mesma senha no campo de confirmação'}.
+                  </p>
+                )}
+                <button onClick={salvarSenha} disabled={!podeSalvar || carregando} aria-describedby={npw.length > 0 && !podeSalvar ? 'redefinir-pendencia' : undefined} className="hov-btn" style={{ ...btnNeon, marginTop: 22, opacity: podeSalvar && !carregando ? 1 : 0.4, cursor: podeSalvar && !carregando ? 'pointer' : 'not-allowed' }}>{carregando ? 'Salvando…' : 'Salvar nova senha'}</button>
               </div>
             )}
 

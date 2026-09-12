@@ -2,6 +2,7 @@
 
 import { type CSSProperties, type ReactNode } from 'react';
 import Link from 'next/link';
+import { fraseDosFaltantes, requisitosDaSenha, requisitosFaltantes } from '@/lib/auth/politica-senha';
 
 /**
  * Primitivos compartilhados das telas de conta (login/cadastro/redefinir/confirmar).
@@ -63,7 +64,15 @@ export function LinkLegal({ href, children }: { href: string; children: ReactNod
   );
 }
 
-/** Força de senha (medidor) — cores do token V2. */
+/**
+ * Força de senha (medidor) — cores do token V2.
+ *
+ * ⚠️ Isto é ESTIMATIVA, não critério de aceitação. Foi usar isto como sinal de aprovação que
+ * produziu o defeito de 11/09/2026: senha sem número marcava "Razoável", a pessoa mandava, e
+ * o servidor devolvia 422. Quem decide se a senha É ACEITÁVEL é `senhaCumprePolitica`
+ * (`@/lib/auth/politica-senha`); esta escala só diferencia uma senha válida de outra melhor,
+ * e por isso só deve ser exibida DEPOIS que todos os requisitos estiverem cumpridos.
+ */
 export function forcaSenha(pw: string): { pct: string; cor: string; rotulo: string } {
   let s = 0;
   if (pw.length >= 8) s++;
@@ -75,6 +84,57 @@ export function forcaSenha(pw: string): { pct: string; cor: string; rotulo: stri
   if (s === 2) return { pct: '50%', cor: '#E5C04D', rotulo: 'Razoável' };
   if (s === 3) return { pct: '75%', cor: '#16A34A', rotulo: 'Boa' };
   return { pct: '100%', cor: '#BDFF00', rotulo: 'Forte' };
+}
+
+/** Visível só para leitor de tela (o repo é inline-style; não há utilitário global). */
+export const apenasLeitorDeTela: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
+  overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0,
+};
+
+/**
+ * 🔴 OS REQUISITOS DE SENHA, VISÍVEIS ANTES DE DIGITAR (defeito do beta, 11/09/2026).
+ *
+ * O que a tela fazia: pedia "Mínimo 8 caracteres" no placeholder, media "força" e mandava. O
+ * servidor exige minúscula + maiúscula + número, e a pessoa só descobria isso por uma recusa
+ * genérica. A lista abaixo é a política INTEIRA, dita antes do erro.
+ *
+ * 🔒 Acessibilidade, em três peças que só funcionam juntas:
+ *  · a lista é `aria-describedby` do campo (ver as telas) — ao focar a senha, o leitor de tela
+ *    anuncia o que é exigido, sem a pessoa precisar caçar o texto;
+ *  · cada item carrega o estado em TEXTO ("Cumprido:" / "Falta:"), não só na cor e no ícone —
+ *    cor sozinha não é informação para quem não a enxerga (WCAG 1.4.1);
+ *  · um único `aria-live="polite"` resume o que falta. Ele fica no RESUMO, e não em cada
+ *    item, porque um live region por item tagarelaria a cada tecla; o resumo só muda quando um
+ *    requisito de fato vira.
+ *
+ * 📌 `role="list"` explícito: `listStyle: none` remove a semântica de lista no Safari/VoiceOver.
+ */
+export function RequisitosSenha({ senha, id }: { senha: string; id: string }) {
+  const itens = requisitosDaSenha(senha);
+  const faltam = requisitosFaltantes(senha);
+  const resumo = faltam.length === 0
+    ? 'A senha cumpre todos os requisitos.'
+    : `Ainda falta ${fraseDosFaltantes(faltam)}.`;
+
+  return (
+    <div id={id}>
+      <ul role="list" style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {itens.map((r) => (
+          <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.82rem', lineHeight: 1.4, color: r.ok ? '#BDFF00' : 'rgba(234,229,219,.62)' }}>
+            <span aria-hidden style={{ display: 'flex', width: 14, minWidth: 14, justifyContent: 'center' }}>
+              {r.ok
+                ? <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                : <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><circle cx={12} cy={12} r={4} fill="currentColor" /></svg>}
+            </span>
+            <span style={apenasLeitorDeTela}>{r.ok ? 'Cumprido:' : 'Falta:'}</span>
+            <span>{r.rotulo}</span>
+          </li>
+        ))}
+      </ul>
+      <span aria-live="polite" style={apenasLeitorDeTela}>{resumo}</span>
+    </div>
+  );
 }
 
 export function Backdrop() {
