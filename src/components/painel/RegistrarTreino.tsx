@@ -11,6 +11,7 @@ import CalibracaoModal, { type PayloadCalibracao } from './CalibracaoModal';
 import { repUnitDe, type RepUnit } from '@/lib/engine/isometricos';
 import { temCargaProgressivel } from '@/lib/engine/equipamento';
 import { seriesDoSlot } from '@/lib/series-treino';
+import { casaComBusca } from '@/lib/busca-exercicio';
 
 /**
  * Registrar treino feito — porte FIEL do formulário do design
@@ -19,14 +20,15 @@ import { seriesDoSlot } from '@/lib/series-treino';
  * guiado). Regras de produção do handoff (o protótipo simplificava):
  * - a sessão entra na DATA REAL escolhida (aceita passado; nunca futuro — max = hoje);
  * - o contador de dias deduplica por dia calendário (feito no derivado `diasDeTreino`);
- * - busca ESTRUTURADA na biblioteca real (163) é o caminho principal; texto livre só como
- *   "exercício personalizado" explícito, que NÃO alimenta o gráfico de carga.
+ * - busca ESTRUTURADA na biblioteca real (168 exercícios) é o caminho principal; texto livre
+ *   só como "exercício personalizado" explícito, que NÃO alimenta o gráfico de carga. A busca
+ *   é a FONTE ÚNICA `busca-exercicio` — a mesma da biblioteca, para as duas não voltarem a
+ *   ler campos diferentes (auditoria de visibilidade, 2026-09-12).
  * Grava no MESMO formato da sessão guiada (ResumoSessao) + origem manual (no Painel).
  */
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const PADRAO_LABEL: Record<string, string> = { empurrar: 'Empurrar', puxar: 'Puxar', agachar: 'Agachar', dobradica_quadril: 'Dobradiça de quadril', core: 'Core', cardio: 'Cardio', isolado: 'Isolado' };
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export interface ExForm {
   uid: string;
@@ -238,9 +240,8 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
 
   const addedRefs = useMemo(() => new Set(exs.map((e) => e.refId).filter(Boolean)), [exs]);
   const filtrados = useMemo(() => {
-    const nq = norm(query.trim());
     return EXERCISES_SEED.filter((e) => {
-      const mQ = !nq || norm(e.nomePt).includes(nq) || norm(e.nomeEn ?? '').includes(nq);
+      const mQ = casaComBusca(e, query);
       const mE = !fEquip || e.equipamentoDetalhe === fEquip;
       const mP = !fPadrao || e.padraoMovimento === fPadrao;
       return mQ && mE && mP && !addedRefs.has(e.id);
