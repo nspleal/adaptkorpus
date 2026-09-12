@@ -3,9 +3,10 @@
  * Fonte: cofre (banco-alimentos / ranking-exercicios). Validado Δ≈0.
  *
  * ✍️ EXCEÇÃO DECLARADA — D20, 2026-09-11: dois RÓTULOS foram desambiguados à mão. Nenhum
- * id, movimento, grupo, padrão, equipamento, nível, tier ou instrução mudou; se o gerador
- * rodar de novo a partir do xlsx, estas duas linhas voltam ao estado ambíguo e a mudança
- * precisa ser reaplicada (ou feita na planilha de origem).
+ * id, movimento, grupo, padrão, equipamento, nível, tier ou instrução mudou.
+ * A curadoria versionada em nomes-exercicios.ts reaplica os nomes na montagem do catálogo,
+ * mesmo quando os dados crus forem regenerados com os nomes anteriores. Preservar esta
+ * etapa de montagem; os testes D20 verificam também a regeneração dos dados crus.
  *   · e49  "Puxada alta (pulldown)"  → "Puxada alta na polia (lat pulldown)"
  *   · e126 "Pullover na polia"       → "Pullover na polia (pulldown de braços estendidos)"
  * Motivo: "pulldown" sozinho nomeia os DOIS na academia. e49 é puxada vertical com flexão
@@ -15,6 +16,7 @@
  */
 import type { Exercise } from './types';
 import { LATERALIDADE, LATERALIDADE_ESCOLHA } from './lateralidade';
+import { aplicarNomeCurado } from './nomes-exercicios';
 
 // 🔒 Array CRU gerado do xlsx do cofre (sem `execucao`). A lateralidade curada é mesclada
 // abaixo em `EXERCISES`; o load FALHA se algum exercício não estiver curado (gate C1).
@@ -2599,7 +2601,8 @@ const EXERCISES_RAW: Omit<Exercise, 'execucao'>[] = [
  * curadoria não cobrir um id, o load LANÇA (gate "valor ausente deve falhar"). Nunca há default
  * silencioso de BILATERAL.
  */
-export const EXERCISES: Exercise[] = EXERCISES_RAW.map((e) => {
+export const EXERCISES: Exercise[] = EXERCISES_RAW.map((cru) => {
+  const e = aplicarNomeCurado(cru);
   const execucao = LATERALIDADE[e.id];
   if (execucao == null) {
     throw new Error(`[catálogo] lateralidade (execucao) não curada para ${e.id} (${e.nomePt}) — ver data/lateralidade.ts`);

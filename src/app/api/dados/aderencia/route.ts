@@ -16,6 +16,15 @@ const limitador = criarRateLimit({ limite: 60, janelaMs: 5 * 60_000 });
 
 export const runtime = 'nodejs';
 
+/** Metadados operacionais apenas: nunca payload, data da refeição, usuário ou erro bruto. */
+function registrarFalha(etapa: 'autenticacao' | 'rpc', inicio: number, status: number, upstreamStatus?: number) {
+  console.error(JSON.stringify({
+    evento: 'aderencia_falhou', etapa, status,
+    duracaoMs: Math.max(0, Date.now() - inicio),
+    ...(Number.isInteger(upstreamStatus) && upstreamStatus! >= 100 && upstreamStatus! <= 599
+      ? { upstreamStatus } : {}),
+  }));
+}
 
 export async function GET() {
   const ctx = await contextoUsuario();
@@ -28,8 +37,12 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const inicio = Date.now();
   const ctx = await contextoUsuario();
-  if (ctx instanceof NextResponse) return ctx;
+  if (ctx instanceof NextResponse) {
+    registrarFalha('autenticacao', inicio, ctx.status);
+    return ctx;
+  }
   const barra = barreiraDados(ctx.user.id, limitador);
   if (barra) return barra;
   const parsed = aderenciaDiaSchema.safeParse(await req.json().catch(() => null));
@@ -40,10 +53,16 @@ export async function PUT(req: NextRequest) {
   // chaves). Os dois juntos fecham.
   if (!payloadCabe(payload)) return NextResponse.json({ error: 'payload_grande' }, { status: 413 });
   // A RPC inclui o predicado do índice parcial e resolve auth.uid() sob RLS.
-  const { error } = await ctx.supabase.rpc('registrar_aderencia_dia', {
-    p_dia: body.dia,
-    p_payload: payload,
-  });
-  if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
+  try {
+    const { error, status } = await ctx.supabase.rpc('registrar_aderencia_dia', {
+      p_dia: body.dia,
+      p_payload: payload,
+    });
+    if (error) registrarFalha('rpc', inicio, 500, status);
+    if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
+  } catch {
+    registrarFalha('rpc', inicio, 500);
+    return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
