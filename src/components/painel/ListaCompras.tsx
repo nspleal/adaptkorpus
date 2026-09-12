@@ -35,7 +35,7 @@ function fmtQty(g: number): string {
   return `${total} g`;
 }
 
-/** Nome que o usuário lê = rótulo amigável do cofre (rotulos-amigaveis-alimentos-evokorpus);
+/** Nome que o usuário lê = rótulo amigável do cofre (rotulos-amigaveis-alimentos-adaptkorpus);
  *  o nome clínico TACO fica como proveniência na base. */
 const rotulo = (f: Food): string => f.rotuloAmigavel ?? f.nome;
 

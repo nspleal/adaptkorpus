@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre** — escritor único é a
-> sessão local; decisões novas voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`.
+> sessão local; decisões novas voltam por você. Branch: `claude/adaptkorpus-app-dev-9in0hs`.
 > Specs lidas do cofre em `9d57f39`: parametros-motor-treino (DF #11/#12/#13 + §Escada de
 > modificações) · parametros-motor-substituicao (§2 grupoPrimario + §Famílias) ·
 > registro-de-aderencia (streak ¾) · handoff-frontend-v8 · overview. Protótipos V8.1/V8.2/V8.3

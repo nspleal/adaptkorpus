@@ -2,7 +2,7 @@
  * F1 e F2 do fechamento dirigido de `7a8f2c2`.
  *
  * ── F1: o 500 de `PUT /api/dados/aderencia` ────────────────────────────────────────────
- * 🔴 **Não houve defeito de código.** Causa determinada com evidência nos logs do projeto
+ * 🔴 **Não foi comprovado defeito de código como causa do incidente.** Evidências dos logs do projeto
  * (leitura, sem escrita, sem dado pessoal): a chamada
  * `POST /rest/v1/rpc/registrar_aderencia_dia` voltou **504** do gateway do Supabase em
  * 2026-09-12T00:00:56.333Z, e no MESMO intervalo `GET /auth/v1/user` também voltou 504 três
@@ -10,10 +10,11 @@
  * auth). Os `postgrest_logs` do intervalo registram `Warp server error: Thread killed by
  * timeout manager` (3×), e o **Postgres não registrou nenhum ERROR** — nem
  * `autenticacao_obrigatoria`, nem violação de RLS, nem `ON CONFLICT` sem índice. Um timeout
- * de gateway não chega ao banco; se a RPC tivesse levantado exceção, haveria ERROR no log.
+ * de gateway, por si só, não permite concluir se o banco iniciou ou concluiu a operação.
  *
- * Portanto: rota, RPC, permissões e este lote estão fora da causa, e **nada foi "consertado"
- * aqui** — inventar mudança para fechar um item é pior que declarar a causa. O que este
+ * Retificação da conclusão original: a correlação favorece falha externa, mas a ausência
+ * de ERROR não exclui corrida nem comprova a causa interna do timeout. Não há conserto
+ * dessa infraestrutura comprovado. O que este
  * arquivo trava é o CONTRATO que a QA temia ver violado: a rota **não mascara** falha de
  * escrita como sucesso, e a cópia local sobrevive ao 500 (offline-first), de modo que o PUT
  * seguinte converge. A prova bruta está em `provas/f1-aderencia-504-*.log`.

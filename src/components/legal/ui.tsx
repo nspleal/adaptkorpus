@@ -1,7 +1,7 @@
 import { type ReactNode, type CSSProperties } from 'react';
 
 /**
- * Primitivos das páginas institucionais (porte fiel do V3 "Evokorpus Institucional.dc.html").
+ * Primitivos das páginas institucionais (porte fiel do V3 "Adaptkorpus Institucional.dc.html").
  * Server-safe (sem hooks) — usados pelas páginas (server components). A interatividade
  * (scroll-spy, FAQ, formulário) vive em componentes client separados.
  *

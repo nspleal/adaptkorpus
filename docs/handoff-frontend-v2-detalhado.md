@@ -1,4 +1,4 @@
-# Handoff detalhado — Porte do front-end (protótipo V2) · Evokorpus app
+# Handoff detalhado — Porte do front-end (protótipo V2) · Adaptkorpus app
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
@@ -8,8 +8,8 @@
 > **app**) NÃO escreve no cofre — escritor único é a sessão local. Este arquivo reúne tudo que
 > foi feito, com detalhe suficiente para você arquivar como página(s) de fonte/decisão.
 >
-> - **Repo:** `nspleal/evokorpus` · **Branch:** `claude/evokorpus-app-dev-9in0hs`
-> - **Origem estética:** `V2_front_end_evoK.zip` → `design_handoff_evokorpus_completo/Evokorpus App.dc.html`
+> - **Repo:** `nspleal/adaptkorpus` · **Branch:** `claude/adaptkorpus-app-dev-9in0hs`
+> - **Origem estética:** `V2_front_end_evoK.zip` → `design_handoff_adaptkorpus_completo/Adaptkorpus App.dc.html`
 > - **Natureza:** UI 100% ligada ao **motor determinístico real** (`src/lib/engine`). **Sem backend** ainda.
 > - **Stack:** Next.js 15 (App Router, TS), Tailwind + estilos inline, Vitest, zod, `output: standalone`.
 
@@ -272,7 +272,7 @@ medidor e "as senhas coincidem/não coincidem") → `done` (sucesso → "Entrar"
 
 ---
 
-## 11. Commits (branch `claude/evokorpus-app-dev-9in0hs`)
+## 11. Commits (branch `claude/adaptkorpus-app-dev-9in0hs`)
 
 1. `feat(web): fluxo de auth do protótipo V2 (cadastro, login, redefinir, confirmar)`
 2. `feat(painel): sessão de treino guiada do protótipo V2 (intro/execução/resumo)`

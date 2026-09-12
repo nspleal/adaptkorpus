@@ -22,7 +22,7 @@ import { ChecklistEquipamento, SeletorDias, PreferenciasAlimentares } from '@/co
 import { LinhaConsentimento, LinkLegal } from '@/components/auth/ui';
 
 /**
- * Onboarding (área logada) — porte FIEL do protótipo (Evokorpus App.dc.html):
+ * Onboarding (área logada) — porte FIEL do protótipo (Adaptkorpus App.dc.html):
  * stepper com pontos ascendentes + barra com glow, card em gradiente, evkStepIn por
  * passo, estilos exatos de cada opção. Ligado ao motor real (gate A/B/C + Painel).
  */

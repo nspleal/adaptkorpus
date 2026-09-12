@@ -2,7 +2,7 @@ import InstitucionalShell from '@/components/legal/InstitucionalShell';
 
 export const metadata = { title: 'Changelog · Adaptkorpus' };
 
-// Releases REAIS do Evokorpus, compilados do histórico de lançamentos — atualizar a cada release.
+// Releases REAIS do Adaptkorpus, compilados do histórico de lançamentos — atualizar a cada release.
 // Tags SEM vermelho (vermelho = erro/segurança em todo o sistema): "Novo" = Pulso sólido;
 // "Melhoria"/"Correção" = pílula Bone neutra.
 type Tag = 'Novo' | 'Melhoria' | 'Correção';

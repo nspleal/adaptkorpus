@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Blindagem RLS + allowlist do beta (leva 3, DF/blindagem 2026-07-05)
+-- App Adaptkorpus — Blindagem RLS + allowlist do beta (leva 3, DF/blindagem 2026-07-05)
 -- ----------------------------------------------------------------------------
 -- Implementa as regras de ouro §4.2 da blindagem-seguranca-app-2026-07-05:
 --   (4.2.2) profile.email é ESPELHO server-side de auth.users.email — o UPDATE do usuário

@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `8ebe8b7`. Fontes: cofre
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `8ebe8b7`. Fontes: cofre
 > (`ranking §Unidade de registro` + `parametros-motor-treino §Isométricos DF 2026-07-03`) e o
 > pacote `design_handoff_banner_privacidade`. Portei fiel; travas honradas.
 

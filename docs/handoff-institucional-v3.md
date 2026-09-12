@@ -5,8 +5,8 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `896d1a4` (porte) + `cd77951` (correções da revisão).
-> Origem estética: `V3_front_end_evoK.zip` → `design_handoff_institucional/Evokorpus Institucional.dc.html`.
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commits: `896d1a4` (porte) + `cd77951` (correções da revisão).
+> Origem estética: `V3_front_end_evoK.zip` → `design_handoff_institucional/Adaptkorpus Institucional.dc.html`.
 
 ## O que entrou
 

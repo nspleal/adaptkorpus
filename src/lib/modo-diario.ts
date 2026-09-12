@@ -1,7 +1,7 @@
 /**
  * MODO DIÁRIO — o app de quem o gate de saúde roteou (`ROTEAR`).
  *
- * 🔒 Cofre, DF 2026-07-27 (`gate-de-saude-evokorpus` → "`ROTEAR` = MODO DIÁRIO"): quem declara
+ * 🔒 Cofre, DF 2026-07-27 (`gate-de-saude-adaptkorpus` → "`ROTEAR` = MODO DIÁRIO"): quem declara
  * condição de saúde **entra no app**. O que ela não recebe é **PRESCRIÇÃO** — plano de treino
  * gerado, cardápio, meta de cardio, progressão. O que ela recebe é um **diário**: registra o
  * que fez e lê o próprio histórico.

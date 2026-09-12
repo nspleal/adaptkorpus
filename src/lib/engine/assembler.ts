@@ -1,7 +1,7 @@
 /**
  * Montador de cardápio (Bloco B) — v0 determinístico.
  *
- * Fonte: parametros-motor-dieta-evokorpus §"Montador" + motor-de-regras-deterministico.
+ * Fonte: parametros-motor-dieta-adaptkorpus §"Montador" + motor-de-regras-deterministico.
  *
  * Garantias implementadas (as travadas na spec):
  *   1. ALÉRGENO = filtro de segurança ABSOLUTO — nunca relaxado.
@@ -41,7 +41,7 @@ export interface RestricoesUsuario {
   excluirAlimentoIds?: string[];
   /**
    * "Cansei deste prato" — IDs de PRATOS em descanso na rotação (cofre,
-   * parametros-motor-substituicao-evokorpus §Variedade, DF 2026-07-01). Nível do PRATO, não do
+   * parametros-motor-substituicao-adaptkorpus §Variedade, DF 2026-07-01). Nível do PRATO, não do
    * alimento: cansaço de receita ≠ desgosto do ingrediente. PREFERÊNCIA RELAXÁVEL, idêntico ao
    * "não curto": evita o prato quando há alternativa; relaxa se esvaziar (o cardápio precisa
    * fechar). O prazo de descanso (21 dias) e o retorno automático vivem FORA do motor (usam

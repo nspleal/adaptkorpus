@@ -1,7 +1,7 @@
 /**
  * PESO SUAVIZADO — o peso que realimenta o motor (Leva D).
- * 🔒 SPEC TRAVADA: cofre `parametros-motor-dieta-evokorpus` §⚖️ e
- * `gate-de-saude-evokorpus` §conexão retroativa (DF 2026-07-31).
+ * 🔒 SPEC TRAVADA: cofre `parametros-motor-dieta-adaptkorpus` §⚖️ e
+ * `gate-de-saude-adaptkorpus` §conexão retroativa (DF 2026-07-31).
  *
  * **O defeito em produção:** `registrarPeso` grava em três destinos (estado da UI,
  * `evk_pesos`, `logs` tipo `peso`) e **nenhum deles é `perfil.pesoKg`**. Quem move o perfil
@@ -140,7 +140,7 @@ export interface FaixaProtetiva {
 }
 
 /**
- * 🔒 PROTEGER RÁPIDO, LIBERAR DEVAGAR (spec §3 e `gate-de-saude-evokorpus`).
+ * 🔒 PROTEGER RÁPIDO, LIBERAR DEVAGAR (spec §3 e `gate-de-saude-adaptkorpus`).
  *
  * | Direção | Regra |
  * |---|---|

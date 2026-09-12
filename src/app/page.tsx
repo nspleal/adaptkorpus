@@ -7,7 +7,7 @@ import { temSessao, useTemSessao } from '@/lib/session';
 import { QUANTO_CUSTA } from '@/lib/copy-cobranca';
 
 /**
- * Landing pública do Evokorpus — porte FIEL do protótipo de design (Evokorpus.dc.html):
+ * Landing pública do Adaptkorpus — porte FIEL do protótipo de design (Adaptkorpus.dc.html):
  * estilos inline idênticos + movimento (backdrop que deriva, trajetórias neon que se
  * desenham, reveals em scroll, mockups flutuando, anel pulsando, FAQ, nav com blur,
  * scroll-spy). Copy travada (nunca "IA"; kcal = "ponto de partida"; sem promessa; 18+).
@@ -223,7 +223,7 @@ export default function Home() {
       <section id="transparencia" style={sec()}>
         <div style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 56, alignItems: 'center' }}>
           <div className="rv">
-            {/* 🔒 O REMATE VOLTA (DF 2026-08-01, `identidade-de-marca-evokorpus` §Passos urgentes).
+            {/* 🔒 O REMATE VOLTA (DF 2026-08-01, `identidade-de-marca-adaptkorpus` §Passos urgentes).
                 Em 2026-07-29 o h2 perdeu a segunda metade — era "É como a gente cobra." — porque no
                 beta não há cobrança. 🔴 Truncar onde o board tem remate é REGRESSÃO DE MARCA, não
                 conserto: o remate neon era do design. A regra que fica: quando um pilar do
@@ -231,7 +231,7 @@ export default function Home() {
                 O board trava três pilares do fitness honesto — cobrança honesta · sem promessa
                 mágica · constância. O remate antigo era o ①; este é o ②, e é o que a realidade
                 sustenta hoje. Casa com a seção abaixo, que lista o que o app NÃO faz.
-                Cor: Pulso #BDFF00, o acento de fundo escuro (skill `evokorpus-brand`). */}
+                Cor: Pulso #BDFF00, o acento de fundo escuro (skill `adaptkorpus-brand`). */}
             <h2 style={{ margin: '0 0 18px', fontWeight: 800, fontSize: 'clamp(1.8rem,3.4vw,2.8rem)', lineHeight: 1.12, letterSpacing: '-.02em' }}>Honestidade não é slogan. <span style={{ color: '#BDFF00' }}>É o que a gente deixa de prometer.</span></h2>
             <p style={{ margin: 0, color: 'rgba(234,229,219,.6)', lineHeight: 1.6, fontSize: '1.02rem' }}>Tudo o que entra na sua conta, você vê antes. E o que a gente não faz, a gente diz na cara.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 28 }}>

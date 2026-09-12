@@ -20,7 +20,7 @@ import { ControleRegistro, MEAL_LABEL, type StatusRefeicao } from './RegistroRef
  * refeição em ritual cronometrado é exatamente como apps de contagem viram obsessão. Esta
  * folha NÃO copia a estética da sessão guiada de treino — o tom é "abrir, ver, marcar, fechar".
  *
- * 🔒 Registro BINÁRIO e SEM CALORIA (`registro-de-aderencia-evokorpus`): o `~X kcal` existe
+ * 🔒 Registro BINÁRIO e SEM CALORIA (`registro-de-aderencia-adaptkorpus`): o `~X kcal` existe
  * só no CARDÁPIO (que é o plano), nunca no registro nem no histórico. O controle é o mesmo
  * `ControleRegistro` do V5 — os dois botões com peso visual igual, "comi outra coisa" neutro.
  *

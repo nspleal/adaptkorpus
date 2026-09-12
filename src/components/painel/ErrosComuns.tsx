@@ -4,7 +4,7 @@ import { ERROS_COMUNS } from '@/lib/data/erros-comuns';
 
 /**
  * Lista de "erros comuns" de execução de um exercício. Dado curado do cofre
- * (conceitos/erros-comuns-exercicios-evokorpus, chave = id da biblioteca A1) — porte do
+ * (conceitos/erros-comuns-exercicios-adaptkorpus, chave = id da biblioteca A1) — porte do
  * slot que antes era "em breve" na tela do exercício. Cada item é "erro → correção".
  *
  * Marcador NEUTRO de propósito: no app o vermelho é reservado a erro/segurança; um erro

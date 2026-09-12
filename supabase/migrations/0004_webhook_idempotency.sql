@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Idempotência de webhooks (anti-replay/reentrega)
+-- App Adaptkorpus — Idempotência de webhooks (anti-replay/reentrega)
 -- ----------------------------------------------------------------------------
 -- Registra os eventos já processados. O webhook insere o event_id; se já existe
 -- (unique_violation), o evento é ignorado — evita processar a mesma cobrança 2x.

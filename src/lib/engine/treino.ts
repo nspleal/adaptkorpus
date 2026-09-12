@@ -1,6 +1,6 @@
 /**
  * Motor de treino — prescrição FITT + progressão (dupla progressão) + deload.
- * Fonte: parametros-motor-treino-evokorpus (DFs travadas 2026-06-28). Caminho PERMITIR/RESTRINGIR.
+ * Fonte: parametros-motor-treino-adaptkorpus (DFs travadas 2026-06-28). Caminho PERMITIR/RESTRINGIR.
  */
 import {
   DELOAD_REDUCAO_VOLUME,

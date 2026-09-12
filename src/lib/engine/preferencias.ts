@@ -1,6 +1,6 @@
 /**
  * 🎛️ v3 · BLOCO A — EDIÇÃO MANUAL COMO **PREFERÊNCIA** (DF 2026-07-31, cofre
- * `parametros-motor-treino-evokorpus` §"A FORMA da edição manual").
+ * `parametros-motor-treino-adaptkorpus` §"A FORMA da edição manual").
  *
  * 🔒 **A edição é INPUT do gerador, nunca patch na saída.** O Passo 0 da Leva G mediu que a
  * rotina **não é persistida em lugar nenhum**: `rotinaDias` é memória de render e **cinco

@@ -1,18 +1,18 @@
 -- ============================================================================
--- Evokorpus — aplicar migrations 0001–0006 EM ORDEM (cole no SQL Editor do Supabase).
--- Gerado da branch claude/evokorpus-app-dev-9in0hs. Depois: rode o Security Advisor.
+-- Adaptkorpus — aplicar migrations 0001–0006 EM ORDEM (cole no SQL Editor do Supabase).
+-- Gerado da branch claude/adaptkorpus-app-dev-9in0hs. Depois: rode o Security Advisor.
 -- ============================================================================
 
 -- ========== 0001_init.sql ==========
 
 -- ============================================================================
--- App Evokorpus — Schema inicial (Postgres / Supabase)
+-- App Adaptkorpus — Schema inicial (Postgres / Supabase)
 -- ----------------------------------------------------------------------------
 -- Estrutura relacional dos dados curados + dados do usuário.
 -- A SEGURANÇA (RLS) está no arquivo 0002_rls.sql — TODA tabela tem RLS.
 --
 -- Princípios (cofre): dado de saúde é sensível (LGPD); minimização; RLS desde já.
--- Fonte: outputs/prontidao-do-app-evokorpus §B, fontes/banco-alimentos-evokorpus.
+-- Fonte: outputs/prontidao-do-app-adaptkorpus §B, fontes/banco-alimentos-adaptkorpus.
 -- ============================================================================
 
 -- gen_random_uuid()
@@ -172,7 +172,7 @@ create table if not exists public.subscription (
 -- ========== 0002_rls.sql ==========
 
 -- ============================================================================
--- App Evokorpus — Row Level Security (RLS)
+-- App Adaptkorpus — Row Level Security (RLS)
 -- ----------------------------------------------------------------------------
 -- SEGURANÇA EM PRIMEIRA CLASSE. Toda tabela tem RLS HABILITADA.
 -- Sem política que case → acesso NEGADO por padrão (default-deny).
@@ -255,7 +255,7 @@ create policy "subscription_select_own"
 -- ========== 0003_seed_reference.sql ==========
 
 -- ============================================================================
--- App Evokorpus — Seed da BASE COMPLETA (gerado do xlsx do autor; validado Δ≈0)
+-- App Adaptkorpus — Seed da BASE COMPLETA (gerado do xlsx do autor; validado Δ≈0)
 -- 125 alimentos (TACO 4ª ed.) · 56 pratos · 216 ingredientes · 163 exercícios.
 -- Regenerar via scripts do app; não editar à mão.
 -- ============================================================================
@@ -835,7 +835,7 @@ on conflict (id) do nothing;
 -- ========== 0004_webhook_idempotency.sql ==========
 
 -- ============================================================================
--- App Evokorpus — Idempotência de webhooks (anti-replay/reentrega)
+-- App Adaptkorpus — Idempotência de webhooks (anti-replay/reentrega)
 -- ----------------------------------------------------------------------------
 -- Registra os eventos já processados. O webhook insere o event_id; se já existe
 -- (unique_violation), o evento é ignorado — evita processar a mesma cobrança 2x.
@@ -856,7 +856,7 @@ alter table public.webhook_events enable row level security;
 -- ========== 0005_profile_email_preferencias.sql ==========
 
 -- ============================================================================
--- App Evokorpus — profile: e-mail (espelho) + preferências do perfil (jsonb)
+-- App Adaptkorpus — profile: e-mail (espelho) + preferências do perfil (jsonb)
 -- ----------------------------------------------------------------------------
 -- Decisões de engenharia (DF 2026-07-05, ao mapear a persistência do bloco auth/beta):
 --
@@ -885,7 +885,7 @@ create unique index if not exists profile_email_unique
 -- ========== 0006_rls_hardening_allowlist.sql ==========
 
 -- ============================================================================
--- App Evokorpus — Blindagem RLS + allowlist do beta (leva 3, DF/blindagem 2026-07-05)
+-- App Adaptkorpus — Blindagem RLS + allowlist do beta (leva 3, DF/blindagem 2026-07-05)
 -- ----------------------------------------------------------------------------
 -- Implementa as regras de ouro §4.2 da blindagem-seguranca-app-2026-07-05:
 --   (4.2.2) profile.email é ESPELHO server-side de auth.users.email — o UPDATE do usuário

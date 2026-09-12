@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit do fix: `75b0e06`.
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit do fix: `75b0e06`.
 > Origem: teste manual do usuário no seletor **Trocar** (prato) mostrando opções idênticas.
 
 ## Sintoma

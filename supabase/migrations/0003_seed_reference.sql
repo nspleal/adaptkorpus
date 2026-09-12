@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Seed da BASE COMPLETA (gerado do xlsx do autor; validado Δ≈0)
+-- App Adaptkorpus — Seed da BASE COMPLETA (gerado do xlsx do autor; validado Δ≈0)
 -- 125 alimentos (TACO 4ª ed.) · 56 pratos · 216 ingredientes · 163 exercícios.
 -- Regenerar via scripts do app; não editar à mão.
 -- ============================================================================

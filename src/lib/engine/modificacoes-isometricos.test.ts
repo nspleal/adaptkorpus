@@ -4,7 +4,7 @@ import { REP_UNIT_SEGUNDOS, repUnitDe } from './isometricos';
 import { EXERCISES } from '../data/exercises';
 
 /**
- * Âncoras da spec TRAVADA: cofre `parametros-motor-treino-evokorpus`
+ * Âncoras da spec TRAVADA: cofre `parametros-motor-treino-adaptkorpus`
  * §"Escada de modificações (ordenada)" (B1, DF 2026-07-04) — sequências e base verbatim.
  */
 describe('modificações dos isométricos (cofre §Escada de modificações)', () => {

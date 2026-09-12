@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Gate do CONTEÚDO CURADO atrás da allowlist do beta
+-- App Adaptkorpus — Gate do CONTEÚDO CURADO atrás da allowlist do beta
 -- ----------------------------------------------------------------------------
 -- ⚠️ JÁ APLICADO AO VIVO (2026-07-06) e verificado — esta migration é a
 -- RECONCILIAÇÃO do repo com o banco (mesmo padrão da 0007).

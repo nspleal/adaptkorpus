@@ -1,6 +1,6 @@
 /**
  * Mesociclo v2 — semana do ciclo, rampa de volume e RIR descendente.
- * Fonte: cofre parametros-motor-treino-evokorpus §"v2 — decisões travadas" +
+ * Fonte: cofre parametros-motor-treino-adaptkorpus §"v2 — decisões travadas" +
  * outputs/handoff-motor-treino-v2-2026-07-08 (DFs 2026-07-08).
  *
  * Puro e determinístico: o relógio ("hoje") entra SEMPRE por parâmetro.

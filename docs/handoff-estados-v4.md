@@ -5,8 +5,8 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `b7b6091`.
-> Origem estética: `V4_front_end_evoK.zip` → `design_handoff_estados_sistema/Evokorpus Estados.dc.html`
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `b7b6091`.
+> Origem estética: `V4_front_end_evoK.zip` → `design_handoff_estados_sistema/Adaptkorpus Estados.dc.html`
 > (17 estados — Parte A sistema, Parte B vazios, Parte C carregamento). A "casca de revisão"
 > do protótipo (catálogo de chips) foi descartada, como manda o handoff.
 

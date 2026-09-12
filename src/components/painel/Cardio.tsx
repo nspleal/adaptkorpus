@@ -11,9 +11,9 @@ import { diaDaSemanaPt, formatarAcumulado, rotuloSemana, type RegistroCardioData
 
 /**
  * Cardio — registro, progresso contra a meta e estimativa de gasto
- * (Leva 2 · Bloco 1; porte fiel de `Evokorpus Cardio.dc.html`, 14 telas, do pacote
- * `design_handoff_evokorpus_dieta_cardio_retomada`; spec TRAVADA do cofre
- * `parametros-motor-treino-evokorpus` §Cardio, DF 2026-07-27).
+ * (Leva 2 · Bloco 1; porte fiel de `Adaptkorpus Cardio.dc.html`, 14 telas, do pacote
+ * `design_handoff_adaptkorpus_dieta_cardio_retomada`; spec TRAVADA do cofre
+ * `parametros-motor-treino-adaptkorpus` §Cardio, DF 2026-07-27).
  *
  * 🔴 Travas que esta peça honra (todas com teste):
  *   · o MET (e qualquer número técnico de intensidade) NUNCA aparece na interface;

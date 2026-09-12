@@ -1,7 +1,7 @@
 /**
  * Tipos do banco de dados curado (espelham o schema do Supabase e o banco do cofre).
- * Fonte: fontes/banco-alimentos-evokorpus (V2 limpa: 167 alimentos TACO + 96 pratos, Δ=0)
- *        fontes/ranking-exercicios-evokorpus (163 exercícios).
+ * Fonte: fontes/banco-alimentos-adaptkorpus (V2 limpa: 167 alimentos TACO + 96 pratos, Δ=0)
+ *        fontes/ranking-exercicios-adaptkorpus (163 exercícios).
  *
  * Estrutura RELACIONAL: foods → recipes → recipe_items (join).
  * kcal/macros de um prato = SOMA dos ingredientes (TACO × gramas), nunca por 4/4/9.
@@ -42,7 +42,7 @@ export interface Food {
   nome: string;
   /**
    * Rótulo amigável — vocabulário OFICIAL do cofre (voz de marca; DF 2026-07-01,
-   * conceitos/rotulos-amigaveis-alimentos-evokorpus). É o nome que o usuário lê
+   * conceitos/rotulos-amigaveis-alimentos-adaptkorpus). É o nome que o usuário lê
    * (autocomplete, detalhe de prato, lista de compras). Opcional no TIPO (fixtures de
    * teste do motor não precisam dele); no SEED real é 100% preenchido e único —
    * imposto por data.test.ts. Exibição: `rotuloAmigavel ?? nome`.
@@ -123,7 +123,7 @@ export type EquipamentoCasa =
 
 /**
  * Grupo muscular PRIMÁRIO normalizado (1ª entrada da coluna de grupo da A1) —
- * curadoria aprovada no cofre `parametros-motor-substituicao-evokorpus` §2
+ * curadoria aprovada no cofre `parametros-motor-substituicao-adaptkorpus` §2
  * (DF 2026-07-04). É a chave da PRESERVAÇÃO como filtro duro na troca (F.2).
  */
 export type GrupoPrimario =

@@ -77,7 +77,7 @@ import { chaveLocal } from '@/lib/escopo-local';
 import { useAbaVoltavel, useCamadaVoltavel, useVoltarDoNavegador } from '@/lib/usar-voltar';
 
 /**
- * Painel (área logada) — porte FIEL do Evokorpus App.dc.html (estilos inline exatos +
+ * Painel (área logada) — porte FIEL do Adaptkorpus App.dc.html (estilos inline exatos +
  * evkPop/evkScreenIn). Ligado ao motor determinístico real (gate/dieta/treino/F.2).
  */
 
@@ -663,7 +663,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setPesoMotorKg(pesoEfetivoKg);
     pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
     const { dieta: nd, treino: nt } = recomputarPlano(novo, opcoesDoPlano({ pesoEfetivoKg }));
-    // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-evokorpus): se a edição cair em
+    // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-adaptkorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
     if (nd.gate.comportamento === 'ROTEAR' || !nd.plano || !nt.rotina) {
@@ -712,7 +712,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }, []);
   const marcar = (k: string) => setTrocados((prev) => new Set(prev).add(k));
 
-  // "Cansei deste prato" (cofre, parametros-motor-substituicao-evokorpus §Variedade): pratos em
+  // "Cansei deste prato" (cofre, parametros-motor-substituicao-adaptkorpus §Variedade): pratos em
   // descanso na rotação. O prazo/retorno de 21 dias é resolvido na sessão (relógio fora do motor).
   const cansadosAtivos = pratosCansadosAtivos(perfil.pratosCansados);
   const nomePrato = (id: string) => RECIPES_SEED.find((r) => r.id === id)?.nome ?? id;
@@ -2387,7 +2387,7 @@ function Perfil({ perfil, onConta, onEditar, modoDiario }: {
 
 /* ════════════════════ Encaminhamento (edição → ROTEAR) ════════════════════ */
 
-// Postura fail-safe do gate de saúde (cofre, princípio 4 / gate-de-saude-evokorpus):
+// Postura fail-safe do gate de saúde (cofre, princípio 4 / gate-de-saude-adaptkorpus):
 // a edição entrou em zona clínica → não geramos plano; orientamos profissional. Mantém o
 // plano válido anterior (onManter) ou deixa revisar os dados (onRevisar). Sem promessa.
 function EncaminhamentoEdicao({ motivos, onRevisar, onManter }: { motivos: string[]; onRevisar: () => void; onManter: () => void }) {

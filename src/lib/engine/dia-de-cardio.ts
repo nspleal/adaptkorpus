@@ -1,5 +1,5 @@
 /**
- * DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃 de `parametros-motor-treino-evokorpus`,
+ * DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃 de `parametros-motor-treino-adaptkorpus`,
  * 2026-07-31).
  *
  * 🔴 O gap que isto fecha: o Passo 3 sempre mandou "dias excedentes → cardio/recuperação", e

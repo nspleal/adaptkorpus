@@ -43,7 +43,7 @@ jobs:
       - name: Montar pacote portátil
         shell: pwsh
         run: |
-          $dist = "evokorpus-portatil"
+          $dist = "adaptkorpus-portatil"
           Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "$dist\app","$dist\node" | Out-Null
 
@@ -61,30 +61,30 @@ jobs:
           Copy-Item (Get-Command node).Source "$dist\node\node.exe"
 
           # Lançador na raiz do pacote.
-          Copy-Item "packaging\portable-launcher.bat" "$dist\INICIAR APP EVOKORPUS.bat"
+          Copy-Item "packaging\portable-launcher.bat" "$dist\INICIAR APP ADAPTKORPUS.bat"
 
           # Verificação mínima: o build precisa existir dentro do pacote.
           if (-not (Test-Path "$dist\app\.next\BUILD_ID")) {
             throw "Build ausente no pacote (.next/BUILD_ID não encontrado)."
           }
 
-          Compress-Archive -Path "$dist\*" -DestinationPath "evokorpus-portatil-windows.zip" -Force
-          "Pacote: $((Get-Item evokorpus-portatil-windows.zip).Length / 1MB) MB"
+          Compress-Archive -Path "$dist\*" -DestinationPath "adaptkorpus-portatil-windows.zip" -Force
+          "Pacote: $((Get-Item adaptkorpus-portatil-windows.zip).Length / 1MB) MB"
 
       - name: Publicar Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: portatil-windows
-          name: App Evokorpus — pacote portátil (Windows)
+          name: App Adaptkorpus — pacote portátil (Windows)
           body: |
-            **Pacote portátil do App Evokorpus para Windows — não precisa instalar nada.**
+            **Pacote portátil do App Adaptkorpus para Windows — não precisa instalar nada.**
 
-            1. Baixe **evokorpus-portatil-windows.zip** abaixo (em *Assets*).
+            1. Baixe **adaptkorpus-portatil-windows.zip** abaixo (em *Assets*).
             2. Botão direito no zip → **Extrair tudo**.
-            3. Abra a pasta extraída e dê **duplo-clique** em **INICIAR APP EVOKORPUS.bat**.
+            3. Abra a pasta extraída e dê **duplo-clique** em **INICIAR APP ADAPTKORPUS.bat**.
 
             O app abre sozinho no navegador em http://localhost:3000. Para parar, feche a janela.
             Se aparecer o aviso azul do Windows, clique em *Mais informações → Executar assim mesmo*.
 
             _Gerado automaticamente a cada atualização do código._
-          files: evokorpus-portatil-windows.zip
+          files: adaptkorpus-portatil-windows.zip

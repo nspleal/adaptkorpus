@@ -6,7 +6,7 @@ import type { Exercise } from '@/lib/data/types';
 
 /**
  * Escada de dificuldade — componentes visuais (porte fiel do protótipo V8.3
- * `Evokorpus Escada de Dificuldade.dc.html`; estilos verbatim do design):
+ * `Adaptkorpus Escada de Dificuldade.dc.html`; estilos verbatim do design):
  *  - <EscadaPill>: indicador "Degrau X de Y" (dots Folha/Pulso/translúcido) que expande
  *    a lista da escada em LEITURA (não é seletor — a troca real é o hint/calibração).
  *  - <HintVariacao>: cartão de sugestão da sessão guiada (subida/descida — mesma família,

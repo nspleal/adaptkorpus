@@ -5,7 +5,7 @@ import { NUCLEO_COBRANCA, QUANTO_CUSTA, type SuperficieCobranca } from './copy-c
 
 /**
  * 🔒 O NÚCLEO DA AFIRMAÇÃO SOBRE DINHEIRO É IDÊNTICO NAS TRÊS SUPERFÍCIES
- * (DF 2026-08-01, `faq-evokorpus` §Assinatura, preço e cancelamento).
+ * (DF 2026-08-01, `faq-adaptkorpus` §Assinatura, preço e cancelamento).
  *
  * 🔴 O defeito medido: *"quanto custa?"* tinha **três textos diferentes** em `/faq`, landing
  * e `/suporte`. O conteúdo concordava; a forma divergia — e **três lugares livres derivam

@@ -39,7 +39,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  * Os números (reps, RIR, descanso, séries) vêm do motor determinístico real
  * (PrescricaoFITT) — nada de IA em runtime. O %1RM é só uma LEITURA estimada a
  * partir da faixa de reps (nunca testamos 1RM real); respeita o piso de 6 reps
- * (conceitos/parametros-motor-treino-evokorpus → piso de segurança).
+ * (conceitos/parametros-motor-treino-adaptkorpus → piso de segurança).
  */
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';

@@ -1,6 +1,6 @@
 /**
  * TELEMETRIA DE PRODUTO — os 7 eventos (Leva C2).
- * 🔒 Spec travada: cofre `conceitos/metricas-de-produto-evokorpus` (DF 2026-07-31).
+ * 🔒 Spec travada: cofre `conceitos/metricas-de-produto-adaptkorpus` (DF 2026-07-31).
  *
  * **Por que existe:** o app não media nada. O colapso do beta — zero treinos, zero pesos,
  * zero refeições — só apareceu quando o cofre foi ler o banco à mão. Enquanto isso não

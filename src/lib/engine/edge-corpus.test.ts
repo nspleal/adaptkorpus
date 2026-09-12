@@ -9,7 +9,7 @@
  *   - corpus = REGRESSÃO: roda inteiro a cada conserto;
  *   - postura de falsificação: cada caso tenta QUEBRAR o motor.
  *
- * Fonte de verdade (números): conceitos/parametros-motor-dieta-evokorpus + gate-de-saude.
+ * Fonte de verdade (números): conceitos/parametros-motor-dieta-adaptkorpus + gate-de-saude.
  */
 import { describe, expect, it } from 'vitest';
 import { avaliarGateSaude } from './health-gate';

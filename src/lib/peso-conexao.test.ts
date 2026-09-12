@@ -312,8 +312,8 @@ describe('🔒 a frase do recálculo diz o que já aconteceu', () => {
 
 /**
  * 🔒 O EIXO KCAL DO GATE ENTRA NA HISTERESE ASSIMÉTRICA (DF 2026-08-01,
- * `gate-de-saude-evokorpus` §Histerese assimétrica · prova em
- * `parametros-motor-dieta-evokorpus` §⚖️ regra 2).
+ * `gate-de-saude-adaptkorpus` §Histerese assimétrica · prova em
+ * `parametros-motor-dieta-adaptkorpus` §⚖️ regra 2).
  *
  * O desfecho `GET ≤ piso_seguro → ROTEAR` (1250 F / 1550 M) tem de se comportar como os
  * cortes de IMC: **entrar a cada leitura sobre o suavizado** (o limiar de Δ e o teto de

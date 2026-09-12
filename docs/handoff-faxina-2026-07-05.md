@@ -4,7 +4,7 @@
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-Data: 2026-07-05 · Branch: `claude/evokorpus-app-dev-9in0hs` · Sem dependência externa. **Nada no cofre.**
+Data: 2026-07-05 · Branch: `claude/adaptkorpus-app-dev-9in0hs` · Sem dependência externa. **Nada no cofre.**
 
 Os 4 itens vieram travados (DF 2026-07-04/05). Verificação: **#1 e #4 já estavam implementados e
 testados nesta branch** — só confirmei; o trabalho de código foi **#2 (nome do ebook)** e **#3
@@ -28,7 +28,7 @@ piso `casa+[]` é intacto). Sem edição nesta leva.
 ## #2 — Nome canônico do ebook = "A Curva" (NOVO)
 - `src/app/ebook/page.tsx`: `<h1>` e título da capa → **"A Curva"**; "O básico do fitness honesto"
   virou **subtítulo** (na capa e sob o h1); **removido** o `<AValidar>título e conteúdo final</AValidar>`
-  e o import de `AValidar`; `metadata.title` → **"A Curva · Evokorpus"**. Eyebrow "Ebook" da capa fica
+  e o import de `AValidar`; `metadata.title` → **"A Curva · Adaptkorpus"**. Eyebrow "Ebook" da capa fica
   (rótulo de categoria).
 - `src/app/page.tsx` (landing): a faixa do ebook agora nomeia **"A Curva"**.
 - `faq/page.tsx` já usava "A Curva" — inalterado.

@@ -1,6 +1,6 @@
 /**
  * Escada de MODIFICAÇÕES dos isométricos — mesmo exercício, muda a alavanca.
- * Fonte TRAVADA: cofre `conceitos/parametros-motor-treino-evokorpus` §"Escada de
+ * Fonte TRAVADA: cofre `conceitos/parametros-motor-treino-adaptkorpus` §"Escada de
  * modificações (ordenada)" (B1, DF 2026-07-04). Sequências fácil → base → difícil,
  * com a forma padrão marcada como `base`. NÃO é troca de exercício (a biblioteca tem
  * 1 hold por movimento) — é o insumo do "Corpo C" da calibração manual (V8.1) e da

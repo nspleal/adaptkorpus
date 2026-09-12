@@ -5,10 +5,10 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `91a9078`.
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `91a9078`.
 > Implementa as decisões `## [2026-07-01] decision | App — "Cansei deste prato" (3 semanas) +
-> rótulos amigáveis` (cofre: `parametros-motor-substituicao-evokorpus` §Variedade +
-> `fontes/banco-alimentos-evokorpus`).
+> rótulos amigáveis` (cofre: `parametros-motor-substituicao-adaptkorpus` §Variedade +
+> `fontes/banco-alimentos-adaptkorpus`).
 
 ## Decisão 1 — "Cansei deste prato" (nível do PRATO, 21 dias, retorno automático)
 - **Gesto** no detalhe do prato (aba Dieta → abrir prato → **"Cansei deste prato"**): o prato

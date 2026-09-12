@@ -1,6 +1,6 @@
 /**
  * DESCANSO ENTRE SÉRIES — propriedade do EXERCÍCIO, não do objetivo.
- * 🔒 SPEC TRAVADA: cofre `parametros-motor-treino-evokorpus` §🕐 (DF 2026-07-31);
+ * 🔒 SPEC TRAVADA: cofre `parametros-motor-treino-adaptkorpus` §🕐 (DF 2026-07-31);
  * handoff `outputs/handoff-descanso-2026-07-31`; evidência §5.7 (Singer et al. 2024,
  * PMID 39205815).
  *

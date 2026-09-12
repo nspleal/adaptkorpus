@@ -12,7 +12,7 @@ import type { Exercise } from './data/types';
 
 /**
  * Frequência por grupo — ancorado nas 4 CORREÇÕES OBRIGATÓRIAS do cofre
- * (`parametros-motor-treino-evokorpus` §"Como a régua de 2× pode e não pode ser exibida",
+ * (`parametros-motor-treino-adaptkorpus` §"Como a régua de 2× pode e não pode ser exibida",
  * DF 2026-07-27). Cada uma tem aqui o teste que o critério de aceite nomeia.
  */
 

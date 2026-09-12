@@ -126,7 +126,7 @@ export function DetalheExercicio({ ex, onFechar, onTrocar, onBanir, banidoTexto,
 export function DetalhePrato({ item, foodsById, onFechar, onTrocar, onPorcao, onCansei }: { item: CardapioItem; foodsById: Map<string, Food>; onFechar: () => void; onTrocar: () => void; onPorcao: () => void; onCansei: () => void }) {
   const m = item.macros;
   const alergenos = item.prato.contemAlergenos ?? [];
-  // Nome de exibição = rótulo amigável do cofre (rotulos-amigaveis-alimentos-evokorpus);
+  // Nome de exibição = rótulo amigável do cofre (rotulos-amigaveis-alimentos-adaptkorpus);
   // o nome clínico TACO fica na base (proveniência/atribuição), não na tela.
   const ingredientes = item.prato.itens.map((it) => {
     const f = foodsById.get(it.alimentoId);

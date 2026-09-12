@@ -2,7 +2,7 @@
  * Montador de rotina de treino — v4: ALOCADOR POR VOLUME (leva B do
  * handoff-motor-volume-v4-2026-08-12; substitui o alocador por lista de padrões do v1).
  *
- * Fonte: parametros-motor-treino-evokorpus §"Passo 3" + §1.2 (bandas de volume) + DFs
+ * Fonte: parametros-motor-treino-adaptkorpus §"Passo 3" + §1.2 (bandas de volume) + DFs
  * ①②③ de 2026-08-12 (contagem ponderada · cobertura · divisões).
  *
  * Garantias (travadas na spec):

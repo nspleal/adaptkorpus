@@ -1,6 +1,6 @@
 /**
  * Fórmulas puras do motor — Mifflin-St Jeor, GET, IMC.
- * Espelham parametros-motor-dieta-evokorpus (spec A3) e logica-de-dieta.
+ * Espelham parametros-motor-dieta-adaptkorpus (spec A3) e logica-de-dieta.
  */
 import { PAL } from './constants';
 import type { NivelAtividade, Sexo } from './types';

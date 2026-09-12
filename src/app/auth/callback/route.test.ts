@@ -22,7 +22,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { exchangeCodeForSession: trocar } }),
 }));
 
-const ORIGEM = 'https://evokorpus.vercel.app';
+const ORIGEM = 'https://app.example.test';
 
 /** Chama a rota com um `code` que TROCA COM SUCESSO e devolve o destino do 302. */
 async function destinoDe(next: string | null): Promise<string> {
@@ -51,7 +51,7 @@ describe('/auth/callback — `next` externo nunca sai do domínio', () => {
     '//evil.com',
     '/\\evil.com',
     'javascript:alert(1)',
-    'https://evokorpus.vercel.app.evil.com',
+    'https://app.example.test.evil.com',
     '/a\nb',
   ];
 
@@ -67,7 +67,7 @@ describe('/auth/callback — `next` externo nunca sai do domínio', () => {
     async (quaseAcerto) => {
       const d = await destinoDe(quaseAcerto);
       expect(new URL(d).origin, `escapou para ${d}`).toBe(ORIGEM);
-      expect(new URL(d).host).toBe('evokorpus.vercel.app');
+      expect(new URL(d).host).toBe('app.example.test');
     },
   );
 

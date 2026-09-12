@@ -5,13 +5,13 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `ee85762`.
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `ee85762`.
 > Portei os 5 itens que já estavam prontos no cofre. Fiel aos estilos/tokens; travas honradas.
 
 ## O que foi portado
 
 ### 1. Erros comuns dos 163 exercícios ✅
-- **Fonte:** `conceitos/erros-comuns-exercicios-evokorpus` (tabela `# | Exercício | Erros comuns`, 163 linhas).
+- **Fonte:** `conceitos/erros-comuns-exercicios-adaptkorpus` (tabela `# | Exercício | Erros comuns`, 163 linhas).
 - **Dado gerado (reprodutível):** `scripts/gerar-erros-comuns.mjs` lê a markdown do cofre + `exercises.ts`
   e **valida** que cada nome bate com `EXERCISES[e#].nomePt` (hard-fail em divergência → pega
   reordenação/dessincronia); emite `src/lib/data/erros-comuns.ts` (`e1..e163` → lista de "erro → correção",
@@ -23,7 +23,7 @@
   postura".
 
 ### 2. FAQ completo (30 Q&A) ✅
-- **Fonte:** `conceitos/faq-evokorpus` — as 5 categorias (Assinatura/preço/cancelamento · Treino · Dieta ·
+- **Fonte:** `conceitos/faq-adaptkorpus` — as 5 categorias (Assinatura/preço/cancelamento · Treino · Dieta ·
   Conta e dados · Saúde/legal/18+), **verbatim**. A V6 tinha 11; agora são as 30.
 - Removi os `[A validar]` da FAQ onde o cofre já fixa o fato (R$ 29/mês + R$ 27 ebook · 7 dias · reembolso
   7 dias/2 dias úteis · 167 alimentos/96 pratos · 35 veganos/29 vegetarianos · suporte e-mail+WhatsApp
@@ -36,7 +36,7 @@
   de troca ("Não gostou? Gere mais." / "Não gostei de nenhuma — gerar mais variedade").
 
 ### 4. "Dia de treino registrado" = qualquer treino ✅ — **UI nova, precisa do seu olhar de design**
-- **Decisão do cofre** (`registro-de-aderencia-evokorpus` §Marcos, 2026-07-02): conta **qualquer treino
+- **Decisão do cofre** (`registro-de-aderencia-adaptkorpus` §Marcos, 2026-07-02): conta **qualquer treino
   registrado**, não só a sessão guiada concluída.
 - **Implementação:** `registrarTreinoManual()` grava o dia como treinado (sem séries/volume/feedback,
   `manual:true`) em `evk_treinos`; os **marcos** já contam **dias distintos** → passam a contar o registro

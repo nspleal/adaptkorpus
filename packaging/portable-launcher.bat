@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
-title App Evokorpus (portatil)
+title App Adaptkorpus (portatil)
 set PORT=3000
 set HOSTNAME=127.0.0.1
 set NODE_ENV=production
 
 echo ============================================================
-echo      APP EVOKORPUS - versao portatil (sem instalar nada)
+echo      APP ADAPTKORPUS - versao portatil (sem instalar nada)
 echo ============================================================
 echo.
 echo O app abre no navegador em alguns segundos:

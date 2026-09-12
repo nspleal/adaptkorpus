@@ -1,5 +1,5 @@
 /**
- * Ponto de entrada do motor determinístico do App Evokorpus.
+ * Ponto de entrada do motor determinístico do App Adaptkorpus.
  *
  * Orquestra: gate de saúde → (se PERMITIR/PISAR/RESTRINGIR) dieta → montagem do cardápio.
  * Postura fail-safe: ROTEAR → nenhum plano é gerado.

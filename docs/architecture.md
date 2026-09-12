@@ -1,4 +1,4 @@
-# Arquitetura — App Evokorpus
+# Arquitetura — App Adaptkorpus
 
 > 📌 **DOCUMENTO VIVO** — referenciado pelo `README.md`. Mantenha-o atualizado.
 > A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**
@@ -22,11 +22,11 @@ PerfilUsuario ─▶ avaliarGateSaude ─▶ comportamento
 ```
 
 ### Gate de saúde (`health-gate.ts`)
-Espelha `gate-de-saude-evokorpus`. Precedência **ROTEAR > RESTRINGIR > PISAR > PERMITIR**.
+Espelha `gate-de-saude-adaptkorpus`. Precedência **ROTEAR > RESTRINGIR > PISAR > PERMITIR**.
 Fail-safe: input implausível → ROTEAR. Aviso universal IMC < 18,5.
 
 ### Dieta (`diet.ts` + `constants.ts` + `formulas.ts`)
-Espelha `parametros-motor-dieta-evokorpus` (spec A3, v10): Mifflin-St Jeor → GET (PAL) →
+Espelha `parametros-motor-dieta-adaptkorpus` (spec A3, v10): Mifflin-St Jeor → GET (PAL) →
 fator por objetivo (com piso) → macros na ordem **proteína → gordura (clamp 20–30%) →
 carboidrato (resto)**. 4/4/9 só para a meta.
 

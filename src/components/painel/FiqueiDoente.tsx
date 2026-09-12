@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, ty
 /**
  * "Fiquei doente" — a entrada + a folha de reconhecimento de pausa
  * (Leva 2 · Bloco 4, porte fiel de `design_handoff_fiquei_doente`; cofre
- * `parametros-motor-treino-evokorpus` §"Fiquei doente", DF 2026-07-27).
+ * `parametros-motor-treino-adaptkorpus` §"Fiquei doente", DF 2026-07-27).
  *
  * 🔴 É um RECONHECIMENTO, não um comando. "Entendi" grava um carimbo de tempo e NADA MAIS:
  * não toca ciclo, volume, chama, agenda nem meta de cardio. O congelamento do mesociclo já

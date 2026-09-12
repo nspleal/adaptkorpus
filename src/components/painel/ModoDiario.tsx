@@ -7,7 +7,7 @@ import { MEAL_LABEL, type StatusRefeicao } from './RegistroRefeicao';
 /**
  * MODO DIÁRIO — as telas de quem o gate roteou (`ROTEAR`).
  *
- * 🔒 Cofre, DF 2026-07-27 (`gate-de-saude-evokorpus`): a pessoa ENTRA e REGISTRA; não recebe
+ * 🔒 Cofre, DF 2026-07-27 (`gate-de-saude-adaptkorpus`): a pessoa ENTRA e REGISTRA; não recebe
  * plano, cardápio, sessão guiada, meta de cardio nem progressão. A regra que separa as duas
  * coisas: **registrar é inerte, prescrever seria orientação.**
  *

@@ -5,8 +5,8 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `48f1942`. Fonte: cofre
-> `parametros-motor-treino-evokorpus` §"Passo 2 — Progressão por feedback" + §"Isométricos" + §"Deload".
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `48f1942`. Fonte: cofre
+> `parametros-motor-treino-adaptkorpus` §"Passo 2 — Progressão por feedback" + §"Isométricos" + §"Deload".
 > Determinismo, sem "IA", sem promessa — honrados. Nada escrito no cofre.
 
 ## O contexto

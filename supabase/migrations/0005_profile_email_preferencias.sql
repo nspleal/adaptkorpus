@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — profile: e-mail (espelho) + preferências do perfil (jsonb)
+-- App Adaptkorpus — profile: e-mail (espelho) + preferências do perfil (jsonb)
 -- ----------------------------------------------------------------------------
 -- Decisões de engenharia (DF 2026-07-05, ao mapear a persistência do bloco auth/beta):
 --

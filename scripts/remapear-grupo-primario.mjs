@@ -1,6 +1,6 @@
 /**
  * Remapeia `grupoPrimario` para o vocabulário de 12 valores ANATÔMICOS
- * (cofre `parametros-motor-treino-evokorpus` §Frequência por grupo — DF 2026-07-27,
+ * (cofre `parametros-motor-treino-adaptkorpus` §Frequência por grupo — DF 2026-07-27,
  * destinos de `trapezio`/`adutores` RATIFICADOS pelo cofre em 2026-07-28).
  *
  * 🔒 REGRA DO CAMPO (cofre, DF 2026-07-28): **`grupoPrimario` é anatomia, EXCETO quando a

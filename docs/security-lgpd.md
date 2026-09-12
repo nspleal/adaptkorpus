@@ -1,4 +1,4 @@
-# Segurança & LGPD — postura do App Evokorpus
+# Segurança & LGPD — postura do App Adaptkorpus
 
 > 📌 **DOCUMENTO VIVO** — referenciado por `CLAUDE.md` (princípio 5), `next.config.mjs` e `src/lib/session.ts`. Mantenha-o atualizado.
 > A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**

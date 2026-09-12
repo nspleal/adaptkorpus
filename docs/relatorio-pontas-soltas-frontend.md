@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre (obsidian).** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit desta entrega: `cfb750c`.
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit desta entrega: `cfb750c`.
 > Contexto: varredura completa do front-end procurando botões/abas/links "soltos"
 > (só visuais, sem ação) e o que faltava para a experiência ficar coesa — e a correção deles.
 
@@ -54,7 +54,7 @@
 
 ### /conta — botões que agora funcionam
 - **"Alterar" / "Alterar e-mail"** → modal de edição (atualiza o valor exibido).
-- **"Baixar meus dados"** → exporta **`evokorpus-meus-dados.json`** no navegador
+- **"Baixar meus dados"** → exporta **`adaptkorpus-meus-dados.json`** no navegador
   (`src/lib/export.ts`). É **stopgap**: exporta os dados da conta visíveis; o export completo
   (perfil + plano + histórico do servidor) é a tarefa **Ownership-4**, com aviso no próprio JSON.
 
@@ -69,7 +69,7 @@
 
 - `typecheck` ✅ · `lint` ✅ · **130 testes** ✅ · `build` ✅ (rotas novas presentes).
 - **E2E (Playwright)**: páginas legais (200), 404 (status 404 + UI), `/conta` "Alterar nome"
-  (modal + atualização), "Baixar meus dados" (download `evokorpus-meus-dados.json`),
+  (modal + atualização), "Baixar meus dados" (download `adaptkorpus-meus-dados.json`),
   navegação conta→privacidade. **Sem erros de console** (o único log "404 resource" é a própria
   página de teste inexistente respondendo 404 — esperado).
 
@@ -80,7 +80,7 @@
 - [ ] **Redação jurídica final** de Termos / Privacidade / Aviso (hoje rascunho). Definir:
       valores e ciclo de assinatura, política de reembolso, prazos de retenção, **DPO/encarregado**
       e canal oficial, CNPJ/razão social (rodapé mostra `[CNPJ]`).
-- [ ] **E-mail de suporte**: usei placeholder `suporte@evokorpus.app` — confirmar o real.
+- [ ] **E-mail de suporte**: usei placeholder `suporte@adaptkorpus.app` — confirmar o real.
 - [ ] **Ebook**: a landing menciona "ebook por R$ 27" e tem "Ver o ebook" ainda em `href="#"`
       (removi só o link do footer). Precisa de **decisão de produto**: página/checkout do ebook,
       ou remover a menção. Não inventei destino.

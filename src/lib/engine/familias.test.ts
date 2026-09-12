@@ -3,7 +3,7 @@ import { FAMILIAS, familiaDe, mesmaFamilia } from './familias';
 import { EXERCISES } from '../data/exercises';
 
 /**
- * Âncoras da spec TRAVADA: cofre `parametros-motor-substituicao-evokorpus` §"Famílias
+ * Âncoras da spec TRAVADA: cofre `parametros-motor-substituicao-adaptkorpus` §"Famílias
  * de equivalência" (DF 2026-07-04) — 20 famílias, membership verbatim.
  */
 const byId = new Set(EXERCISES.map((e) => e.id));

@@ -2,7 +2,7 @@
  * Leva H — orçamento na dieta (pedido nº 11 do beta: "a dieta esta muito cara tambem.
  * precisa ter opçao de limite de orçamento").
  *
- * Fonte: cofre, parametros-motor-dieta-evokorpus §`orcamento`/§`custoRelativo` (DF 2026-07-26);
+ * Fonte: cofre, parametros-motor-dieta-adaptkorpus §`orcamento`/§`custoRelativo` (DF 2026-07-26);
  * handoff-leva-h-orcamento-2026-08-06.
  */
 import { readFileSync } from 'node:fs';

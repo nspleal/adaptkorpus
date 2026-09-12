@@ -45,7 +45,7 @@ export const PROTEINA_G_KG = {
 export const GORDURA_G_KG_PONTO = 0.8;
 // Clamp da gordura a 20–30% das kcal. Os "gatilhos" são EMERGENTES do clamp (não há
 // código extra): com 0.8 g/kg, o teto de 30% dispara quando kcal_alvo < 24×peso e o piso
-// de 20% quando kcal_alvo > 36×peso. Ver parametros-motor-dieta-evokorpus (cofre).
+// de 20% quando kcal_alvo > 36×peso. Ver parametros-motor-dieta-adaptkorpus (cofre).
 export const GORDURA_CLAMP = { minFracao: 0.2, maxFracao: 0.3 } as const; // 20–30% das kcal
 
 /** kcal por grama (Atwater) — SÓ para alocar a meta, nunca para medir alimento. */

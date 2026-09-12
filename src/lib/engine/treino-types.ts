@@ -1,6 +1,6 @@
 /**
  * Tipos do motor de TREINO (FITT).
- * Fonte: conceitos/parametros-motor-treino-evokorpus (DFs travadas 2026-06-28).
+ * Fonte: conceitos/parametros-motor-treino-adaptkorpus (DFs travadas 2026-06-28).
  * Roda após o gate de saúde (herdado). Determinístico, sem IA em runtime.
  */
 import type { PreferenciasTreino } from './preferencias';

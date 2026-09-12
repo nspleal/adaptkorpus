@@ -7,7 +7,7 @@ import { EXERCISES } from '../data/exercises';
 import type { NivelExercicio } from '../data/types';
 
 /**
- * Âncoras da spec TRAVADA (cofre): `fontes/ranking-exercicios-evokorpus` §"Escadas de
+ * Âncoras da spec TRAVADA (cofre): `fontes/ranking-exercicios-adaptkorpus` §"Escadas de
  * dificuldade" (DF 2026-07-03). Espelha os cenários do harness do autor (validacao-motor C6),
  * agora sobre os IDs reais do app ("eN") e a biblioteca real (163 exercícios).
  */

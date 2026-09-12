@@ -1,8 +1,8 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Design system Evokorpus — fiel ao brand board definitivo.
- * Fonte de verdade: cofre (obsidian) → conceitos/identidade-de-marca-evokorpus.
+ * Design system Adaptkorpus — fiel ao brand board definitivo.
+ * Fonte de verdade: cofre (obsidian) → conceitos/identidade-de-marca-adaptkorpus.
  *
  * Paleta (5 cores de marca + alerta funcional):
  *   Floresta #0D2818 — base / fundo escuro
