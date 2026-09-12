@@ -10,6 +10,7 @@
  */
 import { supabaseConfigurado } from '@/lib/supabase/env';
 import { pesoKgDaResposta } from '@/lib/peso-dominio';
+import { escopoLocal } from '@/lib/escopo-local';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RegistroPeso, SessaoHistorico } from '@/lib/treino-historico';
 import type { Consentimentos } from '@/lib/persistencia/perfil-profile';
@@ -23,11 +24,13 @@ const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * o cookie e as demais podem chegar com o token já consumido (401 intermitente). Na 2ª
  * ida (~600 ms depois) o cookie renovado já está no browser. 401 persistente → null.
  */
-async function fetchComRetry401(url: string, init?: RequestInit): Promise<Response | null> {
+async function fetchComRetry401(url: string, init?: RequestInit, ativo: () => boolean = () => true): Promise<Response | null> {
   try {
+    if (!ativo()) return null;
     let r = await fetch(url, init);
     if (r.status === 401) {
       await espera(600);
+      if (!ativo()) return null;
       r = await fetch(url, init);
     }
     return r;
@@ -121,7 +124,12 @@ export async function carregarAderenciaServidor(): Promise<Record<string, DiaAde
   return r?.dias ?? null;
 }
 export async function salvarAderenciaDia(dia: string, logs: Record<string, unknown>, notes: Record<string, string>): Promise<boolean> {
-  return enviarJson('/api/dados/aderencia', 'PUT', { dia, logs, notes });
+  if (!supabaseConfigurado()) return false;
+  const conta = escopoLocal();
+  const r = await fetchComRetry401('/api/dados/aderencia', {
+    method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dia, logs, notes }),
+  }, () => escopoLocal() === conta);
+  return r?.ok ?? false;
 }
 
 // ---- peso ---------------------------------------------------------------------

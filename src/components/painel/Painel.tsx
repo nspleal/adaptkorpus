@@ -1683,6 +1683,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <CardioSemana {...propsCardio} />
           </section>
         )}
+        {!vista && aba === 'dieta' && registro.estadoSync === 'pendente' && (
+          <div role="status">Seu registro está salvo neste aparelho, mas ainda não foi confirmado na conta. <button type="button" onClick={registro.tentarSincronizar}>Tentar sincronizar</button></div>
+        )}
+        {!vista && aba === 'dieta' && registro.estadoSync === 'falha-local' && (
+          <div role="alert">Não foi possível guardar uma cópia neste aparelho. Mantenha esta página aberta e tente sincronizar. <button type="button" onClick={registro.tentarSincronizar}>Tentar sincronizar</button></div>
+        )}
         {!vista && aba === 'dieta' && modoDiario && (
           <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
         )}

@@ -5,7 +5,9 @@ import { faixaTint, limiarAderencia, streakAderencia } from '@/lib/aderencia';
 import { diaLocalISO } from '@/lib/dia-local';
 import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from '@/lib/persistencia/sync';
 import { registrarEvento } from '@/lib/metricas/registrar';
-import { chaveLocal } from '@/lib/escopo-local';
+import { chaveLocal, escopoLocal } from '@/lib/escopo-local';
+import { supabaseConfigurado } from '@/lib/supabase/env';
+import { criarPersistenciaAderencia, mesclarAderencia, type EstadoSyncAderencia } from '@/lib/aderencia-persistencia';
 
 /**
  * Registrar refeição + histórico de aderência — porte fiel do V5.
@@ -29,7 +31,7 @@ export type StatusRefeicao = 'seguiu' | 'fora' | 'comi' | null;
 export const MEAL_LABEL: Record<string, string> = { cafe: 'Café da manhã', almoco: 'Almoço', lanche: 'Lanche da tarde', jantar: 'Jantar' };
 const KEY = 'evk_aderencia' as const;
 
-type DiaLog = { logs: Record<string, StatusRefeicao>; notes: Record<string, string> };
+type DiaLog = { logs: Record<string, StatusRefeicao>; notes: Record<string, string>; pendenteSync?: boolean };
 type Historico = Record<string, DiaLog>;
 
 // Dia LOCAL (não UTC): à noite no Brasil, toISOString() viraria "amanhã" e mis-arquivaria
@@ -44,52 +46,48 @@ function lerTudo(): Historico {
 export function useRegistro() {
   const [logs, setLogs] = useState<Record<string, StatusRefeicao>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const hidratado = useRef(false);
+  const [estadoSync, setEstadoSync] = useState<EstadoSyncAderencia>('local');
+  const persistencia = useRef<ReturnType<typeof criarPersistenciaAderencia> | null>(null);
 
   useEffect(() => {
+    const conta = escopoLocal();
+    let vivo = true;
+    const ativo = () => vivo && escopoLocal() === conta;
+    const p = criarPersistenciaAderencia({
+      ativo, online: supabaseConfigurado(), ler: lerTudo,
+      gravar: (h) => localStorage.setItem(chaveLocal(KEY), JSON.stringify(h)),
+      enviar: (dia, valor) => salvarAderenciaDia(dia, valor.logs, valor.notes),
+      mostrar: (estado) => { if (ativo()) setEstadoSync(estado); },
+    });
+    persistencia.current = p;
     const d = lerTudo()[hojeISO()];
     if (d) { setLogs(d.logs || {}); setNotes(d.notes || {}); }
-    hidratado.current = true;
-    // Logado: o dia de HOJE do servidor vence (2º device continua de onde parou).
-    let vivo = true;
     void carregarAderenciaServidor().then((dias) => {
-      if (!vivo || !dias) return; // falha de chamada → local fica (mock intacto)
-      const hoje = dias[hojeISO()];
+      if (!ativo()) return;
+      if (!dias) { void p.sincronizar(); return; }
+      const hoje = p.receber(dias as Historico, hojeISO())?.[hojeISO()];
       if (hoje) {
         setLogs((hoje.logs as Record<string, StatusRefeicao>) || {});
         setNotes(hoje.notes || {});
       }
-      // Re-migração (fix bloqueador 2026-07-08): dias que só existem no LOCAL são
-      // writes silenciosamente perdidos — re-sobem (janela de 30 dias p/ bound de
-      // requests). É o retry do write-through, paridade com o self-heal do profile.
-      const limite = Date.parse(`${hojeISO()}T00:00:00Z`) - 30 * 86_400_000;
-      for (const [dia, d] of Object.entries(lerTudo())) {
-        if (dias[dia] || !d) continue;
-        if (Number.isFinite(limite) && Date.parse(`${dia}T00:00:00Z`) < limite) continue;
-        void salvarAderenciaDia(dia, d.logs ?? {}, d.notes ?? {});
-      }
     });
-    return () => { vivo = false; };
+    return () => { vivo = false; persistencia.current = null; };
   }, []);
 
-  useEffect(() => {
-    if (!hidratado.current) return;
-    const all = lerTudo();
-    all[hojeISO()] = { logs, notes };
-    try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(all)); } catch { /* quota */ }
-    // Write-through p/ o servidor (no-op sem backend); o local já está gravado.
-    void salvarAderenciaDia(hojeISO(), logs, notes);
-  }, [logs, notes]);
-
   return {
-    logs, notes,
+    logs, notes, estadoSync,
+    tentarSincronizar: () => { void persistencia.current?.sincronizar(); },
     setStatus: (id: string, s: StatusRefeicao) => {
       // 🔒 `refeicao_marcada` sai NO ATO da marcação. ⚠️ Só o slot e o booleano — nunca o
       // CONTEÚDO da refeição (a denylist barra `prato`, `alimento`, `kcal`).
       registrarEvento('refeicao_marcada', { refeicao: id, seguiu: s === 'seguiu' });
-      setLogs((p) => ({ ...p, [id]: s }));
+      const d = persistencia.current?.editar(hojeISO(), (p) => ({ ...p, logs: { ...p.logs, [id]: s } }));
+      if (d) { setLogs(d.logs); setNotes(d.notes); }
     },
-    setNote: (id: string, txt: string) => setNotes((p) => ({ ...p, [id]: txt })),
+    setNote: (id: string, txt: string) => {
+      const d = persistencia.current?.editar(hojeISO(), (p) => ({ ...p, notes: { ...p.notes, [id]: txt } }));
+      if (d) { setLogs(d.logs); setNotes(d.notes); }
+    },
   };
 }
 
@@ -158,12 +156,13 @@ export function HistoricoDieta({ refeicoes, hojeLogs, hojeNotes, onVerDieta, mod
   const [hist, setHist] = useState<Historico>({});
   useEffect(() => {
     setHist(lerTudo());
-    // Logado: merge servidor-sobre-local (o servidor vence por dia) e re-grava o cache.
+    // O histórico respeita a mesma pendência local que o editor.
     let vivo = true;
+    const conta = escopoLocal();
     void carregarAderenciaServidor().then((dias: Record<string, DiaAderencia> | null) => {
-      if (!vivo || !dias) return;
-      const merged: Historico = { ...lerTudo(), ...(dias as unknown as Historico) };
-      try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(merged)); } catch { /* quota */ }
+      if (!vivo || escopoLocal() !== conta || !dias) return;
+      const merged: Historico = mesclarAderencia(lerTudo(), dias as unknown as Historico);
+      // Visualização não grava cache: seu GET pode anteceder uma edição já confirmada.
       setHist(merged);
     });
     return () => { vivo = false; };
