@@ -1,5 +1,5 @@
 /**
- * Rampa de retomada — SPEC TRAVADA (cofre `parametros-motor-treino-evokorpus`
+ * Rampa de retomada — SPEC TRAVADA (cofre `parametros-motor-treino-adaptkorpus`
  * §"Rampa de retomada", DF 2026-07-27; handoff `outputs/handoff-leva-2-2026-07-27` Bloco 3).
  *
  * ⚠️ É feature de SEGURANÇA, não de acolhimento. O risco de voltar no volume cheio é

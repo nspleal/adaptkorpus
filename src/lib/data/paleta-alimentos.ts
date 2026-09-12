@@ -5,7 +5,7 @@
  * aparecem nos pratos** (RECIPES_SEED) — não a TACO inteira (handoff Dias-e-Preferências §9,
  * §6). Os IDs são os REAIS da base (o motor recebe IDs, nunca texto). O nome de exibição é o
  * **`rotuloAmigavel` do seed** — vocabulário OFICIAL do cofre (DF 2026-07-01,
- * conceitos/rotulos-amigaveis-alimentos-evokorpus), não mais um mapa hardcoded aqui.
+ * conceitos/rotulos-amigaveis-alimentos-adaptkorpus), não mais um mapa hardcoded aqui.
  */
 import type { GrupoAlimentar } from './types';
 import { FOODS_SEED, RECIPES_SEED } from './seed';

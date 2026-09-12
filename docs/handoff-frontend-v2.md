@@ -1,12 +1,12 @@
-# Handoff — Porte do front-end (protótipo V2) · Evokorpus app
+# Handoff — Porte do front-end (protótipo V2) · Adaptkorpus app
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Para o cofre.** Resumo do que foi implementado no repo do app a partir do protótipo
-> estético **V2** (`V2_front_end_evoK.zip` → `design_handoff_evokorpus_completo/Evokorpus App.dc.html`).
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Tudo é **UI ligada ao motor determinístico real**
+> estético **V2** (`V2_front_end_evoK.zip` → `design_handoff_adaptkorpus_completo/Adaptkorpus App.dc.html`).
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Tudo é **UI ligada ao motor determinístico real**
 > (sem backend ainda). Escritor único do cofre = sessão local; isto aqui é insumo para você arquivar.
 
 ## Regra de trabalho confirmada (travar no cofre)
@@ -52,7 +52,7 @@
 - Execução: tabela de séries (reps + carga), **timer de descanso ao vivo**, opt-in de **%1RM**,
   "como foi" (feedback), modal **"Senti dor"**, demo *faceless* animada.
 - **%1RM é só leitura estimada** da faixa de reps (Epley invertido), **respeita o piso de 6 reps**;
-  **nunca testa 1RM real**. (Ancorar em `parametros-motor-treino-evokorpus`.)
+  **nunca testa 1RM real**. (Ancorar em `parametros-motor-treino-adaptkorpus`.)
 - Lançada por "Começar treino" (Hoje) e "Iniciar treino" (por dia, na aba Treino).
 
 ### 3. Conta e assinatura (`/conta`)

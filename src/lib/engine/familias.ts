@@ -1,6 +1,6 @@
 /**
  * Famílias de equivalência — "mesmo movimento, outro implemento".
- * Fonte TRAVADA: cofre `conceitos/parametros-motor-substituicao-evokorpus` §"Famílias
+ * Fonte TRAVADA: cofre `conceitos/parametros-motor-substituicao-adaptkorpus` §"Famílias
  * de equivalência" (⭐ aprovadas — DF 2026-07-04). 20 famílias, ids verbatim ("eN").
  *
  * Papel na troca (F.2): rank EXTRA dentro do nível 0 de preservação — candidato da

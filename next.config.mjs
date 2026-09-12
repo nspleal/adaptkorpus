@@ -1,5 +1,5 @@
 /**
- * Configuração do Next.js — App Evokorpus.
+ * Configuração do Next.js — App Adaptkorpus.
  *
  * Segurança em primeira classe: cabeçalhos de segurança aplicados a TODAS as rotas.
  * A Content-Security-Policy inclui o host do Supabase (lido do ambiente em build) em

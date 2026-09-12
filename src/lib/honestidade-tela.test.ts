@@ -305,7 +305,7 @@ describe('landing — sem preço, sem trial, sem cancelamento fantasma', () => {
 });
 
 /**
- * 🔒 O H2 DA TRANSPARÊNCIA TEM REMATE (DF 2026-08-01, `identidade-de-marca-evokorpus`
+ * 🔒 O H2 DA TRANSPARÊNCIA TEM REMATE (DF 2026-08-01, `identidade-de-marca-adaptkorpus`
  * §Passos urgentes).
  *
  * 🔴 O defeito que isto trava: em 2026-07-29 o h2 perdeu a segunda metade — era *"É como a

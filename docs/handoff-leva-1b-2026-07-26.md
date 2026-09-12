@@ -4,10 +4,10 @@
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-**Data:** 2026-07-26 · **Branch:** `claude/evokorpus-app-dev-9in0hs` · **Gate:** verde
+**Data:** 2026-07-26 · **Branch:** `claude/adaptkorpus-app-dev-9in0hs` · **Gate:** verde
 (typecheck · lint · **396 testes** · build) + medição Playwright a 390/360 px.
 Fonte: cofre `outputs/plano-pos-feedback-beta-2026-07-26` §Complemento (Leva 1B) +
-`conceitos/parametros-motor-treino-evokorpus` §"Fiquei doente". **Esta ficha volta p/ a
+`conceitos/parametros-motor-treino-adaptkorpus` §"Fiquei doente". **Esta ficha volta p/ a
 sessão local arquivar** — nada foi escrito no cofre.
 
 ---
@@ -84,7 +84,7 @@ vencida ignorada · loop-guard (4) · sessão manual move o relógio.
 
 **Correção barata (sem redesenho de navegação)** — `globals.css` + 3 `className` no Painel,
 tudo dentro de `@media (max-width: 560px)`:
-- a marca **cede espaço**: some o wordmark "evokorpus", fica o símbolo;
+- a marca **cede espaço**: some o wordmark "adaptkorpus", fica o símbolo;
 - respiro do topo e das abas menor (`padding`/`font-size`);
 - `minWidth: 0` na nav (deixa o flex encolher de verdade);
 - **affordance**: `mask-image` esmaece a borda direita — o que passa dela desbota em vez de

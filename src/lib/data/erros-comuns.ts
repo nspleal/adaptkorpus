@@ -1,6 +1,6 @@
 /**
- * GERADO da página do cofre "erros-comuns-exercicios-evokorpus" — NÃO editar à mão. Regenerar:
- *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-evokorpus.md>
+ * GERADO da página do cofre "erros-comuns-exercicios-adaptkorpus" — NÃO editar à mão. Regenerar:
+ *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-adaptkorpus.md>
  * Chave = id da biblioteca A1 (e{#}); cada string é "erro → correção". O marcador visual
  * (neutro, nunca vermelho — vermelho só p/ erro/segurança) é responsabilidade da UI.
  * Trava do cofre: dica educacional e geral, nunca promete "prevenir lesão"/"corrigir postura".

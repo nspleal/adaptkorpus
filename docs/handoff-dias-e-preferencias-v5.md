@@ -5,8 +5,8 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `3e49474` (feature) + `60d2f99` (correções de revisão).
-> Origem estética: `V5_frond_end_evoK.zip` → `design_handoff_dias_e_preferencias/Evokorpus Dias e Preferências.dc.html`
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commits: `3e49474` (feature) + `60d2f99` (correções de revisão).
+> Origem estética: `V5_frond_end_evoK.zip` → `design_handoff_dias_e_preferencias/Adaptkorpus Dias e Preferências.dc.html`
 > (Componente A — dias · Componente B — não curto · faixa "Sua semana" · modal recalcular). A "casca
 > de revisão" do protótipo (segmented Onboarding/Perfil/Painel + Reiniciar) foi descartada, como manda o handoff.
 

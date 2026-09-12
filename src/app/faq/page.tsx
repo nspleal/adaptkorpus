@@ -5,7 +5,7 @@ import FaqBusca, { type FaqCat } from '@/components/legal/FaqBusca';
 export const metadata = { title: 'Perguntas frequentes · Adaptkorpus' };
 
 // FAQ é conteúdo informacional (NÃO jurídico) → draftMode={false} (sem selo de rascunho).
-// Conteúdo canônico VERBATIM do cofre (conceitos/faq-evokorpus, 2026-07-02) — o app porta
+// Conteúdo canônico VERBATIM do cofre (conceitos/faq-adaptkorpus, 2026-07-02) — o app porta
 // daqui, não inventa Q&A. Fatos já fixados no cofre (167 alimentos/96 pratos · reembolso
 // 7 dias/2 dias úteis · suporte 24–48h) → sem [A validar].
 //

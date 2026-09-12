@@ -4,7 +4,7 @@ import { avisoPausaVisivel, pausaReconhecida, type SessaoMinima } from './pausa-
 /**
  * "Fiquei doente" — o reconhecimento de pausa (Leva 2 · Bloco 4, DF 2026-07-27).
  * Ancorado no handoff `design_handoff_fiquei_doente` §7 (estado e comportamento) e na
- * precedência dura do cofre (`parametros-motor-treino-evokorpus` §"Fiquei doente").
+ * precedência dura do cofre (`parametros-motor-treino-adaptkorpus` §"Fiquei doente").
  */
 
 const treino = (dataISO: string): SessaoMinima => ({ dataISO });

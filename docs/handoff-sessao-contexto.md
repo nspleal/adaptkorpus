@@ -1,4 +1,4 @@
-# Handoff de contexto — App Evokorpus (front-end V1 + motor)
+# Handoff de contexto — App Adaptkorpus (front-end V1 + motor)
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
@@ -9,12 +9,12 @@
 > (estado do motor) e `docs/api.md` (contrato das rotas).
 
 ## 0. Como retomar / onde está cada coisa
-- **Repo:** `nspleal/evokorpus` · **branch:** `claude/evokorpus-app-dev-9in0hs` (tudo commitado e pushado).
+- **Repo:** `nspleal/adaptkorpus` · **branch:** `claude/adaptkorpus-app-dev-9in0hs` (tudo commitado e pushado).
 - **Cofre** (`nspleal/obsidian`, repo separado): **fonte de verdade** de produto/specs/marca.
   Esta sessão **lê** o cofre (clona/pull) mas **NUNCA escreve** nele (regra de escritor único —
   só a sessão local do humano escreve no cofre). Decisões novas voltam pelo humano.
 - **Front-end de referência (V1):** o humano depositou o protótipo de design em
-  `cofre/raw/design_handoff_evokorpus/` (`Evokorpus.dc.html` = landing, `Evokorpus App.dc.html`
+  `cofre/raw/design_handoff_adaptkorpus/` (`Adaptkorpus.dc.html` = landing, `Adaptkorpus App.dc.html`
   = área logada, `README.md`, `support.js`). São **HTML com estilos inline + keyframes** — o
   porte fiel saiu **desses arquivos**, não do README (lição aprendida — ver §7).
 
@@ -60,7 +60,7 @@ fonte Plus Jakarta Sans.
 `resolverUserId` é stub→null). Contrato em `docs/api.md`.
 
 ### Front-end — **porte FIEL da V1** (todas as telas do protótipo)
-- **`/` Landing** (`src/app/page.tsx`): porte fiel do `Evokorpus.dc.html` — backdrop que deriva,
+- **`/` Landing** (`src/app/page.tsx`): porte fiel do `Adaptkorpus.dc.html` — backdrop que deriva,
   trajetórias neon que se **desenham** (data-draw + IntersectionObserver), reveals em scroll,
   mockups flutuando (evkFloat), anel pulsando, nav com blur + scroll-spy, FAQ acordeão. Desktop-first.
 - **`/onboarding`** (`src/app/onboarding/page.tsx`): **login (UI mock)** → **wizard 8 passos** (stepper
@@ -77,7 +77,7 @@ fonte Plus Jakarta Sans.
   (evkFloat/evkPulse/evkRingGlow/evkDrift/evkBlink/evkStepIn/evkScreenIn/evkPop/evkDraw/evkRise; `.rv`/`.rv-in`
   reveal; `.hov-lift`/`.hov-btn`/`.modal-opt`/`.evk-troca`/`.evk-navlink`).
 
-## 4. Commits desta rodada (branch `claude/evokorpus-app-dev-9in0hs`)
+## 4. Commits desta rodada (branch `claude/adaptkorpus-app-dev-9in0hs`)
 - `c376434` painel + login fiéis (cartões/abas/menu + tela de login)
 - `f238e63` onboarding fiel (wizard + gerando + gate B, estilos/movimento exatos)
 - `94cc577` modal de troca fiel (3 + "gerar mais variedade")

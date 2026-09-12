@@ -1,7 +1,7 @@
 /**
  * Motor de dieta — caminho após o gate de saúde.
  *
- * Fonte: conceitos/parametros-motor-dieta-evokorpus (spec A3 travada, v10).
+ * Fonte: conceitos/parametros-motor-dieta-adaptkorpus (spec A3 travada, v10).
  *
  * Ordem determinística e auditável: proteína → gordura (clamp 20–30%) → carboidrato (resto).
  * 4/4/9 (Atwater) é usado SÓ para alocar a meta — nunca para medir alimento (isso é TACO).

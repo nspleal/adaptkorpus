@@ -1,5 +1,5 @@
 /**
- * Símbolo "K Ascendente" e "K em Selo" — Evokorpus.
+ * Símbolo "K Ascendente" e "K em Selo" — Adaptkorpus.
  *
  * 🔒 ESTE ARQUIVO NÃO É CÓDIGO MORTO — é a FONTE CANÔNICA da marca (ratificado na auditoria
  * de 2026-08-14). Nenhum componente o importa hoje: os ícones do app são PNG/SVG já gerados
@@ -9,7 +9,7 @@
  * apontá-lo de novo — a resposta é esta linha, não o `rm`.
  *
  * ⚠️ FIDELIDADE VISUAL (prioridade travada no cofre). A geometria abaixo é a
- * CONSTRUÇÃO CANÔNICA extraída de conceitos/identidade-de-marca-evokorpus
+ * CONSTRUÇÃO CANÔNICA extraída de conceitos/identidade-de-marca-adaptkorpus
  * ("Construção canônica do símbolo (SVG)"). Não redesenhar de memória.
  *
  * Regra de cor (a que mais erra):
@@ -122,7 +122,7 @@ interface WordmarkProps {
   className?: string;
 }
 
-/** Wordmark "evokorpus" — sempre minúsculo; "korpus" no acento. */
+/** Wordmark "adaptkorpus" — sempre minúsculo; "korpus" no acento. */
 export function Wordmark({ variante = 'escuro', className }: WordmarkProps) {
   const corEvo = variante === 'escuro' ? COR.bone : COR.floresta;
   const corKorpus = variante === 'escuro' ? COR.pulso : COR.folha;

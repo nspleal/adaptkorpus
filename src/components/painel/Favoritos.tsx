@@ -5,7 +5,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { ElegibilidadeFavorito } from '@/lib/favoritos-elegibilidade';
 
 /**
- * Favoritos (⭐ V8.2) — porte fiel do protótipo `Evokorpus Favoritos.dc.html`:
+ * Favoritos (⭐ V8.2) — porte fiel do protótipo `Adaptkorpus Favoritos.dc.html`:
  *  - <EstrelaFavorito>: botão 42px, contorno Bone quando não-favoritado / preenchido
  *    Pulso quando favoritado, com `evkStarPop` só na transição de estado.
  *  - <BadgeFavorito>: pílula "Favorito" (contorno neon + texto Bone — distinta da tag

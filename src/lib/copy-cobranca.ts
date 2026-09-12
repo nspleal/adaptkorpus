@@ -1,5 +1,5 @@
 /**
- * 🔒 O NÚCLEO DA AFIRMAÇÃO SOBRE DINHEIRO (DF 2026-08-01, `faq-evokorpus`
+ * 🔒 O NÚCLEO DA AFIRMAÇÃO SOBRE DINHEIRO (DF 2026-08-01, `faq-adaptkorpus`
  * §Assinatura, preço e cancelamento).
  *
  * 🔴 O defeito que isto fecha, medido: *"quanto custa?"* é respondida em **três** telas —

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * gerar-erros-comuns.mjs — converte a página do cofre "erros-comuns-exercicios-evokorpus"
+ * gerar-erros-comuns.mjs — converte a página do cofre "erros-comuns-exercicios-adaptkorpus"
  * (markdown, 163 linhas de tabela `# | Exercício | Erros comuns`) em
  * `src/lib/data/erros-comuns.ts` = `Record<string, string[]>` (`e{n}` → lista de "erro → correção").
  *
- *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-evokorpus.md>
+ *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-adaptkorpus.md>
  *
- * Regras (cofre: conceitos/erros-comuns-exercicios-evokorpus):
+ * Regras (cofre: conceitos/erros-comuns-exercicios-adaptkorpus):
  * - `#` da tabela = chave da biblioteca A1 e casa com `EXERCISES[e{#}]` (e1=Flexão=#1, e3=Agachamento=#3).
  * - VALIDA (hard-fail, nada é escrito): 163 linhas · a coluna "Exercício" bate EXATAMENTE com
  *   `EXERCISES[e{#}].nomePt` (pega reordenação/dessincronia com a biblioteca) · nenhuma célula vazia.
@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [mdPath] = process.argv.slice(2);
 if (!mdPath) {
-  console.error('uso: node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-evokorpus.md>');
+  console.error('uso: node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-adaptkorpus.md>');
   process.exit(1);
 }
 
@@ -76,8 +76,8 @@ if (erros.length) {
 
 // ── emissão determinística (chaves e1..e163 em ordem numérica) ───────────────────────────────
 const cabecalho = `/**
- * GERADO da página do cofre "erros-comuns-exercicios-evokorpus" — NÃO editar à mão. Regenerar:
- *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-evokorpus.md>
+ * GERADO da página do cofre "erros-comuns-exercicios-adaptkorpus" — NÃO editar à mão. Regenerar:
+ *   node scripts/gerar-erros-comuns.mjs <erros-comuns-exercicios-adaptkorpus.md>
  * Chave = id da biblioteca A1 (e{#}); cada string é "erro → correção". O marcador visual
  * (neutro, nunca vermelho — vermelho só p/ erro/segurança) é responsabilidade da UI.
  * Trava do cofre: dica educacional e geral, nunca promete "prevenir lesão"/"corrigir postura".

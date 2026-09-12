@@ -6,7 +6,7 @@ import { EXERCISES } from '../data/exercises';
 import type { PerfilTreino } from './treino-types';
 
 /**
- * Invariante travado do cofre (parametros-motor-treino-evokorpus, "Core 2–3×/semana"):
+ * Invariante travado do cofre (parametros-motor-treino-adaptkorpus, "Core 2–3×/semana"):
  * quando a semana COMPORTA a frequência (≥ 3 dias de treino), o montador prescreve core
  * entre 2 e 3 vezes — nunca menos, nunca mais. (Com 1–2 dias a frequência de 2× é
  * fisicamente inatingível — 1 sessão não vira 2 dias distintos — então o piso não se aplica.)

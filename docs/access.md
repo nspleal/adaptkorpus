@@ -4,8 +4,8 @@
 > A fonte de verdade de **produto, decisões, números e marca** continua sendo o **cofre**
 > (repo `obsidian`, ver `CLAUDE.md`); aqui mora o que é específico deste repositório.
 
-O código está no GitHub (`nspleal/evokorpus`), na branch de desenvolvimento
-**`claude/evokorpus-app-dev-9in0hs`**.
+O código está no GitHub (`nspleal/adaptkorpus`), na branch de desenvolvimento
+**`claude/adaptkorpus-app-dev-9in0hs`**.
 
 ## A) Rodar localmente (mais rápido — só para ver funcionando)
 
@@ -17,7 +17,7 @@ Depois de baixar/clonar o projeto:
 - **Mac / Linux:** duplo-clique em **`[DEV] iniciar (Mac e Linux, precisa Node).command`**
 
 > Para testar **SEM instalar nada**, NÃO use estes — baixe o **pacote portátil**
-> (`evokorpus-portatil-windows.zip`) na aba **Releases**. Ver seção abaixo.
+> (`adaptkorpus-portatil-windows.zip`) na aba **Releases**. Ver seção abaixo.
   (Mac, 1ª vez: botão direito → Abrir)
 
 Ele instala tudo na primeira vez, sobe o app e abre o navegador em
@@ -25,9 +25,9 @@ Ele instala tudo na primeira vez, sobe o app e abre o navegador em
 
 ### Pela linha de comando
 ```bash
-git clone https://github.com/nspleal/evokorpus.git
-cd evokorpus
-git checkout claude/evokorpus-app-dev-9in0hs
+git clone <URL_DO_REPOSITORIO_AUTORIZADO> adaptkorpus
+cd adaptkorpus
+git checkout claude/adaptkorpus-app-dev-9in0hs
 npm install
 npm run dev
 ```
@@ -56,7 +56,7 @@ npm test
 
 ## C) Publicar (Vercel — colocar no ar)
 
-1. Em **vercel.com**, importe o repositório `nspleal/evokorpus` e selecione a branch.
+1. Em **vercel.com**, importe o repositório `nspleal/adaptkorpus` e selecione a branch.
 2. Em **Settings → Environment Variables**, adicione as mesmas variáveis do `.env.local`
    (a `service_role` só como variável de servidor — **nunca** com prefixo `NEXT_PUBLIC_`).
 3. Deploy. A Vercel detecta Next.js automaticamente (build `npm run build`).

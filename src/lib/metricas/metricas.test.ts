@@ -7,7 +7,7 @@ import {
 } from './eventos';
 
 /**
- * TELEMETRIA DE PRODUTO — Leva C2. Cofre: `conceitos/metricas-de-produto-evokorpus`.
+ * TELEMETRIA DE PRODUTO — Leva C2. Cofre: `conceitos/metricas-de-produto-adaptkorpus`.
  *
  * O app não media nada: o colapso do beta (zero treinos, zero pesos, zero refeições) só
  * apareceu quando o cofre foi ler o banco à mão. Estes guards existem para que instrumentar

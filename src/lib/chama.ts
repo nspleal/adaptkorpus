@@ -1,7 +1,7 @@
 /**
  * Contador de treinos + Chama dos 4 marcos — lógica pura.
  *
- * Cofre (registro-de-aderencia-evokorpus §Contador, decisão 2026-07-02): contador
+ * Cofre (registro-de-aderencia-adaptkorpus §Contador, decisão 2026-07-02): contador
  * ACUMULADO de dias distintos de treino (guiado ou manual) — só sobe, NUNCA zera,
  * nunca mostra dias parados; NÃO é streak (sem reset ao faltar). Substitui os
  * marcos 7/30 da V6.2.

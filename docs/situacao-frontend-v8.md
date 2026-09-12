@@ -12,7 +12,7 @@
 > atual. Mantido apenas como registro da auditoria original — **não é backlog vigente**.
 
 > **Insumo para o cofre.** Escrito pela sessão do app (nuvem) em 2026-07-04 — esta sessão **não
-> escreve no cofre** (regra de escritor único); o autor arquiva. Branch: `claude/evokorpus-app-dev-9in0hs`.
+> escreve no cofre** (regra de escritor único); o autor arquiva. Branch: `claude/adaptkorpus-app-dev-9in0hs`.
 > Base: auditoria de 4 verificadores independentes contra o código real do app, com evidência
 > `arquivo:linha` para cada afirmação. Este documento é autossuficiente: um leitor do cofre entende a
 > situação sem a conversa que o gerou.

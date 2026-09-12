@@ -2,7 +2,7 @@
  * Orçamento na dieta — pedido nº 11 do beta ("a dieta esta muito cara tambem. precisa ter
  * opçao de limite de orçamento"). Módulo PURO: sem relógio, sem rede, sem IA.
  *
- * Fonte: cofre, parametros-motor-dieta-evokorpus §`orcamento` e §`custoRelativo`
+ * Fonte: cofre, parametros-motor-dieta-adaptkorpus §`orcamento` e §`custoRelativo`
  * (DF 2026-07-26); handoff-leva-h-orcamento-2026-08-06.
  *
  * 🔴 TETO, NÃO ALVO — é a decisão que define a feature. `baixo` PREFERE a faixa 1, sobe para

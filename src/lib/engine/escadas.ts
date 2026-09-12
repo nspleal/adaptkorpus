@@ -1,6 +1,6 @@
 /**
  * Escadas de dificuldade — progressão VERTICAL ("sobe de variação"), só peso corporal.
- * Fonte TRAVADA: cofre `fontes/ranking-exercicios-evokorpus` §"Escadas de dificuldade"
+ * Fonte TRAVADA: cofre `fontes/ranking-exercicios-adaptkorpus` §"Escadas de dificuldade"
  * (DF 2026-07-03). Portado do motor standalone do autor (`motor-exercicios.ts`) para os
  * IDs REAIS do app: `"eN"`, onde N é exatamente o `#` do ranking A1 (mapeamento lossless).
  *

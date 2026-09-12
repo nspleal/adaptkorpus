@@ -1,6 +1,6 @@
 /**
  * Gate de saúde — caminho do TREINO (herdado do gate compartilhado).
- * Fonte: parametros-motor-treino-evokorpus §"Passo 0" + gate-de-saude-evokorpus.
+ * Fonte: parametros-motor-treino-adaptkorpus §"Passo 0" + gate-de-saude-adaptkorpus.
  *
  * Diferenças vs. a dieta: NÃO há `PISAR` (piso é só calórico). `RESTRINGIR` no treino
  * = 16≤IMC<18.5 + emagrecimento → redireciona objetivo p/ Saúde (treino conservador).

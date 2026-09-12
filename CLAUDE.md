@@ -1,12 +1,12 @@
-# CLAUDE.md — Repositório do App Evokorpus
+# CLAUDE.md — Repositório do App Adaptkorpus
 
-Este é o repositório onde o **app Evokorpus** é desenvolvido. Regras de trabalho:
+Este é o repositório onde o **app Adaptkorpus** é desenvolvido. Regras de trabalho:
 
 ## Relação com o cofre (obsidian)
 
 - O **cofre** (repo `obsidian`) é a **fonte de verdade** de produto, decisões, números e
-  marca. Toda spec vem de lá (ex.: `conceitos/parametros-motor-dieta-evokorpus`,
-  `conceitos/gate-de-saude-evokorpus`, `conceitos/identidade-de-marca-evokorpus`).
+  marca. Toda spec vem de lá (ex.: `conceitos/parametros-motor-dieta-adaptkorpus`,
+  `conceitos/gate-de-saude-adaptkorpus`, `conceitos/identidade-de-marca-adaptkorpus`).
 - **Sempre leia o cofre** antes de implementar algo que dependa de uma decisão. **Nunca
   escreva** no cofre por aqui — decisões novas voltam pelo humano para serem arquivadas lá.
 - Quando o código encodar uma regra travada, **cite a página do cofre** no comentário.
@@ -25,7 +25,7 @@ Este é o repositório onde o **app Evokorpus** é desenvolvido. Regras de traba
 ## Fidelidade visual (prioridade travada)
 
 Para qualquer arte (logo/ícone/favicon/mockup) use a **construção canônica do SVG** do
-cofre (`identidade-de-marca-evokorpus` → "Construção canônica do símbolo"). **Nunca
+cofre (`identidade-de-marca-adaptkorpus` → "Construção canônica do símbolo"). **Nunca
 redesenhe de memória.** Regra de cor: neon **Pulso `#BDFF00`** só em fundo escuro; no
 claro o acento é **Folha `#16A34A`**. Ícone do app = **"K em Selo"** (não o "K Ascendente").
 

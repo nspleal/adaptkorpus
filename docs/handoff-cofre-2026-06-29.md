@@ -1,29 +1,29 @@
 ---
-title: "App Evokorpus — estado de desenvolvimento e correções (2026-06-29)"
+title: "App Adaptkorpus — estado de desenvolvimento e correções (2026-06-29)"
 type: concept
 lang: pt
 tags: [fitness, produto, app, motor]
 created: 2026-06-29
 updated: 2026-06-29
-sources: [parametros-motor-dieta-evokorpus, parametros-motor-treino-evokorpus, parametros-motor-substituicao-evokorpus, gate-de-saude-evokorpus, banco-alimentos-evokorpus, ranking-exercicios-evokorpus]
+sources: [parametros-motor-dieta-adaptkorpus, parametros-motor-treino-adaptkorpus, parametros-motor-substituicao-adaptkorpus, gate-de-saude-adaptkorpus, banco-alimentos-adaptkorpus, ranking-exercicios-adaptkorpus]
 status: active
 ---
 
-# App Evokorpus — estado de desenvolvimento e correções
+# App Adaptkorpus — estado de desenvolvimento e correções
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-> **Origem:** gerado pela sessão de desenvolvimento do **código** (repo `evokorpus`, branch
-> `claude/evokorpus-app-dev-9in0hs`) para você integrar ao cofre. Esta sessão **lê** o cofre
+> **Origem:** gerado pela sessão de desenvolvimento do **código** (repo `adaptkorpus`, branch
+> `claude/adaptkorpus-app-dev-9in0hs`) para você integrar ao cofre. Esta sessão **lê** o cofre
 > mas **não escreve** nele (regra de escritor único). Todos os números travados aqui vêm das
 > specs do cofre citadas no frontmatter; o que for **default de implementação** (não decisão da
 > spec) está marcado como tal.
 
 ## 1. Resumo executivo
 
-O app Evokorpus tem hoje um **motor determinístico completo e testado** (gate de saúde → dieta →
+O app Adaptkorpus tem hoje um **motor determinístico completo e testado** (gate de saúde → dieta →
 montagem de cardápio com escala de porções; treino FITT → montagem de rotina; substituição F.2
 de prato e exercício), uma **camada de API** rudimentar sobre esse motor, uma **demo web** para
 testar tudo, e a **base de segurança/LGPD** (RLS, validação na borda, segredos server-only, CSP
@@ -56,9 +56,9 @@ janela calórica e nenhuma troca de prato "fechava".
 
 | Conjunto | Qtde | Fonte | Observações |
 |---|---|---|---|
-| Alimentos | **125** | TACO ([[banco-alimentos-evokorpus]]) | kcal/macros por 100 g; alérgenos por item |
+| Alimentos | **125** | TACO ([[banco-alimentos-adaptkorpus]]) | kcal/macros por 100 g; alérgenos por item |
 | Pratos (receitas) | **56** | banco de pratos | itens = `{alimentoId, gramas}`; kcal/macros = Σ TACO×gramas (Δ=0) |
-| Exercícios | **163** | [[ranking-exercicios-evokorpus]] | atributos abaixo |
+| Exercícios | **163** | [[ranking-exercicios-adaptkorpus]] | atributos abaixo |
 
 **Atributos dos exercícios (A1):** padrão de movimento (Empurrar 21 / Puxar 17 / Agachar 21 /
 Dobradiça 16 / Core 18 / Cardio 14 / Isolado 56) · dificuldade (Iniciante 109 / Intermediário 41
@@ -75,7 +75,7 @@ casa-com 53 / academia 61) · tier de familiaridade (T1 30 / T2 40 / T3 45 / T4 
 Pipeline: **gate de saúde → (se libera) dieta → montagem de cardápio**; e **gate → treino FITT →
 montagem de rotina**. Substituição F.2 roda sobre planos já gerados.
 
-### 4.1 Gate de saúde ([[gate-de-saude-evokorpus]])
+### 4.1 Gate de saúde ([[gate-de-saude-adaptkorpus]])
 Precedência **ROTEAR > RESTRINGIR > PISAR > PERMITIR**.
 - Qualquer flag de PAR-Q verdadeira (gestação/amamentação, renal, cardíaca, lesão, diabetes) → **ROTEAR** (não gera plano).
 - **IMC < 16** → **ROTEAR** (qualquer objetivo). **IMC < 18,5** → aviso universal.
@@ -84,7 +84,7 @@ Precedência **ROTEAR > RESTRINGIR > PISAR > PERMITIR**.
 - **PISAR** quando o alvo de corte cairia abaixo do piso calórico de segurança (mas GET ≥ piso).
 - O treino **herda** o mesmo gate, incluindo a simetria do alto peso (massa→saúde conservador), **sem `PISAR`** (esse é só da dieta).
 
-### 4.2 Dieta — alvo e macros ([[parametros-motor-dieta-evokorpus]])
+### 4.2 Dieta — alvo e macros ([[parametros-motor-dieta-adaptkorpus]])
 - **TMB** Mifflin-St Jeor → **GET** = TMB × **PAL** (sedentário 1,2 · leve 1,375 · moderado 1,55 · intenso 1,725 · muito intenso 1,9).
 - **Ponto** = GET × **fator do objetivo**: emagrecimento **0,825** (déficit 17,5%) · massa **1,125** (superávit 12,5%) · saúde **1,0**.
 - **Piso de segurança:** feminino **1250** / masculino **1550** kcal (chão duro).
@@ -101,7 +101,7 @@ Monta 1 prato por refeição (café/almoço/jantar obrigatórios; lanche opciona
 - **Desempate determinístico:** menor desvio calórico → proteína → chave final lexicográfica sobre o conjunto de ids.
 - **Status:** `ok` / `fora_da_janela` (banco não fecha mesmo escalando) / `sem_candidatos`.
 
-### 4.4 Treino — FITT ([[parametros-motor-treino-evokorpus]])
+### 4.4 Treino — FITT ([[parametros-motor-treino-adaptkorpus]])
 Prescrição por objetivo × nível, com trilhos de segurança:
 - **Reps/RIR/descanso por objetivo** (saúde, massa, emagrecimento) — tabela FITT_OBJETIVO.
 - **Volume e frequência por nível** (iniciante 2–3 sessões; intermediário 3–4; avançado 4–6); volume/grupo modulado pelo objetivo.
@@ -113,7 +113,7 @@ Prescrição por objetivo × nível, com trilhos de segurança:
 ### 4.5 Montador de rotina
 Alocador semanal que garante: fundamentos presentes, **core 2–3×/semana**, **puxar ≥ empurrar**, dobradiça incluída; split conforme dias disponíveis e tempo por sessão.
 
-### 4.6 Substituição F.2 ([[parametros-motor-substituicao-evokorpus]])
+### 4.6 Substituição F.2 ([[parametros-motor-substituicao-adaptkorpus]])
 **Prato (mesmo slot):**
 - Filtros DUROS: alérgeno · identidade · slot · **janela de kcal do dia** · **piso de proteína do dia** (nunca relaxados).
 - **Equivalência calórica (NOVO):** o prato novo é **escalado** para igualar as kcal do prato trocado (spec: "mínimo = equivalência calórica"), dentro de `ESCALA_PORCAO` → o dia inteiro permanece na janela. Retorna `escala` + `macrosNovo`.
@@ -273,7 +273,7 @@ supabase/migrations/ 0001 init · 0002 RLS · 0003 seed · 0004 idempotência we
 docs/                api.md, architecture.md, security-lgpd.md, roadmap.md, access.md, este handoff
 ```
 
-## 14. Commits desta rodada (branch `claude/evokorpus-app-dev-9in0hs`)
+## 14. Commits desta rodada (branch `claude/adaptkorpus-app-dev-9in0hs`)
 
 - `82b17b1` — escala de porções no montador + equivalência calórica na troca (Bloco B).
 - `dc3207d` — liga treino + substituição na demo (abas Dieta/Treino, botões Trocar).

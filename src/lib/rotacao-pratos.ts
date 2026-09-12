@@ -1,5 +1,5 @@
 /**
- * "Cansei deste prato" — descanso na rotação (cofre, parametros-motor-substituicao-evokorpus
+ * "Cansei deste prato" — descanso na rotação (cofre, parametros-motor-substituicao-adaptkorpus
  * §Variedade, DF 2026-07-01). É do nível do **PRATO** (rotação), distinto do "não curto" (nível
  * do alimento): cansaço de receita ≠ desgosto do ingrediente.
  *

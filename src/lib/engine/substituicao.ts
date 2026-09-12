@@ -1,6 +1,6 @@
 /**
  * Motor de substituição (F.2) — seletor determinístico de troca.
- * Fonte: conceitos/parametros-motor-substituicao-evokorpus (DFs travadas 2026-06-29).
+ * Fonte: conceitos/parametros-motor-substituicao-adaptkorpus (DFs travadas 2026-06-29).
  *
  * Forma comum aos dois lados: filtros DUROS → preferência ordenada → desempate
  * determinístico → fallback. Segurança (alérgeno) e identidade (vegano/veg) NUNCA

@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title App Evokorpus
+title App Adaptkorpus
 echo ============================================================
-echo               INICIANDO O APP EVOKORPUS
+echo               INICIANDO O APP ADAPTKORPUS
 echo ============================================================
 echo.
 

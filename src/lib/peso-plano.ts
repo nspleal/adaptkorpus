@@ -82,7 +82,7 @@ export function pesagensDatadas(pesos: readonly RegistroPeso[]): Pesagem[] {
  * a carência de saída só existe para quem saiu por causa do peso.
  *
  * 🔑 **O critério é DERIVADO do gate, não uma lista de cortes de IMC — e é isso que faz o
- * eixo kcal entrar de graça** (DF 2026-08-01, `gate-de-saude-evokorpus` §Histerese
+ * eixo kcal entrar de graça** (DF 2026-08-01, `gate-de-saude-adaptkorpus` §Histerese
  * assimétrica). `GET ≤ piso_seguro → ROTEAR` é `!== 'PERMITIR'` como qualquer outro desfecho
  * protetivo, então ele já herda *entrar a cada leitura · sair em 14 dias*. ⚠️ Trocar isto por
  * uma checagem de faixas de IMC reabriria o buraco em silêncio: existe peso que cruza o piso

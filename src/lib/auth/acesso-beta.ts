@@ -1,5 +1,5 @@
 /**
- * Gate do beta fechado (regra 4.2.1 da blindagem; conceito beta-fechado-app-evokorpus):
+ * Gate do beta fechado (regra 4.2.1 da blindagem; conceito beta-fechado-app-adaptkorpus):
  * o app é servido quando o e-mail está na ALLOWLIST (`beta_liberado()`, RPC security
  * definer) OU quando há assinatura ativa/trial (`subscription.status`, read-only p/ o
  * dono — só o webhook/service_role escreve). O entitlement NUNCA fica em superfície

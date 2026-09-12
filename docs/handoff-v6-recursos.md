@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `61796f8` (V6.1 institucional) +
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commits: `61796f8` (V6.1 institucional) +
 > `163efaf` (V6.2 painel). Fontes: os dois pacotes do Claude Design (V6.1 reembolso/faq/
 > changelog · V6.2 recursos do painel). Portei fiel (estilos inline, tokens, keyframes `evk*`).
 

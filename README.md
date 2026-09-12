@@ -1,4 +1,4 @@
-# Evokorpus — App
+# Adaptkorpus — App
 
 Treino e dieta que evoluem com você, todo dia. App adaptativo (PWA) com **motor de
 regras determinístico** — **nada é gerado por IA em runtime**: tudo vem de fórmulas +
@@ -18,9 +18,9 @@ dados curados. Ferramenta educacional, dirigida pelo usuário, **18+**.
 
 Igual ao PIRAXIS: um pacote com o **Node embutido**, construído na nuvem.
 
-1. Vá na aba **Releases** do repositório → **"App Evokorpus — pacote portátil (Windows)"**.
-2. Baixe **`evokorpus-portatil-windows.zip`**, **extraia** e dê **duplo-clique** em
-   **`INICIAR APP EVOKORPUS.bat`**. O app abre sozinho em `http://localhost:3000`.
+1. Vá na aba **Releases** do repositório → **"App Adaptkorpus — pacote portátil (Windows)"**.
+2. Baixe **`adaptkorpus-portatil-windows.zip`**, **extraia** e dê **duplo-clique** em
+   **`INICIAR APP ADAPTKORPUS.bat`**. O app abre sozinho em `http://localhost:3000`.
 
 (O pacote é gerado automaticamente a cada atualização do código — ver
 `.github/workflows/portable-windows.yml`.)

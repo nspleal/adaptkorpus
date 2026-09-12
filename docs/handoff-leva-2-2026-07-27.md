@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > Para a sessão LOCAL arquivar no cofre. **Nada foi escrito no cofre por esta sessão**
-> (escritor único). Branch `claude/evokorpus-app-dev-9in0hs`, 4 commits, **não promovido**.
+> (escritor único). Branch `claude/adaptkorpus-app-dev-9in0hs`, 4 commits, **não promovido**.
 
 | Commit | Bloco |
 |---|---|
@@ -21,19 +21,19 @@ Smoke Playwright das 4 peças (33 telas do design cobertas; ver §5).
 
 ## 1. Verificação de pacotes (§2 do handoff)
 
-`Evokorpus Cardio.dc.html` aparece em **3 lugares**:
+`Adaptkorpus Cardio.dc.html` aparece em **3 lugares**:
 
 | Pasta | Telas |
 |---|---|
 | raiz do zip (arquivo solto) | — |
 | `design_handoff_dieta_e_cardio` | 10 |
-| **`design_handoff_evokorpus_dieta_cardio_retomada`** | **14** ← CANÔNICA |
+| **`design_handoff_adaptkorpus_dieta_cardio_retomada`** | **14** ← CANÔNICA |
 
 Totais conferidos: **cardio 14 + dieta 10 + retomada 7 + "fiquei doente" 5 + frequência 6 = 42** ✅
 
 ⚠️ **Não existe pasta `design_handoff_frequencia`** em nenhum dos zips. As 6 telas de
 frequência existem só como arquivo solto na raiz
-(`Evokorpus Frequ#U00eancia por Grupo.dc.html`). Usei esse arquivo; se houver uma pasta com
+(`Adaptkorpus Frequ#U00eancia por Grupo.dc.html`). Usei esse arquivo; se houver uma pasta com
 `README.md`/`CLAUDE_CODE.md` da peça, ela não chegou.
 
 ---
@@ -121,7 +121,7 @@ frequência existem só como arquivo solto na raiz
    `core · pernas · corpo-inteiro · cardio`. São 18 dos dois lados. O próprio cofre diz que
    **o catálogo manda**, e foi o que fiz — a tabela do cofre precisa ser corrigida.
 3. 🟠 **MET da caminhada leve: 2,3 ou 3,0?** A linha da pesquisa em
-   `parametros-motor-treino-evokorpus` diz "caminhada 3,0/4,3/5,8"; a spec TRAVADA e o
+   `parametros-motor-treino-adaptkorpus` diz "caminhada 3,0/4,3/5,8"; a spec TRAVADA e o
    handoff dizem **2,3**, e a regra "atividade leve (só a caminhada de passeio, 2,3) não
    avança a meta" só faz sentido com 2,3 (com 3,0 a caminhada leve passaria a contar 1×).
    Usei **2,3**. A linha da pesquisa precisa ser reconciliada.

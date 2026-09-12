@@ -4,9 +4,9 @@
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-**Data:** 2026-07-08 · **Branch:** `claude/evokorpus-app-dev-9in0hs` · **Gate:** verde
+**Data:** 2026-07-08 · **Branch:** `claude/adaptkorpus-app-dev-9in0hs` · **Gate:** verde
 (typecheck · lint · **366 testes** · build). Fonte: cofre
-`wiki/outputs/handoff-motor-treino-v2-2026-07-08.md` + `parametros-motor-treino-evokorpus`
+`wiki/outputs/handoff-motor-treino-v2-2026-07-08.md` + `parametros-motor-treino-adaptkorpus`
 §"v2 — decisões travadas". **Esta ficha volta p/ a sessão local arquivar no cofre**
 (regra de escritor único — nada foi escrito no cofre por aqui).
 

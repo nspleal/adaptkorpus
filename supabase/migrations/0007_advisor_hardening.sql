@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Hardening do Security Advisor (leva 3, 2026-07-05)
+-- App Adaptkorpus — Hardening do Security Advisor (leva 3, 2026-07-05)
 -- ----------------------------------------------------------------------------
 -- Idempotente. Zera os avisos de "function search_path mutable" e de execute
 -- indevido em funções. O aviso "authenticated pode executar beta_liberado" é

@@ -1,7 +1,7 @@
 /**
  * Injeta `grupoPrimario` nos 163 exercícios de src/lib/data/exercises.ts, a partir do
  * campo `grupo` normalizado do motor standalone do autor (curadoria aprovada — cofre
- * `parametros-motor-substituicao-evokorpus` §2, DF 2026-07-04: vocabulário derivado da
+ * `parametros-motor-substituicao-adaptkorpus` §2, DF 2026-07-04: vocabulário derivado da
  * 1ª entrada da coluna de grupo muscular da A1).
  *
  * Mapeamento lossless: id numérico N (standalone) ↔ "eN" (app). Edita por âncora

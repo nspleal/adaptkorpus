@@ -4,9 +4,9 @@ import type { Faixa, NivelExperiencia } from './treino-types';
  * Isométricos (holds) — unidade de registro em SEGUNDOS + faixas de tempo por nível.
  *
  * Curadoria do cofre:
- *  - `fontes/ranking-exercicios-evokorpus` §"Unidade de registro (repUnit)" — os 5 holds abaixo
+ *  - `fontes/ranking-exercicios-adaptkorpus` §"Unidade de registro (repUnit)" — os 5 holds abaixo
  *    registram `segundos` (o app mostra "Segundos" no lugar de "Reps"); todo o resto = `reps`.
- *  - `conceitos/parametros-motor-treino-evokorpus` §"Isométricos (holds)" (DF 2026-07-03) —
+ *  - `conceitos/parametros-motor-treino-adaptkorpus` §"Isométricos (holds)" (DF 2026-07-03) —
  *    faixas de tempo por nível (benchmark de mercado, registrado com ressalva) + piso de 10 s.
  *
  * Determinístico e sem relógio: são constantes ancoradas em teste (isometricos.test.ts).

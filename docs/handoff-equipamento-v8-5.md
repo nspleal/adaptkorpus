@@ -4,7 +4,7 @@
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-Data: 2026-07-05 · Branch: `claude/evokorpus-app-dev-9in0hs` · Base: modelo 2 níveis (handoff anterior
+Data: 2026-07-05 · Branch: `claude/adaptkorpus-app-dev-9in0hs` · Base: modelo 2 níveis (handoff anterior
 `docs/handoff-equipamento-2-niveis.md`). Implementa as 3 DFs travadas em 2026-07-04. **Nada foi
 escrito no cofre** (regra de escritor único) — este arquivo é o insumo para o autor arquivar lá.
 

@@ -18,7 +18,7 @@ import { chaveLocal } from '@/lib/escopo-local';
  */
 
 /**
- * `seguiu`/`fora` = o binário do plano (cofre `registro-de-aderencia-evokorpus`).
+ * `seguiu`/`fora` = o binário do plano (cofre `registro-de-aderencia-adaptkorpus`).
  * `comi` = o registro do MODO DIÁRIO (`ROTEAR`): sem plano não existe "seguiu o plano" nem
  * "comi outra coisa" — as duas frases só significam algo contra uma prescrição, e quem o gate
  * roteou não tem nenhuma. Registrar continua inerte; o que sumiu foi o eixo de comparação.

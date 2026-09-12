@@ -1,5 +1,5 @@
 -- ============================================================================
--- App Evokorpus — Row Level Security (RLS)
+-- App Adaptkorpus — Row Level Security (RLS)
 -- ----------------------------------------------------------------------------
 -- SEGURANÇA EM PRIMEIRA CLASSE. Toda tabela tem RLS HABILITADA.
 -- Sem política que case → acesso NEGADO por padrão (default-deny).

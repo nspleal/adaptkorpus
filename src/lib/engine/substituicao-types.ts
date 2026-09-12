@@ -1,6 +1,6 @@
 /**
  * Tipos do motor de SUBSTITUIÇÃO (F.2).
- * Fonte: conceitos/parametros-motor-substituicao-evokorpus (DFs travadas 2026-06-29).
+ * Fonte: conceitos/parametros-motor-substituicao-adaptkorpus (DFs travadas 2026-06-29).
  * É um SELETOR sobre planos já gerados: filtros duros → preferência → desempate
  * determinístico → fallback. Segurança e identidade nunca relaxam; só o gosto cede.
  */

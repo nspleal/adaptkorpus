@@ -1,6 +1,6 @@
 /**
- * Service worker do Evokorpus — offline-first do PLANO DO DIA (melhoria adotada no cofre,
- * entidades/app-evokorpus §Melhorias: upgrade do OfflineGuard V4 de "avisar que está
+ * Service worker do Adaptkorpus — offline-first do PLANO DO DIA (melhoria adotada no cofre,
+ * entidades/app-adaptkorpus §Melhorias: upgrade do OfflineGuard V4 de "avisar que está
  * offline" para "funcionar offline").
  *
  * Escrito à mão, sem dependências, auditável (~90 linhas). Sem precache de build (os nomes

@@ -1,6 +1,6 @@
 /**
  * POST /api/metricas — telemetria de produto do usuário LOGADO (Leva C2).
- * 🔒 Cofre: `conceitos/metricas-de-produto-evokorpus` (DF 2026-07-31).
+ * 🔒 Cofre: `conceitos/metricas-de-produto-adaptkorpus` (DF 2026-07-31).
  *
  * Grava na tabela `eventos`, sob RLS, no próprio Supabase. **Primeira parte, nunca
  * terceiro** — nada de comportamento por conta sai daqui para serviço externo.

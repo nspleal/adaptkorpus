@@ -1,7 +1,7 @@
 import { type ReactNode, type CSSProperties } from 'react';
 
 /**
- * Estados de sistema, vazios e carregamento — porte fiel do V4 ("Evokorpus Estados.dc.html").
+ * Estados de sistema, vazios e carregamento — porte fiel do V4 ("Adaptkorpus Estados.dc.html").
  * Componentes presentacionais reutilizáveis (server-safe). Regras travadas: toda tela vazia
  * tem ação de saída clara; tom sem culpa; erro nunca expõe stack; sem "IA"; 18+; neon só no escuro.
  */

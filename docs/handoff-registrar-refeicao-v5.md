@@ -5,8 +5,8 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `9062f45`.
-> Origem estética: `V5_front_end_evoK.zip` → `design_handoff_registrar_refeicao/Evokorpus Registrar Refeição.dc.html`
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `9062f45`.
+> Origem estética: `V5_front_end_evoK.zip` → `design_handoff_registrar_refeicao/Adaptkorpus Registrar Refeição.dc.html`
 > (F1 registro na aba Dieta · F2 sub-aba Dieta do Histórico · B4 vazio). A "casca de revisão" do
 > protótipo ("Reiniciar registros" / "Ver estado vazio" / "Abrir o app") foi descartada, como manda o handoff.
 

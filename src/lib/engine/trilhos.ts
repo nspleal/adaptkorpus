@@ -1,6 +1,6 @@
 /**
  * 🎛️ v3 · BLOCO B — OS TRILHOS DO EDITOR e o FOCO POR GRUPO (DF 2026-07-31, cofre
- * `parametros-motor-treino-evokorpus` §"🎛️ v3 — os trilhos do editor").
+ * `parametros-motor-treino-adaptkorpus` §"🎛️ v3 — os trilhos do editor").
  *
  * 🔒 **O v3 sai de política declarada, não de evidência.** A §16 da pesquisa lista 13 lacunas
  * sem resposta robusta e prescreve o procedimento: *declarar a incerteza · default

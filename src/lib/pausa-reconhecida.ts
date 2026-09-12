@@ -1,7 +1,7 @@
 /**
  * "Fiquei doente" — o RECONHECIMENTO de pausa (Leva 2 · Bloco 4, DF 2026-07-27).
  *
- * Cofre: `conceitos/parametros-motor-treino-evokorpus` §"Fiquei doente" (a DF de
+ * Cofre: `conceitos/parametros-motor-treino-adaptkorpus` §"Fiquei doente" (a DF de
  * 2026-07-26 — "pausa que congela" — foi SUPERSEDIDA pela própria Leva 1: desde `9ebf1bd`
  * a semana do ciclo conta semanas TREINADAS, então o congelamento já acontece sozinho,
  * tendo a pessoa avisado ou não). Sobrou para o botão o que ele sempre foi no pedido do

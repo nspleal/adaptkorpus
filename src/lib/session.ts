@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Sessão local do Evokorpus (transitória — sem backend ainda).
+ * Sessão local do Adaptkorpus (transitória — sem backend ainda).
  *
  * Persiste o **perfil do onboarding** em localStorage para que a área logada (`/app`)
  * sobreviva a reload e navegação de volta, sem jogar a pessoa de volta ao cadastro de

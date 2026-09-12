@@ -5,10 +5,10 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commits: `395b534` (dados V2) ·
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commits: `395b534` (dados V2) ·
 > `b159d14` (suporte real) · `789aedd` (offline + analytics).
-> Fontes: `paleta-alimentos-evokorpus-V2-limpa.xlsx` + `pratos-evokorpus-V2.xlsx`
-> (enviadas pelo autor) + decisões de `verificacao-evokorpus-2026-07-01` §5.
+> Fontes: `paleta-alimentos-adaptkorpus-V2-limpa.xlsx` + `pratos-adaptkorpus-V2.xlsx`
+> (enviadas pelo autor) + decisões de `verificacao-adaptkorpus-2026-07-01` §5.
 
 ## 1. Banco V2 IMPORTADO — 167 alimentos · 96 pratos · 363 ingredientes
 

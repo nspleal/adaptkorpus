@@ -127,7 +127,7 @@ describe('gate de saúde', () => {
 });
 
 // Corpus cruzado {6 bandas de IMC} × {3 objetivos} contra a tabela do gate
-// (gate-de-saude-evokorpus, DF 2026-06-29 — simetria baixo × alto peso).
+// (gate-de-saude-adaptkorpus, DF 2026-06-29 — simetria baixo × alto peso).
 // Altura fixa 170 cm, nível MUITO INTENSO (GET bem acima do piso → isola a regra de IMC
 // dos gatilhos calóricos PISAR/ROTEAR). Pesos calculados p/ cair no meio de cada banda.
 describe('gate de saúde — simetria baixo × alto peso (corpus IMC × objetivo)', () => {

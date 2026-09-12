@@ -12,7 +12,7 @@ import type { PerfilUsuario } from './engine/types';
 import type { PerfilTreino } from './engine/treino-types';
 
 /**
- * MODO DIÁRIO (cofre, DF 2026-07-27 — `gate-de-saude-evokorpus`).
+ * MODO DIÁRIO (cofre, DF 2026-07-27 — `gate-de-saude-adaptkorpus`).
  *
  * Os testes de aceite que o autor pediu para a Leva 2.1 · Bloco A:
  *  - FALHA se um usuário em `ROTEAR` receber plano, cardápio ou meta de cardio;

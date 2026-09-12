@@ -1,6 +1,6 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- 0009 — TELEMETRIA DE PRODUTO: tabela `eventos` (Leva C2)
--- Cofre: conceitos/metricas-de-produto-evokorpus (DF 2026-07-31).
+-- Cofre: conceitos/metricas-de-produto-adaptkorpus (DF 2026-07-31).
 --
 -- 🔴 POR QUE TABELA PRÓPRIA, e não `logs` com prefixo:
 --   `logs` é o ARMAZENAMENTO PRIMÁRIO do app — `check (tipo in ('treino','refeicao','peso'))`,

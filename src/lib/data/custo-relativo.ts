@@ -1,11 +1,11 @@
 /**
  * `custoRelativo` — faixa de custo (1 = mais barato · 3 = mais caro) dos 167 alimentos da
  * paleta. TETO, NUNCA ALVO: o montador PREFERE a faixa e sobe quando o piso de proteína ou a
- * janela de kcal não fecham (cofre, parametros-motor-dieta-evokorpus §`custoRelativo`,
+ * janela de kcal não fecham (cofre, parametros-motor-dieta-adaptkorpus §`custoRelativo`,
  * DF 2026-07-26).
  *
  * 🔒 PROCEDÊNCIA E VERSÃO (rótulo que viaja com o dado, como os trilhos do v3):
- *   curadoria 2026-07-28 (`raw/curadoria-custo-relativo-evokorpus-167-2026-07-28.xlsx`,
+ *   curadoria 2026-07-28 (`raw/curadoria-custo-relativo-adaptkorpus-167-2026-07-28.xlsx`,
  *   SHA-256 4fc2d62b…) + regra 6 (agrupamento encadeado ≤10%, maioria, empate → faixa mais
  *   cara), recomputada e validada em 2026-08-06.
  *

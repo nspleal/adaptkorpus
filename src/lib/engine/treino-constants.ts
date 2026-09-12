@@ -1,6 +1,6 @@
 /**
  * Constantes travadas do motor de treino — transcrição fiel das tabelas do cofre
- * (parametros-motor-treino-evokorpus, DFs 2026-06-28). NÃO alterar sem decisão registrada.
+ * (parametros-motor-treino-adaptkorpus, DFs 2026-06-28). NÃO alterar sem decisão registrada.
  */
 import type { NivelExercicio } from '../data/types';
 import type { CardioPrescricao, Faixa, NivelExperiencia } from './treino-types';

@@ -7,7 +7,7 @@ import { EXERCISES } from './data/exercises';
 import type { PerfilTreino } from './engine/treino-types';
 
 /**
- * 🔒 REGISTRO DE CARDIO UNIFICADO (DF 2026-07-27, `parametros-motor-treino-evokorpus`
+ * 🔒 REGISTRO DE CARDIO UNIFICADO (DF 2026-07-27, `parametros-motor-treino-adaptkorpus`
  * §Cardio). O catálogo tem 13 exercícios `tipo: cardio` e 14 com `padraoMovimento: cardio`
  * que o montador põe na rotina — quem fazia a esteira NA SESSÃO GUIADA e também registrava
  * em "Registrar cardio" somava nos dois.

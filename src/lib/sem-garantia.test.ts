@@ -186,7 +186,7 @@ describe('🔒 as exceções declaradas seriam REPROVADAS pelo critério', () =>
  * 🔒 §reembolso — A RÉGUA QUE SUBSTITUI O ① NA PÁGINA QUE VOLTOU (DF 2026-08-11).
  *
  * 🔑 Por que a página sai do léxico genérico: medido, os matches eram ESTRUTURA, não promessa
- * — `function Reembolso()`, `title: 'Reembolso · Evokorpus'`, `page="reembolso"`,
+ * — `function Reembolso()`, `title: 'Reembolso · Adaptkorpus'`, `page="reembolso"`,
  * `titulo="Reembolso"`. Um léxico que proíbe a palavra proíbe a página de ter nome.
  *
  * ⚠️ Este é o par que sustenta a exceção, e ele é MAIS ESTRITO que o léxico: proíbe

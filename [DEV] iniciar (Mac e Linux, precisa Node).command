@@ -1,10 +1,10 @@
 #!/bin/bash
-# Lançador do App Evokorpus para Mac e Linux.
+# Lançador do App Adaptkorpus para Mac e Linux.
 # No Mac: dê duplo-clique. (Se pedir permissão: botão direito > Abrir.)
 cd "$(dirname "$0")" || exit 1
 
 echo "============================================================"
-echo "              INICIANDO O APP EVOKORPUS"
+echo "              INICIANDO O APP ADAPTKORPUS"
 echo "============================================================"
 echo
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * gerar-seed.mjs — converte as planilhas do autor (xlsx, cofre "banco-alimentos-evokorpus")
+ * gerar-seed.mjs — converte as planilhas do autor (xlsx, cofre "banco-alimentos-adaptkorpus")
  * em `src/lib/data/foods.ts` + `src/lib/data/recipes.ts`.
  *
  *   node scripts/gerar-seed.mjs <paleta-V2-limpa.xlsx> <pratos-V2.xlsx>
  *
- * Regras (cofre: fontes/banco-alimentos-evokorpus §Expansão V2 + outputs/handoff-pratos-v2):
+ * Regras (cofre: fontes/banco-alimentos-adaptkorpus §Expansão V2 + outputs/handoff-pratos-v2):
  * - `id` numérico da planilha vira `a{n}` / `p{n}` — ids PRESERVADOS, gaps permitidos (dedupe).
  * - `rotulo_amigavel` = vocabulário oficial do cofre (exibição); `nome` clínico TACO permanece.
  * - "NA"/"Tr"/vazio → 0 nos macros; `contemAlergenos` é sempre RECOMPUTADO dos ingredientes.

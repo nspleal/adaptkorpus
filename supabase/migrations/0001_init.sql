@@ -1,11 +1,11 @@
 -- ============================================================================
--- App Evokorpus — Schema inicial (Postgres / Supabase)
+-- App Adaptkorpus — Schema inicial (Postgres / Supabase)
 -- ----------------------------------------------------------------------------
 -- Estrutura relacional dos dados curados + dados do usuário.
 -- A SEGURANÇA (RLS) está no arquivo 0002_rls.sql — TODA tabela tem RLS.
 --
 -- Princípios (cofre): dado de saúde é sensível (LGPD); minimização; RLS desde já.
--- Fonte: outputs/prontidao-do-app-evokorpus §B, fontes/banco-alimentos-evokorpus.
+-- Fonte: outputs/prontidao-do-app-adaptkorpus §B, fontes/banco-alimentos-adaptkorpus.
 -- ============================================================================
 
 -- gen_random_uuid()

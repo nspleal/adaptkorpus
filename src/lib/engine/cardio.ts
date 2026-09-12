@@ -1,7 +1,7 @@
 /**
  * Cardio — MET, classe, kcal líquida e meta semanal (Leva 2 · Bloco 1, DF 2026-07-27).
  *
- * Cofre: `conceitos/parametros-motor-treino-evokorpus` §Cardio (spec TRAVADA) +
+ * Cofre: `conceitos/parametros-motor-treino-adaptkorpus` §Cardio (spec TRAVADA) +
  * `outputs/pesquisa-cardio-met-2026-07-27` (procedência de cada MET, Compendium of
  * Physical Activities). A tabela 1.1 do motor já prescrevia cardio por objetivo — o app é
  * que não deixava registrar. Este módulo é PURO e determinístico: sem relógio, sem rede.

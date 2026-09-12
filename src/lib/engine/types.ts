@@ -1,9 +1,9 @@
 /**
- * Tipos do motor determinístico — App Evokorpus.
+ * Tipos do motor determinístico — App Adaptkorpus.
  *
  * Fonte de verdade (cofre / obsidian):
- *   - conceitos/parametros-motor-dieta-evokorpus  (spec A3 travada da dieta)
- *   - conceitos/gate-de-saude-evokorpus            (gate de saúde travado)
+ *   - conceitos/parametros-motor-dieta-adaptkorpus  (spec A3 travada da dieta)
+ *   - conceitos/gate-de-saude-adaptkorpus            (gate de saúde travado)
  *   - conceitos/motor-de-regras-deterministico
  *
  * Princípio: NADA é gerado por IA em runtime. Tudo é fórmula + dado curado.

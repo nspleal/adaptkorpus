@@ -1,10 +1,10 @@
-# Roadmap & Handoff — App Evokorpus
+# Roadmap & Handoff — App Adaptkorpus
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
-> Estado em **2026-06-28**. Branch de desenvolvimento: `claude/evokorpus-app-dev-9in0hs`.
+> Estado em **2026-06-28**. Branch de desenvolvimento: `claude/adaptkorpus-app-dev-9in0hs`.
 > Documento de handoff para o autor atualizar o **cofre** (fonte de verdade) e seguir a pesquisa.
 > A fonte de verdade de produto/decisões continua sendo o cofre; este doc é o espelho técnico.
 
@@ -69,7 +69,7 @@
 
 > Regra do cofre: decisões novas voltam pelo autor para serem arquivadas lá. Lista do que mudou:
 
-1. **Repo criado:** `nspleal/evokorpus` (privado); branch dev `claude/evokorpus-app-dev-9in0hs`.
+1. **Repo criado:** `nspleal/adaptkorpus` (privado); branch dev `claude/adaptkorpus-app-dev-9in0hs`.
 2. **Motor implementado = spec executável:** o "falta implementar" da dieta/gate pode virar
    "implementado (motor + 43 testes)". Os números batem 1:1 com a spec.
 3. **Montador v0 + lacunas do Bloco B** mapeadas: falta (a) relaxar **proteína até o piso** +
@@ -127,8 +127,8 @@
 - [ ] **Payload real do webhook Kiwify**: nome do header de assinatura, **algoritmo** (SHA-1/256),
       campo de **event id** e de **timestamp**.
 - [ ] **Agendar revisão jurídica** (portão de lançamento) + confirmar **licença TACO** (atribuição).
-- [ ] **Marca:** classes INPI, domínios (`evokorpus.com/.com.br/.app`), handles sociais.
+- [ ] **Marca:** classes INPI, domínios (`adaptkorpus.com/.com.br/.app`), handles sociais.
 
 ---
 *Espelha o cofre (fonte de verdade). Detalhes técnicos: `docs/architecture.md`, `docs/security-lgpd.md`,
-`docs/access.md`. Estado do código: branch `claude/evokorpus-app-dev-9in0hs`.*
+`docs/access.md`. Estado do código: branch `claude/adaptkorpus-app-dev-9in0hs`.*

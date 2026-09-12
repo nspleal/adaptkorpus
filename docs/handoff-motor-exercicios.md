@@ -5,9 +5,9 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre** — escritor único é
-> a sessão local. Decisões novas voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`.
-> Fonte das travas: cofre `fontes/ranking-exercicios-evokorpus` §Escadas (DF 2026-07-03) +
-> `conceitos/parametros-motor-substituicao-evokorpus` (F.2 §2). Determinismo, sem "IA", sem
+> a sessão local. Decisões novas voltam por você. Branch: `claude/adaptkorpus-app-dev-9in0hs`.
+> Fonte das travas: cofre `fontes/ranking-exercicios-adaptkorpus` §Escadas (DF 2026-07-03) +
+> `conceitos/parametros-motor-substituicao-adaptkorpus` (F.2 §2). Determinismo, sem "IA", sem
 > promessa — honrados. Nada escrito no cofre.
 
 ## TL;DR

@@ -1,4 +1,4 @@
-# API do backend — Evokorpus (rudimentar, Fase 0/1)
+# API do backend — Adaptkorpus (rudimentar, Fase 0/1)
 
 > ⚠️ **ARQUIVO HISTÓRICO.** A fonte de verdade de produto, decisões, números e marca é o
 > **cofre** (repo `obsidian`) — ver `CLAUDE.md`. Este documento registra o estado de um

@@ -2,7 +2,7 @@
  * ERROR-HUNT — corpus de bordas do motor de treino (regressão).
  * Recalcula a spec de forma INDEPENDENTE (números reescritos do cofre, não importados de
  * treino-constants) e testa invariantes em todo o espaço objetivo×nível×equip×dias×tempo.
- * Fonte: parametros-motor-treino-evokorpus.
+ * Fonte: parametros-motor-treino-adaptkorpus.
  */
 import { describe, expect, it } from 'vitest';
 import { gerarTreino } from './index';

@@ -10,7 +10,7 @@ import type { ResumoSessao } from './SessaoTreino';
 
 /**
  * Modal de CALIBRAÇÃO manual ("Muito fácil" — V8.1, porte fiel do protótipo
- * `Evokorpus Muito Fácil e Calibração.dc.html`; DF #11/#13 do cofre, 2026-07-04).
+ * `Adaptkorpus Muito Fácil e Calibração.dc.html`; DF #11/#13 do cofre, 2026-07-04).
  * O corpo é decidido AUTOMATICAMENTE (nível e tipo nunca são perguntados):
  *   com carga → Corpo A (iniciante: reps TRAVADAS em 6 + explicador calmo;
  *               inter/avançado: livre + clamp no piso absoluto 5 + aviso âmbar);

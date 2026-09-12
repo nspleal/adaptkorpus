@@ -1,8 +1,8 @@
 {
-  "name": "evokorpus-app",
+  "name": "adaptkorpus-app",
   "version": "0.1.0",
   "private": true,
-  "description": "App Evokorpus — treino e dieta adaptativos (motor determinístico, sem IA em runtime). 18+. Português (BR).",
+  "description": "App Adaptkorpus — treino e dieta adaptativos (motor determinístico, sem IA em runtime). 18+. Português (BR).",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },

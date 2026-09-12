@@ -5,7 +5,7 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**; decisões/curadoria
-> voltam por você. Branch: `claude/evokorpus-app-dev-9in0hs`, commit `6923fbc`.
+> voltam por você. Branch: `claude/adaptkorpus-app-dev-9in0hs`, commit `6923fbc`.
 > Fonte: DF 2026-07-04 (cofre log "modelo de equipamento: 2 níveis"). Determinismo, sem "IA",
 > copy sem culpa — honrados.
 

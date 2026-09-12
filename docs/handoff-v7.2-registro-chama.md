@@ -5,13 +5,13 @@
 > momento do projeto e **não é atualizado**: onde ele divergir do cofre, o cofre vence.
 
 > **Insumo para o cofre.** Esta sessão (app, nuvem) **não escreve no cofre**.
-> Branch: `claude/evokorpus-app-dev-9in0hs`. Commit: `07c67dc`. Fontes: os dois pacotes do
+> Branch: `claude/adaptkorpus-app-dev-9in0hs`. Commit: `07c67dc`. Fontes: os dois pacotes do
 > Claude Design (`design_handoff_registro_e_contador_treino` + `design_handoff_chama_marcos`).
 > Portei fiel (estilos inline exatos, keyframes `evkChama*`, copy verbatim das telas).
 
 ## ⚠️ Para arquivar no cofre: a decisão do contador EVOLUIU
 
-A página `registro-de-aderencia-evokorpus` registra (2026-07-02): *"contador PURO, **sem
+A página `registro-de-aderencia-adaptkorpus` registra (2026-07-02): *"contador PURO, **sem
 marcos/níveis** — sem comemoração"*. O pacote **chama** que você me mandou depois declara:
 *"Decisão de produto já tomada: este sistema de **4 marcos por cor** é o definitivo"* (15/25/50/100,
 com comemoração única e sutil ao cruzar). Implementei o pacote chama (decisão mais nova do autor).

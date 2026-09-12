@@ -1,7 +1,7 @@
 /**
  * Gate de saúde — triagem que roda ANTES dos motores de dieta e treino.
  *
- * Fonte: conceitos/gate-de-saude-evokorpus (DFs travadas 2026-06-27, refinadas 2026-06-28).
+ * Fonte: conceitos/gate-de-saude-adaptkorpus (DFs travadas 2026-06-27, refinadas 2026-06-28).
  *
  * Vocabulário (mais restritivo → menos):
  *   ROTEAR     = não gera plano; orienta procurar profissional

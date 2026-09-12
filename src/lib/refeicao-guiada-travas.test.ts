@@ -63,7 +63,7 @@ describe('a refeição guiada não vira ritual cronometrado', () => {
 describe('caloria NÃO aparece no registro de refeição', () => {
   it('o controle de registro (seguiu/fora) não mostra kcal nem macro', () => {
     // 🔒 O `~X kcal` existe só no CARDÁPIO (que é o plano), nunca no registro nem no
-    // histórico — `registro-de-aderencia-evokorpus`.
+    // histórico — `registro-de-aderencia-adaptkorpus`.
     const src = FONTE(REGISTRO);
     const i = src.indexOf('export function ControleRegistro');
     expect(i).toBeGreaterThan(-1);
