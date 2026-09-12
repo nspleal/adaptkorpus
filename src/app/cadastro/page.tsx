@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Backdrop, LogoFloat, Marca, cardAuth, inputAuth, labelAuth, EASE, forcaSenha, LinhaConsentimento, LinkLegal, RequisitosSenha, apenasLeitorDeTela } from '@/components/auth/ui';
 import { fraseDosFaltantes, listarEmPortugues, requisitosFaltantes, senhaCumprePolitica } from '@/lib/auth/politica-senha';
-import { traduzirErroCadastro } from '@/lib/auth/erro-auth';
+import { traduzirErroAuth } from '@/lib/auth/erro-auth';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -97,7 +97,7 @@ export default function CadastroPage() {
          * 🔴 Nome, e-mail e senha ficam onde estavam: obrigar a redigitar tudo depois de uma
          * recusa é a segunda punição pelo mesmo erro.
          */
-        const recusa = traduzirErroCadastro(error, senha);
+        const recusa = traduzirErroAuth(error, senha, 'criar-conta');
         setErro(recusa.texto);
         setCarregando(false);
         if (recusa.campo === 'senha') refSenha.current?.focus();
@@ -109,7 +109,7 @@ export default function CadastroPage() {
       // confirmação LIGADA (sem sessão), segue ao /confirmar como antes.
       router.replace(data.session ? '/onboarding' : '/confirmar');
     } catch (e) {
-      setErro(traduzirErroCadastro(e, senha).texto);
+      setErro(traduzirErroAuth(e, senha, 'criar-conta').texto);
       setCarregando(false);
     }
   }

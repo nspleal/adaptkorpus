@@ -102,10 +102,13 @@ describe('🔑 3. a força estimada não pode sugerir aceitação', () => {
 });
 
 describe('🔑 4. a recusa do servidor é lida por código, e nada se perde', () => {
-  it('traduz por `traduzirErroCadastro` (códigos e motivos do SDK)', () => {
+  it('traduz por `traduzirErroAuth` (códigos e motivos do SDK), no contexto desta tela', () => {
     const c = corpoDe('submit');
-    expect(c).toMatch(/traduzirErroCadastro\(error, senha\)/);
-    expect(c, 'o catch precisa traduzir também').toMatch(/catch \(e\)[\s\S]*traduzirErroCadastro\(e, senha\)/);
+    expect(c).toMatch(/traduzirErroAuth\(error, senha, 'criar-conta'\)/);
+    expect(c, 'o catch precisa traduzir também').toMatch(/catch \(e\)[\s\S]*traduzirErroAuth\(e, senha, 'criar-conta'\)/);
+    // 🔒 O contexto não é decoração: é ele que impede a tela de redefinição de dizer
+    // "não foi possível criar a conta" e esta de prometer um link que aqui não existe.
+    expect(codigo, 'esta tela não pode usar o contexto da outra').not.toMatch(/'salvar-senha'/);
   });
 
   it('🔴 nenhuma regex sobre `error.message` decide mais nada', () => {

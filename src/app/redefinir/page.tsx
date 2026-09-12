@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Backdrop, AuthHead, cardAuth, inputAuth, labelAuth, btnNeon, btnGhost, EASE, forcaSenha, RequisitosSenha } from '@/components/auth/ui';
 import { fraseDosFaltantes, requisitosFaltantes, senhaCumprePolitica } from '@/lib/auth/politica-senha';
-import { traduzirErroCadastro } from '@/lib/auth/erro-auth';
+import { traduzirErroAuth } from '@/lib/auth/erro-auth';
 import { supabaseConfigurado } from '@/lib/supabase/env';
 
 const ID_REQUISITOS = 'redefinir-requisitos-senha';
@@ -69,19 +69,24 @@ export default function RedefinirPage() {
       const { error } = await createClient().auth.updateUser({ password: npw });
       if (error) {
         /**
-         * 🔴 `updateUser({ password })` passa pela MESMA política de senha do `signUp` — foi
-         * ela que produziu o 422 do cadastro em 11/09/2026. Se a recusa for de senha, a tela
-         * diz QUAL requisito faltou (por `error.code`/`reasons`, não por texto); qualquer
-         * outra falha aqui continua sendo link expirado/sessão perdida, e a copy é a de antes.
+         * 🔴 NEM TODA FALHA AQUI É LINK EXPIRADO (revisão Codex). `updateUser({ password })`
+         * passa pela MESMA política de senha do `signUp` — foi ela que produziu o 422 do
+         * cadastro em 11/09/2026 — e ainda pode devolver `same_password`, limite de
+         * tentativas, 5xx do servidor ou queda de transporte. Mandar todas elas para "peça um
+         * novo link" faz a pessoa refazer o fluxo inteiro por um problema que o link não
+         * resolve. Cada uma tem sua frase; só sessão realmente inválida pede link novo.
+         *
+         * 🔒 A senha e a confirmação NÃO são limpas: obrigar a redigitar depois de uma recusa
+         * é a segunda punição pelo mesmo erro. A fase também não muda — quem está em "nova
+         * senha" continua lá, podendo corrigir e tentar de novo.
          */
-        const recusa = traduzirErroCadastro(error, npw);
-        setErro(recusa.motivo === 'senha-fraca' ? recusa.texto : 'Não foi possível salvar a senha. Peça um novo link.');
+        setErro(traduzirErroAuth(error, npw, 'salvar-senha').texto);
         setCarregando(false);
         return;
       }
       setFase('done');
-    } catch {
-      setErro('Não foi possível salvar a senha agora. Tente de novo.');
+    } catch (e) {
+      setErro(traduzirErroAuth(e, npw, 'salvar-senha').texto);
       setCarregando(false);
     }
   }

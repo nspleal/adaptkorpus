@@ -52,14 +52,24 @@ describe('🔑 a nova senha é medida contra a política do servidor', () => {
   });
 });
 
-describe('🔑 a recusa de senha é traduzida; o resto da tela fica como estava', () => {
-  it('usa o código do SDK para separar senha fraca das demais falhas', () => {
-    expect(codigo).toMatch(/traduzirErroCadastro\(error, npw\)/);
-    expect(codigo).toMatch(/recusa\.motivo === 'senha-fraca'/);
+describe('🔑 toda recusa é traduzida no contexto de SALVAR SENHA', () => {
+  it('usa `traduzirErroAuth` com o contexto desta tela, nos dois caminhos', () => {
+    expect(codigo).toMatch(/traduzirErroAuth\(error, npw, 'salvar-senha'\)/);
+    expect(codigo, 'o catch precisa traduzir também').toMatch(/catch \(e\)[\s\S]*traduzirErroAuth\(e, npw, 'salvar-senha'\)/);
+    expect(codigo, 'esta tela não pode usar o contexto do cadastro').not.toMatch(/'criar-conta'/);
   });
 
-  it('🔒 a copy de link expirado continua existindo para as outras falhas', () => {
-    expect(codigo).toContain('Não foi possível salvar a senha. Peça um novo link.');
+  /**
+   * 🔴 ACHADO DA REVISÃO CODEX (2026-09-12). A primeira correção só traduzia `senha-fraca` e
+   * jogava TODO o resto em *"Não foi possível salvar a senha. Peça um novo link."* — um 429,
+   * um 503 ou uma senha igual à atual mandavam a pessoa refazer o fluxo inteiro por um
+   * problema que link nenhum resolve. Pedir link novo virou caso, não padrão.
+   */
+  it('🔴 não existe mais o balde "peça um novo link" para tudo que não é senha fraca', () => {
+    expect(/Peça um novo link/.test(codigo), 'o balde genérico voltou').toBe(false);
+    expect(/motivo === 'senha-fraca'/.test(codigo), 'voltou a filtrar só a senha fraca').toBe(false);
+    // A frase de link agora mora no tradutor, e só no motivo de sessão inválida.
+    expect(codigo, 'a tela não pode redigitar copy de erro por fora do tradutor').not.toMatch(/setErro\('Não foi possível salvar/);
   });
 
   it('🔒 as quatro fases e a mensagem neutra do envio seguem intactas', () => {
@@ -67,6 +77,24 @@ describe('🔑 a recusa de senha é traduzida; o resto da tela fica como estava'
     // Mensagem neutra: não revelar se o e-mail existe (enumeração de contas).
     expect(codigo).toMatch(/setFase\('sent'\);/);
     expect(codigo).toMatch(/resetPasswordForEmail\(email,/);
+  });
+
+  /** 🔒 Recusa não apaga o que foi digitado nem tira a pessoa do passo em que ela está. */
+  it('🔒 a recusa preserva os campos e a fase', () => {
+    const i = codigo.search(/async\s+function\s+salvarSenha\s*\(/);
+    expect(i, 'salvarSenha sumiu ou mudou de nome').toBeGreaterThanOrEqual(0);
+    const corpo = codigo.slice(i, codigo.indexOf('const f = forcaSenha', i));
+    expect(corpo.length).toBeGreaterThan(300);
+    // Só o ramo de FALHA: do `if (error)` até o `setFase('done')` do sucesso, que vem depois.
+    const iErro = corpo.indexOf('if (error)');
+    const iDone = corpo.indexOf("setFase('done')", iErro);
+    expect(iErro, 'o ramo de falha sumiu').toBeGreaterThanOrEqual(0);
+    expect(iDone, 'o ramo de sucesso sumiu — o recorte ficaria sem fim').toBeGreaterThan(iErro);
+    const erroPath = corpo.slice(iErro, iDone);
+    for (const limpeza of ["setNpw('')", "setNpw2('')", "setEmail('')"]) {
+      expect(erroPath.includes(limpeza), `${limpeza} apaga o que a pessoa digitou`).toBe(false);
+    }
+    expect(/setFase\(/.test(erroPath), 'a recusa tirou a pessoa do passo de criar senha').toBe(false);
   });
 
   it('🔒 nada de log nem de exigência inventada de símbolo', () => {
