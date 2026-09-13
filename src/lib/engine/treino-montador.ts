@@ -35,6 +35,7 @@ import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
+import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
 import { distribuirGruposNoCalendario } from './calendario-grupos';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
@@ -253,9 +254,10 @@ export function montarRotina(
   // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
   const divisao = perfil.divisaoPreferida ?? 'auto';
   const baseDivisao = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
-  const calendario = distribuirGruposNoCalendario(baseDivisao.dias, diasForcaDaSemana, prioritarios, Math.min(CORE_MIN, diasForca));
+  const selecao = selecionarDivisao(baseDivisao, perfil, agregado, !!semanaCiclo?.retomada);
+  const calendario = distribuirGruposNoCalendario(selecao.dias, diasForcaDaSemana, prioritarios, Math.min(CORE_MIN, diasForca), selecao.preservarRecortes);
   const templates = calendario.dias;
-  const split = diasForca === 1 ? 'Full-body' : templates.every((t, i) => t.nome === baseDivisao.dias[i]?.nome) ? baseDivisao.split : 'Distribuição pela agenda';
+  const split = diasForca === 1 ? 'Full-body' : templates.every((t, i) => t.nome === selecao.dias[i]?.nome) ? selecao.split : 'Distribuição pela agenda';
   if (calendario.limitado) avisos.push('A agenda limita a repetição dos grupos. Priorizamos a recuperação; o foco e a distribuição desejada podem não ser atendidos integralmente.');
   // 🔒 C1 — o teto de slots vem da tabela f(tempo), MAS o reduce-to-fit (override 2) pode pedir
   // menos slots reexecutando o alocador; aí o override manda (nunca acima da tabela).
@@ -1127,8 +1129,23 @@ export function montarRotina(
     baseline: RotinaSemanal = r,
   ): RotinaSemanal => {
     const fatos: FatosReducao = fatosReducao(itensTemporaisDaRotina(baseline), itensTemporaisDaRotina(r));
+    // Atendimento é medido no terminal, depois de séries, restrições e redução temporal.
+    const intencao = !custom ? selecao.intencao : undefined;
+    const recortesEntregues = intencao ? contarRecortesEntregues(intencao.recortes,
+      r.dias.map(d => d.slots.flatMap(s => s.exercicio.grupoPrimario ? [s.exercicio.grupoPrimario] : []))) : 0;
+    const distribuicao = intencao ? {
+      planejada: intencao.nome, recortesPlanejados: intencao.recortes.length, recortesEntregues,
+      limitadaPeloCalendario: calendario.limitado, adaptada: intencao.adaptada,
+      atendida: !calendario.limitado && !intencao.adaptada && recortesEntregues === intencao.recortes.length,
+    } : undefined;
+    if (distribuicao && !distribuicao.atendida) avisos.push(
+      `Distribuição planejada (${distribuicao.planejada}) não atendida integralmente. `
+      + (distribuicao.limitadaPeloCalendario ? 'A recuperação entre os dias disponíveis exige adaptar a organização. ' : '')
+      + (distribuicao.adaptada ? 'Mantivemos a organização vigente para o nível ou a retomada. ' : '')
+      + `Recortes principais entregues: ${recortesEntregues} de ${distribuicao.recortesPlanejados}. Confira os limites de cobertura do plano.`,
+    );
     if (rg.tipo === 'ERRO_ALOCADOR') {
-      return { ...r, fatosReducao: fatos, resultadoGeracao: rg };
+      return { ...r, distribuicao, avisos: [...avisos], fatosReducao: fatos, resultadoGeracao: rg };
     }
 
     const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];
@@ -1225,7 +1242,7 @@ export function montarRotina(
           }
         : rgCertificado;
     return {
-      ...r, ...final, fatosReducao: fatos, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
+      ...r, ...final, distribuicao, fatosReducao: fatos, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
       ...(cardioSemana ? { cardioSemana } : {}),
       avisos: [...avisos],
       ...(resultadoFinal.tipo === 'INCOMPATIVEL' ? { duracaoIncompativel: true } : {}),

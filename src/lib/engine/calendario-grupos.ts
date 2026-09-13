@@ -16,18 +16,19 @@ export function diasConsecutivos(a: Weekday, b: Weekday): boolean {
  * O alocador continua sendo a única autoridade de seleção/volume.
  */
 export function distribuirGruposNoCalendario(
-  templates: readonly TemplateDia[], agenda: readonly Weekday[], focos: readonly GrupoPrimario[] = [], minimoCore = 0,
+  templates: readonly TemplateDia[], agenda: readonly Weekday[], focos: readonly GrupoPrimario[] = [], minimoCore = 0, preservarRecortes = false,
 ): { dias: TemplateDia[]; limitado: boolean } {
   if (templates.length !== agenda.length) throw new Error('Agenda e templates devem ter o mesmo tamanho.');
+  const demandaOriginal = new Map([...new Set(templates.flatMap(t => t.grupos))].map(g => [g, templates.filter(t => t.grupos.includes(g)).length]));
   // Com dois/três dias adjacentes, full-body repetido não cabe. Reutilizamos os
   // recortes superior/inferior e push/pull/pernas antes de ajustar exposições.
   const adjacente = agenda.some((a, i) => agenda.slice(i + 1).some(b => diasConsecutivos(a, b)));
   const temFull = templates.some(t => t.grupos.includes('peito') && t.grupos.includes('quadriceps'));
-  if (adjacente && temFull && agenda.length === 2) templates = [
+  if (!preservarRecortes && adjacente && temFull && agenda.length === 2) templates = [
     { nome: 'Superiores', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] },
     { nome: 'Inferiores', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] },
   ];
-  if (adjacente && temFull && agenda.length === 3) templates = [
+  if (!preservarRecortes && adjacente && temFull && agenda.length === 3) templates = [
     { nome: 'Peito + Ombros + Tríceps', grupos: ['peito', 'ombros', 'triceps', 'core'] },
     { nome: 'Costas + Bíceps', grupos: ['costas', 'biceps'] },
     { nome: 'Pernas', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] },
@@ -47,6 +48,7 @@ export function distribuirGruposNoCalendario(
     for (let mask = 1; mask < (1 << agenda.length); mask++) {
       const indices = agenda.flatMap((_, i) => mask & (1 << i) ? [i] : []);
       if (indices.length > desejados) continue;
+      if (preservarRecortes && originais.length > 0 && indices.some(i => !originais.includes(i))) continue;
       if (indices.some((a, i) => indices.slice(i + 1).some(b => diasConsecutivos(agenda[a]!, agenda[b]!)))) continue;
       candidatos.push(indices);
     }
@@ -71,5 +73,6 @@ export function distribuirGruposNoCalendario(
     const mesmos = d.grupos.every(g => original.grupos.includes(g) || g === 'core' || (g === 'triceps' && original.grupos.includes('biceps'))) && original.grupos.every(g => d.grupos.includes(g));
     d.nome = agenda.length === 1 ? 'Full-body' : mesmos ? original.nome : d.grupos.length ? d.grupos.map(g => nomes[g]).join(' + ') : 'Recuperação';
   }
+  limitado ||= [...demandaOriginal].some(([g, n]) => dias.filter(d => d.grupos.includes(g)).length < n);
   return { dias, limitado };
 }

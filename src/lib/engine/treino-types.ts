@@ -402,6 +402,8 @@ export interface RotinaSemanal {
    * grupo, semana, escopo, métrica e limiar — e não comparando frases.
    */
   fatosCobertura?: FatoCoberturaGrupo[];
+  /** Comparação da intenção de divisão com o terminal, não com um candidato intermediário. */
+  distribuicao?: { planejada: string; recortesPlanejados: number; recortesEntregues: number; limitadaPeloCalendario: boolean; adaptada: boolean; atendida: boolean };
   /**
    * 🔴 D14 — dias da agenda que NÃO viraram sessão. Ausente quando todos foram atendidos.
    * `dias.length + diasNaoAtendidos.length + diasCardioRecuperacao` = agenda SOLICITADA;
