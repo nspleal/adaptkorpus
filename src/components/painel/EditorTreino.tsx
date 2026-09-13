@@ -91,7 +91,7 @@ export default function EditorTreino({
   onSalvar: (dias: DiaEditavel[], avaliacao: Avaliacao) => void;
   onCancelar: () => void;
   onVoltarAoRecomendado: () => void;
-  /** Já existe um treino montado? Só então "Voltar ao recomendado" tem o que desfazer. */
+  /** Já existe um treino montado? Só então "Gerar novo treino" tem o que desfazer. */
   temCustom: boolean;
   onDesbanir?: (id: string) => void;
   /** Telemetria do risco exibido — o EVENTO ADVERSO da leva (payload fechado). */
@@ -189,7 +189,7 @@ export default function EditorTreino({
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onCancelar} style={btnGhost}>Cancelar</button>
           {temCustom && (
-            <button onClick={() => setConfirmarVolta(true)} style={btnGhost}>Voltar ao recomendado</button>
+            <button onClick={() => setConfirmarVolta(true)} style={btnGhost}>Gerar novo treino</button>
           )}
           {/* 🔒 DF① — o salvar NUNCA desabilita por causa de aviso. Só o treino vazio não
               salva, e isso não é risco: é ausência de treino. */}
@@ -224,14 +224,14 @@ export default function EditorTreino({
 
       {confirmarVolta && (
         <div onClick={() => setConfirmarVolta(false)} style={{ position: 'fixed', inset: 0, zIndex: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(234,229,219,.14)', borderRadius: 20, padding: 22 }}>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Voltar ao treino recomendado?</div>
+          <div role="dialog" aria-modal="true" aria-label="Substituir pelo novo treino" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(234,229,219,.14)', borderRadius: 20, padding: 22 }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Substituir pelo novo treino?</div>
             <p style={{ margin: '0 0 16px', fontSize: '.9rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.55 }}>
-              O treino que você montou sai, e o app volta a montar o seu. Dá para montar de novo quando quiser.
+              O treino atual será substituído por uma nova montagem com o perfil atual. Seus registros e histórico serão preservados.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirmarVolta(false)} style={btnGhost}>Manter o meu</button>
-              <button onClick={() => { setConfirmarVolta(false); onVoltarAoRecomendado(); }} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, padding: 12, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Voltar ao recomendado</button>
+              <button onClick={() => { setConfirmarVolta(false); onVoltarAoRecomendado(); }} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, padding: 12, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Gerar novo treino</button>
             </div>
           </div>
         </div>

@@ -137,15 +137,15 @@ describe('🔒 os filtros DUROS continuam valendo sobre a escolha do usuário', 
     expect(r.dias[0]!.slots.map((s) => s.exercicio.id)).toEqual(['e1']);
   });
 
-  it('o teto de SESSÕES do nível continua valendo, e o corte é DITO (nunca silencioso)', () => {
-    // Intermediário: teto 4 sessões/semana. Um desenho de 6 dias perde 2 — com aviso.
+  it('o teto de SESSÕES orienta a recomendação sem apagar o desenho manual', () => {
+    // Decisão 13/09: os seis dias permanecem; a recomendação de quatro é dita.
     const seis: RotinaCustom = {
       origem: 'usuario',
       dias: Array.from({ length: 6 }, (_, i) => ({ nome: `D${i + 1}`, exercicioIds: ['e1'] })),
     };
     const r = plano(perfil({ rotinaCustom: seis, diasDisponiveis: 6 }));
-    expect(r.dias).toHaveLength(4);
-    expect(r.avisos.some((a) => a.includes('ficaram fora desta semana')), `avisos: ${r.avisos.join(' | ')}`).toBe(true);
+    expect(r.dias).toHaveLength(6);
+    expect(r.avisos.some((a) => a.includes('desenho foi preservado')), `avisos: ${r.avisos.join(' | ')}`).toBe(true);
   });
 
   it('desenho VAZIO cai no gerador — nunca deixa a pessoa sem plano', () => {

@@ -176,6 +176,13 @@ export interface ArgsAlocacao {
    * se isto acontece é `decidirFoco`, no montador; aqui só se executa a troca já autorizada.
    */
   transferirSlot?: { de: GrupoPrimario; para: GrupoPrimario };
+  /**
+   * 🔒 C6 — SAÍDA opcional do degrau ②: como a troca autorizada realmente terminou. O
+   * montador precisa distinguir "não coube" de "cabia, mas derrubaria `puxar ≥ empurrar`" —
+   * só o segundo caso desce o degrau para ORDEM por equilíbrio. Preenchida pelo alocador;
+   * ausente preserva as chamadas que não se importam com o desfecho.
+   */
+  relatoTransferencia?: { executada: boolean; recusadaPeloEquilibrio: boolean };
   /** Pool JÁ filtrado (equipamento + nível + banidos/preteridos), ordenado (tier↑, id). */
   pool: readonly Exercise[];
   /** Favoritos efetivos (favoritos + preferidos de troca + recentes da retomada). */
@@ -195,6 +202,8 @@ export interface ArgsAlocacao {
    * esvaziá-lo. Fora das prioridades o dia para quando os déficits acabam.
    */
   preencherAteOrcamento?: boolean;
+  /** Calendário automático: nenhuma reserva/troca pode sair dos grupos admitidos. */
+  respeitarGruposDoDia?: boolean;
   /**
    * Cobertura mínima do plano temporal. Ausente preserva a alocação v4 normal. Quando fornecida,
    * estes padrões ocupam os primeiros slots disponíveis antes das reservas acessórias.
@@ -555,6 +564,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   // o último slot do grupo mais coberto.
   if (templates.length >= 2 && coreSlots() < args.coreMin && temPool('core')) {
     for (let d = templates.length - 1; d >= 0 && coreSlots() < args.coreMin; d -= 1) {
+      if (args.respeitarGruposDoDia && !templates[d]!.grupos.includes('core')) continue;
       if (dias[d]!.slots.some((s) => s.grupo === 'core')) continue;
       const e = escolher('core', usadosPorDia[d]!);
       if (!e) continue;
@@ -619,9 +629,42 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       if (!templates[d]!.grupos.includes(para)) continue;
       const idx = [...dias[d]!.slots.keys()].reverse().find((i) => dias[d]!.slots[i]!.grupo === de);
       if (idx == null) continue;
-      const e = escolher(para, usadosPorDia[d]!);
-      if (!e) continue;
       const sai = dias[d]!.slots[idx]!;
+      /**
+       * 🔒 C6 — A TROCA RESPEITA `puxar ≥ empurrar` COMO TODA OUTRA PORTA DO ALOCADOR.
+       *
+       * 🔴 O defeito que fecha (fila histórica C6; verificação de 2026-08-17 em `44f0ee0`,
+       * ainda viva em `67f5fd9c`): aqui o pick era `escolher(para, …)` SEM trava nenhuma,
+       * enquanto `colocar()` aplica `proiba` em todas as outras portas. Medido: foco em
+       * `peito` cedido por `biceps` tirava `e74[biceps/isolado]` e punha `e2[peito/empurrar]`
+       * — a semana ia de `puxar 2 / empurrar 2` para `2 / 3`, e o montador só AVISAVA
+       * depois. A troca é a ÚNICA porta que mexe nos dois lados da conta ao mesmo tempo, por
+       * isso a trava aqui é LÍQUIDA (desconta o que sai antes de medir o que entra) em vez
+       * da `travaEmpurrar` de `colocar`, que só olha o que entra.
+       *
+       * ⚠️ `exigir` e não `proiba`: `proiba` isenta favorito (DF #12), e um favorito de
+       * `empurrar` entrando aqui quebraria a invariante do mesmo jeito. Favorito não perde
+       * slot que já tinha — apenas não ganha um por uma troca que derrubaria o equilíbrio.
+       *
+       * Sem candidato que preserve o equilíbrio o dia é pulado; esgotados os dias, a troca
+       * não acontece e o montador desce o degrau para ORDEM (DF 2026-08-17).
+       */
+      const puxarSemSaida = (contaPadrao.get('puxar') ?? 0) - (sai.exercicio.padraoMovimento === 'puxar' ? 1 : 0);
+      const empurrarSemSaida = (contaPadrao.get('empurrar') ?? 0) - (sai.exercicio.padraoMovimento === 'empurrar' ? 1 : 0);
+      const preservaEquilibrio = (x: Exercise) =>
+        puxarSemSaida + (x.padraoMovimento === 'puxar' ? 1 : 0)
+        >= empurrarSemSaida + (x.padraoMovimento === 'empurrar' ? 1 : 0);
+      /**
+       * Distingue os dois motivos de recusa SEM mexer no cursor de `escolher`: se havia
+       * candidato livre no dia e nenhum preserva o equilíbrio, a recusa é do equilíbrio.
+       */
+      const livresNoDia = [...(favPorGrupo.get(para) ?? []), ...(porGrupo.get(para) ?? [])]
+        .filter((x) => !usadosPorDia[d]!.has(x.id));
+      if (livresNoDia.length > 0 && !livresNoDia.some(preservaEquilibrio) && args.relatoTransferencia) {
+        args.relatoTransferencia.recusadaPeloEquilibrio = true;
+      }
+      const e = escolher(para, usadosPorDia[d]!, { exigir: preservaEquilibrio });
+      if (!e) continue;
       slotsDiretos.set(sai.grupo, (slotsDiretos.get(sai.grupo) ?? 1) - 1);
       contaPadrao.set(sai.exercicio.padraoMovimento, (contaPadrao.get(sai.exercicio.padraoMovimento) ?? 1) - 1);
       dias[d]!.slots[idx] = { grupo: para, exercicio: e, favorito: favoritos.has(e.id) };
@@ -629,6 +672,10 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       creditar(e);
       slotsDiretos.set(para, (slotsDiretos.get(para) ?? 0) + 1);
       contaPadrao.set(e.padraoMovimento, (contaPadrao.get(e.padraoMovimento) ?? 0) + 1);
+      if (args.relatoTransferencia) {
+        args.relatoTransferencia.executada = true;
+        args.relatoTransferencia.recusadaPeloEquilibrio = false;
+      }
       break;
     }
   }
@@ -645,6 +692,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   for (const [, favs] of favPorGrupo) {
     for (const f of favs) {
       for (let d = 0; d < dias.length; d += 1) {
+        if (args.respeitarGruposDoDia && (f.grupoPrimario == null || !templates[d]!.grupos.includes(f.grupoPrimario))) continue;
         const slots = dias[d]!.slots;
         if (usadosPorDia[d]!.has(f.id)) continue;
         const temPadrao = slots.some((s) => s.exercicio.padraoMovimento === f.padraoMovimento);

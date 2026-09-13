@@ -89,7 +89,16 @@ export function montarSemana(
    * anterior, byte a byte: o excedente vira `recuperacao`, sem item.
    */
   diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
+  sessoesDias: readonly (Weekday | undefined)[] = [],
 ): DiaDaSemana[] {
+  // A sessão explícita não muda de dia quando a disponibilidade do perfil muda.
+  if (sessoesNomes.length > 0 && sessoesDias.length === sessoesNomes.length && sessoesDias.every(d => d != null)) {
+    const semana = montarSemana(treinoDias, [], hojeIdx, diasCardio);
+    return semana.map(d => {
+      const sessionIdx = sessoesDias.indexOf(d.weekday);
+      return sessionIdx < 0 ? d : { ...d, tipo: 'treino' as const, isTraining: true, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] };
+    });
+  }
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
   const temOrdemCanonica = diasCardio.some((d) => d.ordemNoHorizonte != null);
@@ -174,6 +183,7 @@ export function sessaoDeHojeIdx(
   sessoesNomes: readonly string[],
   hojeIdx: number,
   diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
+  sessoesDias: readonly (Weekday | undefined)[] = [],
 ): number | null {
-  return montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio)[hojeIdx]?.sessionIdx ?? null;
+  return montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio, sessoesDias)[hojeIdx]?.sessionIdx ?? null;
 }

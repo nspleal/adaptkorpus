@@ -153,3 +153,18 @@ describe('🔒 o enum de grupos da borda espelha a biblioteca', () => {
     }
   });
 });
+
+
+describe('foco agregado: transporte local completo', () => {
+  it.each(['bracos', 'pernas'] as const)('%s atravessa schema, JSON profile e motor', grupo => {
+    const referencia: PerfilResumo = { ...BASE, diasDisponiveis: 1, treinoDias: ['seg'], tempoPorSessaoMin: 90 };
+    const p: PerfilResumo = { ...referencia, focoAgregado: { grupo, semana: 1 } };
+    const validado = perfilResumoSchema.parse(p);
+    expect(validado.focoAgregado).toEqual(p.focoAgregado);
+    const salvo = perfilParaLinha(p);
+    const lido = linhaParaPerfil(JSON.parse(JSON.stringify(salvo)));
+    expect(lido.focoAgregado).toEqual(p.focoAgregado);
+    expect(plano(lido)).toBe(plano(p));
+    expect(plano(p)).not.toBe(plano(referencia));
+  });
+});

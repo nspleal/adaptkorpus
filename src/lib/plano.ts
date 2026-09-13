@@ -85,6 +85,7 @@ export function recomputarPlano(
      */
     ...(perfil.preferencias ? { preferencias: perfil.preferencias } : {}),
     ...(perfil.foco ? { foco: perfil.foco } : {}),
+    ...(perfil.focoAgregado ? { focoAgregado: perfil.focoAgregado } : {}),
     ...(perfil.divisaoPreferida ? { divisaoPreferida: perfil.divisaoPreferida } : {}),
     // 🧭 O desenho do editor guiado entra como ENTRADA do montador — mesmo trilho dos
     // demais campos do perfil. Ausente = o gerador monta (comportamento de sempre).

@@ -279,7 +279,14 @@ export type MotivoFoco =
   /** O compensador não pode ceder sem furar o próprio piso. */
   | 'compensador_no_piso'
   /** O focado já está no teto do seu porte. */
-  | 'focado_no_teto';
+  | 'focado_no_teto'
+  /**
+   * 🔒 C6 — a troca até existia, mas derrubaria `puxar ≥ empurrar` (saúde do ombro). A DF de
+   * 2026-08-17 é explícita: "ao rearranjar, mantém o equilíbrio"; "se quebraria, entrega
+   * ORDEM (prioriza sem tirar do puxar)".
+   */
+  | 'equilibrio_puxar_empurrar'
+  | 'transferencia_nao_realizada';
 
 export interface DecisaoFoco {
   degrau: DegrauFoco;

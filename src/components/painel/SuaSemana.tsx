@@ -17,8 +17,9 @@ import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], onRegistrarCardio }: {
+export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], onRegistrarCardio }: {
   treinoDias: Weekday[];
+  sessoesDias?: readonly (Weekday | undefined)[];
   sessoesNomes: string[];              // nomes das sessões (rotina.dias[].nome), na ordem do motor
   onIrSessao: (sessionIdx: number) => void;
   onVerDieta: () => void;
@@ -41,7 +42,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, onIrSessao, onVerD
   const hojeIdx = weekdayHojeIdx();
   // 🔒 O dia de cardio vem do MOTOR (`rotina.diasCardio`). A tela não decide se o excedente
   // é cardio ou recuperação, nem calcula duração — se decidisse, existiriam duas respostas.
-  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio);
+  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio, sessoesDias);
   const [selDay, setSelDay] = useState(hojeIdx);
   const sd = semana[selDay]!;
   const proximo = proximoTreinoIdx(semana, hojeIdx);

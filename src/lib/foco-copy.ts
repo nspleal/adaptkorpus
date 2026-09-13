@@ -45,6 +45,14 @@ export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | 
       return `${grupo} já está no topo do seu volume — vem primeiro na sessão.`;
     case 'compensador_no_piso':
       return `Não há de onde tirar: todos os grupos deste dia já estão no volume mínimo. ${grupo} vem primeiro na sessão.`;
+    /**
+     * 🔒 C6 — o fato é o arranjo da semana, não uma falha da pessoa nem do grupo escolhido:
+     * o slot existia, mas movê-lo deixaria a semana com mais empurrar que puxar.
+     */
+    case 'equilibrio_puxar_empurrar':
+      return `Mover um exercício de ${cede.toLowerCase()} para ${grupo.toLowerCase()} deixaria a semana com mais empurrar que puxar, e o motor mantém puxar ao menos igual a empurrar (ombro). ${grupo} vem primeiro na sessão.`;
+    case 'transferencia_nao_realizada':
+      return `Não foi possível transferir um exercício de ${cede.toLowerCase()} para ${grupo.toLowerCase()} nesta semana. ${grupo} vem primeiro na sessão.`;
     case 'sem_dia_comum':
       return `${cede} não treina no mesmo dia que ${grupo.toLowerCase()}, então não tem como ceder volume. Escolha um grupo que divida o dia — por enquanto, ${grupo.toLowerCase()} vem primeiro na sessão.`;
     default:
