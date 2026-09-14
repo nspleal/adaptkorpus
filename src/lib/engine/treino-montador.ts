@@ -558,7 +558,17 @@ export function montarRotina(
    * tratamento do primeiro. Um `if` no meio do corpo criaria o "ramo especial" que a DF
    * proíbe, e o segundo pipeline envelheceria sozinho.
    */
-  function montarSaida(diasTreino: DiaTreino[], split: string): RotinaSemanal {
+  /**
+   * 🔒 `desenhoDaPessoa` é DECLARADO pelo chamador, não deduzido.
+   *
+   * 🔴 Revisão independente 14/09 (fragilidade registrada): a versão anterior decidia isso
+   * comparando `diasTreino !== diasUsuarioCustom` — identidade de REFERÊNCIA de um parâmetro
+   * que esta mesma função reatribui quatro vezes mais abaixo (deload, realocação, fase A e
+   * bloco). Hoje todas as reatribuições ficam DEPOIS do bloco da retomada e a comparação
+   * acerta; mover qualquer uma para cima faria a rampa parar de ler a escolha EM SILÊNCIO,
+   * sem teste que pegasse. Uma flag do chamador não tem esse acoplamento.
+   */
+  function montarSaida(diasTreino: DiaTreino[], split: string, desenhoDaPessoa = false): RotinaSemanal {
     let blocoFoco: RotinaSemanal['blocoFoco'];
     /** Extras do foco que sobreviveram: o invariante puxar≥empurrar é do BASELINE. */
     const extrasDoFoco = new Set<SlotExercicio>();
@@ -792,10 +802,13 @@ export function montarRotina(
        * uma escolha velha guardada nesse desenho vazio cortava o plano alocado de `3/3/3/2`
        * para `1/1/1/1` — intenção manual aplicada a um plano que a pessoa não desenhou. O
        * aplicador manual (`seriesDefinidasPeloUsuario`) nunca roda nesse caminho; este
-       * também não deve.
+       * também não deve. Os DOIS fallbacks existem e são distintos: desenho com dias SEM
+       * `exercicioIds` cai no plano ALOCADO (`diasUsuarioCustom == null`); desenho com ids
+       * INELEGÍVEIS fica no ramo manual com zero dias (`diasUsuarioCustom === []`, ver o
+       * `||` da construção). Nem um nem outro é desenho da pessoa para efeito de dose.
        */
       const escolhaManualDoSlot = (s: SlotExercicio): number | undefined => {
-        if (!custom || diasTreino !== diasUsuarioCustom) return undefined;
+        if (!custom || !desenhoDaPessoa) return undefined;
         const diaId = diasTreino[diaDoSlot.get(s) ?? 0]?.diaId;
         const desenho = custom.dias.find((d, i) => (d.diaId ?? diasForcaDaSemana[i]) === diaId);
         const escolhida = desenho?.seriesPorExercicio?.[s.exercicio.id];
@@ -834,7 +847,6 @@ export function montarRotina(
             return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
           });
           const escolha = slots.map((s) => escolhaManualDoSlot(s));
-          const tetoSlot = tetoIRV.map((t, k) => (escolha[k] == null ? t : Math.min(t, escolha[k]!)));
           /** O round-robin de sempre: piso 1 por slot, teto por slot, ordem (dia, slot). */
           const repartir = (tetos: readonly number[]): number[] => {
             const series = slots.map(() => 1); // piso operacional: 1 série por exercício
@@ -847,15 +859,47 @@ export function montarRotina(
             }
             return series;
           };
-          const comIntencao = repartir(tetoSlot);
           /**
-           * 🔒 A repartição que este grupo teria se NINGUÉM tivesse escolhido nada. Ela é o
-           * teto do slot sem escolha: a folga que a escolha de outro liberou não pode subi-lo.
-           * Sem escolha alguma no grupo as duas repartições são a mesma conta — e a de sempre.
+           * 🔴 R-01 (revisão independente 14/09) — POR QUE A INTENÇÃO NÃO PODE SER TETO DE UM
+           * ROUND-ROBIN.
+           *
+           * `cf88f9b` pôs a escolha como teto do round-robin e `7031790` blindou o slot SEM
+           * escolha com uma segunda repartição. Os dois erram pelo mesmo motivo: o laço
+           * REGASTA a folga que um teto menor liberou. Quem recebe essa folga sobe sem ter
+           * sido tocado — em `7031790` isso continuou acontecendo entre slots que ambos têm
+           * escolha (medido: 2.116 de 39.200; conjunto idêntico ao de `cf88f9b`).
+           *
+           * 🔒 A regra aqui não reparte duas vezes: ela reparte UMA, sem intenção nenhuma, e
+           * depois lê cada slot ISOLADAMENTE. O que um slot deixa de pedir some do total do
+           * grupo — não vai para ninguém. É a única forma de a redução de um slot nunca
+           * mexer em outro: a série entregue a `k` não pode depender do número de `j`.
+           *
+           * As duas leituras possíveis, e nada além delas:
+           *  ① o pedido CABE NA REPARTIÇÃO DE RECUPERAÇÃO — ordenados os dois vetores, o
+           *    pedido é ≤ a cota item a item → cada slot recebe exatamente o que pediu.
+           *    É o que preserva o plano ao reabrir sem editar: a rampa do plano automático
+           *    roda na ordem do ALOCADOR e o desenho que a pessoa guarda está na ordem
+           *    EXIBIDA (depois de `reordenarPeloFoco`), então as séries salvas são uma
+           *    PERMUTAÇÃO da cota — mesmo multiconjunto, outros donos. Era exatamente aí que
+           *    `5d81d227` perdia uma série, e é por isso que a cota não pode ser teto aqui.
+           *    O multiconjunto da repartição não depende da ordem (o laço enche por nível e
+           *    só o resto muda de dono), então esta comparação é exata, não heurística.
+           *  ② o pedido NÃO cabe → cada slot é limitado pela SUA cota posicional. Nada é
+           *    remanejado: só as reduções que a pessoa fez são honradas, e o resto é a
+           *    repartição de recuperação de sempre. O grupo pode entregar MENOS que o alvo —
+           *    é o contrato: o que um slot deixa de pedir some do total, não muda de dono.
+           *
+           * Sem escolha alguma no grupo, `pedido === cota` cai em ① e é a conta de sempre —
+           * por isso o plano automático não se move.
            */
-          const semIntencao = escolha.some((e) => e != null) ? repartir(tetoIRV) : comIntencao;
+          const cota = repartir(tetoIRV);
+          const pedido = tetoIRV.map((t, k) => (escolha[k] == null ? cota[k]! : Math.min(t, escolha[k]!)));
+          const desc = (v: readonly number[]) => [...v].sort((a, b) => b - a);
+          const pedidoOrd = desc(pedido);
+          const cotaOrd = desc(cota);
+          const cabeNaReparticao = pedidoOrd.every((v, i) => v <= cotaOrd[i]!);
           slots.forEach((s, k) => {
-            s.series = escolha[k] != null ? comIntencao[k]! : Math.min(comIntencao[k]!, semIntencao[k]!);
+            s.series = cabeNaReparticao ? pedido[k]! : Math.min(pedido[k]!, cota[k]!);
           });
         }
         if (descartar.size > 0) {
@@ -1654,7 +1698,8 @@ export function montarRotina(
     avisos.push(...avisosCustom);
     decisaoFoco = null;
     compensadorValido = null;
-    const saidaCustom = montarSaida(diasUsuarioCustom, 'Meu treino');
+    // 🔒 O ÚNICO chamador que é o desenho da pessoa. A dose escolhida vale só aqui.
+    const saidaCustom = montarSaida(diasUsuarioCustom, 'Meu treino', true);
     const naoAtendidosCustom = [...(saidaCustom.diasNaoAtendidos ?? []), ...diasNaoAtendidosCustom];
     const rotinaCustomEstrutural = {
       ...saidaCustom,
@@ -1707,7 +1752,9 @@ export function montarRotina(
   // A montagem estrutural precede a avaliação temporal. Um plano que viola cobertura,
   // equipamento ou puxar >= empurrar nunca recebe `duracaoDias` calculada: primeiro ele é
   // rejeitado pelo contrato do alocador; só um plano estruturalmente válido pode ser medido.
-  const rotinaEstrutural = montarSaida(diasTreino, split);
+  // 🔒 Plano ALOCADO — é o fallback (desenho com dias sem `exercicioIds`), não o desenho da
+  // pessoa: `false` explícito para que nenhuma escolha guardada alcance este caminho.
+  const rotinaEstrutural = montarSaida(diasTreino, split, false);
   const violacoesBaseline = violacoesDaRealocacao(rotinaEstrutural);
 
   if (violacoesBaseline.length > 0) {
