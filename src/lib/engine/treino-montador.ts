@@ -759,6 +759,34 @@ export function montarRotina(
        */
       const movidoPeloFoco = decisaoFoco?.series ?? 0;
 
+      /**
+       * 🔴 RETOMADA — A ESCOLHA MANUAL É TETO DA RAMPA, NÃO REFÉM DA POSIÇÃO DELA.
+       *
+       * Medido no candidato `5d81d227` (validação de coordenação, 14/09): a rampa reparte o
+       * volume do grupo em round-robin na ordem (dia, slot) e o ramo automático REORDENA os
+       * slots depois (`reordenarPeloFoco`, movido para o fim da montagem pela revisão D-02).
+       * O desenho que a pessoa vê — e que o editor persiste — está na ordem final; ao reabrir,
+       * a mesma rampa roda sobre a OUTRA permutação e devolve o mesmo total do grupo repartido
+       * em outros slots. O `min(escolhida, série do slot)` do aplicador manual guardava então o
+       * MENOR de duas permutações: ombros `3/3/2/3` contra `3/3/3/2` saía `3/3/2/2` — uma série
+       * sumia por acidente de ordenação, em 36 de 96 contextos de rampa.
+       *
+       * 🔒 A intenção entra AQUI, como teto do slot ao lado do teto de IRV. Os três
+       * guarda-corpos da retomada seguem intactos (frequência por grupo, teto por slot,
+       * volume-alvo do grupo) e nada é compensado em outro exercício: o que o slot não pode
+       * receber volta para o round-robin do MESMO grupo, como já voltava. Sem escolha válida o
+       * teto é o de sempre — e o plano automático não passa por aqui, porque não há `custom`.
+       */
+      const escolhaManualDoSlot = (s: SlotExercicio): number | undefined => {
+        if (!custom) return undefined;
+        const diaId = diasTreino[diaDoSlot.get(s) ?? 0]?.diaId;
+        const desenho = custom.dias.find((d, i) => (d.diaId ?? diasForcaDaSemana[i]) === diaId);
+        const escolhida = desenho?.seriesPorExercicio?.[s.exercicio.id];
+        // Mesma trava de TAMANHO do aplicador manual; o aviso continua lá, uma vez só.
+        return typeof escolhida === 'number' && Number.isInteger(escolhida)
+          && escolhida >= 1 && escolhida <= SERIES_MANUAIS_MAX ? escolhida : undefined;
+      };
+
       // --- RETOMADA: supersede a rampa do mesociclo -----------------------------------
       // Volume = referência × fator, que CAI ABAIXO DO PISO DA BANDA (é o estado novo).
       // Além dele valem os dois guarda-corpos da regra FIT: frequência máxima por GRUPO na
@@ -786,7 +814,9 @@ export function montarRotina(
             const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
             // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
             // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).
-            return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
+            const teto = tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
+            const escolhida = escolhaManualDoSlot(s);
+            return escolhida == null ? teto : Math.min(teto, escolhida);
           });
           const series = slots.map(() => 1); // piso operacional: 1 série por exercício
           let restante = Math.max(0, alvoGrupo - n);
