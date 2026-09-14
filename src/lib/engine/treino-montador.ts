@@ -773,12 +773,29 @@ export function montarRotina(
        *
        * 🔒 A intenção entra AQUI, como teto do slot ao lado do teto de IRV. Os três
        * guarda-corpos da retomada seguem intactos (frequência por grupo, teto por slot,
-       * volume-alvo do grupo) e nada é compensado em outro exercício: o que o slot não pode
-       * receber volta para o round-robin do MESMO grupo, como já voltava. Sem escolha válida o
-       * teto é o de sempre — e o plano automático não passa por aqui, porque não há `custom`.
+       * volume-alvo do grupo). Sem escolha válida o teto é o de sempre.
+       *
+       * 🔴 Revisão independente 14/09 — A ESCOLHA SÓ FALA PELO PRÓPRIO SLOT.
+       *
+       * Medido no candidato `cf88f9b`: entrar como teto sem mais nada fazia a folga liberada
+       * por um slot reduzido voltar ao round-robin e SUBIR um slot sobre o qual a pessoa não
+       * disse nada — em 121 casos medidos (`seg/e130 2→1` levava `seg/e100 1→2`, total 85
+       * intacto). É exatamente a compensação de total em outro exercício que o contrato
+       * vigente (`min(escolhida, série do slot)`, em `5d81d227`) nunca fez. O slot SEM
+       * escolha passa a ser limitado pela repartição que ele teria se ninguém tivesse falado
+       * — ver `repartir` abaixo.
+       *
+       * 🔴 Revisão independente 14/09 — E SÓ FALA NO DESENHO DA PESSOA.
+       *
+       * `custom` existe também quando o desenho não tem exercício elegível nenhum e a
+       * montagem cai no plano ALOCADO (`diasUsuarioCustom == null`). Medido no candidato:
+       * uma escolha velha guardada nesse desenho vazio cortava o plano alocado de `3/3/3/2`
+       * para `1/1/1/1` — intenção manual aplicada a um plano que a pessoa não desenhou. O
+       * aplicador manual (`seriesDefinidasPeloUsuario`) nunca roda nesse caminho; este
+       * também não deve.
        */
       const escolhaManualDoSlot = (s: SlotExercicio): number | undefined => {
-        if (!custom) return undefined;
+        if (!custom || diasTreino !== diasUsuarioCustom) return undefined;
         const diaId = diasTreino[diaDoSlot.get(s) ?? 0]?.diaId;
         const desenho = custom.dias.find((d, i) => (d.diaId ?? diasForcaDaSemana[i]) === diaId);
         const escolhida = desenho?.seriesPorExercicio?.[s.exercicio.id];
@@ -809,24 +826,37 @@ export function montarRotina(
           for (const s of todos) if (!diasMantidos.has(diaDoSlot.get(s) ?? 0)) descartar.add(s);
           const n = slots.length;
           if (n === 0) continue;
-          const tetoSlot = slots.map((s) => {
+          const tetoIRV = slots.map((s) => {
             const comCarga = temCarga(s.exercicio);
             const reps = (s.padrao === 'isolado' ? prescricao.repsIsolado : prescricao.repsComposto).max;
             // %1RM estimado por Epley invertido (mesma leitura do %1RM que a sessão exibe);
             // sem carga o IRV é incomputável → teto fixo de 3 (DF 2026-07-27).
-            const teto = tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
-            const escolhida = escolhaManualDoSlot(s);
-            return escolhida == null ? teto : Math.min(teto, escolhida);
+            return tetoSeriesDaRetomada({ comCarga, reps, pct1rm: 30 / (30 + reps) });
           });
-          const series = slots.map(() => 1); // piso operacional: 1 série por exercício
-          let restante = Math.max(0, alvoGrupo - n);
-          let i = 0;
-          let travas = 0;
-          while (restante > 0 && travas < n) {
-            if (series[i]! < tetoSlot[i]!) { series[i]!++; restante--; travas = 0; } else { travas++; }
-            i = (i + 1) % n;
-          }
-          slots.forEach((s, k) => { s.series = series[k]!; });
+          const escolha = slots.map((s) => escolhaManualDoSlot(s));
+          const tetoSlot = tetoIRV.map((t, k) => (escolha[k] == null ? t : Math.min(t, escolha[k]!)));
+          /** O round-robin de sempre: piso 1 por slot, teto por slot, ordem (dia, slot). */
+          const repartir = (tetos: readonly number[]): number[] => {
+            const series = slots.map(() => 1); // piso operacional: 1 série por exercício
+            let restante = Math.max(0, alvoGrupo - n);
+            let i = 0;
+            let travas = 0;
+            while (restante > 0 && travas < n) {
+              if (series[i]! < tetos[i]!) { series[i]!++; restante--; travas = 0; } else { travas++; }
+              i = (i + 1) % n;
+            }
+            return series;
+          };
+          const comIntencao = repartir(tetoSlot);
+          /**
+           * 🔒 A repartição que este grupo teria se NINGUÉM tivesse escolhido nada. Ela é o
+           * teto do slot sem escolha: a folga que a escolha de outro liberou não pode subi-lo.
+           * Sem escolha alguma no grupo as duas repartições são a mesma conta — e a de sempre.
+           */
+          const semIntencao = escolha.some((e) => e != null) ? repartir(tetoIRV) : comIntencao;
+          slots.forEach((s, k) => {
+            s.series = escolha[k] != null ? comIntencao[k]! : Math.min(comIntencao[k]!, semIntencao[k]!);
+          });
         }
         if (descartar.size > 0) {
           for (const d of diasTreino) d.slots = d.slots.filter((s) => !descartar.has(s));
