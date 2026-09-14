@@ -36,7 +36,27 @@ export function adicionarBlocoFoco(
   const quantidade=agenda.length===1?Math.max(0,2-destino.slots.filter(s=>s.exercicio.grupoPrimario===g).length):grupos.length>1?1:2;
   solicitados+=quantidade;
   const usados=new Set(destino.slots.map(s=>s.exercicio.id));
-  const opcoes=pool.filter(e=>e.grupoPrimario===g&&!usados.has(e.id)).sort((a,b)=>Number(favoritos.has(b.id))-Number(favoritos.has(a.id)));
+  /**
+   * 🔵 DECISÃO DO AUTOR 2026-09-16 (P-03) — REPETIR NA SEMANA É PERMITIDO; VARIEDADE É
+   * PREFERÊNCIA, NÃO OBRIGAÇÃO.
+   *
+   * Medido na revisão: 68 % dos blocos repetiam, na mesma semana, um exercício já
+   * prescrito, porque `usados` só deduplica o DIA de destino. O autor manteve a repetição
+   * permitida em dias compatíveis e mandou apenas **buscar** alternativa quando houver uma
+   * adequada — sem obrigatoriedade e sem usar opção inadequada só para variar. Por isso a
+   * semana entra como CRITÉRIO DE ORDENAÇÃO, nunca como filtro: se o único elegível já
+   * está na semana, ele entra do mesmo jeito.
+   *
+   * 🔒 Duplicar DENTRO do mesmo dia continua impedido (`usados`, filtro duro).
+   * 🔒 Favorito continua na frente: a isenção de variedade do B5 é decisão anterior e não
+   *    foi revogada — a variedade é o desempate DEPOIS dela.
+   * 🔒 «Adequado» é exatamente o que o pool já diz (equipamento, nível, banimentos):
+   *    nenhuma pesquisa regional e nenhuma equivalência nova entram nesta conta.
+   */
+  const naSemana=new Set(dias.flatMap(d=>d.slots.map(s=>s.exercicio.id)));
+  const opcoes=pool.filter(e=>e.grupoPrimario===g&&!usados.has(e.id))
+   .sort((a,b)=>Number(favoritos.has(b.id))-Number(favoritos.has(a.id))
+    ||Number(naSemana.has(a.id))-Number(naSemana.has(b.id)));
   let entregues=0;
   /**
    * 🔴 REVISÃO INDEPENDENTE 15/09 (D-03) — A GUARDA PUXAR/EMPURRAR SAIU DAQUI.

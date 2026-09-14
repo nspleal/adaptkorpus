@@ -1,4 +1,5 @@
 import {avaliarDuracaoResistida} from './duracao-plano';
+import type {GrupoPrimario} from '../data/types';
 import type {DiaTreino,NivelExperiencia,SlotExercicio} from './treino-types';
 
 /** Decisões do autor 14/09/2026, transmitidas pela coordenação: o maior grupo
@@ -74,4 +75,43 @@ export function removerExtrasPorTempo(
   slots.splice(slots.indexOf(alvo),1);removidos.push(alvo);
  }
  return {dia:{...dia,slots},removidos,cabe:cabe()};
+}
+
+/**
+ * 🔵 DECISÃO DO AUTOR 2026-09-16 (P-01) — DISPENSA ORDENADA NO FULL-BODY CURTO.
+ *
+ * O autor REJEITOU trocar cobertura direta por indireta. O que ele autorizou foi outra
+ * coisa: quando a sessão única não cabe nem com o descanso no piso e nem sem os extras
+ * do foco, o plano pode **dispensar o exercício direto** de uma lista fechada de grupos,
+ * **nesta ordem**, parando assim que couber.
+ *
+ * 🔒 É prioridade de PRODUTO para sessão curta — nada aqui afirma que esses músculos
+ * importam menos, e a interface não usa essa expressão. Fora do full-body de um dia a
+ * política dos demais grupos continua valendo inteira (o único exercício não sai).
+ *
+ * `ordem` chega do chamador para que a regra fique legível no ponto de decisão; grupo
+ * ausente do dia é PULADO, nunca acrescentado para depois ser retirado (é o caso do
+ * antebraço, que não está entre os dez grupos do full-body vigente).
+ *
+ * Dado ausente não autoriza poda, como nas duas funções acima.
+ */
+export function dispensarGruposPorTempo(
+ dia:DiaTreino,nivel:NivelExperiencia,limiteSeg:number|undefined,
+ ordem:readonly GrupoPrimario[],
+):{dia:DiaTreino;removidos:SlotExercicio[];gruposDispensados:GrupoPrimario[];cabe:boolean}{
+ const slots=[...dia.slots],removidos:SlotExercicio[]=[];
+ const gruposDispensados:GrupoPrimario[]=[];
+ const cabe=()=>{
+  if(limiteSeg===undefined)return true;
+  const r=avaliarDuracaoResistida(slots,nivel,limiteSeg);
+  return r.estadoCalculo!=='CALCULADO'||(r.duracaoMaximaEstimadaSegundos??Infinity)<=limiteSeg;
+ };
+ for(const grupo of ordem){
+  if(cabe())break; // pára assim que couber: não se dispensa grupo por antecipação
+  const doGrupo=slots.filter(s=>s.exercicio.grupoPrimario===grupo);
+  if(doGrupo.length===0)continue; // grupo ausente: pula, não acrescenta
+  for(const s of doGrupo){slots.splice(slots.indexOf(s),1);removidos.push(s);}
+  gruposDispensados.push(grupo);
+ }
+ return {dia:{...dia,slots},removidos,gruposDispensados,cabe:cabe()};
 }

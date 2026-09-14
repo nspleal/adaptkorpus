@@ -1,5 +1,5 @@
 import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
-import {reduzirEstruturaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
+import {dispensarGruposPorTempo,reduzirEstruturaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
 /**
  * Montador de rotina de treino — v4: ALOCADOR POR VOLUME (leva B do
  * handoff-motor-volume-v4-2026-08-12; substitui o alocador por lista de padrões do v1).
@@ -23,11 +23,11 @@ import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
-import { DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from './descanso';
+import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco, FOCO_SEMANAS } from './trilhos';
-import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
+import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
@@ -920,6 +920,26 @@ export function montarRotina(
         const m=avaliarDuracaoResistida(d.slots,perfil.nivelExperiencia,limiteDia);
         return m.estadoCalculo!=='CALCULADO'||(m.duracaoMaximaEstimadaSegundos??Infinity)<=limiteDia;
       };
+      /**
+       * Decisão de produto 13/09: braços/ombros antes dos demais; manual conserva ordem.
+       * A regra é a mesma de sempre — mudou só QUANDO ela roda (antes da decisão de tempo,
+       * porque a ordem muda a duração do dia pela transição do último item).
+       */
+      const reordenarPeloFoco=(dias:readonly DiaTreino[])=>{
+        if(!(prioritarios.length>0&&foco?.grupo!=='core'))return;
+        const antes=agregado!=null||prioritarios.some(g=>['biceps','triceps','ombros'].includes(g));
+        for(const dia of dias){
+          dia.slots=antes
+            ? [
+              ...dia.slots.filter(s=>prioritarios.includes(s.exercicio.grupoPrimario!)),
+              ...dia.slots.filter(s=>!prioritarios.includes(s.exercicio.grupoPrimario!)),
+            ]
+            : ordenarComFoco(dia.slots,prioritarios[0]!,{
+              classe:sl=>sl.padrao==='isolado'||sl.padrao==='core'?'isolado':'composto',
+              grupo:sl=>sl.exercicio.grupoPrimario??null,
+            });
+        }
+      };
       /** Regra 3 (cobertura > descanso longo): degrada o descanso até o dia caber. */
       const degradarAteCaber=(d:DiaTreino):0|1|2=>{
         let nivel:0|1|2=0;
@@ -954,14 +974,27 @@ export function montarRotina(
         for(const d of dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario;if(g)m.set(g,(m.get(g)??0)+(s.series??0));}
         return m;
       };
-      const aplicarFaseA=(dias:DiaTreino[]):{dias:DiaTreino[];degradacao:(0|1|2)[];incompativeis:string[]}=>{
+      /**
+       * 🔵 P-01 (decisão do autor 2026-09-16) — a dispensa ordenada mora DENTRO da fase A,
+       * que é a fase que NÃO conhece o foco. Assim a mesma retirada acontece no plano sem
+       * foco das mesmas entradas: a existência de um foco nunca provoca retirada adicional
+       * do baseline para acomodar os extras dele (D-01/D-02 seguem valendo).
+       */
+      const dispensadosNoFullbody:GrupoPrimario[]=[];
+      const aplicarFaseA=(dias:DiaTreino[],registrar=false):{dias:DiaTreino[];degradacao:(0|1|2)[];incompativeis:string[]}=>{
         const saida=[...dias],degradacao:(0|1|2)[]=dias.map(()=>0),incompativeis:string[]=[];
         for(let i=0;i<saida.length;i++){
           const d=saida[i]!;
           degradacao[i]=degradarAteCaber(d);
           const ajuste=reduzirEstruturaPorTempo(d,perfil.nivelExperiencia,limiteDia,saida.filter((_,j)=>j!==i).flatMap(x=>x.slots));
           saida[i]=ajuste.dia;
-          if(ajuste.incompativel)incompativeis.push(d.nome);
+          if(!ajuste.incompativel){continue;}
+          // Fora do full-body de um dia nada muda: o único exercício de cada grupo fica.
+          if(diasForca!==1){incompativeis.push(d.nome);continue;}
+          const dispensa=dispensarGruposPorTempo(saida[i]!,perfil.nivelExperiencia,limiteDia,GRUPOS_DISPENSAVEIS_FULLBODY_CURTO);
+          saida[i]=dispensa.dia;
+          if(registrar)for(const g of dispensa.gruposDispensados)if(!dispensadosNoFullbody.includes(g))dispensadosNoFullbody.push(g);
+          if(!dispensa.cabe)incompativeis.push(d.nome);
         }
         return {dias:saida,degradacao,incompativeis};
       };
@@ -973,10 +1006,19 @@ export function montarRotina(
         diasTreino=realocado.dias;
         if(realocado.adaptado)avisos.push('Mantivemos a distribuição disponível: não foi possível separar os recortes de pernas preservando os exercícios.');
       }
-      const faseA=aplicarFaseA(diasTreino);
+      const faseA=aplicarFaseA(diasTreino,true);
       diasTreino=faseA.dias;
       const degradacaoDoDia=faseA.degradacao;
-      for(const nome of faseA.incompativeis)avisos.push(`Estrutura incompatível com o tempo disponível em ${nome}; preservamos o único exercício de cada grupo.`);
+      for(const nome of faseA.incompativeis)avisos.push(dispensadosNoFullbody.length
+        // Depois da dispensa a frase antiga seria falsa: core/panturrilha perderam o único.
+        ? `Estrutura incompatível com o tempo disponível em ${nome}, mesmo depois das retiradas possíveis; preservamos o único exercício dos demais grupos.`
+        : `Estrutura incompatível com o tempo disponível em ${nome}; preservamos o único exercício de cada grupo.`);
+      /**
+       * 🔵 P-01 — a retirada é NOMEADA. O aviso diz o que saiu e por quê, e nada no plano
+       * pode afirmar cobertura direta completa depois disso (o aviso de cobertura ausente
+       * dos pequenos continua sendo emitido à parte, mais abaixo).
+       */
+      if(dispensadosNoFullbody.length)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min nesta sessão única, o plano ficou sem exercício direto de ${dispensadosNoFullbody.map(g=>ROTULO_GRUPO[g]).join(', ')}. Os demais grupos foram preservados; a cobertura direta desta semana não está completa.`);
       if(volumeNeutro){
         // O custo da separação dos recortes é DITO, nunca silencioso (D-01/D-02 valem para
         // a adição; aqui a decisão 3 pode mesmo mudar a distribuição, e a pessoa sabe).
@@ -1001,9 +1043,25 @@ export function montarRotina(
       if(semanaCiclo?.retomada&&prioritarios.length)avisos.push('Retomada: mantivemos os limites desta fase; o bloco adicional do foco não foi aplicado.');
       if(bloco.adaptados.length)avisos.push('Segunda exposição adaptada à sessão existente do foco para respeitar a recuperação entre os dias escolhidos.');
       if(bloco.faltantes.length)avisos.push('Não foi possível completar o bloco adicional do foco com os exercícios elegíveis neste plano.');
+      /**
+       * 🔴 REVALIDAÇÃO 16/09 — A ORDEM É DECIDIDA ANTES DA PERGUNTA "CABE?".
+       *
+       * A fórmula canônica (C1 §4) cobra TRANSIÇÃO de todo item resistido menos o último:
+       * trocar quem fica por último muda a duração do dia pela diferença entre os dois
+       * descansos. A reordenação por foco rodava DEPOIS desta fase, então o dia era medido
+       * numa ordem que não era a entregue. Medido em 3.456 combinações: **56 planos iam de
+       * CERTIFICADO a INCOMPATIVEL** só por causa disso — o foco derrubando a certificação
+       * de um baseline que cabia, sem aviso e sem nada ser removido (88 no candidato
+       * `badcea47`). A reordenação passou a acontecer aqui, antes de degradar e de podar.
+       */
+      const ordemSemFoco=diasTreino.map(d=>d.slots.filter(s=>!bloco.adicionais.has(s)));
+      reordenarPeloFoco(diasTreino);
       for(let i=0;i<diasTreino.length;i++){
         const d=diasTreino[i]!;
-        if(!d.slots.some(s=>bloco.adicionais.has(s)))continue;
+        /** 🔒 A ordem é PREFERÊNCIA, não garantia: se ela sozinha estoura um dia que cabia,
+         *  o dia volta à ordem do plano sem foco. O baseline não paga pela preferência. */
+        const restaurar=()=>{d.slots=[...ordemSemFoco[i]!];aplicarDescanso(d,degradacaoDoDia[i]??0);};
+        if(!d.slots.some(s=>bloco.adicionais.has(s))){if(!cabeNoDia(d))restaurar();continue;}
         /**
          * Ordem da decisão 6, na letra: o DESCANSO cede primeiro — até o piso permitido,
          * que continua sendo o da classe (e os 120 s do critério documental) —, e só depois
@@ -1016,9 +1074,11 @@ export function montarRotina(
         if(ajuste.dia.slots.some(s=>bloco.adicionais.has(s))){
           if(degradacaoComBloco>(degradacaoDoDia[i]??0))avisos.push(`Para caber o bloco do foco, o descanso de ${d.nome} foi encurtado até o piso permitido.`);
         } else {
-          // Bloco inteiro removido ⇒ o dia volta a ser exatamente o do plano SEM FOCO,
-          // descanso incluído. Nada do baseline paga por um extra que nem ficou.
-          aplicarDescanso(ajuste.dia,degradacaoDoDia[i]??0);
+          // Bloco inteiro removido ⇒ o dia volta a ser exatamente o do plano SEM FOCO —
+          // ordem e descanso inclusive. Nada do baseline paga por um extra que nem ficou.
+          const diaSemBloco=ajuste.dia;
+          diaSemBloco.slots=[...ordemSemFoco[i]!];
+          aplicarDescanso(diaSemBloco,degradacaoDoDia[i]??0);
         }
       }
       for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s))extrasDoFoco.add(s);
@@ -1037,28 +1097,8 @@ export function montarRotina(
       }
     }
 
-    /**
-     * O bloco entra depois das séries; sua ordem também deve respeitar a prioridade.
-     *
-     * 🔴 Revisão 15/09 — antes só braços/ombros/pernas reordenavam DEPOIS do bloco. Com a
-     * guarda de padrão fora (D-03), o extra do grupo focado pode ser um COMPOSTO, e ele
-     * ficava no fim do dia: "o grupo focado vem primeiro dentro da classe" (B2/C6) passava
-     * a falhar para peito/costas. A reordenação final agora espelha a de antes do bloco.
-     */
-    if (automatico && prioritarios.length > 0 && foco?.grupo !== 'core') {
-      const antes = agregado != null || prioritarios.some(g => ['biceps', 'triceps', 'ombros'].includes(g));
-      for (const dia of diasTreino) {
-        dia.slots = antes
-          ? [
-            ...dia.slots.filter(s => prioritarios.includes(s.exercicio.grupoPrimario!)),
-            ...dia.slots.filter(s => !prioritarios.includes(s.exercicio.grupoPrimario!)),
-          ]
-          : ordenarComFoco(dia.slots, prioritarios[0]!, {
-            classe: sl => sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto',
-            grupo: sl => sl.exercicio.grupoPrimario ?? null,
-          });
-      }
-    }
+    // (a reordenação por foco mora agora dentro do ramo automático, em `reordenarPeloFoco`,
+    //  chamada ANTES da decisão de tempo — ver o comentário da fase B.)
 
     // Cobertura direta dos complementares usa o piso já vigente do alocador.
     const diretos = (g: GrupoPrimario) => diasTreino.reduce((n, d) => n + d.slots.filter(s => s.exercicio.grupoPrimario === g).length, 0);
@@ -1126,6 +1166,28 @@ export function montarRotina(
      * `diasNaoAtendidos`, com o mesmo motivo que o aviso do motor já nomeia. O dia pedido pela
      * pessoa NÃO some do plano: some da contagem de entrega.
      */
+    /**
+     * 🔵 P-04 (decisão do autor 2026-09-16) — O RESUMO DA SEMANA REFLETE O QUE FOI PRESCRITO.
+     *
+     * `semana.descansoCompostoSeg` é o escalar legado que a tela usa como referência (e como
+     * fallback do slot sem `descansoSeg`, em `Painel.tsx`). Depois da etapa 3 ele só subia ao
+     * teto de 180 s no caminho NÃO automático, então o automático publicava a faixa da
+     * prescrição enquanto os slots traziam outros números — o campo dizia uma coisa e os
+     * exercícios diziam outra (P-04 da revisão).
+     *
+     * 🔒 A saída aqui é REPRESENTAR A FAIXA REAL, nunca uniformizar os exercícios para a tela
+     * concordar: min e max dos descansos efetivamente prescritos aos slots de classe composta
+     * (COMPOSTO e POTENCIA degradam juntos). As diferenças legítimas por classe, força
+     * pesada, fase do ciclo e ajuste temporal continuam intactas — elas é que produzem a
+     * faixa. Sem slot composto com descanso decidido (chamada v1, cardio puro), fica o valor
+     * anterior, que é o único que existe.
+     */
+    const descansosCompostosDoPlano = diasTreino.flatMap((d) => d.slots
+      .filter((s) => s.descansoSeg != null && classeDeDescanso(s.exercicio) !== 'ISOLADO' && classeDeDescanso(s.exercicio) !== 'NAO_SE_APLICA')
+      .map((s) => s.descansoSeg!));
+    const descansoCompostoDaSemana: Faixa = descansosCompostosDoPlano.length > 0
+      ? { min: Math.min(...descansosCompostosDoPlano), max: Math.max(...descansosCompostosDoPlano) }
+      : descansoEfetivo;
     const diasEntregues = diasTreino.filter((d) => d.slots.length > 0);
     const diasNaoAtendidos: DiaNaoAtendido[] = diasTreino
       .filter((d) => d.slots.length === 0)
@@ -1152,7 +1214,7 @@ export function montarRotina(
       ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
       ...(semanaCiclo
-        ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoEfetivo } }
+        ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoCompostoDaSemana } }
         : {}),
     };
   }

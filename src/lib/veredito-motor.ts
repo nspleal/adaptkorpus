@@ -119,7 +119,11 @@ export function vereditoDoPlano(
           rotina.limiteTempoTreino === 'sem_limite'
             ? 'Você já está sem limite de tempo por sessão, então o que falta é exercício elegível: confira os avisos de cobertura e equipamento.'
             : 'Três caminhos abrem espaço, e nenhum deles garante que caiba: aumentar o tempo por sessão, espalhar o treino por mais dias da semana, ou escolher 75+ (sem limite de tempo por sessão).',
-          'Não cortamos exercício a ponto de o treino deixar de cobrir os padrões básicos, nem encurtamos o descanso abaixo do mínimo.',
+          // 🔵 P-01 (decisão do autor 2026-09-16): no full-body de um dia o plano PODE ter
+          // dispensado o exercício direto de core/panturrilha para tentar caber. Afirmar
+          // aqui que nada foi cortado seria falso justamente no estado em que isso
+          // acontece — quem nomeia o que saiu é o aviso do motor. Ficou o que segue exato.
+          'O que não fazemos para caber: encurtar o descanso abaixo do mínimo, nem tirar o único exercício dos grupos principais. Se algum grupo ficou sem exercício direto, está dito nos avisos.',
         ].join(' '),
       };
     case 'ERRO_ALOCADOR':

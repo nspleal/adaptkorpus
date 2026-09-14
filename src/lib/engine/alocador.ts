@@ -33,6 +33,20 @@ export const GRUPOS_GRANDES: readonly GrupoPrimario[] = ['peito', 'costas', 'qua
 export const GRUPOS_PEQUENOS_PISO: readonly GrupoPrimario[] = ['biceps', 'triceps', 'panturrilha'];
 export const GRUPOS_SO_INDIRETO: readonly GrupoPrimario[] = ['lombar', 'antebraco'];
 
+/**
+ * 🔵 DECISÃO DO AUTOR 2026-09-16 (P-01) — ordem de DISPENSA no full-body de um dia que não
+ * cabe no tempo escolhido, depois de o descanso já estar no piso e de os extras do foco já
+ * terem saído. Pára assim que couber; grupo ausente é pulado.
+ *
+ * 🔒 `antebraco` está aqui por ordem do autor, mas NÃO é um dos dez grupos do full-body
+ * vigente (ele é só-indireto, acima): a entrada existe para fixar a ordem caso ele passe a
+ * ser coberto, e hoje é sempre pulada — jamais acrescentado só para depois ser retirado.
+ *
+ * ⚠️ É prioridade de produto para sessão curta. Não é afirmação sobre a importância
+ * biológica destes músculos, e a interface não usa essa expressão.
+ */
+export const GRUPOS_DISPENSAVEIS_FULLBODY_CURTO: readonly GrupoPrimario[] = ['core', 'antebraco', 'panturrilha'];
+
 /** Piso direto dos pequenos (DF②: "1–2 exercícios/semana") e teto que o acompanha. */
 export const PEQUENOS_PISO_DIRETO = 1;
 export const PEQUENOS_TETO_DIRETO = 2;
