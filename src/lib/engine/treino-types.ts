@@ -255,6 +255,9 @@ export interface SlotExercicio {
   series?: number;
   /** Explicit manual choice (visual laboratory, author request 2026-09-10). */
   seriesDefinidasPeloUsuario?: boolean;
+  /** Referência real antes do deload automático, para não reduzir duas vezes ao editar.
+   * Metadado do plano entregue; não é um novo campo do desenho persistido. */
+  seriesAntesDoDeload?: number;
   /**
    * 🔒 Descanso entre séries DESTE exercício, em segundos (cofre §🕐, DF 2026-07-31).
    *

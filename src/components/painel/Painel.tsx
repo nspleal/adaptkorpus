@@ -911,9 +911,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   /**
    * 🧭 EDITOR GUIADO — abrir, salvar e voltar ao recomendado.
    *
-   * 🔒 DF② — o que se PERSISTE é só o desenho (ids por dia): séries/RIR/descanso continuam
-   * do motor a cada recompute, e o plano custom progride igual ao gerado. Guardar o plano
-   * inteiro congelaria a pessoa fora de todo conserto futuro do motor.
+   * O desenho persiste IDs e escolhas de séries. Ao partir do automático, a dose entregue
+   * vira a escolha inicial; ao reabrir custom, preserva-se a intenção salva. Reps/RIR/
+   * descanso continuam no motor, assim como as reduções de recuperação. Abrir/cancelar
+   * não persiste o rascunho.
    */
   function abrirEditor() {
     const origem = perfil.rotinaCustom ? 'plano' : rotinaDias.length > 0 ? 'plano' : 'vazio';

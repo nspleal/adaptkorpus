@@ -38,14 +38,20 @@ export interface DiaEditavel {
   seriesPorExercicio?: Record<string, number>;
 }
 
-/** Do plano gerado para o formato editável ("começar do meu plano atual"). */
+/** Começar do plano atual conserva sua dose como escolha inicial do novo desenho manual.
+ * Custom existente conserva a intenção salva, inclusive a ausência de escolha: copiar a
+ * saída recuperada congelaria rampa/deload e perderia a dose original do usuário.
+ * A prévia/salvamento continuam sujeitos à recuperação do motor, sem regra paralela aqui.
+ */
 export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[], custom?: RotinaCustom): DiaEditavel[] {
   return dias.map((d, i) => ({
     nome: d.nome,
     // `diaId` é a fonte nova; agenda/posição é apenas compatibilidade para plano legado.
     weekdayIdx: Math.max(0, ORDEM_SEMANA.indexOf(d.diaId ?? treinoDias[i] ?? ORDEM_SEMANA[i % 7]!)),
     exercicios: d.slots.map((s) => s.exercicio),
-    seriesPorExercicio: custom?.dias.find((dia, indice) => (dia.diaId ?? treinoDias[indice]) === (d.diaId ?? treinoDias[i]))?.seriesPorExercicio ?? Object.fromEntries(d.slots.filter((s) => s.seriesDefinidasPeloUsuario && s.series != null).map((s) => [s.exercicio.id, s.series!])),
+    seriesPorExercicio: custom
+      ? { ...custom.dias.find((dia, indice) => (dia.diaId ?? treinoDias[indice]) === (d.diaId ?? treinoDias[i]))?.seriesPorExercicio }
+      : Object.fromEntries(d.slots.filter((s) => s.series != null).map((s) => [s.exercicio.id, s.seriesAntesDoDeload ?? s.series!])),
   }));
 }
 
@@ -54,7 +60,7 @@ export function weekdaysSaoUnicos(dias: readonly DiaEditavel[]): boolean {
   return new Set(dias.map((d) => d.weekdayIdx)).size === dias.length;
 }
 
-/** Do formato editável para o que se persiste — SÓ o desenho (ids por dia). */
+/** Do formato editável para o desenho e suas escolhas de séries (sem reps/RIR/descanso). */
 export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
   return {
     origem: 'usuario',

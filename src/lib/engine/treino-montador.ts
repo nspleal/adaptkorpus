@@ -907,7 +907,7 @@ export function montarRotina(
     if(automatico){
       // Autor14/09: as séries do baseline já foram decididas pela rampa. A adição
       // não redistribui essas séries; o deload continua reduzindo uma única vez.
-      if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,series:seriesEmDeload(s.series??0)}))}));
+      if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,series:seriesEmDeload(s.series??0)}))}));
       const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
       const limiteDia=perfil.limiteTempoTreino==='sem_limite'?undefined:perfil.tempoPorSessaoMin*60;
       /** Descanso pela autoridade única (`descansoDoExercicio`), no nível pedido. */
