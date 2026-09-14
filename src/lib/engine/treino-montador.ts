@@ -1,5 +1,7 @@
 import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
-import {dispensarGruposPorTempo,reduzirEstruturaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
+// 🔒 Autoridade única do ajuste temporal: o montador chama a SEQUÊNCIA, nunca uma etapa
+// solta. As etapas seguem exportadas no módulo para teste unitário.
+import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
 /**
  * Montador de rotina de treino — v4: ALOCADOR POR VOLUME (leva B do
  * handoff-motor-volume-v4-2026-08-12; substitui o alocador por lista de padrões do v1).
@@ -981,20 +983,39 @@ export function montarRotina(
        * do baseline para acomodar os extras dele (D-01/D-02 seguem valendo).
        */
       const dispensadosNoFullbody:GrupoPrimario[]=[];
+      /** Relatos consolidados da sequência — a comunicação é por PLANO, nunca por exercício. */
+      const relatoReducao={series:0,minimas:0,redundantes:0,acima:[] as {nome:string;seg:number}[],foraDaPolitica:new Set<number>()};
+      /**
+       * 🔵 POLÍTICA FINAL 2026-09-17 — a fase A executa a SEQUÊNCIA ÚNICA por dia.
+       * E1 (descanso) fica aqui porque depende da prescrição; E3..E6 vivem em
+       * `reduzirDiaPorTempo`, que é a autoridade única do ajuste estrutural.
+       *
+       * 🔒 A dispensa (E5) só é habilitada no full-body de um dia — a exceção que o autor
+       * ampliou com glúteos e mandou NÃO generalizar para outras divisões.
+       * 🔒 A redução de séries vale só no automático com tempo limitado: com `limiteDia`
+       * indefinido (75+) a função sai intacta, e o manual não passa por este ramo.
+       */
       const aplicarFaseA=(dias:DiaTreino[],registrar=false):{dias:DiaTreino[];degradacao:(0|1|2)[];incompativeis:string[]}=>{
         const saida=[...dias],degradacao:(0|1|2)[]=dias.map(()=>0),incompativeis:string[]=[];
         for(let i=0;i<saida.length;i++){
           const d=saida[i]!;
-          degradacao[i]=degradarAteCaber(d);
-          const ajuste=reduzirEstruturaPorTempo(d,perfil.nivelExperiencia,limiteDia,saida.filter((_,j)=>j!==i).flatMap(x=>x.slots));
+          degradacao[i]=degradarAteCaber(d); // E1
+          const ajuste=reduzirDiaPorTempo(d,perfil.nivelExperiencia,limiteDia,{
+            outrosDias:saida.filter((_,j)=>j!==i).flatMap(x=>x.slots),
+            permitirDispensa:diasForca===1,
+            ordemDispensa:GRUPOS_DISPENSAVEIS_FULLBODY_CURTO,
+          });
           saida[i]=ajuste.dia;
-          if(!ajuste.incompativel){continue;}
-          // Fora do full-body de um dia nada muda: o único exercício de cada grupo fica.
-          if(diasForca!==1){incompativeis.push(d.nome);continue;}
-          const dispensa=dispensarGruposPorTempo(saida[i]!,perfil.nivelExperiencia,limiteDia,GRUPOS_DISPENSAVEIS_FULLBODY_CURTO);
-          saida[i]=dispensa.dia;
-          if(registrar)for(const g of dispensa.gruposDispensados)if(!dispensadosNoFullbody.includes(g))dispensadosNoFullbody.push(g);
-          if(!dispensa.cabe)incompativeis.push(d.nome);
+          if(!registrar){if(!ajuste.cabe&&!ajuste.naoAvaliado)incompativeis.push(d.nome);continue;}
+          relatoReducao.series+=ajuste.seriesReduzidas.length;
+          relatoReducao.minimas+=ajuste.seriesMinimas.length;
+          relatoReducao.redundantes+=ajuste.redundantesRetirados.length;
+          for(const g of ajuste.gruposDispensados)if(!dispensadosNoFullbody.includes(g))dispensadosNoFullbody.push(g);
+          for(const n of ajuste.quantidadesForaDaPolitica)relatoReducao.foraDaPolitica.add(n);
+          if(ajuste.cabe||ajuste.naoAvaliado)continue;
+          incompativeis.push(d.nome);
+          // Decisão 3, último item: entregar a versão reduzida COM a duração estimada.
+          if(ajuste.duracaoSeg!=null)relatoReducao.acima.push({nome:d.nome,seg:ajuste.duracaoSeg});
         }
         return {dias:saida,degradacao,incompativeis};
       };
@@ -1009,16 +1030,34 @@ export function montarRotina(
       const faseA=aplicarFaseA(diasTreino,true);
       diasTreino=faseA.dias;
       const degradacaoDoDia=faseA.degradacao;
-      for(const nome of faseA.incompativeis)avisos.push(dispensadosNoFullbody.length
-        // Depois da dispensa a frase antiga seria falsa: core/panturrilha perderam o único.
-        ? `Estrutura incompatível com o tempo disponível em ${nome}, mesmo depois das retiradas possíveis; preservamos o único exercício dos demais grupos.`
-        : `Estrutura incompatível com o tempo disponível em ${nome}; preservamos o único exercício de cada grupo.`);
+      /**
+       * 🔵 COMUNICAÇÃO (política final 2026-09-17) — SÓ O QUE FOI FEITO, UMA VEZ CADA.
+       *
+       * Uma mensagem por tipo de ajuste, agregada no plano inteiro: nada por exercício e
+       * nada por dia. Cada uma só é emitida quando o ajuste correspondente aconteceu de
+       * fato — o contador vem da sequência, não de uma suposição sobre ela.
+       */
+      const plural=(n:number,um:string,varios:string)=>n===1?um:varios;
+      if(relatoReducao.series>0)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min, reduzimos de 3 para 2 séries em ${relatoReducao.series} ${plural(relatoReducao.series,'exercício','exercícios')}.`);
+      if(relatoReducao.redundantes>0)avisos.push(`Também retiramos ${relatoReducao.redundantes} ${plural(relatoReducao.redundantes,'exercício repetido','exercícios repetidos')} de ${plural(relatoReducao.redundantes,'grupo que continua coberto','grupos que continuam cobertos')} no mesmo dia.`);
       /**
        * 🔵 P-01 — a retirada é NOMEADA. O aviso diz o que saiu e por quê, e nada no plano
        * pode afirmar cobertura direta completa depois disso (o aviso de cobertura ausente
        * dos pequenos continua sendo emitido à parte, mais abaixo).
        */
       if(dispensadosNoFullbody.length)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min nesta sessão única, o plano ficou sem exercício direto de ${dispensadosNoFullbody.map(g=>ROTULO_GRUPO[g]).join(', ')}. Os demais grupos foram preservados; a cobertura direta desta semana não está completa.`);
+      // Última etapa da sequência: a série cai, o exercício fica.
+      if(relatoReducao.minimas>0)avisos.push(`Como último ajuste do tempo, ${relatoReducao.minimas} ${plural(relatoReducao.minimas,'exercício de bíceps, tríceps ou ombros ficou','exercícios de bíceps, tríceps ou ombros ficaram')} com 1 série. Os exercícios foram mantidos.`);
+      if(faseA.incompativeis.length)avisos.push(dispensadosNoFullbody.length
+        // Depois da dispensa a frase antiga seria falsa: os dispensados perderam o único.
+        ? `Estrutura incompatível com o tempo disponível em ${faseA.incompativeis.join(', ')}, mesmo depois das reduções possíveis; preservamos o único exercício dos demais grupos.`
+        : `Estrutura incompatível com o tempo disponível em ${faseA.incompativeis.join(', ')}; preservamos o único exercício de cada grupo.`);
+      /**
+       * 🔒 Decisão 2 + último item da decisão 3: as reduções FICAM mesmo sem serem
+       * suficientes, e o plano é entregue reduzido — com a DURAÇÃO ESTIMADA e sem
+       * certificado de que cabe. Nada é restaurado só porque o plano segue incompatível.
+       */
+      if(relatoReducao.acima.length)avisos.push(`Mesmo com os ajustes, a estimativa ainda passa do seu tempo: ${relatoReducao.acima.map(a=>`${a.nome} ~${Math.round(a.seg/60)} min`).join(', ')} (seu limite é ${perfil.tempoPorSessaoMin} min). Entregamos a versão reduzida; não dá para afirmar que ela cabe.`);
       if(volumeNeutro){
         // O custo da separação dos recortes é DITO, nunca silencioso (D-01/D-02 valem para
         // a adição; aqui a decisão 3 pode mesmo mudar a distribuição, e a pessoa sabe).
@@ -1056,6 +1095,8 @@ export function montarRotina(
        */
       const ordemSemFoco=diasTreino.map(d=>d.slots.filter(s=>!bloco.adicionais.has(s)));
       reordenarPeloFoco(diasTreino);
+      /** Relato consolidado da fase B: uma mensagem por tipo, nunca uma por dia. */
+      const extrasRemovidos={dias:[] as string[],descansoEncurtado:[] as string[]};
       for(let i=0;i<diasTreino.length;i++){
         const d=diasTreino[i]!;
         /** 🔒 A ordem é PREFERÊNCIA, não garantia: se ela sozinha estoura um dia que cabia,
@@ -1063,16 +1104,18 @@ export function montarRotina(
         const restaurar=()=>{d.slots=[...ordemSemFoco[i]!];aplicarDescanso(d,degradacaoDoDia[i]??0);};
         if(!d.slots.some(s=>bloco.adicionais.has(s))){if(!cabeNoDia(d))restaurar();continue;}
         /**
-         * Ordem da decisão 6, na letra: o DESCANSO cede primeiro — até o piso permitido,
+         * E1 → E2 da sequência, na letra: o DESCANSO cede primeiro — até o piso permitido,
          * que continua sendo o da classe (e os 120 s do critério documental) —, e só depois
-         * saem exercícios. O que mudou na revisão é QUEM sai: nunca o baseline.
+         * saem os EXTRAS. O baseline não é tocado aqui: ele já foi decidido na fase A, sem
+         * conhecer o foco, e extras que não cabem saem antes de provocar qualquer nova
+         * redução nele.
          */
         const degradacaoComBloco=degradarAteCaber(d);
         const ajuste=removerExtrasPorTempo(d,perfil.nivelExperiencia,limiteDia,bloco.adicionais);
         diasTreino[i]=ajuste.dia;
-        if(ajuste.removidos.length)avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${d.nome}.`);
+        if(ajuste.removidos.length)extrasRemovidos.dias.push(d.nome);
         if(ajuste.dia.slots.some(s=>bloco.adicionais.has(s))){
-          if(degradacaoComBloco>(degradacaoDoDia[i]??0))avisos.push(`Para caber o bloco do foco, o descanso de ${d.nome} foi encurtado até o piso permitido.`);
+          if(degradacaoComBloco>(degradacaoDoDia[i]??0))extrasRemovidos.descansoEncurtado.push(d.nome);
         } else {
           // Bloco inteiro removido ⇒ o dia volta a ser exatamente o do plano SEM FOCO —
           // ordem e descanso inclusive. Nada do baseline paga por um extra que nem ficou.
@@ -1081,6 +1124,8 @@ export function montarRotina(
           aplicarDescanso(diaSemBloco,degradacaoDoDia[i]??0);
         }
       }
+      if(extrasRemovidos.dias.length)avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${extrasRemovidos.dias.join(', ')}.`);
+      if(extrasRemovidos.descansoEncurtado.length)avisos.push(`Para caber o bloco do foco, o descanso de ${extrasRemovidos.descansoEncurtado.join(', ')} foi encurtado até o piso permitido.`);
       for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s))extrasDoFoco.add(s);
       if (prioritarios.some(g => g !== 'core')) {
         const anteriores = rotinaBaseDoDeload?.blocoFoco?.adicionais ?? [];
