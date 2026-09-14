@@ -14,7 +14,7 @@
  * o boost polvilhador voltar por qualquer caminho, ou a troca deixar de pousar no slot, ou o
  * "Nenhum" não voltar ao base, o gate fica VERMELHO aqui.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { recomputarPlano } from './plano';
 import { avaliarTroca } from './engine/preferencias';
 import { EXERCISES } from './data/exercises';
@@ -102,3 +102,7 @@ describe('🟠 D4 — "Nenhum" volta ao plano base', () => {
     expect(seriesPorGrupo(com).get('peito')).toBeGreaterThan(seriesPorGrupo(base).get('peito') ?? 0);
   });
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./engine/selecao-divisao', () => import('./engine/__fixtures__/selecao-etapa1'));

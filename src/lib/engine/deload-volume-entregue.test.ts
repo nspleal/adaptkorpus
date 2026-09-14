@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { gerarTreino } from '@/lib/engine';
 import type { PerfilTreino } from '@/lib/engine';
 import { EXERCISES_SEED } from '@/lib/data/seed';
@@ -171,3 +171,7 @@ describe('D13 · a banda do cofre é de PRESCRIÇÃO, e não vira exigência da 
     expect(razoes.every((r) => r < 1)).toBe(true);
   });
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./selecao-divisao', () => import('./__fixtures__/selecao-etapa1'));

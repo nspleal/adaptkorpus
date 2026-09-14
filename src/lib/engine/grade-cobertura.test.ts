@@ -10,7 +10,7 @@
  *  · a inversão morreu (iniciante ≤ intermediário ≤ avançado — prova fina no
  *    alocador.test.ts; aqui o smoke da grade completa).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
@@ -185,3 +185,7 @@ describe('🔴 grade de CASA — o corte é dito, nunca silencioso', () => {
     expect(falhas, `grupos a zero em casa equipada:\n${falhas.join('\n')}`).toEqual([]);
   });
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./selecao-divisao', () => import('./__fixtures__/selecao-etapa1'));
