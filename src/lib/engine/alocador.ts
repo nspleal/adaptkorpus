@@ -168,6 +168,12 @@ export interface DiaAlocado {
 
 export interface ArgsAlocacao {
   templates: readonly TemplateDia[];
+  /** Foco estrutural: reservar sua presença por sessão antes de consumir a semana. */
+  prioritarios?: readonly GrupoPrimario[];
+  /** Complementos já filtrados pelo calendário, somente para lacunas reais. */
+  complementosPorDia?: readonly (readonly GrupoPrimario[])[];
+  /** Banda vigente: retirar redundância planejada sem furar seu piso. */
+  pisoPonderado?: number;
   /** Slots que cabem no dia (f do tempo por sessão). */
   budgetPorDia: number;
   /**
@@ -369,6 +375,13 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       proiba: travaEmpurrar ? (x) => x.padraoMovimento === 'empurrar' : undefined,
     });
     if (!e) return false;
+    // Cobertura antes de redundância: não gastar todos os empurrares permitidos
+    // repetindo peito quando outro grupo direto (ex.: ombros sem equipamento)
+    // ainda depende desse mesmo padrão para entrar. Não antecipa crédito de puxar.
+    if(args.pisoPonderado!=null && (slotsDiretos.get(g)??0)>0 && e.padraoMovimento==='empurrar'
+      && GRUPOS_GRANDES.some(outro=>outro!==g&&(slotsDiretos.get(outro)??0)===0&&temPool(outro)
+        && templates.some(t=>t.grupos.includes(outro))
+        && [...(porGrupo.get(outro)??[]),...(favPorGrupo.get(outro)??[])].some(x=>x.padraoMovimento==='empurrar')))return false;
     registrar(diaIdx, g, e, usadosDia);
     return true;
   }
@@ -476,6 +489,16 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     const e = escolher(grupoPuxar, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'puxar' });
     if (!e || e.padraoMovimento !== 'puxar') continue;
     registrar(d, grupoPuxar, e, usadosPorDia[d]!);
+  }
+
+  // Decisões 13/09: a sessão do foco precisa existir no plano alocado.
+  // Reserva dentro do orçamento e tetos existentes; não altera o alvo de séries.
+  // Antebraço explícito pode ocupar um bloco (decisão 25), sem criar banda nova.
+  for(const g of args.prioritarios??[])for(const d of diasComGrupoNoTemplate(g)){
+    if(g==='core'||dias[d]!.slots.some(s=>s.grupo===g))continue;
+    const reservadas=(reservadosCore.has(d)?1:0)+(reservaPequeno.get(d)?.filter(x=>x!==g).length??0);
+    if(dias[d]!.slots.length+reservadas>=budgetPorDia)continue;
+    if(colocar(d,g,usadosPorDia[d]!))reservaPequeno.set(d,(reservaPequeno.get(d)??[]).filter(x=>x!==g));
   }
 
   const reservasDoDia = (d: number) => (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
@@ -615,6 +638,70 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     }
   }
 
+  // Decisão 34: completar uma sessão do foco curta só com grupo ainda descoberto,
+  // deficitário e compatível. Sem repetir variantes para gastar todo o orçamento.
+  for(let d=0;d<dias.length;d++)for(const g of args.complementosPorDia?.[d]??[]){
+    if(dias[d]!.slots.length>=budgetPorDia)break;
+    if((slotsDiretos.get(g)??0)>0||!podeReceber(g))continue;
+    colocar(d,g,usadosPorDia[d]!);
+  }
+
+  // As novas divisões não autorizam exceder a banda ponderada existente.
+  // Retira apenas slot redundante; nunca aumenta séries nem elimina um grupo.
+  const diasSemRedundancia=new Set<number>();
+  if(args.pisoPonderado!=null){
+    const medir=()=>creditoPonderadoDaSemana(dias.flatMap(d=>d.slots.map(s=>({exercicio:s.exercicio,series:seriesPlanejamento}))));
+    let mudou=true;
+    while(mudou){
+      mudou=false;const antes=medir();
+      for(const g of GRUPOS_GRANDES){
+        if((antes.get(g)??0)<=(alvoPonderado.get(g)??Infinity))continue;
+        // Antes de podar, tente trocar uma contribuição indireta excedente no
+        // mesmo grupo/padrão. Pool já elegível; sem reduzir crédito de terceiros,
+        // mexer em favoritos, calendário, séries ou quantidade de slots.
+        substituicao:for(const dia of dias)for(const slot of dia.slots){
+          if(slot.favorito||!secundariosDe(slot.exercicio).includes(g))continue;
+          const original=slot.exercicio;
+          for(const alternativa of porGrupo.get(slot.grupo)??[]){
+            if(alternativa.padraoMovimento!==original.padraoMovimento
+              ||dia.slots.some(s=>s.exercicio.id===alternativa.id))continue;
+            slot.exercicio=alternativa;const depois=medir();
+            if((depois.get(g)??0)<(antes.get(g)??0)
+              &&(depois.get(g)??0)>=Math.min(antes.get(g)??0,args.pisoPonderado!)
+              &&[...new Set([...antes.keys(),...depois.keys()])].every(x=>x===g||(depois.get(x)??0)===(antes.get(x)??0))){
+              mudou=true;break substituicao;
+            }
+            slot.exercicio=original;
+          }
+        }
+        if(mudou)break;
+        busca:for(let d=dias.length-1;d>=0;d--)for(let i=dias[d]!.slots.length-1;i>=0;i--){
+          const slot=dias[d]!.slots[i]!;
+          if(slot.grupo!==g||dias[d]!.slots.filter(s=>s.grupo===g).length<2||slot.favorito)continue;
+          dias[d]!.slots.splice(i,1);const depois=medir();
+          const seguro=GRUPOS_GRANDES.every(x=>(depois.get(x)??0)>=Math.min(antes.get(x)??0,args.pisoPonderado!))
+            && dias.flatMap(x=>x.slots).filter(s=>s.exercicio.padraoMovimento==='puxar').length>=dias.flatMap(x=>x.slots).filter(s=>s.exercicio.padraoMovimento==='empurrar').length;
+          if(seguro && (slot.exercicio.padraoMovimento!=='dobradica_quadril'||dias.some(dia=>dia.slots.some(s=>s.exercicio.padraoMovimento==='dobradica_quadril')))){slotsDiretos.set(g,(slotsDiretos.get(g)??1)-1);diasSemRedundancia.add(d);mudou=true;break busca;}
+          dias[d]!.slots.splice(i,0,slot);
+        }
+        if(mudou)break;
+      }
+    }
+  }
+
+  // A cascata seguinte usa o saldo real após completar/retirar redundância.
+  // Nada desta etapa muda os slots depois da transferência contabilizada por C6.
+  if(args.pisoPonderado!=null){
+    credito.clear();slotsDiretos.clear();contaPadrao.clear();
+    for(let d=0;d<dias.length;d++){
+      usadosPorDia[d]!.clear();
+      for(const s of dias[d]!.slots){creditar(s.exercicio);usadosPorDia[d]!.add(s.exercicio.id);
+        slotsDiretos.set(s.grupo,(slotsDiretos.get(s.grupo)??0)+1);
+        contaPadrao.set(s.exercicio.padraoMovimento,(contaPadrao.get(s.exercicio.padraoMovimento)??0)+1);
+      }
+    }
+  }
+
   /**
    * ── Passo 5b: TRANSFERÊNCIA DE SLOT do foco (degrau ② da cascata, DF 2026-08-14).
    *
@@ -736,7 +823,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
      *  · nenhum grupo do dia queria mais volume ⇒ o dia fechou porque a semana já está paga
      *    (`teto`) — foi o que a medição de 2026-08-13 achou em academia.
      */
-    dias[d]!.motivoCurto = templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
+    dias[d]!.motivoCurto = !diasSemRedundancia.has(d) && templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
   }
 
   return dias;

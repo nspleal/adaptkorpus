@@ -10,6 +10,26 @@ export function diasConsecutivos(a: Weekday, b: Weekday): boolean {
   return distancia === 1 || distancia === 6;
 }
 
+/** Reordena sessões inteiras antes de reduzir exposições. Contagens estruturais,
+ * não pesos fisiológicos: primeiro conflitos do foco, depois os demais conflitos.
+ * No máximo 6! ordens, com parada ao achar agenda sem conflito direto.
+ */
+function ordenarRecortes(templates:readonly TemplateDia[],agenda:readonly Weekday[],focos:readonly GrupoPrimario[]):readonly TemplateDia[]{
+  const custo=(ts:readonly TemplateDia[])=>{
+    let foco=0,total=0;
+    for(let i=0;i<ts.length;i++)for(let j=i+1;j<ts.length;j++)if(diasConsecutivos(agenda[i]!,agenda[j]!))
+      for(const g of ts[i]!.grupos)if(ts[j]!.grupos.includes(g)){total++;if(focos.includes(g))foco++;}
+    return [foco,total] as const;
+  };
+  let melhor=templates,valor=custo(templates);
+  const visitar=(ordem:TemplateDia[],restantes:readonly TemplateDia[])=>{
+    if(valor[1]===0)return;
+    if(!restantes.length){const c=custo(ordem);if(c[0]<valor[0]||(c[0]===valor[0]&&c[1]<valor[1])){melhor=ordem;valor=c;}return;}
+    for(let i=0;i<restantes.length;i++)visitar([...ordem,restantes[i]!],restantes.filter((_,j)=>j!==i));
+  };
+  visitar([],templates);return melhor;
+}
+
 /** Distribui os grupos dos templates existentes, não exercícios ou séries.
  * Enumeração finita (no máximo 128 conjuntos): conserva a quantidade de exposições
  * proposta quando cabe, prioriza o calendário e distribui a carga documental restante.
@@ -19,6 +39,7 @@ export function distribuirGruposNoCalendario(
   templates: readonly TemplateDia[], agenda: readonly Weekday[], focos: readonly GrupoPrimario[] = [], minimoCore = 0, preservarRecortes = false,
 ): { dias: TemplateDia[]; limitado: boolean } {
   if (templates.length !== agenda.length) throw new Error('Agenda e templates devem ter o mesmo tamanho.');
+  if(preservarRecortes)templates=ordenarRecortes(templates,agenda,focos);
   const demandaOriginal = new Map([...new Set(templates.flatMap(t => t.grupos))].map(g => [g, templates.filter(t => t.grupos.includes(g)).length]));
   // Com dois/três dias adjacentes, full-body repetido não cabe. Reutilizamos os
   // recortes superior/inferior e push/pull/pernas antes de ajustar exposições.

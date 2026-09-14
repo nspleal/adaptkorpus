@@ -7,7 +7,7 @@
  * o e72 ponta a ponta; o cardio (final, sem substituir musculação, só oferecidos, sem wrap); e a
  * fixture 36 (distribuição SOMENTE pós-terminal).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { recomputarPlano } from './plano';
@@ -636,3 +636,7 @@ describe('C1.1 · oferta de dias — caminho funcional completo (ter e sáb)', (
     expect(controle).toMatch(/onChange\(alternarDiaOferecidoCardio/); // o Painel recebe e recompõe
   });
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./engine/selecao-divisao', async (importOriginal) => process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? importOriginal() : import('./engine/__fixtures__/selecao-etapa1'));

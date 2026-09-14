@@ -12,7 +12,7 @@
  *   ② `total da semana CONSERVA` — mata o vazamento (e o crescimento)
  *   ③ `só o par focado ↔ compensador muda` — mata o `ombros −4` que ninguém pediu
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
@@ -103,3 +103,7 @@ describe('🔴 B3 — a entrega do foco, nas três asserções', () => {
     expect(ops).not.toContain('peito');
   });
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./selecao-divisao', async (importOriginal) => process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? importOriginal() : import('./__fixtures__/selecao-etapa1'));

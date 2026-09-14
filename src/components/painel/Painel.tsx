@@ -1910,6 +1910,7 @@ function DiasNaoAtendidos({ dias }: { dias?: DiaNaoAtendido[] }) {
   if (!dias || dias.length === 0) return null;
   const porque = (m: DiaNaoAtendido['motivo']) =>
     m === 'EQUIPAMENTO' ? 'com o equipamento que você marcou no perfil, não há exercício novo para este dia'
+      : m === 'SELECAO_COMPATIVEL' ? 'não há seleção adicional compatível com este plano sem repetir variantes'
       : m === 'TETO_SEMANAL' ? 'os grupos deste dia já alcançaram o volume previsto para a semana'
         : 'o desenho deste dia ficou sem exercício disponível';
   return (

@@ -90,7 +90,7 @@ describe('D1 — o canal existe e é verbatim', () => {
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
   ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
-  ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
+  ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ equipamento: 'nenhum', foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
   ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
   ['distribuição original limitada', /Distribuição planejada.*não atendida integralmente/, () => gerar({ nivelExperiencia: 'avancado', treinoDias: ['seg','ter','qua'], diasDisponiveis: 3, tempoPorSessaoMin: 90, focoAgregado: { grupo: 'pernas', semana: 1 } })],
   ['agenda limita', /agenda limita/, () => gerar({ treinoDias: ['seg','ter'], diasDisponiveis: 2 })],

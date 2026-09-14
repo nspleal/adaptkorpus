@@ -17,7 +17,7 @@
  * O par discriminante: o MESMO perfil sem foco fecha equilibrado. A violação é INTRODUZIDA
  * pela aplicação do foco, não herdada do plano base.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
@@ -130,3 +130,7 @@ describe('🔒 C6 — grade: o foco nunca introduz `empurrar > puxar`', () => {
     expect(falhas, `${falhas.length} combinações em que o FOCO introduziu o desequilíbrio:\n${falhas.slice(0, 20).join('\n')}`).toEqual([]);
   }, 600000);
 });
+
+// Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
+// As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
+vi.mock('./selecao-divisao', async (importOriginal) => process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? importOriginal() : import('./__fixtures__/selecao-etapa1'));
