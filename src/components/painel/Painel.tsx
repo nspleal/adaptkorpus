@@ -116,6 +116,8 @@ export interface PerfilResumo {
   preferencias?: PreferenciasTreino;
   /** 🎛️ v3 · Bloco B — o grupo em foco (1 por vez, janela de 4–6 semanas). */
   foco?: FocoGrupo;
+  /** Prioridade de ordem/distribuição; sem delta de séries agregado. */
+  focoAgregado?: { grupo: 'bracos' | 'pernas'; semana: number };
   /** 🎛️ v4 · DF③ (2026-08-12) — divisão preferida (`auto` | `superior-inferior` |
    *  `prioridades`). Ausente = `auto`. Persistida na leva A; consumida pelo alocador (leva B). */
   divisaoPreferida?: DivisaoPreferida;
@@ -1205,6 +1207,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     rotinaDias.map((d) => d.nome),
     weekdayHojeIdx(),
     treino.rotina?.diasCardio ?? [],
+    rotinaDias.map(d => d.diaId),
   );
   const diaDeHoje = sessaoHojeIdx != null ? rotinaDias[sessaoHojeIdx] : undefined;
 
@@ -1377,7 +1380,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       diasNoHorizonteEsperado: ORDEM_SEMANA.length,
       diasOferecidosCardioEsperados: diasOferecidosCardio,
       diasTreinoEsperados: perfil.treinoDias ?? [],
-      diasDaSemanaIdx: (perfil.treinoDias ?? []).map((w) => ORDEM_SEMANA.indexOf(w)),
+      diasDaSemanaIdx: rotinaDias.map((d, i) => ORDEM_SEMANA.indexOf(d.diaId ?? perfil.treinoDias?.[i] ?? ORDEM_SEMANA[i]!)),
       seriesPadrao: prescricaoEfetiva.seriesPorExercicio.min,
     };
     const atual = avaliarSemana(
@@ -1598,6 +1601,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <SuaSemana
               treinoDias={perfil.treinoDias}
               sessoesNomes={rotinaDias.map((d) => d.nome)}
+              sessoesDias={rotinaDias.map(d => d.diaId)}
               onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : irAbaHist('treino'))}
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}

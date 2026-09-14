@@ -118,6 +118,8 @@ export interface PerfilTreino {
    * preferências: é entrada do gerador, não remendo na saída.
    */
   foco?: FocoGrupo;
+  /** Prioridade de ordem/distribuição; sem delta de séries agregado. */
+  focoAgregado?: { grupo: 'bracos' | 'pernas'; semana: number };
   equipamento: EquipamentoDisp;
   /** Checklist de equipamento de CASA (modelo 2 níveis, DF 2026-07-04). Vazio = "nenhum
    *  equipamento" (≡ antigo `nenhum`); ausente = chamada legada (casa antiga = tudo). */
@@ -400,6 +402,8 @@ export interface RotinaSemanal {
    * grupo, semana, escopo, métrica e limiar — e não comparando frases.
    */
   fatosCobertura?: FatoCoberturaGrupo[];
+  /** Comparação da intenção de divisão com o terminal, não com um candidato intermediário. */
+  distribuicao?: { planejada: string; recortesPlanejados: number; recortesEntregues: number; limitadaPeloCalendario: boolean; adaptada: boolean; atendida: boolean };
   /**
    * 🔴 D14 — dias da agenda que NÃO viraram sessão. Ausente quando todos foram atendidos.
    * `dias.length + diasNaoAtendidos.length + diasCardioRecuperacao` = agenda SOLICITADA;
@@ -415,7 +419,7 @@ export interface RotinaSemanal {
     grupo: GrupoPrimario;
     compensa: GrupoPrimario;
     degrau: 'serie' | 'slot' | 'ordem';
-    motivo: 'folga' | 'slot_do_compensador' | 'delta_zero' | 'sem_dia_comum' | 'compensador_no_piso' | 'focado_no_teto';
+    motivo: 'folga' | 'slot_do_compensador' | 'delta_zero' | 'sem_dia_comum' | 'compensador_no_piso' | 'focado_no_teto' | 'equilibrio_puxar_empurrar' | 'transferencia_nao_realizada';
     /** Séries que mudaram de mão (0 no degrau `ordem`). */
     series: number;
   };

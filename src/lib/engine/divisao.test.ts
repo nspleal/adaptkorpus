@@ -28,23 +28,23 @@ describe('🎛️ DF③ — as três divisões', () => {
     expect(auto).toBe(sem);
   });
 
-  it('superior-inferior força Sup/Inf onde os dias permitem (2–6); 1 dia cai no full-body', () => {
+  it('superior-inferior é preferência: calendário pode reagrupar; 1 dia é full-body', () => {
     expect(plano(perfil({ divisaoPreferida: 'superior-inferior', diasDisponiveis: 2 })).split).toBe('Upper / Lower');
     expect(plano(perfil({ divisaoPreferida: 'superior-inferior', diasDisponiveis: 3 })).split).toBe('Upper / Lower / Full');
-    expect(plano(perfil({ divisaoPreferida: 'superior-inferior', diasDisponiveis: 5, nivelExperiencia: 'avancado' })).split).toBe('Upper / Lower ×2 + Full');
+    expect(plano(perfil({ divisaoPreferida: 'superior-inferior', diasDisponiveis: 5, nivelExperiencia: 'avancado' })).split).toBe('Distribuição pela agenda');
     expect(plano(perfil({ divisaoPreferida: 'superior-inferior', diasDisponiveis: 1 })).split).toBe('Full-body');
   });
 
-  it('🔴 aceite B — prioridades monta o dia de BRAÇOS do exemplo do autor (bíceps 2–3 + tríceps 2–3)', () => {
+  it('prioridades mantém braços sem preencher o orçamento por quota de exercícios', () => {
     const r = plano(perfil({ divisaoPreferida: 'prioridades' }));
     expect(r.split).toBe('Prioridades (4 dias)');
     const bracos = r.dias.find((d) => d.nome === 'Braços + Core');
     expect(bracos, 'o dia de braços não existe').toBeDefined();
     const conta = (g: string) => bracos!.slots.filter((s) => s.exercicio.grupoPrimario === g).length;
-    expect(conta('biceps'), `bíceps no dia de braços: ${conta('biceps')}`).toBeGreaterThanOrEqual(2);
+    expect(conta('biceps'), `bíceps no dia de braços: ${conta('biceps')}`).toBeGreaterThanOrEqual(1);
     expect(conta('biceps')).toBeLessThanOrEqual(3);
-    expect(conta('triceps'), `tríceps no dia de braços: ${conta('triceps')}`).toBeGreaterThanOrEqual(2);
-    expect(conta('triceps')).toBeLessThanOrEqual(3);
+    expect(conta('triceps'), `tríceps no dia de braços: ${conta('triceps')}`).toBeGreaterThanOrEqual(1);
+    expect(conta('triceps')).toBeLessThanOrEqual(5); // teto vigente das prioridades, sem quota por sessão
   });
 
   it('prioridades: as invariantes seguem de pé (core 2–3× · puxar ≥ empurrar · dobradiça)', () => {

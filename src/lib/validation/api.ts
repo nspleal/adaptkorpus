@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import { perfilSchema } from './profile';
-import { divisaoPreferidaSchema, focoSchema, perfilResumoSchema, preferenciasTreinoSchema, rotinaCustomSchema } from './perfil-resumo';
+import { divisaoPreferidaSchema, focoAgregadoSchema, focoSchema, perfilResumoSchema, preferenciasTreinoSchema, rotinaCustomSchema } from './perfil-resumo';
 import { entradaPlanoVisivelSchema, weekdaySchema } from './plano-entrada';
 
 const camposEntradaPlano = entradaPlanoVisivelSchema.innerType().shape;
@@ -51,6 +51,7 @@ export const perfilTreinoSchema = z.object({
   treinoDias: z.array(weekdaySchema).min(1).max(7).optional(),
   preferencias: preferenciasTreinoSchema.optional(),
   foco: focoSchema.optional(),
+  focoAgregado: focoAgregadoSchema.optional(),
   divisaoPreferida: divisaoPreferidaSchema.optional(),
   rotinaCustom: rotinaCustomSchema.optional(),
   cardioFavorito: z.enum(['caminhada', 'corrida', 'bike', 'pular_corda', 'lutas', 'outro']).optional(),

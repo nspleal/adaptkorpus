@@ -89,9 +89,16 @@ describe('D1 — o canal existe e é verbatim', () => {
  * de entrar em silêncio. (`avisos.push(...avisosCustom)` é repasse, não família própria.)
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
-  ['retomada · frequência limitada', /Retomada: frequ/, () => gerar({}, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
+  ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
+  ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
+  ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
+  ['distribuição original limitada', /Distribuição planejada.*não atendida integralmente/, () => gerar({ nivelExperiencia: 'avancado', treinoDias: ['seg','ter','qua'], diasDisponiveis: 3, tempoPorSessaoMin: 90, focoAgregado: { grupo: 'pernas', semana: 1 } })],
+  ['agenda limita', /agenda limita/, () => gerar({ treinoDias: ['seg','ter'], diasDisponiveis: 2 })],
+  ['manual com foco', /ordem do seu treino foi preservada/, () => gerar({ rotinaCustom: SO_EMPURRAR, foco: { grupo: 'peito', compensa: 'costas', semana: 1 } })],
+  ['escolhas inelegíveis', /não elegíveis no perfil/, () => gerar({ rotinaCustom: SO_EMPURRAR, equipamento: 'casa', equipamentosCasa: [] })],
+  ['retomada · frequência limitada', /Retomada: frequ/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: SEIS_DIAS.map(diaId => ({ nome: diaId, diaId, exercicioIds: ['e1'] })) } }, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
   ['retomada · volume reduzido', /Retomada: volume reduzido/, () => gerar({}, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
-  ['alvo do grupo não cabe nos exercícios', /alvo de \d+ s[ée]ries para/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 10 }, { semanaCiclo: { semana: 5 } })],
+  ['alvo do grupo não cabe nos exercícios', /alvo de \d+ s[ée]ries para/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 90 }, { semanaCiclo: { semana: 5 } })],
   /**
    * 🔎 ACHADO desta rodada: as três invariantes estruturais abaixo NÃO são alcançáveis pelo
    * alocador automático — varri 1.800 perfis (5 equipamentos × 3 níveis × 4 agendas × 6
@@ -120,7 +127,7 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
       - (MONTADOR.match(/avisos\.push\(\.\.\.avisosCustom\)/g) ?? []).length;
     // Tripwire: um `avisos.push` novo entra descoberto e derruba este teste em vez de virar
     // mais um aviso que ninguém prova que chega à tela — o defeito que D1 fecha.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(13);
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(20);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

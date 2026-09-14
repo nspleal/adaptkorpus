@@ -57,6 +57,7 @@ export interface PreferenciasPerfil {
    */
   preferenciasTreino?: PerfilResumo['preferencias'];
   foco?: PerfilResumo['foco'];
+  focoAgregado?: PerfilResumo['focoAgregado'];
   cardioFavorito?: PerfilResumo['cardioFavorito'];
   tecnicasAvancadas?: PerfilResumo['tecnicasAvancadas'];
   orcamento?: PerfilResumo['orcamento'];
@@ -119,6 +120,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       // 🔴 O fio do v3 (leva A do v4): gravar o que a leitura devolve, campo a campo.
       ...(p.preferencias != null ? { preferenciasTreino: p.preferencias } : {}),
       ...(p.foco != null ? { foco: p.foco } : {}),
+      ...(p.focoAgregado != null ? { focoAgregado: p.focoAgregado } : {}),
       ...(p.tecnicasAvancadas != null ? { tecnicasAvancadas: p.tecnicasAvancadas } : {}),
       ...(p.cardioFavorito != null ? { cardioFavorito: p.cardioFavorito } : {}),
       ...(p.orcamento != null ? { orcamento: p.orcamento } : {}),
@@ -193,6 +195,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     // 🔴 O fio do v3 (leva A do v4): inverso fiel do bloco de escrita acima.
     ...(pref.preferenciasTreino != null ? { preferencias: pref.preferenciasTreino } : {}),
     ...(pref.foco != null ? { foco: pref.foco } : {}),
+    ...(pref.focoAgregado != null ? { focoAgregado: pref.focoAgregado } : {}),
     ...(pref.tecnicasAvancadas != null ? { tecnicasAvancadas: pref.tecnicasAvancadas } : {}),
     ...(pref.cardioFavorito != null ? { cardioFavorito: pref.cardioFavorito } : {}),
     ...(pref.orcamento != null ? { orcamento: pref.orcamento } : {}),

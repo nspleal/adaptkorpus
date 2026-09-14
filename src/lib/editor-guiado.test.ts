@@ -116,7 +116,7 @@ describe('🔒 DF② — edição manual de séries; reps e RIR permanecem autom
 
   it('"Voltar ao recomendado" apaga só o campo e confirma antes', () => {
     expect(painel).toMatch(/rotinaCustom: undefined/);
-    expect(editor, 'a confirmação sumiu').toMatch(/Voltar ao treino recomendado\?/);
+    expect(editor, 'a confirmação sumiu').toMatch(/Substituir pelo novo treino\?/);
   });
 });
 

@@ -400,14 +400,14 @@ describe('rampa de retomada no montador — volume ABAIXO do piso da banda', () 
     }
   });
 
-  it('frequência por grupo limitada (3 na semana 1) — os slots excedentes saem da rotina', () => {
+  it('frequência por grupo limitada (3 na semana 1) — conta sessões, não exercícios', () => {
     const p = perfil({ ...perfilBase, diasDisponiveis: 6, nivelExperiencia: 'avancado' });
     const presc = prescreverTreino(p, avaliarGateTreino(p));
     const r = montarRotina(presc, p, EXERCISES, new Set(), {
       semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: presc.volumePorGrupoSemana.max },
     });
     const vezes = new Map<string, number>();
-    for (const d of r.dias) for (const s of d.slots) { const g = s.exercicio.grupoPrimario; if (g == null) continue; vezes.set(g, (vezes.get(g) ?? 0) + 1); }
+    for (const d of r.dias) for (const g of new Set(d.slots.map(s => s.exercicio.grupoPrimario))) { if (g == null) continue; vezes.set(g, (vezes.get(g) ?? 0) + 1); }
     for (const [g, n] of vezes) expect(n, `grupo ${g}`).toBeLessThanOrEqual(3);
   });
 

@@ -131,7 +131,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   const [banidos, setBanidos] = useState<string[]>([...(inicial.preferencias?.banidos ?? [])]);
   // 🎛️ v3 · Bloco B — o grupo em foco. `compensa` é obrigatório: sem ele não há 1:1, e sem
   // 1:1 o "foco" seria aumento geral de volume com outro nome.
-  const [focoGrupo, setFocoGrupo] = useState<string | null>(inicial.foco?.grupo ?? null);
+  const [focoGrupo, setFocoGrupo] = useState<string | null>(inicial.foco?.grupo ?? inicial.focoAgregado?.grupo ?? null);
   const [focoCompensa, setFocoCompensa] = useState<string | null>(inicial.foco?.compensa ?? null);
   // 🎛️ v4 · DF③ (2026-08-12) — a divisão de treino como escolha: auto (padrão por dias) ·
   // superior-inferior · prioridades. Persistida no perfil; o alocador a lê como entrada.
@@ -190,7 +190,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       // 🎛️ v3 · Bloco A: as trocas ficam intactas; só a lista de banidos é editável aqui.
       preferencias: { trocas: inicial.preferencias?.trocas ?? [], banidos },
       // Só vira foco quando o par está completo — meio foco não é foco.
-      foco: focoGrupo && focoCompensa
+      focoAgregado: focoGrupo === 'bracos' || focoGrupo === 'pernas'
+        ? { grupo: focoGrupo, semana: inicial.focoAgregado?.grupo === focoGrupo ? inicial.focoAgregado.semana : 1 } : undefined,
+      foco: focoGrupo && focoCompensa && !['bracos', 'pernas'].includes(focoGrupo)
         ? { grupo: focoGrupo as never, compensa: focoCompensa as never, semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
         : undefined,
       modoForca,

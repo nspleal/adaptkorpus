@@ -37,6 +37,8 @@ export const focoSchema = z.object({
   semana: z.number().int().min(1),
 });
 
+export const focoAgregadoSchema = z.object({ grupo: z.enum(['bracos', 'pernas']), semana: z.number().int().min(1) });
+
 export const divisaoPreferidaSchema = z.enum(['auto', 'superior-inferior', 'prioridades']);
 
 export const rotinaCustomSchema = z.object({
@@ -91,6 +93,7 @@ export const rotinaCustomHidratacaoSchema = z.object({
 const BLOCOS_DE_TREINO = {
   preferencias: preferenciasTreinoSchema,
   foco: focoSchema,
+  focoAgregado: focoAgregadoSchema,
   divisaoPreferida: divisaoPreferidaSchema,
   /**
    * 🔴 O DESENHO DO USUÁRIO SE VALIDA PELA FORMA, NÃO PELO VALOR (medido no navegador,
@@ -109,7 +112,7 @@ const BLOCOS_DE_TREINO = {
 export function sanearBlocosDeTreino<T extends Record<string, unknown>>(perfil: T): T {
   let saneado = perfil;
   const rotulos: Record<keyof typeof BLOCOS_DE_TREINO, string> = {
-    preferencias: 'preferências de exercícios', foco: 'foco muscular',
+    preferencias: 'preferências de exercícios', foco: 'foco muscular', focoAgregado: 'foco agregado',
     divisaoPreferida: 'divisão de treino', rotinaCustom: 'desenho do treino',
   };
   const mensagens = Object.fromEntries(Object.entries(rotulos).map(([k, rotulo]) => [k,
@@ -183,6 +186,7 @@ export const perfilResumoSchema = z.object({
    */
   preferencias: preferenciasTreinoSchema.optional(),
   foco: focoSchema.optional(),
+  focoAgregado: focoAgregadoSchema.optional(),
   tecnicasAvancadas: z.boolean().optional(),
   /**
    * 🏃 C2 — a MODALIDADE preferida de cardio. A spec já previa modalidade escolhida (default
