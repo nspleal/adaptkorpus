@@ -168,6 +168,12 @@ export interface DiaAlocado {
 
 export interface ArgsAlocacao {
   templates: readonly TemplateDia[];
+  /** Foco estrutural: reservar sua presença por sessão antes de consumir a semana. */
+  prioritarios?: readonly GrupoPrimario[];
+  /** Complementos já filtrados pelo calendário, somente para lacunas reais. */
+  complementosPorDia?: readonly (readonly GrupoPrimario[])[];
+  /** Banda vigente: retirar redundância planejada sem furar seu piso. */
+  pisoPonderado?: number;
   /** Slots que cabem no dia (f do tempo por sessão). */
   budgetPorDia: number;
   /**
@@ -478,6 +484,16 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     registrar(d, grupoPuxar, e, usadosPorDia[d]!);
   }
 
+  // Decisões 13/09: a sessão do foco precisa existir no plano alocado.
+  // Reserva dentro do orçamento e tetos existentes; não altera o alvo de séries.
+  // Antebraço explícito pode ocupar um bloco (decisão 25), sem criar banda nova.
+  for(const g of args.prioritarios??[])for(const d of diasComGrupoNoTemplate(g)){
+    if(g==='core'||dias[d]!.slots.some(s=>s.grupo===g))continue;
+    const reservadas=(reservadosCore.has(d)?1:0)+(reservaPequeno.get(d)?.filter(x=>x!==g).length??0);
+    if(dias[d]!.slots.length+reservadas>=budgetPorDia)continue;
+    if(colocar(d,g,usadosPorDia[d]!))reservaPequeno.set(d,(reservaPequeno.get(d)??[]).filter(x=>x!==g));
+  }
+
   const reservasDoDia = (d: number) => (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
 
   // ── Passo 2: rodadas — cada dia recebe 1 slot por vez, pelo MAIOR déficit ──
@@ -715,6 +731,38 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     }
   }
 
+  // Decisão 34: completar uma sessão do foco curta só com grupo ainda descoberto,
+  // deficitário e compatível. Sem repetir variantes para gastar todo o orçamento.
+  for(let d=0;d<dias.length;d++)for(const g of args.complementosPorDia?.[d]??[]){
+    if(dias[d]!.slots.length>=budgetPorDia)break;
+    if((slotsDiretos.get(g)??0)>0||!podeReceber(g))continue;
+    colocar(d,g,usadosPorDia[d]!);
+  }
+
+  // As novas divisões não autorizam exceder a banda ponderada existente.
+  // Retira apenas slot redundante; nunca aumenta séries nem elimina um grupo.
+  const diasSemRedundancia=new Set<number>();
+  if(args.pisoPonderado!=null){
+    const medir=()=>creditoPonderadoDaSemana(dias.flatMap(d=>d.slots.map(s=>({exercicio:s.exercicio,series:seriesPlanejamento}))));
+    let mudou=true;
+    while(mudou){
+      mudou=false;const antes=medir();
+      for(const g of GRUPOS_GRANDES){
+        if((antes.get(g)??0)<=(alvoPonderado.get(g)??Infinity))continue;
+        busca:for(let d=dias.length-1;d>=0;d--)for(let i=dias[d]!.slots.length-1;i>=0;i--){
+          const slot=dias[d]!.slots[i]!;
+          if(slot.grupo!==g||dias[d]!.slots.filter(s=>s.grupo===g).length<2||slot.favorito)continue;
+          dias[d]!.slots.splice(i,1);const depois=medir();
+          const seguro=GRUPOS_GRANDES.every(x=>(depois.get(x)??0)>=Math.min(antes.get(x)??0,args.pisoPonderado!))
+            && dias.flatMap(x=>x.slots).filter(s=>s.exercicio.padraoMovimento==='puxar').length>=dias.flatMap(x=>x.slots).filter(s=>s.exercicio.padraoMovimento==='empurrar').length;
+          if(seguro && (slot.exercicio.padraoMovimento!=='dobradica_quadril'||dias.some(dia=>dia.slots.some(s=>s.exercicio.padraoMovimento==='dobradica_quadril')))){slotsDiretos.set(g,(slotsDiretos.get(g)??1)-1);diasSemRedundancia.add(d);mudou=true;break busca;}
+          dias[d]!.slots.splice(i,0,slot);
+        }
+        if(mudou)break;
+      }
+    }
+  }
+
   /**
    * 🔴 O corte REAL do dia, medido no fim (pedido-casa-dia-curto-2026-08-13).
    *
@@ -736,7 +784,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
      *  · nenhum grupo do dia queria mais volume ⇒ o dia fechou porque a semana já está paga
      *    (`teto`) — foi o que a medição de 2026-08-13 achou em academia.
      */
-    dias[d]!.motivoCurto = templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
+    dias[d]!.motivoCurto = !diasSemRedundancia.has(d) && templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
   }
 
   return dias;

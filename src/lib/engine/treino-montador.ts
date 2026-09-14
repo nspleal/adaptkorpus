@@ -36,7 +36,7 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
-import { distribuirGruposNoCalendario } from './calendario-grupos';
+import { distribuirGruposNoCalendario, diasConsecutivos } from './calendario-grupos';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, DiaNaoAtendido, Faixa, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -254,7 +254,7 @@ export function montarRotina(
   // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
   const divisao = perfil.divisaoPreferida ?? 'auto';
   const baseDivisao = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
-  const selecao = selecionarDivisao(baseDivisao, perfil, agregado, !!semanaCiclo?.retomada);
+  const selecao = selecionarDivisao(baseDivisao, perfil, agregado, !!semanaCiclo?.retomada, CORE_MAX);
   const calendario = distribuirGruposNoCalendario(selecao.dias, diasForcaDaSemana, prioritarios, Math.min(CORE_MIN, diasForca), selecao.preservarRecortes);
   const templates = calendario.dias;
   const split = diasForca === 1 ? 'Full-body' : templates.every((t, i) => t.nome === selecao.dias[i]?.nome) ? selecao.split : 'Distribuição pela agenda';
@@ -400,6 +400,12 @@ export function montarRotina(
   const tetoPequenos = divisao === 'prioridades' ? PEQUENOS_TETO_DIRETO_PRIORIDADES : PEQUENOS_TETO_DIRETO;
   const argsAloc = {
     templates,
+    prioritarios: selecao.prioritarios,
+    pisoPonderado: selecao.preservarRecortes ? banda.min : undefined,
+    complementosPorDia: templates.map((t,d)=>selecao.prioritarios?.some(g=>t.grupos.includes(g))
+      ? [...GRUPOS_GRANDES,...GRUPOS_PEQUENOS_PISO].filter(g=>!t.grupos.includes(g)
+        && !templates.some((outro,i)=>i!==d&&outro.grupos.includes(g)&&diasConsecutivos(diasForcaDaSemana[d]!,diasForcaDaSemana[i]!)))
+      : []),
     budgetPorDia,
     pool,
     favoritos: favoritosEfetivos,
@@ -960,10 +966,13 @@ export function montarRotina(
    * resultado e **sem sugerir equipamento que a pessoa não marcou** — o app não vende, e
    * inventar item de compra seria prescrição de consumo travestida de dica.
    */
+  const cortePorSelecao = perfil.equipamento === 'academia' && selecao.preservarRecortes;
   const porCatalogo = diasAlocados.filter((d) => d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo');
   if (porCatalogo.length > 0) {
     const quais = porCatalogo.map((d) => d.nome).join(', ');
-    avisos.push(`Seu equipamento disponível limita ${porCatalogo.length === 1 ? 'este dia' : 'estes dias'}: ${quais}. Com o que você marcou no perfil, não há exercício novo para acrescentar sem repetir o que já está lá.`);
+    avisos.push(cortePorSelecao
+      ? `A seleção compatível com o plano limita estes dias: ${quais}. Não acrescentamos variantes apenas para ocupar o tempo disponível.`
+      : `Seu equipamento disponível limita ${porCatalogo.length === 1 ? 'este dia' : 'estes dias'}: ${quais}. Com o que você marcou no perfil, não há exercício novo para acrescentar sem repetir o que já está lá.`);
   }
   /**
    * A OUTRA causa, que existia em academia sem nunca ser dita (6 das 36 combinações da
@@ -985,7 +994,7 @@ export function montarRotina(
     // academia, e não é corte por catálogo).
     ...(d.naoPreenchidos > 0 ? { slotsNaoPreenchidos: d.naoPreenchidos } : {}),
     // 🔴 D14 — a causa viaja com o dia: o mesmo `motivoCurto` que decide qual aviso sai.
-    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo' ? { motivoDoCorte: 'EQUIPAMENTO' as const } : {}),
+    ...(d.naoPreenchidos > 0 && d.motivoCurto === 'catalogo' ? { motivoDoCorte: cortePorSelecao ? 'SELECAO_COMPATIVEL' as const : 'EQUIPAMENTO' as const } : {}),
     ...(d.naoPreenchidos > 0 && d.motivoCurto === 'teto' ? { motivoDoCorte: 'TETO_SEMANAL' as const } : {}),
     slots: d.slots.map((s) => ({
       // O padrão do slot é o do EXERCÍCIO escolhido (o template agora é de grupos): tudo

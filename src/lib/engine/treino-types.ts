@@ -295,7 +295,7 @@ export interface DiaTreino {
    * 🔴 D14 — QUAL regra deixou o dia curto, para o dia NÃO ATENDIDO poder dizer o porquê sem
    * a tela reconstruir a causa. Mesmo vocabulário dos dois avisos que o montador já emite.
    */
-  motivoDoCorte?: 'EQUIPAMENTO' | 'TETO_SEMANAL';
+  motivoDoCorte?: 'EQUIPAMENTO' | 'SELECAO_COMPATIVEL' | 'TETO_SEMANAL';
 }
 
 /**
@@ -334,7 +334,7 @@ export interface DiaNaoAtendido {
   nome: string;
   diaId?: Weekday;
   /** `DESENHO_VAZIO` = o desenho manual daquele dia ficou sem exercício elegível. */
-  motivo: 'EQUIPAMENTO' | 'TETO_SEMANAL' | 'DESENHO_VAZIO';
+  motivo: 'EQUIPAMENTO' | 'SELECAO_COMPATIVEL' | 'TETO_SEMANAL' | 'DESENHO_VAZIO';
   /** Quantos slots o template pediu e ninguém pôde preencher (quando o motor mediu). */
   slotsPedidos?: number;
 }
