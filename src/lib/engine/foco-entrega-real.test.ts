@@ -95,6 +95,37 @@ describe('Adição14/09 — entrega sem compensação, nos dois seletores', () =
     expect(mexidos, `alguém foi cobrado sem estar no foco: ${mexidos.join(', ')}`).toEqual(['panturrilha']);
   });
 
+  /**
+   * 🔴 REGRESSÃO DA REVISÃO INDEPENDENTE 15/09 (L-01) — A FIXTURE ORIGINAL DE 60 MIN VOLTA.
+   *
+   * A etapa 3 tinha movido este arquivo de `60 min limitado` para `75 min + sem_limite`. Com
+   * a fixture ORIGINAL, o candidato `badcea47` falhava: nas semanas 4 e 5 o bíceps perdia 4
+   * séries (8→4) e o total da semana CAÍA 2, enquanto o peito subia 2 — exatamente o D-01.
+   * Ela fica aqui como regressão permanente do regime com tempo limitado, que é o de quase
+   * todo mundo. O que se exige é a identidade: o que o grupo focado ganha é, série a série,
+   * o que o bloco entregou; e ninguém mais muda.
+   */
+  describe('fixture original de 60 min, LIMITADA — regressão de D-01', () => {
+    const base60 = (over: Partial<PerfilTreino> = {}) =>
+      perfil({ tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over });
+    for (const semana of [1, 2, 3, 4, 5] as SemanaCiclo[]) {
+      it(`semana ${semana} · só ${FOCADO} muda, e muda exatamente o que o bloco entregou`, () => {
+        const sem = plano(base60(), semana);
+        const com = plano(base60({ foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), semana);
+        const a = porGrupo(sem); const b = porGrupo(com);
+        const entregue = (com.blocoFoco?.adicionais ?? []).reduce((n, x) => n + x.series, 0);
+        const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => (a.get(g) ?? 0) !== (b.get(g) ?? 0));
+        expect(mexidos.sort(), `grupos alterados: ${mexidos.join(', ')}`).toEqual(entregue > 0 ? [FOCADO] : []);
+        expect((b.get(FOCADO) ?? 0) - (a.get(FOCADO) ?? 0), 'ganho líquido ≠ bloco declarado').toBe(entregue);
+        expect(total(com) - total(sem)).toBe(entregue);
+      });
+    }
+    it('anti-vacuidade: neste perfil o bloco de 60 min realmente chega ao plano', () => {
+      const com = plano(base60({ foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), 3);
+      expect((com.blocoFoco?.adicionais ?? []).length, 'bloco vazio nas cinco semanas: a identidade seria trivial').toBeGreaterThan(0);
+    });
+  });
+
   /** E a UI tem de saber disso: peito não pode ser oferecido para compensar panturrilha. */
   it('os compensadores oferecidos vêm do plano — peito não compensa panturrilha em PPL', () => {
     const r = plano(perfil(), 3);

@@ -4,13 +4,18 @@ import {secundariosDe} from './secundarios';
 import type {DiaTreino,SlotExercicio} from './treino-types';
 
 /** Autor14/09: adição ao baseline, não transferência. Pool já elegível no montador.
- * Séries/descanso/hold são materializados pelo chamador, na autoridade existente. */
+ * Séries/descanso/hold são materializados pelo chamador, na autoridade existente.
+ *
+ * `solicitados` é a INTENÇÃO (quantos extras esta montagem pediu). Quem entrega é o
+ * `adicionais`, e o tempo ainda pode remover parte dele depois — a tela precisa dos
+ * dois números para não anunciar o que não ficou no plano. */
 export function adicionarBlocoFoco(
  base:readonly DiaTreino[],agenda:readonly Weekday[],grupos:readonly GrupoPrimario[],
  pool:readonly Exercise[],favoritos:ReadonlySet<string>,
-):{dias:DiaTreino[];adicionais:Set<SlotExercicio>;adaptados:GrupoPrimario[];faltantes:GrupoPrimario[]}{
+):{dias:DiaTreino[];adicionais:Set<SlotExercicio>;adaptados:GrupoPrimario[];faltantes:GrupoPrimario[];solicitados:number}{
  const dias=base.map(d=>({...d,slots:[...d.slots]})),adicionais=new Set<SlotExercicio>();
  const adaptados:GrupoPrimario[]=[],faltantes:GrupoPrimario[]=[];
+ let solicitados=0;
  const tem=(d:DiaTreino,g:GrupoPrimario)=>d.slots.some(s=>s.exercicio.grupoPrimario===g);
  const consecutivo=(a:Weekday,b:Weekday)=>{const delta=Math.abs(ORDEM_SEMANA.indexOf(a)-ORDEM_SEMANA.indexOf(b));return delta===1||delta===6;};
  // A exceção de um dia conserva apenas um direto de cada grupo já representado.
@@ -29,18 +34,35 @@ export function adicionarBlocoFoco(
   if(!destino){destino=existentes[0];if(destino)adaptados.push(g);}
   if(!destino){faltantes.push(g);continue;}
   const quantidade=agenda.length===1?Math.max(0,2-destino.slots.filter(s=>s.exercicio.grupoPrimario===g).length):grupos.length>1?1:2;
+  solicitados+=quantidade;
   const usados=new Set(destino.slots.map(s=>s.exercicio.id));
   const opcoes=pool.filter(e=>e.grupoPrimario===g&&!usados.has(e.id)).sort((a,b)=>Number(favoritos.has(b.id))-Number(favoritos.has(a.id)));
   let entregues=0;
+  /**
+   * 🔴 REVISÃO INDEPENDENTE 15/09 (D-03) — A GUARDA PUXAR/EMPURRAR SAIU DAQUI.
+   *
+   * Ela recusava qualquer extra de `empurrar` quando a semana já tinha
+   * `empurrar >= puxar` — ou seja, **a semana equilibrada já bloqueava** —, e nunca
+   * restringia `puxar`. Medido na varredura da revisão: os 200 planos com "não foi
+   * possível completar o bloco" eram peito (72), tríceps (64) e posterior (64), sem
+   * um único grupo de puxar; e, fora do bloqueio total, ela ainda trocava em silêncio
+   * o composto de empurrar por um isolado.
+   *
+   * Decisão da coordenação: o balanceamento é referência do plano SEM foco; o
+   * desequilíbrio que vem dos extras autorizados é consequência aceita do foco, e não
+   * se compensa tirando de outro grupo. O aviso semanal de puxar/empurrar passou a ser
+   * medido só sobre o baseline, no montador.
+   *
+   * (O caso `posterior` NÃO vinha daqui: no equipamento `casa` o pool elegível tem um
+   * único exercício, então a falta é de catálogo e o aviso já era honesto.)
+   */
   for(const e of opcoes){
    if(entregues>=quantidade)break;
-   const todos=dias.flatMap(d=>d.slots);
-   if(e.padraoMovimento==='empurrar'&&todos.filter(s=>s.padrao==='empurrar').length>=todos.filter(s=>s.padrao==='puxar').length)continue;
    const s:SlotExercicio={padrao:e.padraoMovimento,exercicio:e,...(favoritos.has(e.id)?{incluidoPorPreferencia:true}:{})};destino.slots.push(s);adicionais.add(s);entregues++;
   }
   if(entregues<quantidade)faltantes.push(g);
  }
- return {dias,adicionais,adaptados,faltantes};
+ return {dias,adicionais,adaptados,faltantes,solicitados};
 }
 
 /** Redistribui o baseline entre recortes já decididos pelo seletor. Não corta séries

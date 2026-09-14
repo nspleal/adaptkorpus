@@ -68,6 +68,30 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
     expect(com.blocoFoco?.grupos).toEqual(['peito']);
     expect(com.blocoFoco?.adicionais).toHaveLength(2);
   });
+
+  /**
+   * 🔴 L-01 (revisão independente 15/09) — o MESMO caminho real, com tempo LIMITADO.
+   * A etapa 3 tinha posto `sem_limite` nos dois lados desta comparação; o regime limitado,
+   * que é o da maioria, ficou sem prova — e era justamente onde o candidato `badcea47`
+   * cobrava de terceiros. Aqui o baseline não se mexe e o ganho é o do bloco entregue.
+   */
+  describe('tempo LIMITADO de 60 min — regressão de D-01/D-02', () => {
+    const semL = rotina(perfil({ limiteTempoTreino: 'limitado' } as never));
+    const comL = rotina(perfil({ limiteTempoTreino: 'limitado', foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
+    const x = seriesPorGrupo(semL); const y = seriesPorGrupo(comL);
+    const entregue = (comL.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
+
+    it('anti-vacuidade: o bloco chega ao plano neste regime', () => {
+      expect(entregue, 'bloco vazio — nada é provado abaixo').toBeGreaterThan(0);
+    });
+    it('nenhum terceiro paga, com o relógio apertando', () => {
+      const mexidos = [...new Set([...x.keys(), ...y.keys()])].filter((g) => (x.get(g) ?? 0) !== (y.get(g) ?? 0));
+      expect(mexidos.sort(), `grupos alterados: ${mexidos.join(', ')}`).toEqual(['peito']);
+    });
+    it('o ganho do peito é exatamente o que o bloco declara', () => {
+      expect((y.get('peito') ?? 0) - (x.get('peito') ?? 0)).toBe(entregue);
+    });
+  });
 });
 
 describe('🔴 D2/D3 — a troca escolhida ENTRA (id, nunca índice entre listas)', () => {

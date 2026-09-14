@@ -419,9 +419,15 @@ export interface RotinaSemanal {
    * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em
    * ambiguidade. Ausente quando não há foco vigente.
    */
-  /** Adição automática14/09: entrega concreta, separada da transferência legada. */
+  /** Adição automática14/09: entrega concreta, separada da transferência legada.
+   *
+   * 🔴 Revisão 15/09 — INTENÇÃO × ENTREGA em campos separados. `solicitados` é quanto
+   * esta montagem pediu; `adicionais` é o que SOBREVIVEU ao corte temporal. A tela
+   * anunciava "2 exercícios adicionais" contando a intenção, inclusive quando o tempo
+   * já tinha removido um deles. `adicionais.length < solicitados` ⇒ entrega parcial. */
   blocoFoco?: {
     grupos: GrupoPrimario[];
+    solicitados: number;
     adicionais: {diaId?: Weekday; exercicioId: string; series: number}[];
     adaptado: boolean;
   };

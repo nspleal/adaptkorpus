@@ -28,9 +28,16 @@ export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | 
   if (bloco) {
     const grupos = bloco.grupos.map(g => ROTULO_GRUPO[g] ?? g).join(' e ');
     const n = bloco.adicionais.length;
-    return n > 0
-      ? `${grupos} em foco: ${n} exercício${n === 1 ? '' : 's'} ${n === 1 ? 'adicional' : 'adicionais'} no plano, com ${bloco.adicionais.reduce((total, a) => total + a.series, 0)} séries ao todo.`
-      : `${grupos} em foco: não foi possível acrescentar exercícios neste plano. Confira os limites indicados.`;
+    if (n === 0) return `${grupos} em foco: não foi possível acrescentar exercícios neste plano. Confira os limites indicados.`;
+    /**
+     * 🔴 Revisão independente 15/09 — A FRASE CONTA O QUE SOBREVIVEU, NÃO A INTENÇÃO.
+     * Ela dizia "2 exercícios adicionais, 4 séries" mesmo quando o corte temporal já
+     * tinha removido parte do bloco — e, no defeito D-02, quando o ganho líquido do
+     * grupo era zero. `solicitados` × `adicionais` separa intenção de entrega.
+     */
+    const series = bloco.adicionais.reduce((total, a) => total + a.series, 0);
+    const parcial = bloco.solicitados > n ? ` Coube ${n} de ${bloco.solicitados}; o resto não entrou pelo tempo disponível.` : '';
+    return `${grupos} em foco: ${n} exercício${n === 1 ? '' : 's'} ${n === 1 ? 'adicional' : 'adicionais'} no plano, com ${series} séries ao todo.${parcial}`;
   }
   const f = rotina?.foco;
   if (!f) return null;

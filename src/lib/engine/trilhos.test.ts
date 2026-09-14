@@ -201,6 +201,23 @@ describe('🔒 o foco chega ao PLANO', () => {
     expect(soma(com)).toBe(soma(plano(perfil({limiteTempoTreino:'sem_limite'})))+(com.blocoFoco?.adicionais.reduce((n,a)=>n+a.series,0)??0));
   });
 
+  /**
+   * 🔴 L-01 (revisão independente 15/09) — a mesma identidade com tempo LIMITADO, onde o
+   * candidato `badcea47` tirava do baseline para acomodar o bloco. O total sobe exatamente o
+   * que o bloco entregou, e nenhum grupo fora do foco muda de volume.
+   */
+  it('tempo LIMITADO: o total sobe só o que o bloco entregou, e ninguém mais muda', () => {
+    const soma = (r: ReturnType<typeof plano>) => [...seriesPorGrupo(r).values()].reduce((a, b) => a + b, 0);
+    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }));
+    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 });
+    const entregue = com.blocoFoco?.adicionais.reduce((n, a) => n + a.series, 0) ?? 0;
+    expect(entregue, 'bloco vazio — a identidade seria trivial').toBeGreaterThan(0);
+    expect(soma(com)).toBe(soma(sem) + entregue);
+    const a = seriesPorGrupo(sem); const b = seriesPorGrupo(com);
+    const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => g !== 'peito' && (a.get(g) ?? 0) !== (b.get(g) ?? 0));
+    expect(mexidos, `grupos alterados fora do foco: ${mexidos.join(', ')}`).toEqual([]);
+  });
+
   it('MRV do baseline preservado; extras do foco têm exceção explícita14/09', () => {
     const teto = mrv('intermediario', 'massa');
     for (const p of [perfil(), comFoco])

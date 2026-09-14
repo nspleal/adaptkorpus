@@ -98,11 +98,29 @@ export function vereditoDoPlano(
         ].filter(Boolean).join(' '),
       };
     }
+    /**
+     * 🔴 P-01 (revisão independente 15/09) — O QUE ESTE ESTADO É, E O QUE ELE NÃO É.
+     *
+     * `bloqueio` aqui é TOM DE AVISO, não impedimento: o plano continua listado, o dia
+     * continua selecionável e a sessão continua podendo ser iniciada e registrada
+     * (`AvisosMotor` só pinta a faixa; `TreinoTab` renderiza os dias do mesmo jeito).
+     * A frase tinha de dizer isso e oferecer os caminhos reais — sem prometer que algum
+     * deles faz o treino caber, porque o motor não mediu nenhum deles.
+     *
+     * O que NÃO se faz para sair daqui: afrouxar o limite escolhido, o piso de descanso
+     * ou a cobertura aprovada. Qualquer mudança nessas três políticas é decisão do autor.
+     */
     case 'INCOMPATIVEL':
       return {
         tom: 'bloqueio',
         titulo: `Não encontramos uma versão com a cobertura exigida dentro do limite de tempo para sessões de ${tempoPorSessaoMin} min.`,
-        detalhe: 'Aumentar o tempo por sessão no seu perfil é o que abre espaço — não vamos cortar exercício a ponto de o treino deixar de cobrir os padrões básicos.',
+        detalhe: [
+          `O plano continua aqui para consultar, iniciar e registrar — o que não dá para afirmar é que ele caiba em ${tempoPorSessaoMin} min.`,
+          rotina.limiteTempoTreino === 'sem_limite'
+            ? 'Você já está sem limite de tempo por sessão, então o que falta é exercício elegível: confira os avisos de cobertura e equipamento.'
+            : 'Três caminhos abrem espaço, e nenhum deles garante que caiba: aumentar o tempo por sessão, espalhar o treino por mais dias da semana, ou escolher 75+ (sem limite de tempo por sessão).',
+          'Não cortamos exercício a ponto de o treino deixar de cobrir os padrões básicos, nem encurtamos o descanso abaixo do mínimo.',
+        ].join(' '),
       };
     case 'ERRO_ALOCADOR':
       return {

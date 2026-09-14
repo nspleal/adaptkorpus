@@ -84,4 +84,17 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   const grupos=(r:typeof a)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
   expect(grupos(b)).toEqual({...grupos(a),peito:grupos(a).peito!+4});
  });
+ /**
+  * 🔴 L-01 (revisão independente 15/09) — a MESMA propriedade com tempo LIMITADO de 60 min,
+  * que é a fixture que esta suíte tinha trocado por `75 + sem_limite`. No candidato
+  * `badcea47` o bloco se pagava com séries de terceiros exatamente aqui.
+  */
+ it.each([1,4,5] as const)('tempo LIMITADO: adição sem compensação, semana %i',semana=>{
+  const p:PerfilTreino={...base,divisaoPreferida:'superior-inferior',tempoPorSessaoMin:60,limiteTempoTreino:'limitado'};
+  const a=run(p,semana),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
+  const grupos=(r:typeof a)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
+  const entregue=(b.blocoFoco?.adicionais??[]).reduce((n,x)=>n+x.series,0);
+  expect(entregue,'bloco vazio — a igualdade abaixo seria trivial').toBeGreaterThan(0);
+  expect(grupos(b)).toEqual({...grupos(a),peito:grupos(a).peito!+entregue});
+ });
 });

@@ -1,5 +1,5 @@
 import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
-import {reduzirEstruturaPorTempo} from './ajuste-tempo-estrutura';
+import {reduzirEstruturaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
 /**
  * Montador de rotina de treino — v4: ALOCADOR POR VOLUME (leva B do
  * handoff-motor-volume-v4-2026-08-12; substitui o alocador por lista de padrões do v1).
@@ -558,6 +558,8 @@ export function montarRotina(
    */
   function montarSaida(diasTreino: DiaTreino[], split: string): RotinaSemanal {
     let blocoFoco: RotinaSemanal['blocoFoco'];
+    /** Extras do foco que sobreviveram: o invariante puxar≥empurrar é do BASELINE. */
+    const extrasDoFoco = new Set<SlotExercicio>();
     // Um dia: todos os grupos diretos vigentes, um exercício por grupo antes
     // de distribuir séries. Crédito indireto não substitui esta cobertura.
     if (automatico && diasForca === 1 && diasTreino[0]) {
@@ -641,18 +643,18 @@ export function montarRotina(
       if (elegivel180 && coubeCheio) descansoEfetivo = { min: prescricao.descansoCompostoSeg.min, max: DESCANSO_COMPOSTO_TETO_SEG };
     }
 
-    // Decisão de produto 13/09: braços/ombros antes dos demais; manual conserva ordem.
-    if (!custom && prioritarios.length > 0 && foco?.grupo !== 'core') {
-      for (const dia of diasTreino) {
-        const antes = agregado != null || prioritarios.some(g => ['biceps', 'triceps', 'ombros'].includes(g));
-        dia.slots = antes
-          ? [...dia.slots.filter(s => prioritarios.includes(s.exercicio.grupoPrimario!)), ...dia.slots.filter(s => !prioritarios.includes(s.exercicio.grupoPrimario!))]
-          : ordenarComFoco(dia.slots, prioritarios[0]!, {
-            classe: sl => sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto',
-            grupo: sl => sl.exercicio.grupoPrimario ?? null,
-          });
-      }
-    }
+    /**
+     * Decisão de produto 13/09: braços/ombros antes dos demais; manual conserva ordem.
+     *
+     * 🔴 Revisão independente 15/09 (D-02) — A REORDENAÇÃO SAIU DAQUI PARA O FIM DA MONTAGEM.
+     *
+     * Ela rodava ANTES da rampa de volume, e a rampa distribui as séries em round-robin na
+     * ordem (dia, slot): reordenar antes fazia o mesmo baseline receber uma divisão de séries
+     * diferente só por existir um foco — e, com o teto estrito, uma divisão diferente muda o
+     * dia que estoura e o exercício que sai. Era mais um caminho pelo qual o foco cobrava de
+     * terceiros. Agora a ordem é decidida uma única vez, no fim, já com o bloco no dia (a
+     * mesma regra, o mesmo `ordenarComFoco`).
+     */
 
     /**
      * 🔒 DESCANSO DEFINITIVO, POR SLOT (cofre §🕐). Agora que os exercícios estão escolhidos,
@@ -904,14 +906,92 @@ export function montarRotina(
       // Autor14/09: as séries do baseline já foram decididas pela rampa. A adição
       // não redistribui essas séries; o deload continua reduzindo uma única vez.
       if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,series:seriesEmDeload(s.series??0)}))}));
-      if(recortesFoco && !rotinaBaseDoDeload && !semanaCiclo?.retomada){
-        const realocado=realocarBaselineAosRecortes(diasTreino,recortesFoco);
+      const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
+      const limiteDia=perfil.limiteTempoTreino==='sem_limite'?undefined:perfil.tempoPorSessaoMin*60;
+      /** Descanso pela autoridade única (`descansoDoExercicio`), no nível pedido. */
+      const aplicarDescanso=(d:DiaTreino,degradacao:0|1|2)=>{
+        for(const slot of d.slots){
+          const descanso=descansoDoExercicio({exercicio:slot.exercicio,rirAlvo,modoForca:prescricao.modoForca,semanaRampa:semanaCiclo?.retomada?.semana,degradacao});
+          if(descanso!=null)slot.descansoSeg=descanso;
+        }
+      };
+      const cabeNoDia=(d:DiaTreino)=>{
+        if(limiteDia===undefined)return true;
+        const m=avaliarDuracaoResistida(d.slots,perfil.nivelExperiencia,limiteDia);
+        return m.estadoCalculo!=='CALCULADO'||(m.duracaoMaximaEstimadaSegundos??Infinity)<=limiteDia;
+      };
+      /** Regra 3 (cobertura > descanso longo): degrada o descanso até o dia caber. */
+      const degradarAteCaber=(d:DiaTreino):0|1|2=>{
+        let nivel:0|1|2=0;
+        for(const deg of [0,1,2] as const){nivel=deg;aplicarDescanso(d,deg);if(cabeNoDia(d))break;}
+        return nivel;
+      };
+      /**
+       * 🔴 FASE A (revisão independente 15/09 — D-01/D-02) — A DECISÃO TEMPORAL DO
+       * BASELINE NÃO CONHECE O FOCO.
+       *
+       * Antes, degradação e corte rodavam sobre o plano JÁ com os extras. Duas
+       * consequências medidas: (a) um extra sozinho no seu grupo virava irremovível e o
+       * dia cedia um exercício do BASELINE — foco de bíceps custava 3 séries de costas em
+       * 243 das 3.456 combinações varridas; (b) as contagens semanais de `removivel`
+       * enxergavam os extras de outro dia, então extras na segunda mudavam o corte da
+       * quinta e o grupo focado podia terminar com ganho líquido ZERO enquanto a tela
+       * anunciava +4 séries.
+       *
+       * Rodando a fase sobre o baseline puro — e fixando aqui o nível de degradação do
+       * dia —, exercícios, séries e descanso dos demais grupos saem idênticos ao plano
+       * SEM FOCO das mesmas entradas, por construção. O foco não tem como cobrar deles.
+       */
+      /**
+       * Os recortes de pernas são REDISTRIBUIÇÃO do baseline (decisão 3), não o bloco
+       * adicional: eles entram antes da fase temporal, como sempre entraram. O que a
+       * revisão exige separar é a ADIÇÃO — e ela vem depois, na fase B.
+       * A conta de volume por grupo dos dois arranjos é comparada abaixo, para que a
+       * redistribuição nunca custe séries em silêncio.
+       */
+      const volumePorGrupo=(dias:readonly DiaTreino[])=>{
+        const m=new Map<GrupoPrimario,number>();
+        for(const d of dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario;if(g)m.set(g,(m.get(g)??0)+(s.series??0));}
+        return m;
+      };
+      const aplicarFaseA=(dias:DiaTreino[]):{dias:DiaTreino[];degradacao:(0|1|2)[];incompativeis:string[]}=>{
+        const saida=[...dias],degradacao:(0|1|2)[]=dias.map(()=>0),incompativeis:string[]=[];
+        for(let i=0;i<saida.length;i++){
+          const d=saida[i]!;
+          degradacao[i]=degradarAteCaber(d);
+          const ajuste=reduzirEstruturaPorTempo(d,perfil.nivelExperiencia,limiteDia,saida.filter((_,j)=>j!==i).flatMap(x=>x.slots));
+          saida[i]=ajuste.dia;
+          if(ajuste.incompativel)incompativeis.push(d.nome);
+        }
+        return {dias:saida,degradacao,incompativeis};
+      };
+      const usaRecortes=!!recortesFoco && !rotinaBaseDoDeload && !semanaCiclo?.retomada;
+      const clonar=(dias:readonly DiaTreino[])=>dias.map(d=>({...d,slots:d.slots.map(s=>({...s}))}));
+      const volumeNeutro=usaRecortes?volumePorGrupo(aplicarFaseA(clonar(diasTreino)).dias):undefined;
+      if(usaRecortes){
+        const realocado=realocarBaselineAosRecortes(diasTreino,recortesFoco!);
         diasTreino=realocado.dias;
         if(realocado.adaptado)avisos.push('Mantivemos a distribuição disponível: não foi possível separar os recortes de pernas preservando os exercícios.');
       }
-      const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[],faltantes:[]} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
+      const faseA=aplicarFaseA(diasTreino);
+      diasTreino=faseA.dias;
+      const degradacaoDoDia=faseA.degradacao;
+      for(const nome of faseA.incompativeis)avisos.push(`Estrutura incompatível com o tempo disponível em ${nome}; preservamos o único exercício de cada grupo.`);
+      if(volumeNeutro){
+        // O custo da separação dos recortes é DITO, nunca silencioso (D-01/D-02 valem para
+        // a adição; aqui a decisão 3 pode mesmo mudar a distribuição, e a pessoa sabe).
+        const depois=volumePorGrupo(diasTreino);
+        const perdas=[...volumeNeutro].filter(([g,n])=>(depois.get(g)??0)<n).map(([g])=>ROTULO_GRUPO[g]);
+        if(perdas.length)avisos.push(`Separar os recortes de pernas custou séries em ${perdas.join(', ')} no tempo disponível. Sem a ênfase agregada, esses grupos mantêm o volume anterior.`);
+      }
+      /**
+       * 🔴 FASE B — O BLOCO ADICIONAL ENTRA POR ÚLTIMO E SAI PRIMEIRO.
+       * Só extras são removidos aqui, e todos eles podem sair (o tempo pode eliminar o
+       * bloco inteiro). O descanso dos extras usa o MESMO nível de degradação já fixado
+       * pelo baseline: a adição também não encurta o descanso de quem já estava no plano.
+       */
+      const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[] as GrupoPrimario[],faltantes:[] as GrupoPrimario[],solicitados:0} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
       diasTreino=bloco.dias;
-      const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
       for(const adicional of bloco.adicionais){
         adicional.series=deloadAgendado?seriesEmDeload(2):2;
         const hold=repUnitDe(adicional.exercicio.id)==='segundos'?faixaSegundos(adicional.exercicio.id,perfil.nivelExperiencia)?.min:undefined;
@@ -923,40 +1003,61 @@ export function montarRotina(
       if(bloco.faltantes.length)avisos.push('Não foi possível completar o bloco adicional do foco com os exercícios elegíveis neste plano.');
       for(let i=0;i<diasTreino.length;i++){
         const d=diasTreino[i]!;
-        // O avaliador recebe séries/hold reais. Descanso é recalculado pela mesma
-        // autoridade, antes de remover qualquer exercício.
-        for(const deg of [0,1,2] as const){
-          for(const slot of d.slots){
-            const descanso=descansoDoExercicio({exercicio:slot.exercicio,rirAlvo,modoForca:prescricao.modoForca,semanaRampa:semanaCiclo?.retomada?.semana,degradacao:deg});
-            if(descanso!=null)slot.descansoSeg=descanso;
-          }
-          if(perfil.limiteTempoTreino==='sem_limite')break;
-          const medido=avaliarDuracaoResistida(d.slots,perfil.nivelExperiencia,perfil.tempoPorSessaoMin*60);
-          if(medido.estadoCalculo!=='CALCULADO'||(medido.duracaoMaximaEstimadaSegundos??Infinity)<=perfil.tempoPorSessaoMin*60)break;
-        }
-        const ajuste=reduzirEstruturaPorTempo(d,perfil.nivelExperiencia,perfil.limiteTempoTreino==='sem_limite'?undefined:perfil.tempoPorSessaoMin*60,bloco.adicionais,diasTreino.filter((_,j)=>j!==i).flatMap(d=>d.slots));
+        if(!d.slots.some(s=>bloco.adicionais.has(s)))continue;
+        /**
+         * Ordem da decisão 6, na letra: o DESCANSO cede primeiro — até o piso permitido,
+         * que continua sendo o da classe (e os 120 s do critério documental) —, e só depois
+         * saem exercícios. O que mudou na revisão é QUEM sai: nunca o baseline.
+         */
+        const degradacaoComBloco=degradarAteCaber(d);
+        const ajuste=removerExtrasPorTempo(d,perfil.nivelExperiencia,limiteDia,bloco.adicionais);
         diasTreino[i]=ajuste.dia;
-        if(ajuste.removidos.some(s=>bloco.adicionais.has(s)))avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${d.nome}.`);
-        if(ajuste.incompativel)avisos.push(`Estrutura incompatível com o tempo disponível em ${d.nome}; preservamos o único exercício de cada grupo.`);
+        if(ajuste.removidos.length)avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${d.nome}.`);
+        if(ajuste.dia.slots.some(s=>bloco.adicionais.has(s))){
+          if(degradacaoComBloco>(degradacaoDoDia[i]??0))avisos.push(`Para caber o bloco do foco, o descanso de ${d.nome} foi encurtado até o piso permitido.`);
+        } else {
+          // Bloco inteiro removido ⇒ o dia volta a ser exatamente o do plano SEM FOCO,
+          // descanso incluído. Nada do baseline paga por um extra que nem ficou.
+          aplicarDescanso(ajuste.dia,degradacaoDoDia[i]??0);
+        }
       }
+      for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s))extrasDoFoco.add(s);
       if (prioritarios.some(g => g !== 'core')) {
         const anteriores = rotinaBaseDoDeload?.blocoFoco?.adicionais ?? [];
+        const entregues = diasTreino.flatMap(d => d.slots.filter(s => bloco.adicionais.has(s)
+            || anteriores.some(a => a.diaId === d.diaId && a.exercicioId === s.exercicio.id))
+            .map(s => ({diaId: d.diaId, exercicioId: s.exercicio.id, series: s.series ?? 0})));
         blocoFoco = {
           grupos: prioritarios.filter(g => g !== 'core'),
-          adicionais: diasTreino.flatMap(d => d.slots.filter(s => bloco.adicionais.has(s)
-            || anteriores.some(a => a.diaId === d.diaId && a.exercicioId === s.exercicio.id))
-            .map(s => ({diaId: d.diaId, exercicioId: s.exercicio.id, series: s.series ?? 0}))),
+          // Intenção × entrega: a tela não pode anunciar o que o tempo removeu depois.
+          solicitados: rotinaBaseDoDeload ? (rotinaBaseDoDeload.blocoFoco?.solicitados ?? entregues.length) : bloco.solicitados,
+          adicionais: entregues,
           adaptado: bloco.adaptados.length > 0 || rotinaBaseDoDeload?.blocoFoco?.adaptado === true,
         };
       }
     }
 
-    // O bloco entra depois das séries; sua ordem também deve respeitar a prioridade.
-    if (automatico && (agregado === 'pernas' || prioritarios.some(g => ['biceps','triceps','ombros'].includes(g)))) {
-      for (const dia of diasTreino) dia.slots = [
-        ...dia.slots.filter(s => prioritarios.includes(s.exercicio.grupoPrimario!)),
-        ...dia.slots.filter(s => !prioritarios.includes(s.exercicio.grupoPrimario!)),
-      ];
+    /**
+     * O bloco entra depois das séries; sua ordem também deve respeitar a prioridade.
+     *
+     * 🔴 Revisão 15/09 — antes só braços/ombros/pernas reordenavam DEPOIS do bloco. Com a
+     * guarda de padrão fora (D-03), o extra do grupo focado pode ser um COMPOSTO, e ele
+     * ficava no fim do dia: "o grupo focado vem primeiro dentro da classe" (B2/C6) passava
+     * a falhar para peito/costas. A reordenação final agora espelha a de antes do bloco.
+     */
+    if (automatico && prioritarios.length > 0 && foco?.grupo !== 'core') {
+      const antes = agregado != null || prioritarios.some(g => ['biceps', 'triceps', 'ombros'].includes(g));
+      for (const dia of diasTreino) {
+        dia.slots = antes
+          ? [
+            ...dia.slots.filter(s => prioritarios.includes(s.exercicio.grupoPrimario!)),
+            ...dia.slots.filter(s => !prioritarios.includes(s.exercicio.grupoPrimario!)),
+          ]
+          : ordenarComFoco(dia.slots, prioritarios[0]!, {
+            classe: sl => sl.padrao === 'isolado' || sl.padrao === 'core' ? 'isolado' : 'composto',
+            grupo: sl => sl.exercicio.grupoPrimario ?? null,
+          });
+      }
     }
 
     // Cobertura direta dos complementares usa o piso já vigente do alocador.
@@ -968,7 +1069,15 @@ export function montarRotina(
 
     // Invariantes (verificação + aviso honesto, sem afrouxar segurança).
     const contaPadrao = (p: PadraoMovimento) => diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
-    if (contaPadrao('puxar') < contaPadrao('empurrar')) {
+    /**
+     * 🔴 Revisão 15/09 (D-03) — o alvo puxar ≥ empurrar é do PLANO SEM FOCO. O bloco
+     * adicional é autorizado a desequilibrar (foi decisão da coordenação não recusar um
+     * extra por isso, nem compensá-lo em outro grupo), então medir o alvo com os extras
+     * dentro acusaria um desequilíbrio que o baseline não tem.
+     */
+    const contaPadraoBaseline = (p: PadraoMovimento) =>
+      diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p && !extrasDoFoco.has(s)).length, 0);
+    if (contaPadraoBaseline('puxar') < contaPadraoBaseline('empurrar')) {
       avisos.push('Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).');
     }
     if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
@@ -1116,7 +1225,6 @@ export function montarRotina(
    * estruturalmente inválido como incompatibilidade temporal nem se continua reduzindo a partir dele.
    */
   const violacoesDaRealocacao = (r: RotinaSemanal): string[] => {
-    const slots = r.dias.flatMap((d) => d.slots);
     const permitidos = new Set<string>(
       locaisPermitidos(perfil.equipamento).flatMap((l) => (l === 'academia' ? ['academia'] : l === 'casa_com' ? ['casa_com'] : ['casa_sem'])),
     );
@@ -1126,20 +1234,41 @@ export function montarRotina(
       puxar: 'puxar', empurrar: 'empurrar', agachar: 'agachar',
       dobradica_quadril: 'agachar', isolado: 'isolado', core: 'core', cardio: 'core',
     };
-    return avaliarInvariantes(
-      slots.map((s) => ({
-        diaId: 'verificacao',
-        id: s.exercicio.id,
-        padrao: PARA_PADRAO[s.padrao],
-        grupo: s.exercicio.grupoPrimario ?? 'na',
-        equipamento: s.exercicio.local,
-        series: s.series ?? 1,
-        descansoSeg: s.descansoSeg ?? 0,
-        execucao: { tipo: 'REPETICOES', segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG },
-      })),
+    /**
+     * 🔴 REVISÃO INDEPENDENTE 15/09 (D-03) — COBERTURA E puxar ≥ empurrar SÃO DO BASELINE.
+     *
+     * Tirar a guarda de `bloco-foco-adicional` não bastava: o invariante rodava sobre o
+     * plano INTEIRO, então um extra de `empurrar` autorizado derrubava o plano em
+     * `ERRO_ALOCADOR{INVARIANTE_VIOLADO}` — a mesma recusa, um degrau acima. A decisão da
+     * coordenação é que o balanceamento é referência do plano SEM FOCO e que o
+     * desequilíbrio vindo dos extras autorizados é consequência aceita, sem compensar em
+     * outro grupo. Então cobertura e equilíbrio são medidos no baseline.
+     *
+     * Equipamento continua valendo para TODO slot entregue: um extra fora da allowlist é
+     * defeito de elegibilidade, não desequilíbrio de padrão.
+     */
+    const extras = new Set((r.blocoFoco?.adicionais ?? []).map((a) => `${a.diaId ?? ''}|${a.exercicioId}`));
+    const item = (s: SlotExercicio) => ({
+      diaId: 'verificacao',
+      id: s.exercicio.id,
+      padrao: PARA_PADRAO[s.padrao],
+      grupo: s.exercicio.grupoPrimario ?? 'na',
+      equipamento: s.exercicio.local,
+      series: s.series ?? 1,
+      descansoSeg: s.descansoSeg ?? 0,
+      execucao: { tipo: 'REPETICOES' as const, segundosEstimadosPorSerie: TEMPO_EXECUCAO_SERIE_REPS_SEG },
+    });
+    const baseline = r.dias.flatMap((d) => d.slots.filter((s) => !extras.has(`${d.diaId ?? ''}|${s.exercicio.id}`)));
+    const doFoco = r.dias.flatMap((d) => d.slots.filter((s) => extras.has(`${d.diaId ?? ''}|${s.exercicio.id}`)));
+    const violacoes = avaliarInvariantes(
+      baseline.map(item),
       // cobertura obrigatória da spec §8 (fixture 21) + allowlist REAL de locais do perfil.
       { coberturaObrigatoria: COBERTURA_TEMPORAL_OBRIGATORIA, equipamentosDisponiveis: [...permitidos] },
     ).violacoes;
+    for (const s of doFoco) {
+      if (!permitidos.has(s.exercicio.local)) violacoes.push(`equipamento fora da allowlist: ${s.exercicio.id} (${s.exercicio.local})`);
+    }
+    return violacoes;
   };
 
   /** Dia de um treino é explícito quando disponível; posição na agenda só atende rotinas legadas. */
