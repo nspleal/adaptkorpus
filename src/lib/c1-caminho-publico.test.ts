@@ -80,13 +80,33 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     expect(r.rotina!.duracaoIncompativel).toBe(true);
   });
 
-  it('um dia encontra a cobertura mínima válida e só então declara INCOMPATIVEL temporal', () => {
+  /**
+   * 🔵 REANCORADO pela decisão do autor de 2026-09-16 (P-01), não afrouxado.
+   *
+   * O literal `10` era a cobertura de dez grupos diretos. A decisão autorizou o full-body de
+   * um dia a DISPENSAR o direto de core → antebraço → panturrilha quando não couber, nesta
+   * ordem, parando assim que couber. Aos 10 min nada faz caber, então a lista é percorrida
+   * inteira: core e panturrilha saem (antebraço não está entre os dez e é pulado) e restam 8.
+   *
+   * O que se cobra agora é a CONDUTA, não o número: quem saiu foi só grupo dispensável, os
+   * demais mantiveram o único exercício, a retirada está nomeada num aviso e o plano continua
+   * declarando incompatibilidade — nunca certificado falso.
+   */
+  it('um dia dispensa só o que a decisão permite e ainda assim declara INCOMPATIVEL temporal', () => {
     const r = gerarTreino(
       perfilTreino({ diasDisponiveis: 1, tempoPorSessaoMin: 10 }),
       { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
     );
-    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 10 });
-    expect(r.rotina!.duracaoIncompativel).toBe(true);
+    const rotina = r.rotina!;
+    const entregues = rotina.dias.flatMap((d) => d.slots).map((s) => s.exercicio.grupoPrimario);
+    expect(rotina.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: entregues.length });
+    expect(rotina.duracaoIncompativel).toBe(true);
+    expect(entregues, 'grupo dispensável sobreviveu: o caso deixou de exercer a regra').not.toContain('core');
+    expect(entregues).not.toContain('panturrilha');
+    // Os oito restantes são exatamente os dez menos os dois dispensáveis presentes.
+    expect(new Set(entregues).size).toBe(8);
+    expect(rotina.avisos.some((a) => a.startsWith('Para caber em') && a.includes('Core')),
+      'a retirada não foi nomeada').toBe(true);
   });
 
   it('o alocador declara SEM_PLANO_MENOR antes da capacidade 1 inválida e preserva o último terminal válido', () => {

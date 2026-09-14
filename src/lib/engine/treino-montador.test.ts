@@ -6,6 +6,8 @@ import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { FeedbackGrupo, PerfilTreino } from './treino-types';
 import type { GrupoPrimario } from '../data/types';
+import { altaExigenciaDocumental, classeDeDescanso } from './descanso';
+import { FITT_OBJETIVO } from './treino-constants';
 
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
@@ -325,9 +327,38 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     expect(slots.filter((s) => !COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 60), 'semana 1 = piso do isolado/core').toBe(true);
   });
 
-  it('descanso do composto: objetivo saúde (60–90) sem modo força NUNCA sobe p/ 180 s', () => {
+  /**
+   * 🔵 REANCORADO pela decisão do autor de 2026-09-16 (P-04) — e a reancoragem corrigiu uma
+   * afirmação que o teste antigo fazia sem base.
+   *
+   * Ele cobrava `semana.descansoCompostoSeg.max === 90` e chamava isso de «objetivo saúde
+   * nunca sobe p/ 180 s». Mas 60–90 é a faixa que o OBJETIVO carrega na prescrição, e desde a
+   * inversão de eixo da §1.1 **o objetivo não governa descanso nenhum**: a faixa vem da CLASSE
+   * (composto 120–180) e o objetivo entra só pelo RIR-alvo. Medido neste mesmo perfil: `e2` e
+   * `e16` são compostos sem carga e sempre tiveram 120 s. O «90» descrevia apenas o escalar
+   * legado, que não olhava para os exercícios — exatamente o defeito de P-04.
+   *
+   * 🔒 O que se cobra agora é verificável e é o que a spec promete: a classe manda, os pisos
+   * valem, e o resumo da semana é o retrato dos slots.
+   */
+  it('descanso do composto: quem manda é a CLASSE, não o objetivo — e o resumo retrata os slots', () => {
     const r = rotinaSemana(1, { objetivo: 'saude', tempoPorSessaoMin: 120 });
-    expect(r.semana?.descansoCompostoSeg.max).toBe(90);
+    const compostos = r.dias.flatMap((d) => d.slots)
+      .filter((s) => classeDeDescanso(s.exercicio) === 'COMPOSTO' && s.descansoSeg != null);
+    expect(compostos.length, 'sem composto no plano: o teste seria vácuo').toBeGreaterThan(0);
+    // A faixa do objetivo (60–90) não aparece: nenhum composto fica dentro dela.
+    const faixaDoObjetivo = FITT_OBJETIVO.saude.descansoCompostoSeg;
+    expect(faixaDoObjetivo).toEqual({ min: 60, max: 90 });
+    for (const s of compostos) {
+      expect(s.descansoSeg, `${s.exercicio.id} caiu na faixa do objetivo — o eixo voltou a ser o objetivo`)
+        .toBeGreaterThan(faixaDoObjetivo.max);
+      // Piso da classe sempre respeitado; documental nunca abaixo de 120 s.
+      expect(s.descansoSeg).toBeGreaterThanOrEqual(altaExigenciaDocumental(s.exercicio) ? 120 : 90);
+    }
+    // Há de fato slots documentais a 180 s neste plano — senão o retrato não é exercido.
+    expect(compostos.some((s) => s.descansoSeg === 180 && altaExigenciaDocumental(s.exercicio))).toBe(true);
+    const valores = compostos.map((s) => s.descansoSeg!);
+    expect(r.semana?.descansoCompostoSeg).toEqual({ min: Math.min(...valores), max: Math.max(...valores) });
   });
 
   it('smoke: 3 níveis × 3 objetivos × semanas 1–6 sem violar invariantes nem séries fora da faixa', () => {

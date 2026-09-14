@@ -96,6 +96,12 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['bloco elegível incompleto', /completar o bloco adicional/, () => gerar({equipamento:'nenhum',foco:{grupo:'antebraco',semana:1}})],
   ['bloco reduzido por tempo', /Bloco do foco reduzido pelo tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20,foco:{grupo:'peito',semana:1}})],
   ['estrutura incompatível', /Estrutura incompatível com o tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  /**
+   * 🔵 P-01 (decisão do autor 2026-09-16) — o full-body de um dia pode dispensar o direto de
+   * core → antebraço → panturrilha para caber. A retirada tem de ser NOMEADA: é a única coisa
+   * que impede o plano de parecer coberto depois dela.
+   */
+  ['full-body dispensou grupo por tempo', /Para caber em \d+ min nesta sess[ãa]o [úu]nica, o plano ficou sem exerc[íi]cio direto de/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
   ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
     const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
     try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}
@@ -150,7 +156,8 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
       - (MONTADOR.match(/avisos\.push\(\.\.\.avisosCustom\)/g) ?? []).length;
     // Tripwire: um `avisos.push` novo entra descoberto e derruba este teste em vez de virar
     // mais um aviso que ninguém prova que chega à tela — o defeito que D1 fecha.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(29);
+    // 29 → 30 em 2026-09-16: entrou a família da dispensa do full-body curto (P-01).
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(30);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

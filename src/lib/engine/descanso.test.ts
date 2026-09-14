@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DESCANSO_PISO_DURO_SEG, FAIXA_DESCANSO, FAIXA_FORCA_PESADA, classeDeDescanso,
-  classificarComOrigem, descansoDoExercicio, descansoDoPadrao, deslocarPorRir, ehIsometrico, faixaDoExercicio, pisoFitDaRampa,
+  classificarComOrigem, degradar, descansoDoExercicio, deslocarPorRir, ehIsometrico, faixaDoExercicio, pisoFitDaRampa,
   rotuloDescanso, type ClasseDescanso,
 } from './descanso';
 import { EXERCISES } from '../data/exercises';
@@ -281,9 +281,10 @@ describe('🔴 1.3 — força pesada NÃO desce de 180 s ao degradar', () => {
     expect(cheio).toBe(300);
     expect(degradado, 'força pesada furou o piso de 3 min').toBe(180);
     expect(degradado / cheio, 'a queda passou de 40 %').toBeGreaterThanOrEqual(0.6);
-    // E o orçamento (que só vê o padrão) tem de concordar — senão o `min` do montador
-    // reintroduz o corte pelo outro lado.
-    expect(descansoDoPadrao('empurrar', { rirAlvo: 1, modoForca: true, degradacao: 2 })).toBe(180);
+    // 🔵 P-05: o orçamento não tem mais régua própria para «concordar». `descansoDoPadrao`
+    // saiu — ela não conseguia aplicar a exigência documental, que depende da CARGA — e o
+    // montador calcula o orçamento com esta mesma função. O piso de 3 min é cobrado direto.
+    expect(degradar(300, 'COMPOSTO', 2, true), 'o piso de força pesada cedeu').toBe(180);
   });
 
   it('composto SEM força pesada continua cedendo até 90 s', () => {
