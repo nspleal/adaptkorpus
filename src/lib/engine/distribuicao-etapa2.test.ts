@@ -35,8 +35,15 @@ describe('etapa2: possibilidades na saída final',()=>{
   expect(gs.some(g=>g.includes('costas')&&!g.includes('peito'))).toBe(true);
   expect(gs.flat()).toContain('ombros');
  });
- it('6 pernas: duas sessões inferiores abrangentes, diferentes do neutro',()=>{
-  const f=grupos(run(6,'pernas'));expect(f.filter(g=>g.includes('quadriceps')&&g.includes('posterior'))).toHaveLength(2);expect(f).not.toEqual(grupos(run(6)));
+ it.each([3,4,5,6,7])('%i pernas: ênfases distintas no terminal, com derivados preservados',n=>{
+  const r=run(n,'pernas'),f=grupos(r);
+  // Primários documentais do catálogo; não exige exclusividade anatômica.
+  const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
+  expect(inferiores).toHaveLength(2);
+  expect(inferiores.some(g=>g[0]==='quadriceps'&&!g.includes('posterior'))).toBe(true);
+  expect(inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'))).toBe(true);
+  expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','panturrilha','ombros','peito','costas']));
+  expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2});
  });
  it('antebraço: bloco direto com foco explícito, sem novo dia exclusivo',()=>{
   const f=grupos(run(4,'antebraco'));expect(f.some(g=>g.includes('antebraco')&&g.length>1)).toBe(true);
@@ -83,5 +90,26 @@ describe('etapa2: contratos no seletor atual, sem fixture histórica',()=>{
   const r=gerarTreino({...base,diasDisponiveis:6,treinoDias:agendas[6],focoAgregado:{grupo:'bracos',semana:1}},{exercises:EXERCISES,semanaCiclo:{semana:3,retomada:{semana:1,fator:0.5,volumeReferencia:14}}}).rotina!;
   const gs=grupos(r);for(const g of new Set(gs.flat()))expect(gs.filter(xs=>xs.includes(g)).length).toBeLessThanOrEqual(freqMaxPorGrupo(1));
   expect(r.distribuicao).toMatchObject({adaptada:true,atendida:false});
+ });
+});
+
+
+describe('rodada2: contratos quantitativos, seletor real',()=>{
+ it.each([1,2,3,4,5] as const)('banda existente no terminal, semana %i',semana=>{
+  const p={...base,nivelExperiencia:'intermediario' as const,diasDisponiveis:4,tempoPorSessaoMin:60};
+  const r=gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
+  const c=creditoPonderadoDaSemana(r.dias.flatMap(d=>d.slots));
+  for(const g of ['peito','costas'] as const)expect(c.get(g)).toBeLessThanOrEqual(16);
+ });
+ it.each([2,3] as const)('cascata na divisão explícita estável, semana %i: entrega e conservação',semana=>{
+  // Caminho explícito suportado pelo seletor atual, sem simular o seletor antigo.
+  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:60,divisaoPreferida:'superior-inferior'};
+  const run=(p:PerfilTreino)=>gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
+  const a=run(p),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}});
+  const totais=(r:typeof a)=>{const m=new Map<string,number>();for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m.set(g,(m.get(g)??0)+(s.series??0));}return m;};
+  const x=totais(a),y=totais(b);
+  expect(y.get('peito')).toBeGreaterThan(x.get('peito')!);
+  expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0));
+  expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito','triceps']);
  });
 });

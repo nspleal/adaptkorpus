@@ -656,6 +656,25 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       mudou=false;const antes=medir();
       for(const g of GRUPOS_GRANDES){
         if((antes.get(g)??0)<=(alvoPonderado.get(g)??Infinity))continue;
+        // Antes de podar, tente trocar uma contribuição indireta excedente no
+        // mesmo grupo/padrão. Pool já elegível; sem reduzir crédito de terceiros,
+        // mexer em favoritos, calendário, séries ou quantidade de slots.
+        substituicao:for(const dia of dias)for(const slot of dia.slots){
+          if(slot.favorito||!secundariosDe(slot.exercicio).includes(g))continue;
+          const original=slot.exercicio;
+          for(const alternativa of porGrupo.get(slot.grupo)??[]){
+            if(alternativa.padraoMovimento!==original.padraoMovimento
+              ||dia.slots.some(s=>s.exercicio.id===alternativa.id))continue;
+            slot.exercicio=alternativa;const depois=medir();
+            if((depois.get(g)??0)<(antes.get(g)??0)
+              &&(depois.get(g)??0)>=Math.min(antes.get(g)??0,args.pisoPonderado!)
+              &&[...new Set([...antes.keys(),...depois.keys()])].every(x=>x===g||(depois.get(x)??0)===(antes.get(x)??0))){
+              mudou=true;break substituicao;
+            }
+            slot.exercicio=original;
+          }
+        }
+        if(mudou)break;
         busca:for(let d=dias.length-1;d>=0;d--)for(let i=dias[d]!.slots.length-1;i>=0;i--){
           const slot=dias[d]!.slots[i]!;
           if(slot.grupo!==g||dias[d]!.slots.filter(s=>s.grupo===g).length<2||slot.favorito)continue;

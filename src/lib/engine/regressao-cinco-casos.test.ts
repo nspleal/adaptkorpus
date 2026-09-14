@@ -215,4 +215,4 @@ describe('C1 §8.3 · regressões adicionais (sessão longa · tempo impossível
 
 // Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
 // As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.
-vi.mock('./selecao-divisao', () => import('./__fixtures__/selecao-etapa1'));
+vi.mock('./selecao-divisao', async (importOriginal) => process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? importOriginal() : import('./__fixtures__/selecao-etapa1'));

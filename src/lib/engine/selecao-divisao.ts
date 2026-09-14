@@ -58,7 +58,6 @@ export function selecionarDivisao(
     dias=[dia('Peito + Tríceps + Ombros','peito','triceps','ombros'),quad(),costas(),post()];
     if(n>=5){dias[0]=peito();dias.push(dia('Ombros + Braços','ombros','biceps','triceps'));}
     if(n>=6){
-      if(foco==='pernas'){dias[1]=pernas();dias[3]=pernas();}
       dias.push(complemento());
     }
     // Foco individual conserva as outras ênfases, sem virar foco agregado.
@@ -83,13 +82,13 @@ export function selecionarDivisao(
   let recortes:GrupoPrimario[][];
   if(n===1)recortes=[['peito','costas','quadriceps','posterior']];
   else if(n===2)recortes=[['peito','costas'],['quadriceps','posterior']];
-  else if(foco==='pernas')recortes=n>=6?[['quadriceps','posterior'],['quadriceps','posterior']]:[['quadriceps'],['posterior']];
+  else if(foco==='pernas')recortes=[['quadriceps'],['posterior']];
   else if(n===3&&foco==='bracos')recortes=[['biceps','peito'],['triceps','costas']];
   else if(prioritarios.length)recortes=dias.filter(d=>prioritarios.every(g=>d.grupos.includes(g))).map(()=>[...prioritarios]);
   else recortes=dias.map(d=>d.grupos.filter(g=>['peito','costas','quadriceps','posterior','ombros'].includes(g))).filter(g=>g.length>0);
   if(!recortes.length&&prioritarios.length)recortes=[[...prioritarios]];
   const split=n===1?'Full-body':dias.map(d=>d.nome).join(' / ');
-  return {...(adaptada?legado:{split,dias}),intencao:{nome:split,recortes,adaptada},preservarRecortes:!adaptada,prioritarios:adaptada?undefined:prioritarios};
+  return {...(adaptada?legado:{split,dias}),intencao:{nome:split,recortes,adaptada},preservarRecortes:!adaptada,prioritarios:adaptada||individual==='core'?undefined:prioritarios};
 }
 
 /** Quantas sessões distintas do plano final cumprem os recortes principais pedidos.
