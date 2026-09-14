@@ -36,8 +36,13 @@ const PERFIL: PerfilTreino = {
 
 const RAMPA: OpcoesSemana = { semana: 3, retomada: { semana: 2, fator: 0.7, volumeReferencia: 16 } };
 
-const gerar = (p: PerfilTreino, ctx: OpcoesSemana) => gerarTreino(p, { exercises: EXERCISES, semanaCiclo: ctx }).rotina!;
-const abrir = (r: RotinaSemanal, p: PerfilTreino) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom);
+// O Painel fornece o contexto vigente ao capturar a dose real. O harness faz o mesmo.
+const contextos = new WeakMap<RotinaSemanal, OpcoesSemana>();
+const gerar = (p: PerfilTreino, ctx: OpcoesSemana) => {
+  const r = gerarTreino(p, { exercises: EXERCISES, semanaCiclo: ctx }).rotina!;
+  contextos.set(r, ctx); return r;
+};
+const abrir = (r: RotinaSemanal, p: PerfilTreino) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom, contextos.get(r)?.retomada);
 const json = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 const salvar = (r: RotinaSemanal, p: PerfilTreino) => json(paraRotinaCustom(abrir(r, p)));
 const total = (r: RotinaSemanal) => r.dias.reduce((n, d) => n + d.slots.reduce((m, s) => m + (s.series ?? 0), 0), 0);

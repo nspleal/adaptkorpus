@@ -1,3 +1,4 @@
+import { aplicarDoseReferenciada, contextoDaDose } from './referencia-dose';
 import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
 // 🔒 Autoridade única do ajuste temporal: o montador chama a SEQUÊNCIA, nunca uma etapa
 // solta. As etapas seguem exportadas no módulo para teste unitário.
@@ -859,48 +860,14 @@ export function montarRotina(
             }
             return series;
           };
-          /**
-           * 🔴 R-01 (revisão independente 14/09) — POR QUE A INTENÇÃO NÃO PODE SER TETO DE UM
-           * ROUND-ROBIN.
-           *
-           * `cf88f9b` pôs a escolha como teto do round-robin e `7031790` blindou o slot SEM
-           * escolha com uma segunda repartição. Os dois erram pelo mesmo motivo: o laço
-           * REGASTA a folga que um teto menor liberou. Quem recebe essa folga sobe sem ter
-           * sido tocado — em `7031790` isso continuou acontecendo entre slots que ambos têm
-           * escolha (medido: 2.116 de 39.200; conjunto idêntico ao de `cf88f9b`).
-           *
-           * 🔒 A regra aqui não reparte duas vezes: ela reparte UMA, sem intenção nenhuma, e
-           * depois lê cada slot ISOLADAMENTE. O que um slot deixa de pedir some do total do
-           * grupo — não vai para ninguém. É a única forma de a redução de um slot nunca
-           * mexer em outro: a série entregue a `k` não pode depender do número de `j`.
-           *
-           * As duas leituras possíveis, e nada além delas:
-           *  ① o pedido CABE NA REPARTIÇÃO DE RECUPERAÇÃO — ordenados os dois vetores, o
-           *    pedido é ≤ a cota item a item → cada slot recebe exatamente o que pediu.
-           *    É o que preserva o plano ao reabrir sem editar: a rampa do plano automático
-           *    roda na ordem do ALOCADOR e o desenho que a pessoa guarda está na ordem
-           *    EXIBIDA (depois de `reordenarPeloFoco`), então as séries salvas são uma
-           *    PERMUTAÇÃO da cota — mesmo multiconjunto, outros donos. Era exatamente aí que
-           *    `5d81d227` perdia uma série, e é por isso que a cota não pode ser teto aqui.
-           *    O multiconjunto da repartição não depende da ordem (o laço enche por nível e
-           *    só o resto muda de dono), então esta comparação é exata, não heurística.
-           *  ② o pedido NÃO cabe → cada slot é limitado pela SUA cota posicional. Nada é
-           *    remanejado: só as reduções que a pessoa fez são honradas, e o resto é a
-           *    repartição de recuperação de sempre. O grupo pode entregar MENOS que o alvo —
-           *    é o contrato: o que um slot deixa de pedir some do total, não muda de dono.
-           *
-           * Sem escolha alguma no grupo, `pedido === cota` cai em ① e é a conta de sempre —
-           * por isso o plano automático não se move.
-           */
           const cota = repartir(tetoIRV);
-          const pedido = tetoIRV.map((t, k) => (escolha[k] == null ? cota[k]! : Math.min(t, escolha[k]!)));
-          const desc = (v: readonly number[]) => [...v].sort((a, b) => b - a);
-          const pedidoOrd = desc(pedido);
-          const cotaOrd = desc(cota);
-          const cabeNaReparticao = pedidoOrd.every((v, i) => v <= cotaOrd[i]!);
-          slots.forEach((s, k) => {
-            s.series = cabeNaReparticao ? pedido[k]! : Math.min(pedido[k]!, cota[k]!);
-          });
+          // Automático permanece na repartição original. Só o desenho pode usar fotografia.
+          const doses = desenhoDaPessoa ? aplicarDoseReferenciada(slots.map((s, k) => {
+            const diaId = diasTreino[diaDoSlot.get(s) ?? 0]?.diaId;
+            const desenho = custom?.dias.find((d, i) => (d.diaId ?? diasForcaDaSemana[i]) === diaId);
+            return { id: s.exercicio.id, escolha: escolha[k], referencia: desenho?.referenciaDose };
+          }), cota, tetoIRV, alvoGrupo, contextoDaDose(ret)!) : cota;
+          slots.forEach((s, k) => { s.series = doses[k]!; });
         }
         if (descartar.size > 0) {
           for (const d of diasTreino) d.slots = d.slots.filter((s) => !descartar.has(s));

@@ -48,8 +48,13 @@ const RAMPA_A: OpcoesSemana = { semana: 3, retomada: { semana: 1, fator: 0.35, v
 const RAMPA_B: OpcoesSemana = { semana: 3, retomada: { semana: 2, fator: 0.55, volumeReferencia: 22 } };
 const RAMPAS = [RAMPA_A, RAMPA_B];
 
-const gerar = (p: PerfilTreino, ctx: OpcoesSemana) => gerarTreino(p, { exercises: EXERCISES, semanaCiclo: ctx }).rotina!;
-const abrir = (r: RotinaSemanal, p: PerfilTreino) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom);
+// O Painel fornece o contexto vigente ao capturar a dose real. O harness faz o mesmo.
+const contextos = new WeakMap<RotinaSemanal, OpcoesSemana>();
+const gerar = (p: PerfilTreino, ctx: OpcoesSemana) => {
+  const r = gerarTreino(p, { exercises: EXERCISES, semanaCiclo: ctx }).rotina!;
+  contextos.set(r, ctx); return r;
+};
+const abrir = (r: RotinaSemanal, p: PerfilTreino) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom, contextos.get(r)?.retomada);
 const json = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 const salvar = (r: RotinaSemanal, p: PerfilTreino) => json(paraRotinaCustom(abrir(r, p)));
 
@@ -313,19 +318,8 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       expect(moveu).toEqual([]);
     });
 
-    /**
-     * 🔒 EXCEÇÃO CARACTERIZADA E FIXADA — o único ponto em que uma redução move outro slot.
-     *
-     * Enquanto o desenho pede MAIS do que o volume-alvo do grupo permite, cada slot é
-     * limitado pela sua cota posicional; quando a redução traz o pedido para DENTRO do teto,
-     * o motor passa a entregar exatamente o que foi pedido — e um slot cujo número estava
-     * sendo recusado sobe ATÉ O NÚMERO QUE A PRÓPRIA PESSOA PEDIU para ele. Não há função
-     * de um slot só que faça as duas coisas ao mesmo tempo (preservar o plano reaberto e
-     * nunca mover ninguém) com um teto de grupo duro: é preciso olhar a soma.
-     *
-     * Este teste PRENDE esse comportamento para que ele não mude em silêncio.
-     */
-    it('exceção fixada: ao sair de acima do teto, o slot sobe SÓ até o número que a pessoa pediu', () => {
+    // Regressão R4: atravessar a fronteira não pode promover o pedido alheio recusado.
+    it('ao sair de acima do teto, a redução preserva os outros slots', () => {
       const CTX: OpcoesSemana = { semana: 3, retomada: { semana: 1, fator: 0.35, volumeReferencia: 16 } };
       const auto = gerar(P_CASA, CTX);
       const fonte = mapaDe(gerar(P_CASA, { semana: 1 }));
@@ -339,9 +333,9 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       expect(cota.get('qua/e156')).toBe(2);
       expect(antes.get('seg/e55')).toBe(3);
       expect(antes.get('qua/e156')).toBe(2);
-      // reduzindo e55 para 2, o pedido passa a caber (2+3 = 5) e e156 recebe o SEU número
+      // O pedido cabe, mas a edição de e55 não autoriza aumentar e156.
       expect(depois.get('seg/e55')).toBe(2);
-      expect(depois.get('qua/e156')).toBe(3);
+      expect(depois.get('qua/e156')).toBe(antes.get('qua/e156'));
       expect(depois.get('qua/e156')!).toBeLessThanOrEqual(fonte.qua!.e156!);
       // o volume do grupo não passa do alvo da retomada em nenhum dos dois estados
       const alvo = totalPorGrupo(gerar(com(P_CASA, desenho(auto, {})), CTX));

@@ -5,6 +5,7 @@ import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
 import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico } from '@/lib/engine/critico';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
+import { contextoDaDose, type ReferenciaDose } from '@/lib/engine/referencia-dose';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 import SeletorExercicio, { type ContextoSeletor } from './SeletorExercicio';
@@ -36,6 +37,7 @@ export interface DiaEditavel {
   weekdayIdx: number;
   exercicios: Exercise[];
   seriesPorExercicio?: Record<string, number>;
+  referenciaDose?: ReferenciaDose;
 }
 
 /** Começar do plano atual conserva sua dose como escolha inicial do novo desenho manual.
@@ -43,8 +45,9 @@ export interface DiaEditavel {
  * saída recuperada congelaria rampa/deload e perderia a dose original do usuário.
  * A prévia/salvamento continuam sujeitos à recuperação do motor, sem regra paralela aqui.
  */
-export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[], custom?: RotinaCustom): DiaEditavel[] {
-  return dias.map((d, i) => ({
+export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday[], custom?: RotinaCustom, retomada?: { semana: number; fator: number; volumeReferencia: number }): DiaEditavel[] {
+  const contexto = contextoDaDose(retomada);
+  const editaveis: DiaEditavel[] = dias.map((d, i) => ({
     nome: d.nome,
     // `diaId` é a fonte nova; agenda/posição é apenas compatibilidade para plano legado.
     weekdayIdx: Math.max(0, ORDEM_SEMANA.indexOf(d.diaId ?? treinoDias[i] ?? ORDEM_SEMANA[i % 7]!)),
@@ -53,6 +56,26 @@ export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday
       ? { ...custom.dias.find((dia, indice) => (dia.diaId ?? treinoDias[indice]) === (d.diaId ?? treinoDias[i]))?.seriesPorExercicio }
       : Object.fromEntries(d.slots.filter((s) => s.series != null).map((s) => [s.exercicio.id, s.seriesAntesDoDeload ?? s.series!])),
   }));
+  if (contexto) editaveis.forEach((d, i) => {
+    d.referenciaDose = { versao: 1, contexto,
+      series: Object.fromEntries(dias[i]!.slots.filter(s => s.series != null).map(s => [s.exercicio.id, s.series!])),
+      escolhas: { ...d.seriesPorExercicio },
+    };
+  });
+  return editaveis;
+}
+
+/** Captura a prévia efetivamente exibida ANTES da próxima edição, sem alterar a intenção. */
+export function atualizarReferencias(dias: readonly DiaEditavel[], previsto: readonly DiaDoEditor[]): DiaEditavel[] {
+  let indice = 0;
+  return dias.map(d => {
+    const p = d.exercicios.length ? previsto[indice++] : undefined;
+    if (!d.referenciaDose || !p) return d;
+    return { ...d, referenciaDose: { ...d.referenciaDose,
+      series: Object.fromEntries(p.exercicios.flatMap((e, i) => p.series?.[i] == null ? [] : [[e.id, p.series[i]!]])),
+      escolhas: { ...d.seriesPorExercicio },
+    } };
+  });
 }
 
 /** Um treino de força por dia nesta versão. Sessões duplas exigirão uma identidade de sessão própria. */
@@ -66,7 +89,7 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
     origem: 'usuario',
     dias: dias
       .filter((d) => d.exercicios.length > 0)
-      .map((d) => ({ nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id),
+      .map((d) => ({ ...(d.referenciaDose ? { referenciaDose: d.referenciaDose } : {}), nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id),
         ...(d.seriesPorExercicio && Object.keys(d.seriesPorExercicio).length ? { seriesPorExercicio: Object.fromEntries(d.exercicios.filter((e) => d.seriesPorExercicio?.[e.id] != null).map((e) => [e.id, d.seriesPorExercicio![e.id]!])) } : {}),
       })),
   };
@@ -127,7 +150,7 @@ export default function EditorTreino({
   const proximoDiaLivre = (atuais: readonly DiaEditavel[]) =>
     Math.max(0, ORDEM_SEMANA.findIndex((_, indice) => !atuais.some((dia) => dia.weekdayIdx === indice)));
 
-  const mut = (i: number, f: (d: DiaEditavel) => DiaEditavel) => setDias((p) => p.map((d, k) => (k === i ? f(d) : d)));
+  const mut = (i: number, f: (d: DiaEditavel) => DiaEditavel) => setDias((p) => atualizarReferencias(p, preverPlano(p)).map((d, k) => (k === i ? f(d) : d)));
   return (
     <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', padding: '28px 20px 48px', animation: `evkScreenIn .45s ${EASE}` }}>
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -201,7 +224,7 @@ export default function EditorTreino({
           {/* 🔒 DF① — o salvar NUNCA desabilita por causa de aviso. Só o treino vazio não
               salva, e isso não é risco: é ausência de treino. */}
           <button
-            onClick={() => { onAvisoMostrado?.(avaliacao.avisos.map((a) => a.codigo)); onSalvar(dias, avaliacao); }}
+            onClick={() => { onAvisoMostrado?.(avaliacao.avisos.map((a) => a.codigo)); onSalvar(atualizarReferencias(dias, previsto), avaliacao); }}
             disabled={total === 0 || !diasUnicos}
             className={total > 0 && diasUnicos ? 'hov-btn' : ''}
             style={{ flex: 1, minWidth: 180, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: total > 0 && diasUnicos ? 'pointer' : 'not-allowed', opacity: total > 0 && diasUnicos ? 1 : 0.4 }}

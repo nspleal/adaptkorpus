@@ -45,7 +45,7 @@ const RETOMADAS: OpcoesSemana[] = FATORES.flatMap((fator) =>
     RAMPAS.map((semana) => ({ semana: 3, retomada: { semana, fator, volumeReferencia } }))));
 
 const gerar = (p: PerfilTreino, ctx: OpcoesSemana) => gerarTreino(p, { exercises: EXERCISES, semanaCiclo: ctx }).rotina!;
-const abrir = (r: RotinaSemanal, p: PerfilTreino) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom);
+const abrir = (r: RotinaSemanal, p: PerfilTreino, ctx?: OpcoesSemana) => doPlano(r.dias, p.treinoDias ?? [], p.rotinaCustom, ctx?.retomada);
 /** Dia + id + séries de CADA slot — nunca o total, que compensação disfarça. */
 const dose = (r: RotinaSemanal) => r.dias.map((d) => ({ dia: d.diaId, slots: d.slots.map((s) => [s.exercicio.id, s.series] as const) }));
 const total = (r: RotinaSemanal) => r.dias.reduce((n, d) => n + d.slots.reduce((m, s) => m + (s.series ?? 0), 0), 0);
@@ -60,7 +60,7 @@ describe('Retomada · transferência ao editor conserva a dose slot a slot', () 
     const divergencias: string[] = [];
     for (const ctx of RETOMADAS) {
       const automatico = gerar(PERFIL, ctx);
-      const custom = json(paraRotinaCustom(abrir(automatico, PERFIL)));
+      const custom = json(paraRotinaCustom(abrir(automatico, PERFIL, ctx)));
       const previsto = gerar({ ...PERFIL, rotinaCustom: custom }, ctx);
       const { fator, volumeReferencia, semana } = ctx.retomada!;
       for (const dia of automatico.dias) {
@@ -89,13 +89,13 @@ describe('Retomada · transferência ao editor conserva a dose slot a slot', () 
   it('cinco ciclos de salvar/reabrir na rampa não movem a dose nem a intenção', () => {
     const ctx: OpcoesSemana = { semana: 3, retomada: { semana: 2, fator: 0.7, volumeReferencia: 16 } };
     const automatico = gerar(PERFIL, ctx);
-    const primeiro = json(paraRotinaCustom(abrir(automatico, PERFIL)));
+    const primeiro = json(paraRotinaCustom(abrir(automatico, PERFIL, ctx)));
     let atual = primeiro;
     for (let i = 0; i < 5; i += 1) {
       const salvo: PerfilTreino = { ...PERFIL, rotinaCustom: json(atual) };
       const r = gerar(salvo, ctx);
       expect(dose(r)).toEqual(dose(automatico));
-      atual = json(paraRotinaCustom(abrir(r, salvo)));
+      atual = json(paraRotinaCustom(abrir(r, salvo, ctx)));
       expect(atual).toEqual(primeiro);
     }
   });

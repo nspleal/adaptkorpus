@@ -919,7 +919,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function abrirEditor() {
     const origem = perfil.rotinaCustom ? 'plano' : rotinaDias.length > 0 ? 'plano' : 'vazio';
     registrarEvento('editor_aberto', { origem });
-    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? [], perfil.rotinaCustom));
+    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? [], perfil.rotinaCustom, opcoesDoPlano().semanaCiclo?.retomada));
   }
 
   function salvarTreinoCustom(dias: DiaEditavel[], avaliacao: Avaliacao) {

@@ -41,6 +41,13 @@ export const focoAgregadoSchema = z.object({ grupo: z.enum(['bracos', 'pernas'])
 
 export const divisaoPreferidaSchema = z.enum(['auto', 'superior-inferior', 'prioridades']);
 
+/** Metadado versionado; inválido é descartado sem apagar desenho/intenção legados. */
+const referenciaDoseSchema = z.object({
+  versao: z.literal(1), contexto: z.string().max(120),
+  series: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
+  escolhas: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
+}).optional().catch(undefined);
+
 export const rotinaCustomSchema = z.object({
   origem: z.literal('usuario'),
   dias: z.array(z.object({
@@ -48,6 +55,7 @@ export const rotinaCustomSchema = z.object({
     /** Ausente só em rotinas legadas; novas gravações carregam o dia real. */
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
+    referenciaDose: referenciaDoseSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)).optional(),
   })).max(7),
 }).superRefine((rotina, ctx) => {
@@ -77,6 +85,7 @@ export const rotinaCustomHidratacaoSchema = z.object({
     nome: z.string().max(60),
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
+    referenciaDose: referenciaDoseSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number()).optional(),
   })).max(7),
 });

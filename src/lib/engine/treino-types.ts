@@ -1,3 +1,4 @@
+import type { ReferenciaDose } from './referencia-dose';
 /**
  * Tipos do motor de TREINO (FITT).
  * Fonte: conceitos/parametros-motor-treino-adaptkorpus (DFs travadas 2026-06-28).
@@ -79,20 +80,17 @@ export type DivisaoPreferida = 'auto' | 'superior-inferior' | 'prioridades';
 /**
  * 🧭 A ROTINA MONTADA PELO USUÁRIO (editor guiado — DF② de 2026-08-13).
  *
- * 🔒 Guarda **só o desenho**: quais exercícios, em que dia, em que ordem. Séries, reps,
- * RIR, descanso, rampa e deload continuam do MOTOR — literal do autor: *"igual ao motor
- * normal, a única diferença é que foi o usuário que fez o treino"*. Guardar o plano inteiro
- * congelaria a pessoa fora de todo conserto futuro do motor (a lição do v3 · Bloco A:
- * *override não é só uma segunda verdade — é segunda verdade que envelhece sozinha*).
- *
- * 🔑 É por isso que ela cabe em ~380 bytes (medido, 6 dias × 7 slots) contra ~18 KB do
- * plano serializado: o que se persiste é a DECISÃO, não o resultado dela.
+ * Guarda o desenho e as escolhas explícitas de séries. Na retomada, o editor também
+ * registra uma referência versionada da dose realmente exibida, por dia e exercício.
+ * Essa referência conserva os donos das séries entre edições no mesmo contexto;
+ * contexto incompatível ou dose acima dos tetos exige novo cálculo pelo motor.
+ * Reps, RIR, descanso, rampa e deload continuam sob autoridade do motor.
  */
 export interface RotinaCustom {
   /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
   origem: 'usuario';
   /** `diaId` explícito passou a ser gravado pelo editor. Ausente só em rotina legada; o montador deriva uma vez da agenda e preserva compatibilidade. */
-  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number> }[];
+  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number>; referenciaDose?: ReferenciaDose }[];
 }
 
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
