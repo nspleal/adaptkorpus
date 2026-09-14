@@ -101,10 +101,17 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     const entregues = rotina.dias.flatMap((d) => d.slots).map((s) => s.exercicio.grupoPrimario);
     expect(rotina.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: entregues.length });
     expect(rotina.duracaoIncompativel).toBe(true);
-    expect(entregues, 'grupo dispensável sobreviveu: o caso deixou de exercer a regra').not.toContain('core');
-    expect(entregues).not.toContain('panturrilha');
-    // Os oito restantes são exatamente os dez menos os dois dispensáveis presentes.
-    expect(new Set(entregues).size).toBe(8);
+    // 🔵 17/09: a lista dispensável passou a incluir GLÚTEOS. Aos 10 min a sequência a
+    // percorre inteira (nada faz caber), então saem core, panturrilha e glúteos — antebraço
+    // não está entre os dez e é pulado —, e restam 7 dos 10 grupos.
+    for (const g of ['core', 'panturrilha', 'gluteos'] as const) {
+      expect(entregues, `${g} sobreviveu: o caso deixou de exercer a regra`).not.toContain(g);
+    }
+    expect(new Set(entregues).size).toBe(7);
+    // …e nenhum grupo FORA da lista perdeu o seu único exercício.
+    for (const g of ['peito', 'costas', 'quadriceps', 'posterior', 'ombros', 'biceps', 'triceps'] as const) {
+      expect(entregues, `${g} perdeu o único exercício`).toContain(g);
+    }
     expect(rotina.avisos.some((a) => a.startsWith('Para caber em') && a.includes('Core')),
       'a retirada não foi nomeada').toBe(true);
   });

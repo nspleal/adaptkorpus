@@ -120,13 +120,38 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
     ].join(' | '));
   });
 
+  /**
+   * 🔵 REANCORADO em 2026-09-17 pela política final de redução, e o motivo é medido.
+   *
+   * A COMPOSIÇÃO — quais exercícios ocupam o dia e com que descanso — segue sendo a do
+   * diagnóstico, exercício por exercício. O que mudou é UMA quantidade de séries: o dia
+   * ainda estoura os 30 min depois de descanso no piso e de retirar o redundante, e a
+   * última etapa da sequência aprovada leva o exercício de BÍCEPS de 4 para 1 série,
+   * preservando o exercício. Nenhum outro slot foi tocado.
+   *
+   * A duração canônica acompanha: 1720–2020 s → **1420–1720 s**. O dia ficou 300 s mais perto
+   * do orçamento de 1800 s — e, nesta medição, passou a caber: `LIMITE_INDETERMINADO` deu lugar
+   * a `DENTRO_DO_LIMITE`. É exatamente o objetivo declarado da decisão 2, aqui alcançado.
+   */
+  /**
+   * 🔒 O NOME DESTE TESTE É CONTRATO: `test-support/selecao-etapa1-classificacao.json` casa a
+   * classificação histórica pelo nome COMPLETO. Renomeá-lo tira o teste da exclusão e o joga
+   * no projeto do seletor atual, onde o dia 'Upper A' nem existe — medido ao tentar. O texto
+   * fica como está; o que muda é o corpo.
+   */
   it('caso 1 (curta): a composição de hoje É a do diagnóstico e a canônica corrige o descanso pós-última', () => {
     const m = medirCaso(ORIGINAIS[0]!);
-    expect(m.dia.slots.map((s) => `${s.series}x@${s.descansoSeg}`)).toEqual(['4x@60', '4x@120', '4x@120', '4x@60']);
-    // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica dá 1540–1780.
-    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1720);
-    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(2020);
-    expect(m.dur.estadoLimite).toBe('LIMITE_INDETERMINADO'); // teto estrito14/09; o antigo dizia "não cabe" (1840 > 1800)
+    // A composição do diagnóstico — padrões e descansos — reaparece inteira.
+    expect(m.dia.slots.map((s) => `${s.padrao}@${s.descansoSeg}`))
+      .toEqual(['isolado@60', 'empurrar@120', 'puxar@120', 'isolado@60']);
+    // Quem cedeu série foi UM exercício de braços/ombros (E6), e só ele: os demais em 4.
+    expect(m.dia.slots.map((s) => s.series)).toEqual([4, 4, 4, 1]);
+    expect(['biceps', 'triceps', 'ombros'], 'E6 tocou um grupo fora da lista aprovada')
+      .toContain(m.dia.slots.at(-1)!.exercicio.grupoPrimario);
+    // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica não conta.
+    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1420);
+    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1720);
+    expect(m.dur.estadoLimite).toBe('DENTRO_DO_LIMITE'); // o antigo dizia "não cabe" (1840 > 1800)
   });
 
   it('caso 5 (força pesada): a composição medida reaparece e o drift GER≫C-lig (4320×2930) morre na fonte única', () => {

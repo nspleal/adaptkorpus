@@ -102,6 +102,15 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * que impede o plano de parecer coberto depois dela.
    */
   ['full-body dispensou grupo por tempo', /Para caber em \d+ min nesta sess[ãa]o [úu]nica, o plano ficou sem exerc[íi]cio direto de/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  /**
+   * 🔵 POLÍTICA FINAL 2026-09-17 — as quatro famílias da sequência única de redução. Cada
+   * uma só sai quando o ajuste correspondente ACONTECEU, e uma única vez no plano (a
+   * comunicação é agregada, nunca por exercício nem por dia).
+   */
+  ['séries de 3 para 2', /reduzimos de 3 para 2 s[ée]ries em \d+ exerc[íi]cios?/, () => gerar({nivelExperiencia:'iniciante',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:15})],
+  ['exercícios redundantes retirados', /retiramos \d+ exerc[íi]cios? repetidos?/, () => gerar({nivelExperiencia:'intermediario',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:30})],
+  ['braços/ombros a 1 série', /ficaram? com 1 s[ée]rie\. Os exerc[íi]cios foram mantidos/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:30})],
+  ['estimativa ainda acima do limite', /a estimativa ainda passa do seu tempo/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:30})],
   ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
     const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
     try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}
@@ -156,8 +165,10 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
       - (MONTADOR.match(/avisos\.push\(\.\.\.avisosCustom\)/g) ?? []).length;
     // Tripwire: um `avisos.push` novo entra descoberto e derruba este teste em vez de virar
     // mais um aviso que ninguém prova que chega à tela — o defeito que D1 fecha.
-    // 29 → 30 em 2026-09-16: entrou a família da dispensa do full-body curto (P-01).
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(30);
+    // 29 → 30 em 2026-09-16: a dispensa do full-body curto (P-01).
+    // 30 → 34 em 2026-09-17: as quatro famílias da sequência única de redução (séries 3→2,
+    // redundantes retirados, braços/ombros a 1 série, estimativa ainda acima do limite).
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(34);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

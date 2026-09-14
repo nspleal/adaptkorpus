@@ -211,7 +211,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/emagrecim
   "objetivo": "emagrecimento",
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
 }
@@ -221,7 +221,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 10
 {
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
   "tempo": 10,
@@ -233,7 +233,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 12
   "objetivo": "massa",
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
 }
@@ -243,7 +243,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 15
 {
   "slots": [
     3,
-    2,
+    3,
     3,
   ],
   "tempo": 15,
@@ -254,7 +254,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 20
 {
   "slots": [
     3,
-    2,
+    3,
     3,
   ],
   "tempo": 20,
@@ -265,7 +265,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 25
 {
   "slots": [
     4,
-    3,
+    4,
     4,
   ],
   "tempo": 25,
@@ -555,7 +555,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/emag
   "objetivo": "emagrecimento",
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
 }
@@ -565,7 +565,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
 {
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
   "tempo": 10,
@@ -577,7 +577,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
   "objetivo": "massa",
   "slots": [
     3,
-    1,
+    2,
     3,
   ],
 }
@@ -587,7 +587,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
 {
   "slots": [
     3,
-    2,
+    3,
     3,
   ],
   "tempo": 15,
@@ -598,7 +598,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
 {
   "slots": [
     3,
-    2,
+    3,
     3,
   ],
   "tempo": 20,
@@ -609,7 +609,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
 {
   "slots": [
     4,
-    3,
+    4,
     4,
   ],
   "tempo": 25,

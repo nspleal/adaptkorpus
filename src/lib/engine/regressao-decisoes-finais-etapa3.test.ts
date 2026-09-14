@@ -137,7 +137,7 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
 
   it('antebraço não está entre os dez grupos do full-body — nunca é acrescentado', () => {
     const plano = gerar(curto);
-    expect(GRUPOS_DISPENSAVEIS_FULLBODY_CURTO).toEqual(['core', 'antebraco', 'panturrilha']);
+    expect(GRUPOS_DISPENSAVEIS_FULLBODY_CURTO).toEqual(['core', 'antebraco', 'panturrilha', 'gluteos']);
     expect(grupos(plano).has('antebraco'), 'antebraço entrou no full-body só para ser retirado').toBe(false);
   });
 
@@ -148,7 +148,10 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
     expect(diretos(plano, 'core'), 'core sobreviveu: o caso deixou de exercer a regra').toBe(0);
     expect(aviso).toContain('Core');
     // Os demais grupos mantêm o único exercício — a política antiga continua valendo para eles.
-    for (const g of GRUPOS_GRANDES) expect(diretos(plano, g), `${g} perdeu o único exercício`).toBeGreaterThanOrEqual(1);
+    for (const g of GRUPOS_GRANDES) {
+      if (GRUPOS_DISPENSAVEIS_FULLBODY_CURTO.includes(g)) continue; // 🔵 17/09: glúteos entrou na lista
+      expect(diretos(plano, g), `${g} perdeu o único exercício`).toBeGreaterThanOrEqual(1);
+    }
     for (const g of GRUPOS_PEQUENOS_PISO) {
       if (GRUPOS_DISPENSAVEIS_FULLBODY_CURTO.includes(g)) continue;
       expect(diretos(plano, g), `${g} perdeu o único exercício`).toBeGreaterThanOrEqual(1);
