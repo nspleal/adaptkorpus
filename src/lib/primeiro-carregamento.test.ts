@@ -82,7 +82,7 @@ describe('D7 — o primeiro carregamento hidrata pela MESMA porta do servidor', 
   it('o foco do perfil chega ao plano no primeiro boot', () => {
     const perfil = base({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 } });
     const r = recomputarPlano(perfil, opcoesDoPrimeiroBoot(perfil)).treino.rotina!;
-    expect(r.foco).toMatchObject({ grupo: 'peito', compensa: 'costas' });
+    expect(r.blocoFoco).toMatchObject({grupos:['peito']});
   });
 
   it('o peso RESOLVIDO continua mandando (a porta única não devolveu o plano ao perfil.pesoKg)', () => {

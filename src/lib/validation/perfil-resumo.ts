@@ -33,7 +33,7 @@ export const preferenciasTreinoSchema = z.object({
 
 export const focoSchema = z.object({
   grupo: grupoPrimario,
-  compensa: grupoPrimario,
+  compensa: grupoPrimario.optional(),
   semana: z.number().int().min(1),
 });
 
@@ -156,6 +156,7 @@ export const perfilResumoSchema = z.object({
   alergenos: z.array(z.string()).default([]),
   diasDisponiveis: z.number().int().min(1).max(7),
   tempoPorSessaoMin: z.number().int().min(10).max(240),
+  limiteTempoTreino: z.enum(['limitado', 'sem_limite']).optional(),
   treinoDias: z.array(z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'])).min(1),
   naoCurto: z.array(z.string()).default([]),
   favoritos: z.array(z.string()).optional(),
@@ -308,6 +309,7 @@ const LISTAS_RECUPERAVEIS = {
 
 /** Opcionais: presente e ilegível ⇒ some (a ausência já é um estado que o motor trata). */
 const OPCIONAIS_DESCARTAVEIS = {
+  limiteTempoTreino: perfilResumoSchema.shape.limiteTempoTreino,
   orcamento: perfilResumoSchema.shape.orcamento,
   cardioFavorito: perfilResumoSchema.shape.cardioFavorito,
   tecnicasAvancadas: perfilResumoSchema.shape.tecnicasAvancadas,

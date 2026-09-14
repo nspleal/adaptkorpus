@@ -1,3 +1,4 @@
+//14/09: fotografias preservadas em antigo; expectativas vivas usam descanso novo e teto estrito.
 /**
  * 🔒 C1 §8.3 — REGRESSÃO MEDIDA: os CINCO CASOS ORIGINAIS do diagnóstico
  * (`auditoria-catalogo-criterios-treino-2026-08-16.md`,
@@ -89,7 +90,7 @@ function medirCaso(c: CasoOriginal) {
   });
 
   // 🔒 CONVERGÊNCIA no mesmo SHA: o crítico avalia o MESMO dia pela MESMA função canônica.
-  const doCritico = avaliarDuracaoResistida(dia.slots, perfil.nivelExperiencia, orcamentoSeg);
+  const doCritico = avaliarDuracaoResistida(dia.slots, perfil.nivelExperiencia, orcamentoSeg, true);
   expect(doCritico).toEqual(dur);
 
   const rg = rot.resultadoGeracao!;
@@ -121,18 +122,18 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
 
   it('caso 1 (curta): a composição de hoje É a do diagnóstico e a canônica corrige o descanso pós-última', () => {
     const m = medirCaso(ORIGINAIS[0]!);
-    expect(m.dia.slots.map((s) => `${s.series}x@${s.descansoSeg}`)).toEqual(['4x@60', '4x@90', '4x@90', '4x@60']);
+    expect(m.dia.slots.map((s) => `${s.series}x@${s.descansoSeg}`)).toEqual(['4x@60', '4x@120', '4x@120', '4x@60']);
     // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica dá 1540–1780.
-    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1540);
-    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1780);
-    expect(m.dur.estadoLimite).toBe('DENTRO_DO_LIMITE'); // o antigo dizia "não cabe" (1840 > 1800)
+    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1720);
+    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(2020);
+    expect(m.dur.estadoLimite).toBe('LIMITE_INDETERMINADO'); // teto estrito14/09; o antigo dizia "não cabe" (1840 > 1800)
   });
 
   it('caso 5 (força pesada): a composição medida reaparece e o drift GER≫C-lig (4320×2930) morre na fonte única', () => {
     const m = medirCaso(ORIGINAIS[4]!);
     // composição do diagnóstico: dobr3x@180 · isol3x@60 · agach3x@90 · agach3x@180 · dobr4x@90 · core4x@60
     expect(m.dia.slots.map((s) => `${s.padrao.slice(0, 4)}${s.series}x@${s.descansoSeg}`)).toEqual(
-      ['dobr3x@180', 'isol3x@60', 'agac3x@90', 'agac3x@180', 'dobr4x@90', 'core4x@60'],
+      ['dobr3x@180', 'isol3x@60', 'agac3x@120', 'agac3x@180', 'dobr4x@120', 'core4x@60'],
     );
     // hoje NÃO há duas respostas: gerador e crítico devolvem a MESMA faixa (asserido em medirCaso),
     // dentro do limite — o antigo tinha GER "não cabe" (4320) × C-lig "cabe" (2930) para o MESMO dia.
@@ -178,7 +179,7 @@ describe('C1 §8.3 · regressões adicionais (sessão longa · tempo impossível
     }
     const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
     rot.dias.forEach((d, i) => {
-      expect(avaliarDuracaoResistida(d.slots, perfil.nivelExperiencia, orcamentoSeg)).toEqual(rot.duracaoDias![i]);
+      expect(avaliarDuracaoResistida(d.slots, perfil.nivelExperiencia, orcamentoSeg, true)).toEqual(rot.duracaoDias![i]);
     });
     expect(rot.duracaoIncompativel ?? false).toBe(rot.resultadoGeracao!.tipo === 'INCOMPATIVEL');
   });

@@ -104,3 +104,28 @@ describe('C1 fiação viva · caminho REAL de montarRotina', () => {
     expect(rotina.distribuicaoCardio!.blocosPorDia).toHaveLength(0);
   });
 });
+
+
+describe('etapa3: cardio com escolha explícita sem limite', () => {
+  it('atende a demanda finita, mesmo com musculação longa, sem alterar legado', () => {
+    const entrada = {...base, diasComMusculacao: [{diaId: 'seg' as const, duracao: dur(7200)}], diasOferecidosCardio: ['seg' as const], orcamentoSegundos: undefined};
+    const limitado = distribuirCardioDaRotina(entrada);
+    const livre = distribuirCardioDaRotina({...entrada, semLimite: true});
+    expect(livre.blocosPorDia[0]?.duracaoTotalSegundos).toBe(1800);
+    expect(livre.contratosPorPrescricao[0]?.duracaoDescartadaSegundos).toBe(0);
+    expect(limitado.blocosPorDia).toHaveLength(0);
+    expect(livre.canonicalInputHash).not.toBe(limitado.canonicalInputHash);
+    expect(entrada.diasComMusculacao[0]!.duracao.duracaoMaximaEstimadaSegundos).toBe(7200);
+  });
+  it('origem não calculável conserva saldo no destino posterior oferecido sem limite', () => {
+    const origem = {...dur(0), estadoCalculo: 'NAO_AVALIADO' as const, duracaoMaximaEstimadaSegundos: undefined};
+    const r = distribuirCardioDaRotina({...base, orcamentoSegundos: undefined, semLimite: true,
+      diasComMusculacao: [{diaId: 'seg', duracao: origem}], diasOferecidosCardio: ['seg', 'qua']});
+    const c = r.contratosPorPrescricao.find(c => c.diaOrigemId === 'seg')!;
+    expect(c.duracaoUsadaNaSessaoSegundos).toBe(0);
+    expect(c.alocacoesDestino).toEqual([{diaId: 'qua', segundos: 1800}]);
+    expect(c.duracaoDescartadaSegundos).toBe(0);
+    expect(r.blocosPorDia.find(b => b.diaId === 'qua')?.duracaoTotalSegundos).toBe(3600);
+    expect(r.blocosPorDia.some(b => b.diaId === 'ter')).toBe(false);
+  });
+});

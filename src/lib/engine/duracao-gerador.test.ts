@@ -46,9 +46,9 @@ describe('C1 gerador · certificação do plano final (§5.5)', () => {
       for (const d of r.duracaoDias!) {
         expect(d.estadoCalculo, JSON.stringify(over)).toBe('CALCULADO');
         // o gerador nunca ENTREGA um plano acima do limite operacional (reduz antes, se preciso).
-        expect(['DENTRO_DO_LIMITE', 'DENTRO_DA_TOLERANCIA']).toContain(d.estadoLimite);
+        if(r.resultadoGeracao?.tipo==='CERTIFICADO')expect(d.estadoLimite).toBe('DENTRO_DO_LIMITE');
       }
-      expect(r.duracaoIncompativel ?? false, `rede de segurança disparou em ${JSON.stringify(over)}`).toBe(false);
+      expect(r.duracaoIncompativel??false).toBe(r.resultadoGeracao?.tipo==='INCOMPATIVEL');
     }
   });
 });

@@ -52,17 +52,18 @@ function podeUltrapassar(rotina: Pick<RotinaSemanal, 'dias'>, indices: readonly 
  * sem prometer o que o motor não mediu.
  */
 export function vereditoDoPlano(
-  rotina: Pick<RotinaSemanal, 'dias' | 'resultadoGeracao'> | null | undefined,
+  rotina: Pick<RotinaSemanal, 'dias' | 'resultadoGeracao' | 'limiteTempoTreino'> | null | undefined,
   tempoPorSessaoMin: number,
 ): Veredito | null {
   const rg: ResultadoGeracaoRotina | undefined = rotina?.resultadoGeracao;
   if (!rotina || !rg) return null;
   switch (rg.tipo) {
     case 'CERTIFICADO':
+      if(rotina.limiteTempoTreino==='sem_limite')return {tom:'ok',titulo:'Plano calculado sem limite de tempo por sessão.',detalhe:'O tempo livre não acrescenta exercícios ao plano.'};
       return {
         tom: 'ok',
         titulo: 'A duração calculada está dentro dos limites do app.',
-        detalhe: `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais; essa tolerância não vale para acrescentar cardio automático.`,
+        detalhe: rotina.limiteTempoTreino==='limitado' ? `Referência: ${tempoPorSessaoMin} min por sessão.` : `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais; essa tolerância não vale para acrescentar cardio automático.`,
       };
     case 'NAO_AVALIADO_ENTREGAVEL':
       return {

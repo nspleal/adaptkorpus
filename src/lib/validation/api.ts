@@ -45,6 +45,7 @@ export const perfilTreinoSchema = z.object({
   diasDisponiveis: z.coerce.number().int().min(1).max(7),
   // 🔒 UMA régua com o perfil do produto (era 10–180 aqui e 10–240 lá, no mesmo campo).
   tempoPorSessaoMin: perfilResumoSchema.shape.tempoPorSessaoMin,
+  limiteTempoTreino: perfilResumoSchema.shape.limiteTempoTreino,
 
   // ── os sete campos que o montador lê e a rota descartava ──────────────────────────────
   /** Agenda real da semana — é a FONTE DE VERDADE dos dias; sem ela o split diverge do app. */

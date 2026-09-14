@@ -67,7 +67,7 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
 }
 
 export default function EditorTreino({
-  inicial, ctxSeletor, exercises, nivel, objetivo, tempoPorSessaoMin, preverPlano,
+  inicial, ctxSeletor, exercises, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, preverPlano,
   onSalvar, onCancelar, onVoltarAoRecomendado, temCustom, onDesbanir, onAvisoMostrado,
 }: {
   inicial: DiaEditavel[];
@@ -76,6 +76,7 @@ export default function EditorTreino({
   nivel: NivelExperiencia;
   objetivo: Objetivo;
   tempoPorSessaoMin: number;
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   /**
    * 🔑 A PRÉVIA REAL, não uma estimativa. Recebe o desenho em construção e devolve o que o
    * MOTOR produziria com ele — séries e descanso incluídos.
@@ -110,10 +111,10 @@ export default function EditorTreino({
     // não anotou séries (deload/corpo-inteiro), o placar cai no piso do próprio crítico — e o
     // critério de TEMPO abstém-se (C1), nunca inventa.
     return avaliarSemana(previsto, {
-      nivel, objetivo, tempoPorSessaoMin,
+      nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino,
       diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),
     });
-  }, [dias, nivel, objetivo, tempoPorSessaoMin, previsto]);
+  }, [dias, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, previsto]);
 
   const total = dias.reduce((n, d) => n + d.exercicios.length, 0);
   const diasUnicos = weekdaysSaoUnicos(dias);

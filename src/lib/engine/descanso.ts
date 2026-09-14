@@ -196,10 +196,17 @@ export interface ArgsDescanso {
  * O orçamento de tempo NÃO entra aqui — ele degrada por classe no montador, que é quem
  * conhece a sessão inteira.
  */
+/** Critério operacional do autor14/09: composto com equipamento de carga.
+ * Não mede peso real; os demais mantêm suas regras, não são declarados leves. */
+export function altaExigenciaDocumental(ex: Exercise): boolean {
+  return classeDeDescanso(ex) === 'COMPOSTO' && temCarga(ex);
+}
+
 export function descansoDoExercicio(args: ArgsDescanso): number | null {
   const faixa = faixaDoExercicio(args.exercicio, args.modoForca === true);
   if (!faixa) return null;
-  const base = deslocarPorRir(faixa, args.rirAlvo);
+  const exigente = altaExigenciaDocumental(args.exercicio);
+  const base = Math.max(deslocarPorRir(faixa, args.rirAlvo), exigente ? 180 : 0);
   const naRampa = args.semanaRampa != null && args.semanaRampa > 0;
   const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
   // 🔒 Na rampa NÃO se degrada: o piso do FIT é inviolável e quem cede é o nº de itens.
@@ -207,7 +214,7 @@ export function descansoDoExercicio(args: ArgsDescanso): number | null {
   const final = naRampa || classe === 'NAO_SE_APLICA'
     ? comPiso
     : degradar(comPiso, classe, args.degradacao ?? 0, args.modoForca === true && temCarga(args.exercicio));
-  return Math.max(DESCANSO_PISO_DURO_SEG, final);
+  return Math.max(DESCANSO_PISO_DURO_SEG, exigente ? 120 : 0, final);
 }
 
 /** Rótulo humano em passos legíveis: "2 min", "2 min 30", "1 min 30", "45 s". */

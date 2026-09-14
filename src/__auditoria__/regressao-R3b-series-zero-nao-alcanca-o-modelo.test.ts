@@ -83,7 +83,9 @@ describe('⚠️ R3b ① — o motor não emite slot com série zero nem ausente
     // Anti-vacuidade: a varredura tem de ter olhado um número sério de slots (medido: 32.244).
     expect(slots, 'a varredura não montou plano nenhum — o teste seria vazio').toBeGreaterThan(5000);
     expect(achados, `slots com série 0/ausente (${achados.length}): ${achados.slice(0, 5).join(' · ')}`).toEqual([]);
-  });
+  // 4.320 perfis completos: na suíte concorrente a varredura ultrapassa os 5s padrão.
+  // Mantém integralmente a matriz e as asserções, com limite local de execução.
+  }, 30_000);
 
   it('o deload reduz mas não zera — o piso do alívio é ≥ 1', () => {
     for (const manual of [1, 2, 3, 7, 20]) {

@@ -313,7 +313,7 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
    */
   it('descanso do composto: o teto de 180 s do campo v1 depende do orçamento ter fechado', () => {
     const longo = rotinaSemana(1, { tempoPorSessaoMin: 90 });
-    expect(longo.semana?.descansoCompostoSeg.max).toBe(180);
+    expect(longo.dias.flatMap(d=>d.slots).some(s=>s.descansoSeg===180)).toBe(true);
     const curto = rotinaSemana(1, { tempoPorSessaoMin: 30 });
     expect(curto.semana?.descansoCompostoSeg.max).toBe(120); // sobre-afirmação de 2026-08-04, morta
     // 🔑 O que o usuário VÊ aos 30 min é o valor DEGRADADO por classe (regra 3 — cede

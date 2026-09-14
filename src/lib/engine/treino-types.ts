@@ -130,6 +130,8 @@ export interface PerfilTreino {
   treinoDias?: readonly Weekday[];
   /** Tempo por sessão em minutos. */
   tempoPorSessaoMin: number;
+  /** Ausente em perfis legados: conserva o limite numérico, sem inferir a escolha 75+. */
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   /** 🎛️ v4 · DF③ — divisão preferida. Ausente = `auto` (padrão por dias disponíveis). */
   divisaoPreferida?: DivisaoPreferida;
   /**
@@ -380,6 +382,8 @@ export interface PlanoFinalDia {
 }
 
 export interface RotinaSemanal {
+  limiteTempoEstrito?: boolean;
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   diasForcaAgendados: number;
   diasCardioRecuperacao: number;
   split: string;
@@ -415,6 +419,12 @@ export interface RotinaSemanal {
    * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em
    * ambiguidade. Ausente quando não há foco vigente.
    */
+  /** Adição automática14/09: entrega concreta, separada da transferência legada. */
+  blocoFoco?: {
+    grupos: GrupoPrimario[];
+    adicionais: {diaId?: Weekday; exercicioId: string; series: number}[];
+    adaptado: boolean;
+  };
   foco?: {
     grupo: GrupoPrimario;
     compensa: GrupoPrimario;

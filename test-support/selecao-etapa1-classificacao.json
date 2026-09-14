@@ -78,62 +78,7 @@
     },
     {
       "arquivo": "src/lib/engine/foco-entrega-real.test.ts",
-      "historicos": [
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 2 · ① séries(peito) SOBE",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 2 · ② o total da semana CONSERVA exatamente",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 2 · ③ NENHUM grupo além do par focado↔compensador mudou",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 3 · ① séries(peito) SOBE",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 3 · ② o total da semana CONSERVA exatamente",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 3 · ③ NENHUM grupo além do par focado↔compensador mudou",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 1 · delta 0 não move volume nenhum (entrega ordem)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 4 · delta 0 não move volume nenhum (entrega ordem)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 B3 — a entrega do foco, nas três asserções semana 5 · delta 0 não move volume nenhum (entrega ordem)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        }
-      ]
+      "historicos": []
     },
     {
       "arquivo": "src/lib/engine/foco-equilibrio-puxar-empurrar.test.ts",
@@ -167,102 +112,6 @@
       "arquivo": "src/lib/engine/orcamento-caracterizacao.test.ts",
       "historicos": [
         {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL massa/intermediário, 60 min por sessão",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL massa/intermediário, 75 min por sessão",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL massa/intermediário, 90 min por sessão",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL objetivo massa, 60 min",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL objetivo emagrecimento, 60 min",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL objetivo saude, 60 min",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL nível intermediario, 60 min",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL modo força ligado (composto a 6RM) — o caminho do teto de 180 s",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL semana 1 do mesociclo",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL semana 3 do mesociclo",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL semana 5 do mesociclo",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL semana 6 do mesociclo",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — nº de exercícios por dia, com o estimador ATUAL sessão de 30 min, avançado (o caso mais apertado)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — orçamento temporal atual e composição da sessão o cap inicial não depende de quais exercícios caíram na sessão",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — orçamento temporal atual e composição da sessão descanso efetivo — massa, 60 min (o teto de 180 s depende do tempo)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "📸 caracterização — orçamento temporal atual e composição da sessão descanso efetivo — modo força liga o teto de 180 s em faixa baixa",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
           "nome": "🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composição no mesmo orçamento, o dia carregado de composto degrada e o leve não",
           "classificacao": "fotografia_historica_com_prova_sucessora",
           "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
@@ -284,26 +133,7 @@
     },
     {
       "arquivo": "src/lib/plano-caminho-real.test.ts",
-      "historicos": [
-        {
-          "nome": "🔴 D1 — o foco no caminho real é a CASCATA (não o boost polvilhador) peito NÃO é polvilhado: fica nos MESMOS dias de antes (não entra nos 6)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 D1 — o foco no caminho real é a CASCATA (não o boost polvilhador) NENHUM terceiro paga: só o par peito↔ombros muda",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔴 D1 — o foco no caminho real é a CASCATA (não o boost polvilhador) o total da semana CONSERVA (o foco redistribui, não cresce)",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        }
-      ]
+      "historicos": []
     },
     {
       "arquivo": "src/lib/engine/regressao-cinco-casos.test.ts",
@@ -371,14 +201,7 @@
     },
     {
       "arquivo": "src/lib/engine/trilhos.test.ts",
-      "historicos": [
-        {
-          "nome": "🔒 o foco chega ao PLANO 🔴 e o volume total da semana NÃO cresce — o foco redistribui",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
-          "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        }
-      ]
+      "historicos": []
     }
   ]
 }

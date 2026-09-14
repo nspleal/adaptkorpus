@@ -1,3 +1,4 @@
+//14/09: fixture temporal ajustada pelos descansos novos; D12-MEDIDAS.json registra faixas.
 import { describe, expect, it } from 'vitest';
 import { recomputarPlano } from '@/lib/plano';
 import { migrarSessao } from '@/lib/session';
@@ -48,7 +49,7 @@ const gerar = (p: PerfilResumo, semana: SemanaCiclo = 1, diasOferecidosCardio?: 
   }).treino.rotina!;
 
 describe('D12 · o dia que PODE estourar não recebe certificado', () => {
-  const rotina = gerar(manual(6));
+  const rotina = gerar(manual(6,{tempoPorSessaoMin:70}));
 
   it('anti-vacuidade: o motor realmente mede o dia como LIMITE_INDETERMINADO', () => {
     const d = rotina.duracaoDias![0]!;
@@ -93,8 +94,8 @@ describe('D12 · a tolerância existente é preservada', () => {
    * por política explícita. Ele não pode ser varrido junto com a incerteza — seria apertar a
    * régua por tabela, que é o oposto do que D12 pede.
    */
-  it('5 séries em 45 min cai na tolerância — e segue CERTIFICADO', () => {
-    const r = gerar(manual(5, { tempoPorSessaoMin: 45 }));
+  it('5 séries em 50 min cai na tolerância — e segue CERTIFICADO', () => {
+    const r = gerar(manual(5, { tempoPorSessaoMin: 50 }));
     const estados = (r.duracaoDias ?? []).map((d) => d.estadoLimite);
     // Anti-vacuidade: sem um dia REALMENTE na tolerância, a afirmação abaixo não prova nada.
     expect(estados, 'a fixture saiu da tolerância — escolha outra combinação').toContain('DENTRO_DA_TOLERANCIA');
@@ -105,7 +106,7 @@ describe('D12 · a tolerância existente é preservada', () => {
 
 describe('D12 · estado combinado: cardio sem duração + dia que pode estourar', () => {
   /** Objetivo `massa` prescreve cardio em SESSÕES (sem minutos): o terminal vira NAO_AVALIADO. */
-  const rotina = gerar(manual(6, { objetivo: 'massa', diasDisponiveis: 2, treinoDias: ['seg', 'qua'] }), 1, ['qua']);
+  const rotina = gerar(manual(6, { tempoPorSessaoMin:70, objetivo: 'massa', diasDisponiveis: 2, treinoDias: ['seg', 'qua'] }), 1, ['qua']);
 
   it('os dois fatos convivem no mesmo terminal — nenhum é suprimido pelo outro', () => {
     const rg = rotina.resultadoGeracao!;

@@ -30,7 +30,7 @@ describe('rodada2: propriedades atuais antes protegidas por fotografias',()=>{
  ] as const)('convergência em todos os dias do perfil histórico $tempo/$n/$nivel/$objetivo',c=>{
   const p:PerfilTreino={...base,tempoPorSessaoMin:c.tempo,diasDisponiveis:c.n,nivelExperiencia:c.nivel,objetivo:c.objetivo,modoForca:'modoForca' in c};
   const r=run(p,c.semana);expect(r.dias.length).toBeGreaterThan(0);
-  for(let i=0;i<r.dias.length;i++)expect(avaliarDuracaoResistida(r.dias[i]!.slots,p.nivelExperiencia,p.tempoPorSessaoMin*60)).toEqual(r.duracaoResistidaDias![i]);
+  for(let i=0;i<r.dias.length;i++)expect(avaliarDuracaoResistida(r.dias[i]!.slots,p.nivelExperiencia,p.tempoPorSessaoMin*60,r.limiteTempoEstrito)).toEqual(r.duracaoResistidaDias![i]);
  });
  it('degradação por composição e acessório antes de composto: casos atuais discriminantes',()=>{
   let diferencaPorDia=false,acessorioPrimeiro=false;
@@ -78,10 +78,10 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   const curtos=r.dias.filter(d=>d.slots.length<6);expect(curtos.length).toBeGreaterThan(0);
   expect(curtos.some(d=>r.avisos.join(' ').includes(d.nome))).toBe(true);
  });
- it.each([1,4,5] as const)('cascata de delta zero na mesma divisão explícita, semana %i',semana=>{
-  const p:PerfilTreino={...base,divisaoPreferida:'superior-inferior'};
+ it.each([1,4,5] as const)('adição sem compensação na mesma divisão explícita, semana %i',semana=>{
+  const p:PerfilTreino={...base,divisaoPreferida:'superior-inferior',limiteTempoTreino:'sem_limite'};
   const a=run(p,semana),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
   const grupos=(r:typeof a)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
-  expect(grupos(b)).toEqual(grupos(a));
+  expect(grupos(b)).toEqual({...grupos(a),peito:grupos(a).peito!+4});
  });
 });

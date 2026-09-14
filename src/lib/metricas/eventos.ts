@@ -82,7 +82,7 @@ export interface PayloadPorEvento {
    * `entrega`: 'volume' (havia folga até o MRV) | 'ordem' (o grupo já estava no topo).
    * 🔑 É este campo que diz se o teto duro morde na população real ou só na teoria.
    */
-  foco_ativado: { grupo: string; compensa: string; entrega: string; delta: number };
+  foco_ativado: { grupo: string; compensa?: string; entrega: string; delta: number };
   /** Sem ele não se mede DURAÇÃO — e a janela de 4–6 semanas nunca vira evidência. */
   foco_encerrado: { grupo: string; semanas: number; motivo: string };
   /** O portão abriu: mede quantos CHEGAM lá — o denominador honesto de qualquer adoção. */

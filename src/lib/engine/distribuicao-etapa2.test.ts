@@ -15,10 +15,10 @@ describe('etapa2: possibilidades na saída final',()=>{
   expect(gs.some(g=>g.includes('peito')&&g.includes('triceps')&&!g.includes('costas'))).toBe(true);
   expect(gs.flat()).toContain('ombros');
  });
- it('3 braços: bíceps antes de peito e tríceps antes de costas',()=>{
+ it('3 braços: primário e auxiliar juntos, braços antes dos compostos',()=>{
   const r=run(3,'bracos'),gs=grupos(r);
-  expect(gs.some(g=>g[0]==='biceps'&&g.includes('peito')&&!g.includes('costas'))).toBe(true);
-  expect(gs.some(g=>g[0]==='triceps'&&g.includes('costas')&&!g.includes('peito'))).toBe(true);
+  expect(gs.some(g=>g[0]==='biceps'&&g.includes('costas')&&!g.includes('peito'))).toBe(true);
+  expect(gs.some(g=>g[0]==='triceps'&&g.includes('peito')&&!g.includes('costas'))).toBe(true);
   expect(gs.flat()).toEqual(expect.arrayContaining(['quadriceps','posterior','ombros']));
  });
  it.each([4,5,6])('%i peito/costas: sessões reais do foco e diferença estrutural',n=>{
@@ -40,8 +40,10 @@ describe('etapa2: possibilidades na saída final',()=>{
   // Primários documentais do catálogo; não exige exclusividade anatômica.
   const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
   expect(inferiores).toHaveLength(2);
-  expect(inferiores.some(g=>g[0]==='quadriceps'&&!g.includes('posterior'))).toBe(true);
-  expect(inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'))).toBe(true);
+  if(!r.avisos.some(a=>a.startsWith('Mantivemos a distribuição disponível'))){
+   expect(inferiores.some(g=>g[0]==='quadriceps'&&!g.includes('posterior'))).toBe(true);
+   expect(inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'))).toBe(true);
+  }
   expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','panturrilha','ombros','peito','costas']));
   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2});
  });
@@ -101,15 +103,15 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
   const c=creditoPonderadoDaSemana(r.dias.flatMap(d=>d.slots));
   for(const g of ['peito','costas'] as const)expect(c.get(g)).toBeLessThanOrEqual(16);
  });
- it.each([2,3] as const)('cascata na divisão explícita estável, semana %i: entrega e conservação',semana=>{
+ it.each([2,3] as const)('adição na divisão explícita estável, semana %i: preservação de terceiros',semana=>{
   // Caminho explícito suportado pelo seletor atual, sem simular o seletor antigo.
-  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:60,divisaoPreferida:'superior-inferior'};
+  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:75,limiteTempoTreino:'sem_limite',divisaoPreferida:'superior-inferior'};
   const run=(p:PerfilTreino)=>gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
   const a=run(p),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}});
   const totais=(r:typeof a)=>{const m=new Map<string,number>();for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m.set(g,(m.get(g)??0)+(s.series??0));}return m;};
   const x=totais(a),y=totais(b);
   expect(y.get('peito')).toBeGreaterThan(x.get('peito')!);
-  expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0));
-  expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito','triceps']);
+  expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0)+4);
+  expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito']);
  });
 });

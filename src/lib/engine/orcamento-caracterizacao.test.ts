@@ -47,7 +47,7 @@ function rotinaComCiclo(over: Partial<PerfilTreino> = {}, semana = 1) {
 /** Nº de slots por dia — a saída observável do `maxExercicios` que `sPlan` produz. */
 const slotsPorDia = (r: ReturnType<typeof rotinaComCiclo>): number[] => r.dias.map((d) => d.slots.length);
 
-describe('📸 caracterização — nº de exercícios por dia, com o estimador ATUAL', () => {
+describe(`📸 etapa3 — nº de exercícios, seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
   /**
    * O eixo que mais mexe no `cap()`: o tempo por sessão entra no numerador direto.
    * Objetivo `massa` = descanso composto 90–120 (média 105) → o divisor é `sPlan × 145`.
@@ -139,7 +139,7 @@ describe('📸 caracterização — nº de exercícios por dia, com o estimador 
   });
 });
 
-describe('📸 caracterização — orçamento temporal atual e composição da sessão', () => {
+describe(`📸 etapa3 — composição seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
   /**
    * 🔑 A contagem INICIAL de slots ainda depende de tempo e volume, antes de existir
    * uma lista concreta de exercícios. Depois da alocação, o orçamento temporal avalia
@@ -300,7 +300,7 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
     // — acessório a 60 s, composto INTACTO no topo (180 s). A ordem invertida rebaixaria o
     // composto a 90 aqui. Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela
     // faixa: na semana 1 (RIR 3) ele JÁ é 60 s e degradar fica indistinguível.
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 90, nivelExperiencia: 'intermediario' }, 5);
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 60, nivelExperiencia: 'intermediario' }, 5);
     const diaDegradado = r.dias.find((d) =>
       d.slots.some((x) => (x.padrao === 'isolado' || x.padrao === 'core') && x.descansoSeg === 60));
     expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();

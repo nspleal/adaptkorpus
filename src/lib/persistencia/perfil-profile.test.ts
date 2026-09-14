@@ -168,3 +168,15 @@ describe('🔒 3.5 — `mesocicloSemana` não pode reaparecer no código de src/
     expect(comInicio.length, 'a âncora do ciclo sumiu junto com o espelho').toBeGreaterThan(2);
   });
 });
+
+
+describe('75+ explícito, sem reinterpretar minutos legados',()=>{
+ it.each([75,90,180,240])('preserva legado limitado %i, inclusive após round-trip',tempoPorSessaoMin=>{
+  const p={...perfil,tempoPorSessaoMin};const volta=linhaParaPerfil(perfilParaLinha(p));
+  expect(volta.tempoPorSessaoMin).toBe(tempoPorSessaoMin);expect(volta.limiteTempoTreino).toBeUndefined();
+ });
+ it('escolha explícita sem limite sobrevive JSON, mapeamento e hidratação',()=>{
+  const p={...perfil,tempoPorSessaoMin:75,limiteTempoTreino:'sem_limite' as const};
+  expect(linhaParaPerfil(JSON.parse(JSON.stringify(perfilParaLinha(p))))).toEqual(p);
+ });
+});

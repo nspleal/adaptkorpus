@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import * as blocoFoco from './engine/bloco-foco-adicional';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { recomputarPlano } from './plano';
@@ -89,6 +90,16 @@ describe('D1 — o canal existe e é verbatim', () => {
  * de entrar em silêncio. (`avisos.push(...avisosCustom)` é repasse, não família própria.)
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
+  ['fullbody sem elegível', /Sem exercício elegível/, () => gerar({equipamento:'nenhum',treinoDias:['seg'],diasDisponiveis:1})],
+  ['foco limitado por retomada', /bloco adicional do foco não foi aplicado/, () => gerar({foco:{grupo:'peito',semana:1}}, {semanaCiclo:{semana:3,retomada:{semana:1,fator:0.5,volumeReferencia:14}}})],
+  ['segunda exposição adaptada', /Segunda exposição adaptada/, () => gerar({treinoDias:['seg','ter'],diasDisponiveis:2,foco:{grupo:'peito',semana:1}})],
+  ['bloco elegível incompleto', /completar o bloco adicional/, () => gerar({equipamento:'nenhum',foco:{grupo:'antebraco',semana:1}})],
+  ['bloco reduzido por tempo', /Bloco do foco reduzido pelo tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20,foco:{grupo:'peito',semana:1}})],
+  ['estrutura incompatível', /Estrutura incompatível com o tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
+    const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
+    try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}
+  }],
   ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
   ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ equipamento: 'nenhum', foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
   ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
@@ -127,7 +138,7 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
       - (MONTADOR.match(/avisos\.push\(\.\.\.avisosCustom\)/g) ?? []).length;
     // Tripwire: um `avisos.push` novo entra descoberto e derruba este teste em vez de virar
     // mais um aviso que ninguém prova que chega à tela — o defeito que D1 fecha.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(20);
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(27);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

@@ -79,8 +79,8 @@ export const FOCO_SEMANAS: Faixa = { min: 4, max: 6 };
 
 export interface FocoGrupo {
   grupo: GrupoPrimario;
-  /** O grupo que cede o volume — a compensação é **1:1**, o total da semana não cresce. */
-  compensa: GrupoPrimario;
+  /** Legado/core: compensador; o bloco automático adicional não o utiliza. */
+  compensa?: GrupoPrimario;
   /** Semana do foco (1-based). Fora de 1..`FOCO_SEMANAS.max` o foco está encerrado. */
   semana: number;
 }

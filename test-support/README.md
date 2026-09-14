@@ -13,3 +13,14 @@ Na revisão E2-02, eram 196 testes originais aplicáveis ao atual e 39 dirigidos
 As provas sucessoras de `src/lib/engine/distribuicao-etapa2.test.ts` e `distribuicao-contratos-atuais.test.ts` cobrem recortes e intenção, banda ponderada, cascata em divisão estável, dias não atendidos, favoritos, duração e cardio terminal. O mapa explica as comparações estruturais que deixaram de ser propriedades do auto, sem dispensar as invariantes numéricas.
 
 Para inspeção dirigida, `npm test -- src/lib/engine/trilhos.test.ts` executa as duas leituras desse arquivo. `npm test` sem filtros é a validação obrigatória; não requer runner ou variável externa. Uma falha no seletor atual retorna status não zero mesmo que o histórico passe. Essa propriedade foi demonstrada com um teste temporário novo no arquivo trilhos, restaurado byte a byte após a prova; logs ficam no pacote externo da rodada 3.
+
+
+## Etapa 3 — reconciliação das regras aprovadas em 14/09/2026
+
+O projeto histórico congela somente o seletor, não todo o motor. Os testes que
+passaram a exercer o bloco adicional, o descanso documental e o teto estrito foram
+reancorados nessas decisões; as saídas anteriores permanecem no pacote externo.
+Foram removidas exclusões obsoletas, sem adicionar exclusões novas. Os snapshots
+atuais e com seletor histórico têm nomes distintos e ambos são executados.
+A contagem de 53 acima descreve a revisão E2-02, não a execução desta etapa.
+O relatório externo da etapa 3 registra os nomes reativados e os skipped efetivos.

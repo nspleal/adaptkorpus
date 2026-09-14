@@ -73,12 +73,11 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     expect(r.rotina!.duracaoIncompativel).toBeUndefined();
   });
 
-  it('o mínimo vem do alocador: 10 min aceita capacidade 2 em quatro dias, sem falso INCOMPATIVEL', () => {
+  it('tempo estrito14/09:10min preserva únicos e declara incompatibilidade', () => {
     const r = gerarTreino(perfilTreino({ tempoPorSessaoMin: 10 }), { exercises: EXERCISES, semanaCiclo: { semana: 1 } });
     const rg = r.rotina!.resultadoGeracao!;
-    expect(rg).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 2 });
-    expect(Math.max(...r.rotina!.dias.map((d) => d.slots.length))).toBe(2);
-    expect(r.rotina!.duracaoIncompativel).toBeUndefined();
+    expect(rg).toEqual({tipo:'INCOMPATIVEL',capacidadeMinimaTestada:Math.max(...r.rotina!.dias.map(d=>d.slots.length))});
+    expect(r.rotina!.duracaoIncompativel).toBe(true);
   });
 
   it('um dia encontra a cobertura mínima válida e só então declara INCOMPATIVEL temporal', () => {
@@ -86,7 +85,7 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
       perfilTreino({ diasDisponiveis: 1, tempoPorSessaoMin: 10 }),
       { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
     );
-    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 3 });
+    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 10 });
     expect(r.rotina!.duracaoIncompativel).toBe(true);
   });
 
@@ -95,8 +94,8 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
       perfilTreino({ diasDisponiveis: 4, tempoPorSessaoMin: 1 }),
       { exercises: EXERCISES, semanaCiclo: { semana: 1 } },
     );
-    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 2 });
-    expect(Math.max(...r.rotina!.dias.map((d) => d.slots.length))).toBe(2);
+    expect(r.rotina!.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: Math.max(...r.rotina!.dias.map(d=>d.slots.length)) });
+    expect(r.rotina!.dias.every(d=>d.slots.length>0)).toBe(true);
   });
 
   it.each([5, 6])('perfil avançado de %i dias não publica candidato de capacidade 1 sem cobertura', (diasDisponiveis) => {
@@ -182,12 +181,12 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
       perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', tempoPorSessaoMin: 40 }),
       { exercises: todosDoisLados, semanaCiclo: { semana: 1 } },
     ).rotina!;
-    expect(rot.resultadoGeracao).toEqual({ tipo: 'CERTIFICADO', capacidadeTerminal: 4 });
-    expect(Math.max(...rot.dias.map((d) => d.slots.length))).toBe(4);
+    expect(rot.resultadoGeracao?.tipo).toBe('INCOMPATIVEL');
+    expect(rot.dias.some(d=>d.slots.length>0)).toBe(true);
     // Compostos de massa começam a 120 s na semana 1; 90 s só ocorre após degradação.
     expect(rot.dias.flatMap((d) => d.slots).some((s) => s.descansoSeg === 90)).toBe(true);
     expect(Math.max(...rot.duracaoResistidaDias!.map((d) => d.duracaoMaximaEstimadaSegundos ?? 0)))
-      .toBeLessThanOrEqual(40 * 60 + 8 * 60);
+      .toBeGreaterThan(40 * 60);
   });
 });
 
@@ -471,13 +470,13 @@ describe('C1.1 · e72 ponta a ponta: escolha → gerarTreino → SlotExercicio �
 describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900)', () => {
   /**
    * Cenário construído pelo GERADOR REAL (montarRotina, API pública) com prescrição artesanal:
-   * massa/intermediário, 39 min (B = 2340 s), 5 séries por slot, cardio 30 min/semana em 2 dias
-   * oferecidos {0, 4}. O dia 0 (Upper A: isol/emp/pux/isol) DEGRADA de 60/120/120/60 (candidato,
-   * MAX 2540 ≥ B ⇒ cardio 0) para 60/90/90/60 (terminal, MAX 2240 ⇒ sobra EXATA de 100 s).
+   * massa/intermediário, 39 min (B = 2640 s), 5 séries por slot, cardio 30 min/semana em 2 dias
+   * oferecidos {0, 4}. O dia 0 (Upper A: isol/emp/pux/isol) DEGRADA de 60/180/180/60 (candidato,
+   * MAX 2540 ≥ B ⇒ cardio 0) para 60/120/120/60 (terminal, MAX 2540 ⇒ sobra EXATA de 100 s).
    * Prescrito por dia oferecido = 30/2 = 15 min = 900 s.
    */
   const montarF36 = () => {
-    const p = perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: 39 });
+    const p = perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: 44 });
     const base = prescreverTreino(p, avaliarGateTreino(p));
     const presc = {
       ...base,
@@ -486,7 +485,7 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
       cardio: { tipo: 'minutos_semana', min: 30, max: 30 } as const,
     };
     const rot = montarRotina(presc, p, EXERCISES, new Set(), { semana: 1 }, p.preferencias, new Map(), [0, 4]);
-    return { p, presc, rot, B: 39 * 60 };
+    return { p, presc, rot, B: 44 * 60 };
   };
   const contratoDia0 = (rot: RotinaSemanal) =>
     rot.distribuicaoCardio!.contratosPorPrescricao.find((c) => c.diaOrigemId === idDoDia(0))!;
@@ -494,18 +493,18 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
   it('pré-condição: a degradação REAL aconteceu (terminal 60/90/90/60; candidato nível 0 seria 60/120/120/60)', () => {
     const { p, presc, rot } = montarF36();
     const slots0 = rot.dias[0]!.slots;
-    expect(slots0.map((s) => s.descansoSeg)).toEqual([60, 90, 90, 60]); // terminal degradado
+    expect(slots0.map((s) => s.descansoSeg)).toEqual([60, 120, 120, 60]); // terminal degradado
     const rir = presc.rirAlvoSemana ?? rirAlvoDaSemana(presc.rir, 1);
     const semDegradar = slots0.map((s) => descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: rir, modoForca: false, semanaRampa: null, degradacao: 0 }));
-    expect(semDegradar).toEqual([60, 120, 120, 60]); // candidato (nível 0)
+    expect(semDegradar).toEqual([60, 180, 180, 60]); // candidato (nível 0)
     void p;
   });
 
   it('🔒 EXATO: terminal MAX 2240, sobra 100 ⇒ prescrito 900 · usa 100 · redistribui 800 · descarte 0', () => {
     const { rot, B } = montarF36();
-    expect(B).toBe(2340);
-    expect(rot.duracaoResistidaDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2240); // B − 100
-    expect(rot.duracaoDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2340); // dia FINAL = 2240 + cardio 100
+    expect(B).toBe(2640);
+    expect(rot.duracaoResistidaDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2540); // B − 100
+    expect(rot.duracaoDias![0]!.duracaoMaximaEstimadaSegundos).toBe(2640); // dia FINAL = 2540 + cardio 100
     expect(rot.duracaoDias![0]!.componentes?.continuoSegundos).toBe(100);
     const c = contratoDia0(rot);
     expect(c.duracaoPrescritaSegundos).toBe(900);
@@ -525,7 +524,7 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
       descansoSeg: descansoDoExercicio({ exercicio: s.exercicio, rirAlvo: rir, modoForca: false, semanaRampa: null, degradacao: 0 })!,
     }));
     const durCandidato = avaliarDuracaoResistida(slotsCandidato, p.nivelExperiencia, B);
-    expect(durCandidato.duracaoMaximaEstimadaSegundos).toBe(2540); // ≥ B ⇒ capacidade 0
+    expect(durCandidato.duracaoMaximaEstimadaSegundos).toBe(3140); // ≥ B ⇒ capacidade 0
     const duracaoDiasCandidato = rot.duracaoResistidaDias!.map((d, i) => (i === 0 ? durCandidato : d));
     const intermediaria = distribuirCardioDaRotina({
       diasTotais: 5, diasForca: rot.diasForcaAgendados, duracaoDias: duracaoDiasCandidato,

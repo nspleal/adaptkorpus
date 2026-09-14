@@ -24,6 +24,14 @@ import type { RotinaSemanal } from '@/lib/engine';
  * sem tom de falha (a ausência de entrega descreve o arranjo, não acusa a pessoa).
  */
 export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | null {
+  const bloco = rotina?.blocoFoco;
+  if (bloco) {
+    const grupos = bloco.grupos.map(g => ROTULO_GRUPO[g] ?? g).join(' e ');
+    const n = bloco.adicionais.length;
+    return n > 0
+      ? `${grupos} em foco: ${n} exercício${n === 1 ? '' : 's'} ${n === 1 ? 'adicional' : 'adicionais'} no plano, com ${bloco.adicionais.reduce((total, a) => total + a.series, 0)} séries ao todo.`
+      : `${grupos} em foco: não foi possível acrescentar exercícios neste plano. Confira os limites indicados.`;
+  }
   const f = rotina?.foco;
   if (!f) return null;
   const grupo = ROTULO_GRUPO[f.grupo] ?? f.grupo;
