@@ -165,7 +165,7 @@ describe('P-01 — INCOMPATIVEL informa o conflito e os caminhos, sem prometer q
    * renderizando os dias. O parecer pediu que a frase dissesse isso e nomeasse as saídas
    * reais — sem afrouxar limite, descanso ou cobertura para fabricar um certificado.
    */
-  const entrada = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 30, treinoDias: ['seg'] });
+  const entrada = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg'] });
   const r = gerar(entrada);
 
   it('anti-vacuidade: este perfil realmente cai em INCOMPATIVEL', () => {

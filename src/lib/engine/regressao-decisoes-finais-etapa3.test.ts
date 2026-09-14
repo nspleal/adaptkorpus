@@ -103,7 +103,7 @@ describe('R-00 — o bloco do foco não derruba a certificação do baseline', (
 });
 
 describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => {
-  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 30, treinoDias: ['seg'] });
+  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg'] });
 
   it('a unidade respeita a ORDEM e PARA assim que couber', () => {
     // Dia sintético: core e panturrilha presentes. Com um limite que cabe depois de tirar
@@ -143,7 +143,7 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
 
   it('no plano real a retirada acontece, é nomeada e preserva os grupos principais', () => {
     const plano = gerar(curto);
-    const aviso = plano.avisos.find((a) => a.startsWith('Para caber em'));
+    const aviso = plano.avisos.find((a) => a.startsWith('Para caber em') && a.includes('nesta sessão única'));
     expect(aviso, 'a retirada não foi nomeada em nenhum aviso').toBeTruthy();
     expect(diretos(plano, 'core'), 'core sobreviveu: o caso deixou de exercer a regra').toBe(0);
     expect(aviso).toContain('Core');

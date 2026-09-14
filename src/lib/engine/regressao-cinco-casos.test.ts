@@ -144,13 +144,13 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
     // A composição do diagnóstico — padrões e descansos — reaparece inteira.
     expect(m.dia.slots.map((s) => `${s.padrao}@${s.descansoSeg}`))
       .toEqual(['isolado@60', 'empurrar@120', 'puxar@120', 'isolado@60']);
-    // Quem cedeu série foi UM exercício de braços/ombros (E6), e só ele: os demais em 4.
-    expect(m.dia.slots.map((s) => s.series)).toEqual([4, 4, 4, 1]);
+    // SER-4: último slot4→2 e anterior4→3; para ao caber antes de E6.
+    expect(m.dia.slots.map((s) => s.series)).toEqual([4, 4, 3, 2]);
     expect(['biceps', 'triceps', 'ombros'], 'E6 tocou um grupo fora da lista aprovada')
       .toContain(m.dia.slots.at(-1)!.exercicio.grupoPrimario);
     // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica não conta.
-    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1420);
-    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1720);
+    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1360);
+    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1660);
     expect(m.dur.estadoLimite).toBe('DENTRO_DO_LIMITE'); // o antigo dizia "não cabe" (1840 > 1800)
   });
 

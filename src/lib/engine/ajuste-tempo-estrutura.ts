@@ -13,7 +13,7 @@ import type {DiaTreino,NivelExperiencia,SlotExercicio} from './treino-types';
  * ```
  * E1  descanso até os pisos vigentes            (no montador: depende da prescrição)
  * E2  extras do foco que não couberem           (`removerExtrasPorTempo`, fase B)
- * E3  exercícios com TRÊS séries passam a DUAS  (`reduzirTresParaDuas`)
+ * E3  séries >= 3 cedem UMA por vez até DUAS (`reduzirSeriesAteDuas`)
  * E4  exercícios redundantes                    (`reduzirEstruturaPorTempo`)
  * E5  dispensar direto: core → antebraço → panturrilha → glúteos (`dispensarGruposPorTempo`)
  * E6  bíceps/tríceps/ombros a UMA série         (`reduzirBracosOmbrosParaUma`)
@@ -150,8 +150,7 @@ export function dispensarGruposPorTempo(
  * E3 e E6 — REDUÇÃO DE SÉRIES (decisão do autor 2026-09-17)
  * ──────────────────────────────────────────────────────────────────────────────── */
 
-/** 🔒 «Três para duas» autoriza ESTA transformação, não uma redução indiscriminada de
- *  qualquer quantidade para duas. Séries já menores ficam como estão. */
+/** SER-4: a partir de três séries, reduzir uma por vez até duas. Não aumentar menores. */
 export const SERIES_DE = 3;
 export const SERIES_PARA = 2;
 /** 🔒 Última etapa: bíceps, tríceps e ombros a UMA série, nesta ordem determinística.
@@ -163,7 +162,7 @@ export interface SerieAjustada { exercicioId: string; grupo: GrupoPrimario | nul
 
 export interface AjusteTemporalDoDia {
  dia: DiaTreino;
- /** E3 — exercícios que foram de 3 para 2 séries. */
+ /** E3 — operações atômicas de uma série; um exercício pode aparecer mais de uma vez. */
  seriesReduzidas: SerieAjustada[];
  /** E4 — exercícios redundantes retirados (o grupo continua coberto no mesmo dia). */
  redundantesRetirados: SlotExercicio[];
@@ -175,25 +174,25 @@ export interface AjusteTemporalDoDia {
  naoAvaliado: boolean;
  /** Duração máxima estimada do dia ENTREGUE, em segundos, quando calculável. */
  duracaoSeg?: number;
- /**
-  * 🟡 CASO A DOCUMENTAR, NÃO A INVENTAR POLÍTICA: quantidades de séries acima de 3 que
-  * sobraram num dia que não coube. A política aprovada cobre só 3 → 2; se isto aparecer,
-  * é caso novo para o autor decidir, e sai daqui para o relatório sem limite inventado.
-  */
+ /** Quantidades acima do piso restantes se a redução de séries foi desabilitada. */
  quantidadesForaDaPolitica: number[];
 }
 
-/** E3 — só 3 → 2, um exercício por vez, do fim para o começo do dia (determinístico). */
-export function reduzirTresParaDuas(
+/** E3 / SER-4 — ordem estável do último slot ao primeiro, sem ranking muscular.
+ * Cada exercício cede UMA série por operação, até duas, antes de passar ao anterior.
+ * A duração é recalculada antes de cada operação: 4→3 pode bastar, sem chegar a 2.
+ */
+export function reduzirSeriesAteDuas(
  slots: SlotExercicio[], cabe: () => boolean,
 ): SerieAjustada[] {
  const feitas: SerieAjustada[] = [];
  while (!cabe()) {
   let alvo: SlotExercicio | undefined;
-  for (let i = slots.length - 1; i >= 0; i -= 1) if (slots[i]!.series === SERIES_DE) { alvo = slots[i]; break; }
-  if (!alvo) break; // não há mais nenhum com 3 séries: a etapa acabou
-  alvo.series = SERIES_PARA;
-  feitas.push({ exercicioId: alvo.exercicio.id, grupo: alvo.exercicio.grupoPrimario, de: SERIES_DE, para: SERIES_PARA });
+  for (let i = slots.length - 1; i >= 0; i -= 1) if ((slots[i]!.series ?? 0) >= SERIES_DE) { alvo = slots[i]; break; }
+  if (!alvo) break;
+  const de = alvo.series!;
+  alvo.series = de - 1;
+  feitas.push({ exercicioId: alvo.exercicio.id, grupo: alvo.exercicio.grupoPrimario, de, para: alvo.series });
  }
  return feitas;
 }
@@ -249,14 +248,14 @@ export function reduzirDiaPorTempo(
  // certificação diz NAO_AVALIADO — a mesma postura das etapas isoladas.
  if (medir(dia.slots).estadoCalculo !== 'CALCULADO') return vazio(dia, false, true);
 
- let slots = [...dia.slots];
+ let slots = dia.slots.map(s => ({ ...s }));
  const cabe = () => {
   const r = medir(slots);
   return r.estadoCalculo !== 'CALCULADO' || (r.duracaoMaximaEstimadaSegundos ?? Infinity) <= limiteSeg;
  };
 
- // E3 — três séries viram duas, só quando necessário e só enquanto necessário.
- const seriesReduzidas = reduzirSeries ? reduzirTresParaDuas(slots, cabe) : [];
+ // E3 / SER-4 — uma série por vez até duas, parando assim que couber.
+ const seriesReduzidas = reduzirSeries ? reduzirSeriesAteDuas(slots, cabe) : [];
 
  // E4 — exercício redundante (grupo com mais de um no dia). A política de sempre, agora
  // com posição declarada: depois de E3 e antes de excluir um grupo inteiro.
@@ -276,10 +275,9 @@ export function reduzirDiaPorTempo(
 
  const final = medir(slots);
  const coube = cabe();
- // Só documenta quando o dia NÃO coube: aí sim a quantidade que sobrou é candidata a
- // política nova. Num dia que coube, séries maiores são o plano normal, não um caso.
+ // Diagnóstico residual: com SER-4 ativa nenhuma quantidade acima do piso sobra no excesso.
  const quantidadesForaDaPolitica = coube ? [] : [...new Set(
-  slots.map((s) => s.series ?? 0).filter((n) => n > SERIES_DE),
+  slots.map((s) => s.series ?? 0).filter((n) => n >= SERIES_DE),
  )].sort((a, b) => a - b);
  return {
   dia: { ...dia, slots },

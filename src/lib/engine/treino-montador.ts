@@ -1007,7 +1007,7 @@ export function montarRotina(
           });
           saida[i]=ajuste.dia;
           if(!registrar){if(!ajuste.cabe&&!ajuste.naoAvaliado)incompativeis.push(d.nome);continue;}
-          relatoReducao.series+=ajuste.seriesReduzidas.length;
+          relatoReducao.series+=new Set(ajuste.seriesReduzidas.map(s=>s.exercicioId)).size;
           relatoReducao.minimas+=ajuste.seriesMinimas.length;
           relatoReducao.redundantes+=ajuste.redundantesRetirados.length;
           for(const g of ajuste.gruposDispensados)if(!dispensadosNoFullbody.includes(g))dispensadosNoFullbody.push(g);
@@ -1038,7 +1038,7 @@ export function montarRotina(
        * fato — o contador vem da sequência, não de uma suposição sobre ela.
        */
       const plural=(n:number,um:string,varios:string)=>n===1?um:varios;
-      if(relatoReducao.series>0)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min, reduzimos de 3 para 2 séries em ${relatoReducao.series} ${plural(relatoReducao.series,'exercício','exercícios')}.`);
+      if(relatoReducao.series>0)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min, reduzimos séries progressivamente, até o piso de 2, em ${relatoReducao.series} ${plural(relatoReducao.series,'exercício','exercícios')}.`);
       if(relatoReducao.redundantes>0)avisos.push(`Também retiramos ${relatoReducao.redundantes} ${plural(relatoReducao.redundantes,'exercício repetido','exercícios repetidos')} de ${plural(relatoReducao.redundantes,'grupo que continua coberto','grupos que continuam cobertos')} no mesmo dia.`);
       /**
        * 🔵 P-01 — a retirada é NOMEADA. O aviso diz o que saiu e por quê, e nada no plano

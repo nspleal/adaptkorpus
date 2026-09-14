@@ -48,6 +48,7 @@ function plano(s: number, over: Partial<PerfilTreino> = {}) {
       classe: classeDeDescanso(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       exigente: altaExigenciaDocumental(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       descansoSeg: sl.descansoSeg ?? null,
+      series: sl.series,
     })),
   }));
 }
@@ -122,47 +123,31 @@ describe('🔒 aceite 1 — classes diferentes na MESMA sessão recebem descanso
 
 describe('🔒 aceite 5 — o orçamento cede descanso, nunca exercício', () => {
   /**
-   * ⚠️ A 1ª escrita comparava 30 min × 90 min e exigia o MESMO número de exercícios — e isso
-   * a spec nunca prometeu: meia hora comporta menos trabalho que uma hora e meia, e a
-   * medição confirma (12 × 14). A regra é outra: *nunca se corta exercício para caber
-   * descanso*. Ela só se testa **dentro do mesmo orçamento**, comparando semanas em que a
-   * exigência de descanso cresce.
-   */
-  /**
-   * 🔴 CONFLITO REAL, DOCUMENTADO (revisão independente 15/09, achado L-02).
-   *
-   * O aceite 5 original — "no MESMO orçamento a cobertura NUNCA cede" — deixou de valer na
-   * letra quando a decisão 6 de 14/09 entrou: «reduzir descanso até o piso permitido; retirar
-   * extras primeiro; depois alternar cortes entre grupos». Com o teto estrito, um dia pode
-   * mesmo perder exercício. Medido: em 2 dos 24 perfis varridos (intermediário, 45 min,
-   * massa e emagrecimento) a contagem cai da semana 3 em diante; na base eram 0 de 24.
-   *
-   * A etapa 3 tinha trocado a asserção por `contagem.every(n => n > 0)`, que não distingue
-   * certo de errado. O que a spec ainda garante, e o que se cobra aqui, é a ORDEM: nenhum
-   * exercício sai enquanto sobrar descanso para ceder. Quando a contagem cai, TODO composto
-   * do plano já está no piso de degradação da sua classe — rest primeiro, exercício depois.
+   * SER-4 preserva exercícios cedendo séries, portanto queda no número de exercícios
+   * entre semanas não é mais a testemunha necessária da redução temporal. Neste perfil
+   * intermediário, uma série abaixo de três testemunha a etapa E3 ou posterior.
+   * Cobra-se que os compostos já estejam no piso quando isso ocorre, com casos dos dois
+   * lados. Os orçamentos originais permanecem e acrescentamos 5/10/20 min.
+   * O nome histórico fica preservado por ser chave da classificação do Vitest.
    */
   it('🔑 no MESMO orçamento, exercício só cede DEPOIS que todo o descanso cedeu', () => {
-    let comQueda = 0; let semQueda = 0;
-    for (const tempoPorSessaoMin of [30, 45, 60, 90]) {
+    let comReducao = 0; let semReducao = 0;
+    for (const tempoPorSessaoMin of [5, 10, 20, 30, 45, 60, 90]) {
       const semanas = [1, 3, 5].map((s) => plano(s, { tempoPorSessaoMin }));
-      const contagem = semanas.map((slotsDaSemana) => slotsDaSemana.flatMap((d) => d.slots).length);
-      const caiu = contagem.some((n, i) => i > 0 && n < contagem[0]!);
-      if (!caiu) { semQueda += 1; continue; }
-      comQueda += 1;
-      // A semana que perdeu exercício tem de estar com TODO composto no piso da classe.
-      for (const [i, n] of contagem.entries()) {
-        if (i === 0 || n >= contagem[0]!) continue;
-        const compostos = semanas[i]!.flatMap((d) => d.slots).filter((s) => s.classe === 'COMPOSTO');
+      const cedeuSeries = (dias: ReturnType<typeof plano>) =>
+        dias.some(d => d.slots.some(s => (s.series ?? 4) < 3));
+      if (!semanas.some(cedeuSeries)) { semReducao += 1; continue; }
+      comReducao += 1;
+      for (const dias of semanas) {
+        if (!cedeuSeries(dias)) continue;
+        const compostos = dias.flatMap((d) => d.slots).filter((s) => s.classe === 'COMPOSTO');
         const acimaDoPiso = compostos.filter((s) => (s.descansoSeg ?? 0) > (s.exigente ? 120 : PISO_DEGRADACAO.COMPOSTO));
         expect(acimaDoPiso.map((s) => `${s.id}@${s.descansoSeg}`),
-          `${tempoPorSessaoMin} min: caiu de ${contagem[0]} para ${n} exercícios com descanso ainda acima do piso`).toEqual([]);
+          `${tempoPorSessaoMin} min: séries cederam com descanso ainda acima do piso`).toEqual([]);
       }
     }
-    // Anti-vacuidade dos dois lados: a matriz tem de conter orçamento que cede exercício e
-    // orçamento que não cede — senão a implicação seria verdadeira por ausência de caso.
-    expect(comQueda, 'nenhum orçamento perdeu exercício: a implicação não foi exercida').toBeGreaterThan(0);
-    expect(semQueda, 'todos os orçamentos perderam exercício: o contraste sumiu').toBeGreaterThan(0);
+    expect(comReducao, 'nenhum orçamento cedeu séries: a implicação não foi exercida').toBeGreaterThan(0);
+    expect(semReducao, 'todos os orçamentos cederam séries: o contraste sumiu').toBeGreaterThan(0);
   });
 
   it('quando o tempo aperta, quem cede é o DESCANSO — até os pisos de degradação', () => {

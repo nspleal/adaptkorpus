@@ -29,6 +29,8 @@ const rotina = (p: PerfilTreino, over?: Partial<OpcoesSemana>) =>
 const supino = EXERCISES.find((e) => e.id === 'e1')!;
 
 const GRID: Array<Partial<PerfilTreino>> = [
+  // SER-4: manter ramo incompatível sem remover os casos originais que passaram a caber.
+  { tempoPorSessaoMin:20, diasDisponiveis:1, treinoDias:['seg'], nivelExperiencia:'avancado' },
   {},
   { tempoPorSessaoMin: 30 },
   { tempoPorSessaoMin: 75, nivelExperiencia: 'avancado', diasDisponiveis: 6 },

@@ -107,10 +107,10 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * uma só sai quando o ajuste correspondente ACONTECEU, e uma única vez no plano (a
    * comunicação é agregada, nunca por exercício nem por dia).
    */
-  ['séries de 3 para 2', /reduzimos de 3 para 2 s[ée]ries em \d+ exerc[íi]cios?/, () => gerar({nivelExperiencia:'iniciante',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:15})],
-  ['exercícios redundantes retirados', /retiramos \d+ exerc[íi]cios? repetidos?/, () => gerar({nivelExperiencia:'intermediario',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:30})],
-  ['braços/ombros a 1 série', /ficaram? com 1 s[ée]rie\. Os exerc[íi]cios foram mantidos/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:30})],
-  ['estimativa ainda acima do limite', /a estimativa ainda passa do seu tempo/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:30})],
+  ['séries de 3 para 2', /reduzimos s[ée]ries progressivamente, at[ée] o piso de 2, em \d+ exerc[íi]cios?/, () => gerar({nivelExperiencia:'iniciante',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:15})],
+  ['exercícios redundantes retirados', /retiramos \d+ exerc[íi]cios? repetidos?/, () => gerar({nivelExperiencia:'intermediario',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:10})],
+  ['braços/ombros a 1 série', /ficaram? com 1 s[ée]rie\. Os exerc[íi]cios foram mantidos/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  ['estimativa ainda acima do limite', /a estimativa ainda passa do seu tempo/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
   ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
     const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
     try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}

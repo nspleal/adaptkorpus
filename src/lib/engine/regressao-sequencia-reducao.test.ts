@@ -18,7 +18,7 @@ import { EXERCISES } from '../data/exercises';
 import { avaliarDuracaoResistida } from './duracao-plano';
 import {
   GRUPOS_SERIE_MINIMA, SERIES_DE, SERIES_PARA, SERIE_MINIMA,
-  reduzirDiaPorTempo, reduzirTresParaDuas, reduzirBracosOmbrosParaUma,
+  reduzirDiaPorTempo, reduzirSeriesAteDuas, reduzirBracosOmbrosParaUma,
 } from './ajuste-tempo-estrutura';
 import { GRUPOS_DISPENSAVEIS_FULLBODY_CURTO } from './alocador';
 import type { PerfilTreino, RotinaSemanal, SlotExercicio, DiaTreino } from './treino-types';
@@ -69,16 +69,28 @@ describe('E3 — três séries viram duas, e só quando é preciso', () => {
     expect(r.cabe).toBe(true);
   });
 
-  it('«três para duas» NÃO é «qualquer quantidade para duas»: 4 e 2 ficam como estão', () => {
-    const d = dia([slot('peito', 4), slot('costas', 2), slot('ombros', 4)]);
-    const antes = d.slots.map((s) => s.series);
-    // Limite impossível: a etapa tenta o quanto puder, e ainda assim não mexe em 4 nem em 2.
+  it('SER-4 reduz 4→3→2 e preserva séries já menores', () => {
+    const d = dia([slot('peito', 4), slot('costas', 2), slot('ombros', 4), slot('biceps', 1)]);
+    const antes = JSON.stringify(d);
     const r = reduzirDiaPorTempo(d, 'intermediario', 1, { reduzirSeries: true });
-    expect(r.seriesReduzidas, 'reduziu uma quantidade que a política não cobre').toEqual([]);
-    const semBracos = r.dia.slots.filter((s) => !GRUPOS_SERIE_MINIMA.includes(s.exercicio.grupoPrimario!));
-    expect(semBracos.map((s) => s.series)).toEqual(antes.filter((_, i) => i !== 2));
-    // …e o caso é DOCUMENTADO em vez de virar política nova inventada.
-    expect(r.quantidadesForaDaPolitica, 'a quantidade não coberta não foi registrada').toContain(4);
+    expect(r.seriesReduzidas.map(s => [s.grupo, s.de, s.para])).toEqual([
+      ['ombros',4,3], ['ombros',3,2], ['peito',4,3], ['peito',3,2],
+    ]);
+    expect(r.dia.slots.map(s => s.series)).toEqual([2,2,1,1]);
+    expect(r.quantidadesForaDaPolitica).toEqual([]);
+    expect(JSON.stringify(d), 'ajuste não pode modificar o plano de entrada').toBe(antes);
+  });
+
+  it('SER-4 para em 4→3 se uma única série resolver', () => {
+    const d = dia([slot('peito',4),slot('costas',4)]);
+    const limite = medir([slot('peito',4),slot('costas',3)]);
+    expect(limite).toBeLessThan(medir(d.slots));
+    const r = reduzirDiaPorTempo(d,'intermediario',limite);
+    expect(r.dia.slots.map(s=>s.series)).toEqual([4,3]);
+    expect(r.seriesReduzidas.map(s=>[s.de,s.para])).toEqual([[4,3]]);
+    expect(r.redundantesRetirados).toEqual([]);
+    expect(r.seriesMinimas).toEqual([]);
+    expect(r.cabe).toBe(true);
   });
 
   it('a unidade só reduz enquanto `cabe()` é falso', () => {
@@ -86,7 +98,7 @@ describe('E3 — três séries viram duas, e só quando é preciso', () => {
     let chamadas = 0;
     // `cabe` responde falso nas duas primeiras chamadas e verdadeiro na terceira: a etapa
     // reduz exatamente duas vezes e para — nenhum corte depois de o dia caber.
-    const feitas = reduzirTresParaDuas(slots, () => { chamadas += 1; return chamadas > 2; });
+    const feitas = reduzirSeriesAteDuas(slots, () => { chamadas += 1; return chamadas > 2; });
     expect(feitas).toHaveLength(2);
     expect(chamadas, 'a etapa não conferiu a duração antes de cada redução').toBe(3);
     expect(slots.filter((s) => s.series === SERIES_DE), 'reduziu mais do que o necessário').toHaveLength(1);
@@ -150,12 +162,14 @@ describe('E5 — dispensa na ordem aprovada, pulando ausentes', () => {
     expect(r.avisos.some((a) => a.startsWith('Para caber em') && a.includes('nesta sessão única')),
       'o aviso da exceção do full-body apareceu numa divisão de vários dias').toBe(false);
     // Anti-vacuidade: o caso realmente aperta — há dia acima do limite.
-    expect(r.resultadoGeracao?.tipo, 'o perfil não aperta: o teste seria vácuo').toBe('INCOMPATIVEL');
+    expect(r.avisos.some(a=>a.includes('reduzimos séries progressivamente')), 'SER-4 deve atuar no caso limitado').toBe(true);
+    expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
   });
 });
 
 describe('Persistindo o excesso: cortes mantidos, duração dita, sem falso certificado', () => {
-  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 30, treinoDias: ['seg'] });
+  // SER-4 faz o caso original de 30 min caber; 20 min mantém a prova de excesso residual.
+  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg'] });
 
   it('as reduções FICAM mesmo sem serem suficientes', () => {
     const r = gerar(curto);
@@ -186,7 +200,7 @@ describe('Persistindo o excesso: cortes mantidos, duração dita, sem falso cert
 
   it('a comunicação não se repete por exercício nem por dia', () => {
     const r = gerar(perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg', 'ter', 'qui', 'sex'] }));
-    for (const marca of ['reduzimos de 3 para 2 séries', 'ficaram com 1 série', 'exercícios repetidos', 'a estimativa ainda passa']) {
+    for (const marca of ['reduzimos séries progressivamente', 'ficaram com 1 série', 'exercícios repetidos', 'a estimativa ainda passa']) {
       const n = r.avisos.filter((a) => a.includes(marca)).length;
       expect(n, `a mensagem «${marca}» saiu ${n} vezes`).toBeLessThanOrEqual(1);
     }
@@ -197,7 +211,7 @@ describe('Escopo: 75+ e deload', () => {
   it('75+ explicitamente sem limite não reduz nada', () => {
     const base = perfil({ nivelExperiencia: 'avancado', treinoDias: ['seg'], tempoPorSessaoMin: 75 });
     const semLimite = gerar({ ...base, limiteTempoTreino: 'sem_limite' });
-    for (const marca of ['reduzimos de 3 para 2 séries', 'ficaram com 1 série', 'ficou sem exercício direto']) {
+    for (const marca of ['reduzimos séries progressivamente', 'ficaram com 1 série', 'ficou sem exercício direto']) {
       expect(semLimite.avisos.some((a) => a.includes(marca)), `75+ sofreu ${marca}`).toBe(false);
     }
     // Anti-vacuidade: o MESMO perfil com limite sofre os ajustes.
