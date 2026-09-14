@@ -40,10 +40,17 @@ describe('etapa2: possibilidades na saída final',()=>{
   // Primários documentais do catálogo; não exige exclusividade anatômica.
   const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
   expect(inferiores).toHaveLength(2);
-  if(!r.avisos.some(a=>a.startsWith('Mantivemos a distribuição disponível'))){
-   expect(inferiores.some(g=>g[0]==='quadriceps'&&!g.includes('posterior'))).toBe(true);
-   expect(inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'))).toBe(true);
-  }
+  /**
+   * 🔴 L-03 (revisão independente 15/09) — A ASSERÇÃO NÃO DEPENDE MAIS DO AVISO DO MOTOR.
+   * Antes, a verificação dos recortes era PULADA quando o próprio código sob teste emitia
+   * "Mantivemos a distribuição disponível": a saída do motor virava premissa e, sem
+   * anti-vacuidade, a asserção podia nunca rodar. Agora a estrutura é medida primeiro e o
+   * aviso é CONFERIDO contra ela — separou ⇒ sem aviso; não separou ⇒ aviso obrigatório.
+   */
+  const separou=inferiores.some(g=>g[0]==='quadriceps'&&!g.includes('posterior'))
+    &&inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'));
+  const avisou=r.avisos.some(a=>a.startsWith('Mantivemos a distribuição disponível'));
+  expect(avisou,`recortes ${separou?'separados':'NÃO separados'}, aviso ${avisou?'presente':'ausente'}`).toBe(!separou);
   expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','panturrilha','ombros','peito','costas']));
   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2});
  });

@@ -36,20 +36,40 @@ const GRID: Array<Partial<PerfilTreino>> = [
 ];
 
 describe('C1 gerador · certificação do plano final (§5.5)', () => {
-  it('toda rotina gerada carrega duracaoDias, uma por dia, CALCULADO e dentro do limite operacional', () => {
+  /**
+   * 🔴 L-04 (revisão independente 15/09) — A TAUTOLOGIA SAIU.
+   *
+   * A etapa 3 tinha trocado `expect(r.duracaoIncompativel ?? false).toBe(false)` por
+   * `.toBe(r.resultadoGeracao?.tipo === 'INCOMPATIVEL')` — verdadeiro POR CONSTRUÇÃO, já que
+   * o montador atribui o booleano exatamente a partir do discriminante. O que se cobra agora
+   * é a propriedade que a troca apagou: `INCOMPATIVEL` não é rótulo. Quando ele aparece,
+   * algum dia tem de exceder o teto MEDIDO pela fórmula canônica; quando não aparece, nenhum
+   * dia pode exceder. Os dois ramos são exercidos pela grade (anti-vacuidade abaixo).
+   */
+  it('toda rotina gerada carrega duracaoDias, uma por dia, CALCULADO e coerente com o teto medido', () => {
+    let certificados = 0; let incompativeis = 0;
     for (const over of GRID) {
-      const r = rotina(perfil(over));
+      const p = perfil(over);
+      const r = rotina(p);
+      const teto = p.tempoPorSessaoMin * 60;
       expect(r.duracaoDias, JSON.stringify(over)).toBeDefined();
       expect(r.duracaoDias!.length).toBe(r.dias.length);
       expect(r.fatosReducao, JSON.stringify(over)).toBeDefined();
       expect(r.fatosReducao!.slotsAntes, JSON.stringify(over)).toBe(r.fatosReducao!.slotsDepois);
-      for (const d of r.duracaoDias!) {
-        expect(d.estadoCalculo, JSON.stringify(over)).toBe('CALCULADO');
-        // o gerador nunca ENTREGA um plano acima do limite operacional (reduz antes, se preciso).
-        if(r.resultadoGeracao?.tipo==='CERTIFICADO')expect(d.estadoLimite).toBe('DENTRO_DO_LIMITE');
+      for (const d of r.duracaoDias!) expect(d.estadoCalculo, JSON.stringify(over)).toBe('CALCULADO');
+      const excedem = r.duracaoDias!.filter((d) => (d.duracaoMaximaEstimadaSegundos ?? 0) > teto);
+      if (r.resultadoGeracao?.tipo === 'INCOMPATIVEL') {
+        incompativeis += 1;
+        expect(excedem.length, `${JSON.stringify(over)}: INCOMPATIVEL sem nenhum dia acima do teto medido`).toBeGreaterThan(0);
+      } else {
+        certificados += 1;
+        // O gerador nunca ENTREGA um plano acima do limite sem dizer: reduz antes, se preciso.
+        expect(excedem.map((d) => d.duracaoMaximaEstimadaSegundos), `${JSON.stringify(over)}: dia acima do teto sem INCOMPATIVEL`).toEqual([]);
+        for (const d of r.duracaoDias!) expect(d.estadoLimite, JSON.stringify(over)).toBe('DENTRO_DO_LIMITE');
       }
-      expect(r.duracaoIncompativel??false).toBe(r.resultadoGeracao?.tipo==='INCOMPATIVEL');
     }
+    expect(certificados, 'a grade não produziu nenhum plano dentro do teto').toBeGreaterThan(0);
+    expect(incompativeis, 'a grade não produziu nenhum INCOMPATIVEL — o outro ramo não foi exercido').toBeGreaterThan(0);
   });
 });
 
