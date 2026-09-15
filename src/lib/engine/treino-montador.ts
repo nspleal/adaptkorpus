@@ -430,6 +430,8 @@ export function montarRotina(
     tetoSlotsSemana: (g: GrupoPrimario) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
     coreMin: CORE_MIN,
     coreMax: CORE_MAX,
+    // 🦴 Só para a classe de intercâmbio do passe de cobertura anatômica (faixa de hold por nível).
+    nivel: perfil.nivelExperiencia,
     // Disponibilidade é teto: não acrescentar slots só para preencher o dia.
     preencherAteOrcamento: false,
     respeitarGruposDoDia: true,

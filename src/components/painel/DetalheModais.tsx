@@ -12,6 +12,7 @@ import { repUnitDe } from '@/lib/engine/isometricos';
 import { EscadaPill } from './EscadaDegraus';
 import { EstrelaFavorito } from './Favoritos';
 import { EXERCISES_SEED } from '@/lib/data/seed';
+import AlvosAnatomicos from './AlvosAnatomicos';
 
 /**
  * Modais de detalhe — porte fiel do protótipo V2 (.dc.html): detalhe de prato e
@@ -99,6 +100,10 @@ export function DetalheExercicio({ ex, onFechar, onTrocar, onBanir, banidoTexto,
       </div>
       <div style={secCap}>Como fazer</div>
       <p style={{ margin: '0 0 22px', fontSize: '.92rem', color: 'rgba(234,229,219,.82)', lineHeight: 1.55 }}>{ex.comoFazer}</p>
+      {/* 🦴 "Músculos trabalhados", acima, é o rótulo CURADO do catálogo — o que o motor usa
+          para contar volume. Esta seção é outra coisa: quais ALVOS a ação aborda, por
+          inferência anatômica, com o que isso não prova. As duas convivem. */}
+      <div style={{ marginBottom: 22 }}><AlvosAnatomicos id={ex.id} nomePt={ex.nomePt} /></div>
       {temErrosComuns(ex.id) && (<>
         <div style={secCap}>Erros comuns</div>
         <div style={{ marginBottom: 22 }}><ListaErrosComuns exId={ex.id} /></div>

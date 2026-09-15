@@ -1,0 +1,115 @@
+
+### peito-ombros — Prioridades 4d — peito+ombros / costas+bíceps / pernas / braços+core
+split: Prioridades (4 dias) → Prioridades (4 dias) | slots: 24 → 24 | séries: 93 → 93
+duração máx (Σ dias): 13160s → 13160s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 26/32 → 28/32
+  ✅ GANHOU: da (Deltoide — anterior) · dp (Deltoide — posterior)
+  trocas de exercício:
+  Peito + Ombros: e14,e52,e53,e15,e54,e147  →  e14,e107,e99,e15,e54,e147
+  ⓘ Peito + Ombros — não identificados: qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados
+  ⓘ Braços + Core — não identificados: qu:slots_do_dia_esgotados
+
+### push-pull-legs — Push/Pull/Legs 6d, avançado, 75 min
+split: Distribuição pela agenda → Distribuição pela agenda | slots: 32 → 32 | séries: 124 → 124
+duração máx (Σ dias): 19970s → 19970s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 26/35 → 30/35
+  ✅ GANHOU: da (Deltoide — anterior) · oe (Oblíquo externo — parede lateral) · oi (Oblíquo interno — parede lateral) · ta (Transverso — parede profunda)
+  trocas de exercício:
+  Peito + Tríceps: e14,e15,e2,e9,e55,e40,e4  →  e14,e15,e2,e9,e55,e40,e148
+  Ombros + complementares: e52,e53,e54,e106,e5  →  e98,e53,e54,e106,e8
+  Complementares: e36,e37,e6  →  e36,e37,e8
+  ⓘ Peito + Tríceps — não identificados: qu:slots_do_dia_esgotados
+  ⓘ Quadríceps + complementares — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados
+  ⓘ Ombros + complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
+  ⓘ Posteriores + complementares — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
+
+### sup-inf — Superior/Inferior 4d, 60 min
+split: Distribuição pela agenda → Distribuição pela agenda | slots: 23 → 23 | séries: 89 → 89
+duração máx (Σ dias): 12280s → 12280s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 27/32 → 27/32
+  (plano idêntico)
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### fullbody-curto — Full-body 3d, 30 min (curto)
+split: Peito + Tríceps + Ombros / Costas + Bíceps / Pernas → Peito + Tríceps + Ombros / Costas + Bíceps / Pernas | slots: 12 → 12 | séries: 37 → 37
+duração máx (Σ dias): 5180s → 5180s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 21/26 → 21/26
+  (plano idêntico)
+  ⓘ Peito + Tríceps + Ombros — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### fullbody-muito-curto — Full-body 2d, 20 min (muito curto)
+split: Superiores / Pernas → Superiores / Pernas | slots: 6 → 6 | séries: 18 → 18
+duração máx (Σ dias): 2220s → 2220s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 14/19 → 14/19
+  (plano idêntico)
+  ⓘ Superiores — não identificados: qu:slots_do_dia_esgotados · ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### foco-ombros — Foco em ombros (compensa peito), 4d/60 min
+split: Distribuição pela agenda → Distribuição pela agenda | slots: 25 → 25 | séries: 93 → 93
+duração máx (Σ dias): 12880s → 12880s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 27/32 → 27/32
+  (plano idêntico)
+  ⓘ Peito + Tríceps — não identificados: da:slots_do_dia_esgotados · dp:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### foco-biceps — Foco em bíceps (compensa costas), 4d/60 min
+split: Distribuição pela agenda → Distribuição pela agenda | slots: 25 → 25 | séries: 93 → 93
+duração máx (Σ dias): 12740s → 12740s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 27/32 → 27/32
+  (plano idêntico)
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### casa-halteres — Casa com halteres + elástico, 3d/45 min
+split: Peito + Tríceps + Ombros / Costas + Bíceps / Pernas → Peito + Tríceps + Ombros / Costas + Bíceps / Pernas | slots: 15 → 15 | séries: 59 → 59
+duração máx (Σ dias): 7740s → 7740s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 26/32 → 26/32
+  (plano idêntico)
+  ⓘ Peito + Tríceps + Ombros — não identificados: da:slots_do_dia_esgotados · dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+
+### casa-vazia — Casa sem equipamento, 3d/40 min, iniciante
+split: Full-body ×3 → Full-body ×3 | slots: 14 → 14 | séries: 42 → 42
+duração máx (Σ dias): 6540s → 6540s | descanso mínimo: 60s → 60s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 18/22 → 18/22
+  trocas de exercício:
+  Full-body C: e16,e17,e18,e157,e149  →  e16,e17,e18,e157,e148
+  ⓘ Full-body A — não identificados: gd:sem_candidato_elegivel · gn:sem_candidato_elegivel · qu:slots_do_dia_esgotados · ti:slots_do_dia_esgotados · ts:sem_candidato_elegivel
+  ⓘ Full-body B — não identificados: qu:slots_do_dia_esgotados · ts:sem_candidato_elegivel
+  ⓘ Full-body C — não identificados: qu:slots_do_dia_esgotados
+
+### avancado-5d — Avançado 5d/90 min, academia
+split: Peito + Tríceps / Costas + Bíceps / Pernas / Ombros + Braços / Complementares → Peito + Tríceps / Costas + Bíceps / Pernas / Ombros + Braços / Complementares | slots: 27 → 27 | séries: 104 → 104
+duração máx (Σ dias): 17660s → 17660s | descanso mínimo: 90s → 90s
+estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
+alvos abordados: 26/35 → 30/35
+  ✅ GANHOU: dp (Deltoide — posterior) · oe (Oblíquo externo — parede lateral) · oi (Oblíquo interno — parede lateral) · ta (Transverso — parede profunda)
+  trocas de exercício:
+  Pernas: e16,e26,e17,e64,e27,e4  →  e16,e26,e17,e64,e27,e148
+  Ombros + Braços: e41,e42,e43,e44,e52,e68  →  e41,e42,e43,e44,e107,e68
+  Complementares: e36,e37,e5  →  e36,e37,e8
+  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
+  ⓘ Pernas — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+  ⓘ Complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
