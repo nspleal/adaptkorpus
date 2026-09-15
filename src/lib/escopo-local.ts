@@ -37,6 +37,7 @@ export const CHAVES_LOCAIS = [
   'evk_peso_plano',
   'evk_aderencia',
   'evk_aba',
+  'evk_cardio_planejado_v1',
   'evk_freq_periodo',
   'evk_privacy_ack_v1',
   'evk_instalar_ack_v1',

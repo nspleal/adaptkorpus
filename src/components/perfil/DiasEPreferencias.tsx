@@ -4,7 +4,7 @@ import { useState, type CSSProperties } from 'react';
 import { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA } from '@/lib/engine';
 import type { EquipamentoCasa } from '@/lib/data/types';
 import { ORDEM_SEMANA, DIA_LABEL, type Weekday } from '@/lib/semana';
-import { buscarAlimentos, nomeAlimento } from '@/lib/data/paleta-alimentos';
+import { buscarAlimentos, nomeAlimento, PALETA_ALIMENTOS } from '@/lib/data/paleta-alimentos';
 import type { Alergeno } from '@/lib/data/types';
 
 /**
@@ -195,6 +195,20 @@ export function PreferenciasAlimentares({ alergias, onToggleAlergia, naoCurto, o
         </div>
         <p style={{ margin: '0 0 14px', fontSize: '.9rem', color: 'rgba(234,229,219,.66)', lineHeight: 1.5 }}>{contexto === 'onboarding' ? <>A gente evita quando dá — é <strong style={{ color: '#EAE5DB', fontWeight: 700 }}>preferência</strong>, não alergia. Tudo opcional.</> : 'A gente evita quando dá. Busque e adicione — remova quando quiser.'}</p>
         <BuscaNaoCurto naoCurto={naoCurto} onAdd={onAddFood} onRemove={onRemoveFood} />
+        <details style={{ marginTop: 16 }}>
+          <summary style={{ cursor: 'pointer', padding: '12px 0', color: '#BDFF00' }}>Explorar alimentos por categoria</summary>
+          {[...new Set(PALETA_ALIMENTOS.map(a => a.grupo))].map(grupo => {
+            const alimentos = PALETA_ALIMENTOS.filter(a => a.grupo === grupo);
+            const todos = alimentos.every(a => naoCurto.includes(a.id));
+            return <details key={grupo} style={{ padding: 12, borderBottom: '1px solid #ffffff20' }}>
+              <summary style={{ cursor: 'pointer' }}>{grupo} · {alimentos.filter(a => naoCurto.includes(a.id)).length}/{alimentos.length}</summary>
+              <button type="button" style={{ ...pill(todos), margin: '12px 0' }} onClick={() => alimentos.forEach(a => todos ? onRemoveFood(a.id) : onAddFood(a.id))}>{todos ? 'Desmarcar categoria' : 'Selecionar categoria'}</button>
+              <div style={{ maxHeight: 240, overflowY: 'auto', display: 'grid', gap: 8 }}>
+                {alimentos.map(a => <label key={a.id} style={{ display: 'flex', gap: 10, padding: 8, cursor: 'pointer' }}><input type="checkbox" checked={naoCurto.includes(a.id)} onChange={e => e.target.checked ? onAddFood(a.id) : onRemoveFood(a.id)} />{a.nome}</label>)}
+              </div>
+            </details>;
+          })}
+        </details>
         {/* Cofre §Variedade (DF 2026-07-01): prato ≠ ingrediente. "Cansei deste prato" é do
             nível do PRATO e NÃO alimenta o "não curto" (nível do alimento) — sinais separados. */}
         {contexto === 'editar' && <p style={{ margin: '13px 2px 0', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Isto é sobre <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>ingredientes</strong>. Cansou de uma receita específica? Use <strong style={{ color: 'rgba(234,229,219,.72)', fontWeight: 600 }}>&quot;Cansei deste prato&quot;</strong> no card do prato (aba Dieta) — ele descansa da rotação e volta sozinho.</p>}

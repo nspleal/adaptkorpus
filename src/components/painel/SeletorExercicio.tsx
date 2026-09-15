@@ -159,7 +159,7 @@ export default function SeletorExercicio({
   const rotuloNivel = ctx.nivelExperiencia === 'iniciante' ? 'iniciante' : ctx.nivelExperiencia === 'intermediario' ? 'intermediário' : 'avançado';
 
   return typeof document === 'undefined' ? null : createPortal(
-    <div ref={dialogo} className="ak-library-overlay" role="dialog" aria-modal="true" aria-label={titulo} onClick={onFechar}>
+    <div ref={dialogo} className="ak-library-overlay" role="dialog" aria-modal="true" aria-label={titulo}>
       <div className="ak-library-panel" onClick={(e) => e.stopPropagation()}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
           <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{titulo}</div>
