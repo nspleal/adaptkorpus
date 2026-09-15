@@ -20,7 +20,7 @@ import { alocarSemana, templatesDaSemana, type ArgsAlocacao, type DiaAlocado } f
 import { exercicioDisponivel } from './equipamento';
 import { dificuldadesLiberadas } from './treino';
 import { avaliarDuracaoResistida } from './duracao-plano';
-import { mev } from './trilhos';
+import { secundariosDe } from './secundarios';
 import { EXERCISES } from '../data/exercises';
 import { ALVOS_ANATOMICOS } from '../data/alvos-anatomicos';
 import * as cobertura from './cobertura-anatomica';
@@ -106,7 +106,7 @@ function antesEDepois(p: PerfilTreino): {
   const trocas = otimizarCoberturaAnatomica(
     depois.map((dia, d) => ({ grupos: templates[d]!.grupos, slots: dia.slots })),
     poolPorGrupo(pool),
-    { seriesPlanejamento: 4, pisoCobertura: mev(p.nivelExperiencia, p.objetivo) },
+    { seriesPlanejamento: 4 },
   );
   return { antes, depois, trocas, templates };
 }
@@ -330,7 +330,33 @@ describe('③ o passe completa o trabalho do grupo — não só confere particip
   });
 
   it('cobertura vence complementaridade quando as duas estão em jogo', () => {
-    // Dois desenvolvimentos: `dp` está descoberto e `e119` (face pull) o abre.
+    /**
+     * Dois desenvolvimentos: `dp` está descoberto e `e119` (face pull) o abre; `e111` (Arnold)
+     * só traria tarefa nova. A cobertura tem de ganhar.
+     *
+     * 🔴 O par é `e44`+`e43` e não `e41`+`e42` por causa da DECISÃO DE 2026-09-15 (crédito não
+     * regride): `e41`, `e42`, `e43` e `e155` creditam TRÍCEPS como secundário e `e119` não —
+     * trocar um deles pagaria a cobertura com o volume indireto do tríceps, e o passe recusa.
+     * `e44` (desenvolvimento com elástico) não tem secundário, então a troca custa zero. O
+     * teste da prioridade continua inteiro; o que mudou foi o preço que ela pode pagar.
+     */
+    const dia: DiaParaCobertura = {
+      grupos: ['ombros'],
+      slots: [
+        { grupo: 'ombros', exercicio: ex('e44'), favorito: false },
+        { grupo: 'ombros', exercicio: ex('e43'), favorito: false },
+      ],
+    };
+    const trocas = otimizarCoberturaAnatomica([dia], () => [ex('e44'), ex('e43'), ex('e119'), ex('e111')],
+      { seriesPlanejamento: 4 });
+    expect(trocas.some((t) => t.motivo === 'alvo_novo' && t.alvosGanhos.includes('dp'))).toBe(true);
+    expect(abordadosNoDia(dia.slots.map((s) => s.exercicio.id), alvosDesejadosDoDia(['ombros'])).has('dp')).toBe(true);
+    // e o crédito de tríceps de `e43` continua de pé: ninguém pagou por essa cobertura
+    expect(dia.slots.some((s) => secundariosDe(s.exercicio).includes('triceps'))).toBe(true);
+  });
+
+  it('a mesma cobertura é RECUSADA quando custaria crédito indireto (o caso do parecer)', () => {
+    // `e41`/`e42` creditam tríceps; `e119` abre `dp` mas não credita. A troca não acontece.
     const dia: DiaParaCobertura = {
       grupos: ['ombros'],
       slots: [
@@ -340,8 +366,9 @@ describe('③ o passe completa o trabalho do grupo — não só confere particip
     };
     const trocas = otimizarCoberturaAnatomica([dia], () => [ex('e41'), ex('e42'), ex('e119'), ex('e95')],
       { seriesPlanejamento: 4 });
-    expect(trocas.some((t) => t.motivo === 'alvo_novo' && t.alvosGanhos.includes('dp'))).toBe(true);
-    expect(abordadosNoDia(dia.slots.map((s) => s.exercicio.id), alvosDesejadosDoDia(['ombros'])).has('dp')).toBe(true);
+    expect(trocas.map((t) => t.para)).not.toContain('e119');
+    expect(trocas.map((t) => t.para)).not.toContain('e95');
+    expect(dia.slots.every((s) => secundariosDe(s.exercicio).includes('triceps'))).toBe(true);
   });
 
   it('sobre a grade real, a redundância cai e a cobertura não', () => {
@@ -472,7 +499,7 @@ describe('④ a troca é conservativa: o esqueleto do plano não se move', () =>
       const denovo = otimizarCoberturaAnatomica(
         depois.map((dia, d) => ({ grupos: templates[d]!.grupos, slots: dia.slots })),
         poolPorGrupo(poolDe(p)),
-        { seriesPlanejamento: 4, pisoCobertura: mev(p.nivelExperiencia, p.objetivo) },
+        { seriesPlanejamento: 4 },
       );
       expect(denovo, JSON.stringify(over)).toEqual([]);
     }

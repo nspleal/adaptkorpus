@@ -32,7 +32,15 @@ const base = (o: Record<string, unknown> = {}): PerfilResumo => ({
   alergenos: [], preferencia: null, naoCurto: [], pratosCansados: [], favoritos: [], ...o,
 } as unknown as PerfilResumo);
 
-/** O desenho manual mínimo que a auditoria mediu: 5 exercícios × N séries em 1 dia. */
+/**
+ * O desenho manual mínimo que a auditoria mediu: 5 exercícios × N séries em 1 dia.
+ *
+ * 🔴 Reajuste 2026-09-15 (70 → 55 min nos casos indeterminados): a estimativa de degradação
+ * do caminho manual passou a usar as SÉRIES DECLARADAS em vez de projetar `sPlan` em todos os
+ * slots — 5 × 6 séries agora são vistas como 30, não 20. Com isso o dia de 70 min passou a
+ * caber e deixou de medir `LIMITE_INDETERMINADO`. A propriedade travada aqui não mudou; o que
+ * mudou foi o tempo em que ela é observável.
+ */
 const IDS = ['e14', 'e22', 'e16', 'e72', 'e70'];
 const manual = (series: number, o: Record<string, unknown> = {}) => base({
   rotinaCustom: {
@@ -49,7 +57,7 @@ const gerar = (p: PerfilResumo, semana: SemanaCiclo = 1, diasOferecidosCardio?: 
   }).treino.rotina!;
 
 describe('D12 · o dia que PODE estourar não recebe certificado', () => {
-  const rotina = gerar(manual(6,{tempoPorSessaoMin:70}));
+  const rotina = gerar(manual(6,{tempoPorSessaoMin:55})); // 🔴 era 70; ver nota da fixture abaixo
 
   it('anti-vacuidade: o motor realmente mede o dia como LIMITE_INDETERMINADO', () => {
     const d = rotina.duracaoDias![0]!;
@@ -106,7 +114,7 @@ describe('D12 · a tolerância existente é preservada', () => {
 
 describe('D12 · estado combinado: cardio sem duração + dia que pode estourar', () => {
   /** Objetivo `massa` prescreve cardio em SESSÕES (sem minutos): o terminal vira NAO_AVALIADO. */
-  const rotina = gerar(manual(6, { tempoPorSessaoMin:70, objetivo: 'massa', diasDisponiveis: 2, treinoDias: ['seg', 'qua'] }), 1, ['qua']);
+  const rotina = gerar(manual(6, { tempoPorSessaoMin:55, objetivo: 'massa', diasDisponiveis: 2, treinoDias: ['seg', 'qua'] }), 1, ['qua']);
 
   it('os dois fatos convivem no mesmo terminal — nenhum é suprimido pelo outro', () => {
     const rg = rotina.resultadoGeracao!;
@@ -126,12 +134,14 @@ describe('D12 · estado combinado: cardio sem duração + dia que pode estourar'
 
 describe('D12 · salvar e recarregar não troca o rótulo', () => {
   it('o terminal e a frase sobrevivem ao round-trip do perfil salvo', () => {
-    const perfil = manual(6);
+    // 🔴 55 min (era o default 60): é o tempo em que 5 × 6 séries medem indeterminado
+    // depois que a estimativa manual passou a usar as séries declaradas. Ver a nota da fixture.
+    const perfil = manual(6, { tempoPorSessaoMin: 55 });
     const antes = gerar(perfil);
     const recarregado = migrarSessao(JSON.stringify({ v: 2, perfil }))!.perfil;
     const depois = gerar(recarregado);
     expect(depois.resultadoGeracao).toEqual(antes.resultadoGeracao);
-    expect(vereditoDoPlano(depois, 60)).toEqual(vereditoDoPlano(antes, 60));
+    expect(vereditoDoPlano(depois, 55)).toEqual(vereditoDoPlano(antes, 55));
     expect(depois.resultadoGeracao?.tipo).not.toBe('CERTIFICADO');
   });
 });
@@ -160,7 +170,7 @@ describe('D12 · a invariante unificada, nos dois produtores', () => {
   });
 
   it('a fonte da condição é uma só: o guard de `finalizar` cobre os dois ramos', () => {
-    const r = gerar(manual(6));
+    const r = gerar(manual(6, { tempoPorSessaoMin: 55 }));
     // O ramo manual não passa por `precisaReduzir`; o que o rebaixa é o guard compartilhado.
     expect(r.resultadoGeracao?.tipo).toBe('ENTREGUE_SEM_CERTIFICACAO');
     const auto = gerar(base({ tempoPorSessaoMin: 10 }));

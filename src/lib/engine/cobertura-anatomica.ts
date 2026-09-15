@@ -244,12 +244,6 @@ export interface LimitesDeCredito {
   /** Séries de planejamento por slot — a moeda do crédito (direto 1,0 · secundário 0,5). */
   seriesPlanejamento: number;
   /**
-   * Piso de cobertura dos GRUPOS GRANDES (o MEV que o guard do montador usa). Quem estava no
-   * piso não pode cair abaixo dele. Ausente ⇒ regra conservadora: nenhum grupo grande pode
-   * perder crédito.
-   */
-  pisoCobertura?: number;
-  /**
    * 🔒 Grupos que o passe NÃO toca — na prática, os do FOCO adicional.
    *
    * 🔴 Por quê: o bloco do foco (`bloco-foco-adicional.ts`) roda DEPOIS e escolhe os extras
@@ -307,28 +301,31 @@ function creditoGrandeNaoAcrescenta(atual: Exercise, candidato: Exercise): boole
 }
 
 /**
- * 🔒 A troca preserva o CRÉDITO PARCIAL já existente?
+ * 🔒 A troca preserva o CRÉDITO PONDERADO já existente?
  *
- * Usa as autoridades reais (`secundariosDe`, `PESO_SECUNDARIO` e o MEV que o montador passa):
- *  · nenhum grupo GRANDE que estava no piso cai abaixo dele — sem piso conhecido, nenhum
- *    grande pode perder crédito, que é a leitura conservadora;
- *  · nenhum grupo com crédito > 0 vai a ZERO: lombar e antebraço só existem por crédito
- *    indireto, e apagá-los seria cobrir um alvo tirando outro.
+ * 🔴 DECISÃO DO AUTOR 2026-09-15 — NENHUM GRUPO PERDE, ponto. Nem direto, nem indireto, e não
+ * só os grandes. A régua é a autoridade que já existia (`secundariosDe` + `PESO_SECUNDARIO`,
+ * a mesma conta de `creditoPonderadoDaSemana`): não há piso relativo, tolerância nem fórmula
+ * nova, e a perda NUNCA é compensada acrescentando série ou exercício — a troca simplesmente
+ * não acontece, e o passe procura outro candidato compatível.
+ *
+ * 🔴 O que isto conserta, medido: a versão anterior protegia apenas os `GRUPOS_GRANDES` (piso
+ * do MEV) e o "ninguém zera". Com isso, trocas legítimas em ALVO apagavam crédito indireto de
+ * grupo pequeno — `e41` Desenvolvimento → `e95` Remada alta levava o tríceps de 18 para 16
+ * séries ponderadas no perfil real, e o painel "Séries por músculo" caía de "4 diretas · 6
+ * indiretas" para "4 diretas · 2 indiretas". Complementaridade não se compra com o volume
+ * indireto de um vizinho.
+ *
+ * Consequência aceita e declarada: onde a única alternativa que traria alvo ou traço novo
+ * custa crédito de alguém, o exercício anterior fica — a redundância permanece e é o
+ * diagnóstico que a explica.
  */
 function creditoPreservado(
   antes: ReadonlyMap<GrupoPrimario, number>,
   depois: ReadonlyMap<GrupoPrimario, number>,
-  limites: LimitesDeCredito,
 ): boolean {
-  const grupos = new Set<GrupoPrimario>([...antes.keys(), ...depois.keys()]);
-  for (const g of grupos) {
-    const a = antes.get(g) ?? 0;
-    const d = depois.get(g) ?? 0;
-    if (a > 0 && d <= 0) return false;
-    if (!GRANDES.has(g)) continue;
-    if (limites.pisoCobertura == null) {
-      if (d < a) return false;
-    } else if (a >= limites.pisoCobertura ? d < limites.pisoCobertura : d < a) return false;
+  for (const g of new Set<GrupoPrimario>([...antes.keys(), ...depois.keys()])) {
+    if ((depois.get(g) ?? 0) < (antes.get(g) ?? 0)) return false;
   }
   return true;
 }
@@ -464,7 +461,6 @@ export function otimizarCoberturaAnatomica(
           if (!creditoPreservado(
             creditoDe(antesLista, limites.seriesPlanejamento),
             creditoDe(depoisLista, limites.seriesPlanejamento),
-            limites,
           )) continue;
 
           melhor = candidato;

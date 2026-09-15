@@ -575,8 +575,6 @@ export function montarRotina(
       && favoritosEfetivos.has(e.id) === favorito),
     {
       seriesPlanejamento: prescricao.seriesPorExercicio.max,
-      // O MESMO piso que o guard de cobertura usa mais abaixo — autoridade real, não cópia.
-      pisoCobertura: mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo),
       /**
        * 🔒 Exatamente os grupos que o BLOCO ADICIONAL do foco vai receber, com o mesmo
        * filtro — `core` fora (o foco de core sobe séries nos slots que já existem, não
@@ -609,6 +607,24 @@ export function montarRotina(
    * acerta; mover qualquer uma para cima faria a rampa parar de ler a escolha EM SILÊNCIO,
    * sem teste que pegasse. Uma flag do chamador não tem esse acoplamento.
    */
+  /**
+   * 🔒 O ORÇAMENTO DIÁRIO — AUTORIDADE ÚNICA DOS DOIS CAMINHOS.
+   *
+   * `undefined` quando a pessoa escolheu **75+** (`limiteTempoTreino: 'sem_limite'`): aí não
+   * existe orçamento a estourar, e portanto não há o que degradar.
+   *
+   * 🔴 Conserto 2026-09-15: o caminho do DESENHO DA PESSOA (o editor guiado, logo abaixo)
+   * calculava o seu próprio orçamento como `tempoPorSessaoMin * 60` e ignorava o 75+, que o
+   * caminho automático já respeitava. Consequência medida em 17 de 34 cenários: abrir o editor
+   * sobre um plano 75+ e salvar sem editar nada rebaixava o descanso do dia inteiro — `e16`
+   * saía de 4 × 150 s no plano para 4 × 90 s na prévia, e era isso que seria gravado. Os dois
+   * caminhos continuam com a sua própria mecânica de degradação; o que passa a ser um só é o
+   * FATO de haver ou não limite.
+   */
+  const limiteDiarioSegundos = perfil.limiteTempoTreino === 'sem_limite'
+    ? undefined
+    : perfil.tempoPorSessaoMin * 60;
+
   function montarSaida(diasTreino: DiaTreino[], split: string, desenhoDaPessoa = false): RotinaSemanal {
     let blocoFoco: RotinaSemanal['blocoFoco'];
     /** Extras do foco que sobreviveram: o invariante puxar≥empurrar é do BASELINE. */
@@ -650,16 +666,39 @@ export function montarRotina(
        */
       const rirAlvo = prescricao.rirAlvoSemana ?? rirAlvoDaSemana(prescricao.rir, semanaCiclo.semana);
       const semanaRampa = semanaCiclo.retomada?.semana ?? null;
-      const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
+
+      /**
+       * 🔒 SÉRIES DO DIA PARA A ESTIMATIVA — as DECLARADAS pelo desenho, quando existem.
+       *
+       * 🔴 Conserto 2026-09-15 (2ª causa da divergência plano × editor): `custoDia` projetava
+       * `sPlan` para TODOS os slots, enquanto o caminho automático decide a degradação sobre as
+       * séries REAIS de cada slot. Num desenho com 4+3+3+3+3 séries, estimar 4 em cada um
+       * inflava o dia em 4 séries inteiras, o dia "não cabia" e o descanso descia um degrau —
+       * abrir o editor sobre o plano e salvar sem editar rebaixava 180 s para 120 s no dia de
+       * costas do perfil real. `seriesPorExercicio` é a escolha que o próprio desenho carrega e
+       * que o motor vai aplicar logo abaixo: usá-la não é regra nova, é parar de estimar o que
+       * já está decidido. Sem declaração, continua valendo `sPlan`.
+       */
+      const seriesDeclaradas = (dia: DiaTreino, s: SlotExercicio): number => {
+        const desenho = custom?.dias.find((d, k) => (d.diaId ?? diasForcaDaSemana[k]) === dia.diaId);
+        const n = desenho?.seriesPorExercicio?.[s.exercicio.id];
+        const valida = Number.isInteger(n) && (n as number) >= 1 && (n as number) <= SERIES_MANUAIS_MAX;
+        if (!valida) return sPlan;
+        // 🔒 A MESMA redução que o bloco de recuperação aplica à escolha mais abaixo: o editor
+        // manda a dose ANTES do deload (é o que a pessoa vê e edita), e o dia vai rodar com a
+        // dose reduzida. Estimar pela dose cheia degradaria o descanso de um dia que cabe.
+        return deloadAgendado ? seriesEmDeload(n as number) : (n as number);
+      };
 
       // 🔒 C1 §5.4 — a estimativa de PLANEJAMENTO não mantém aritmética própria: projeta itens
-      // (séries = sPlan, execução por tipo, descanso por padrão no nível de degradação) e chama
-      // a MESMA fórmula canônica, usando a MAX da faixa (o pior caso de ocupação do dia). Ela
-      // decide só a DEGRADAÇÃO; a CERTIFICAÇÃO do plano final roda sobre as séries/descansos reais.
-      const custoDia = (slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number => {
+      // (séries declaradas ou sPlan, execução por tipo, descanso por padrão no nível de
+      // degradação) e chama a MESMA fórmula canônica, usando a MAX da faixa (o pior caso de
+      // ocupação do dia). Ela decide só a DEGRADAÇÃO; a CERTIFICAÇÃO do plano final roda sobre
+      // as séries/descansos reais.
+      const custoDia = (dia: DiaTreino, slots: readonly SlotExercicio[], nivel: 0 | 1 | 2): number => {
         const itens = slots.map((s) => ({
           tipo: 'RESISTIDO' as const,
-          series: sPlan,
+          series: seriesDeclaradas(dia, s),
           descansoEntreSeriesSeg: descansoDoExercicio({ exercicio: s.exercicio,
             rirAlvo, modoForca: prescricao.modoForca === true, semanaRampa, degradacao: nivel,
           }) ?? 0,
@@ -679,10 +718,12 @@ export function montarRotina(
        * degradação (o volume da retomada já está cortado 50–70% — sobra tempo).
        */
       for (let i = 0; i < diasTreino.length; i += 1) {
-        if (semanaRampa != null) break;
-        const slots = diasTreino[i]!.slots;
+        // 🟡 Sem rampa e COM orçamento: degrada até caber. Em 75+ não há orçamento — e o que
+        // não tem limite não tem por que ceder descanso (mesma leitura do caminho automático).
+        if (semanaRampa != null || limiteDiarioSegundos === undefined) break;
+        const dia = diasTreino[i]!;
         let nivel: 0 | 1 | 2 = 0;
-        while (nivel < 2 && custoDia(slots, nivel) > orcamentoSeg) nivel = (nivel + 1) as 1 | 2;
+        while (nivel < 2 && custoDia(dia, dia.slots, nivel) > limiteDiarioSegundos) nivel = (nivel + 1) as 1 | 2;
         nivelDegradacaoDia[i] = nivel;
       }
 
@@ -1020,7 +1061,7 @@ export function montarRotina(
       // não redistribui essas séries; o deload continua reduzindo uma única vez.
       if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,series:seriesEmDeload(s.series??0)}))}));
       const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
-      const limiteDia=perfil.limiteTempoTreino==='sem_limite'?undefined:perfil.tempoPorSessaoMin*60;
+      const limiteDia=limiteDiarioSegundos;
       /** Descanso pela autoridade única (`descansoDoExercicio`), no nível pedido. */
       const aplicarDescanso=(d:DiaTreino,degradacao:0|1|2)=>{
         for(const slot of d.slots){
