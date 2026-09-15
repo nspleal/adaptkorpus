@@ -1,115 +1,95 @@
+EVIDÊNCIA — cobertura anatômica e complementaridade mecânica
+Comparação de 3 vias sobre 23 cenários (b = base origin/main 64c2e7b · c = candidato 4576201 · x = corrigido).
+Gerado por: ADAPT_DUMP=<arq> npx vitest run --config scripts/vitest.dump.config.ts  (nos três checkouts)
+            + scripts/analisar-complementaridade.test.ts para o mapa PERMITE/BLOQUEIA.
 
-### peito-ombros — Prioridades 4d — peito+ombros / costas+bíceps / pernas / braços+core
-split: Prioridades (4 dias) → Prioridades (4 dias) | slots: 24 → 24 | séries: 93 → 93
-duração máx (Σ dias): 13160s → 13160s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 26/32 → 28/32
-  ✅ GANHOU: da (Deltoide — anterior) · dp (Deltoide — posterior)
-  trocas de exercício:
-  Peito + Ombros: e14,e52,e53,e15,e54,e147  →  e14,e107,e99,e15,e54,e147
-  ⓘ Peito + Ombros — não identificados: qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados
-  ⓘ Braços + Core — não identificados: qu:slots_do_dia_esgotados
+Colunas: slots · séries · duração máxima somada · descanso mínimo · alvos anatômicos abordados ·
+pares redundantes (mesmo grupo + mesmos alvos + mesma tarefa mecânica no mesmo dia) · traços mecânicos distintos.
 
-### push-pull-legs — Push/Pull/Legs 6d, avançado, 75 min
-split: Distribuição pela agenda → Distribuição pela agenda | slots: 32 → 32 | séries: 124 → 124
-duração máx (Σ dias): 19970s → 19970s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 26/35 → 30/35
-  ✅ GANHOU: da (Deltoide — anterior) · oe (Oblíquo externo — parede lateral) · oi (Oblíquo interno — parede lateral) · ta (Transverso — parede profunda)
-  trocas de exercício:
-  Peito + Tríceps: e14,e15,e2,e9,e55,e40,e4  →  e14,e15,e2,e9,e55,e40,e148
-  Ombros + complementares: e52,e53,e54,e106,e5  →  e98,e53,e54,e106,e8
-  Complementares: e36,e37,e6  →  e36,e37,e8
-  ⓘ Peito + Tríceps — não identificados: qu:slots_do_dia_esgotados
-  ⓘ Quadríceps + complementares — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados
-  ⓘ Ombros + complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
-  ⓘ Posteriores + complementares — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
+cenário                  slots b/c/x   séries b/c/x   durMax b/c/x           descMin   cobertura b/c/x  redund b/c/x  traços b/c/x 
+prioridades-4d           24/24/24       93/93/93        13160/13160/13160      60/60/60   33/35/35 de 40     11/8/8       19/21/23
+prioridades-4d-90        28/28/28       110/110/110       19070/19070/19070      60/60/60   29/36/37 de 43     11/8/8       25/27/29
+supinf-4d-60             24/24/24       93/93/93        12480/12480/12480      60/60/60   40/40/41 de 50     10/10/9       23/23/24
+supinf-4d-90             28/28/28       106/106/106       18560/18560/18560      90/90/90   42/48/49 de 61     6/5/3       28/29/30
+auto-6d-75               32/32/32       124/124/124       19970/19970/19970      60/60/60   29/37/39 de 48     16/14/9       26/27/34
+auto-5d-90               27/27/27       104/104/104       17660/17660/17660      90/90/90   30/36/37 de 43     10/10/4       25/25/31
+auto-4d-60               23/23/23       89/89/89        12280/12280/12280      60/60/60   31/31/32 de 37     11/11/6       20/20/24
+curto-3d-30              12/12/12       37/37/37        5180/5180/5180       60/60/60   25/25/25 de 31     2/2/2       12/12/12
+curto-2d-20              6/6/6        18/18/18        2220/2220/2220       60/60/60   18/18/18 de 24     0/0/0       6/6/6
+legado-12min             9/9/9        18/18/18        2000/2000/2000       60/60/60   27/28/28 de 36     0/0/0       10/10/10
+foco-ombros              25/25/25       93/93/93        12880/12880/12880      60/60/60   32/32/32 de 40     12/12/12      21/21/23
+foco-biceps              25/25/25       93/93/93        12740/12740/12740      60/60/60   34/34/35 de 40     12/12/7       21/21/25
+foco-posterior           28/28/28       104/104/104       15090/15090/15090      60/60/60   31/37/38 de 44     9/9/4       27/27/31
+casa-halteres            15/15/15       59/59/59        7740/7740/7740       60/60/60   30/30/31 de 37     7/7/2       12/12/16
+casa-vazia               14/14/14       42/42/42        6540/6540/6540       60/60/60   32/33/33 de 41     3/3/3       14/14/14
+casa-vazia-avancado      17/17/17       66/66/66        10570/10570/10570      60/60/60   27/27/28 de 34     12/12/8       13/13/14
+iniciante-3d-60          18/18/18       54/54/54        9030/9030/9030       90/90/90   45/46/46 de 57     2/2/1       19/19/20
+semana1                  23/23/23       83/83/83        11560/11560/11560      60/60/60   31/31/32 de 37     11/11/6       20/20/24
+deload-semana6           23/23/23       46/46/46        7280/7280/7280       60/60/60   31/31/32 de 37     11/11/6       20/20/24
+retomada                 24/24/24       53/53/53        9830/9830/9830       120/120/120  40/40/41 de 50     10/10/9       23/23/24
+manual                   8/8/8        31/31/31        5330/5330/5330       120/120/120  8/8/8 de 14     2/2/2       7/7/7
+emagrecimento-3d         14/14/14       56/56/56        7620/7620/7620       60/60/60   31/31/31 de 37     2/2/2       14/14/14
+forca-pesada             14/14/14       56/56/56        8640/8640/8640       60/60/60   25/32/33 de 40     1/1/1       16/16/16
 
-### sup-inf — Superior/Inferior 4d, 60 min
-split: Distribuição pela agenda → Distribuição pela agenda | slots: 23 → 23 | séries: 89 → 89
-duração máx (Σ dias): 12280s → 12280s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 27/32 → 27/32
-  (plano idêntico)
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+TOTAIS  slots 461/461/461 · séries 1628/1628/1628 · durMax 247430/247430/247430 · cobertura 701/746/761 de 921 · redundância 171/162/112 · traços 421/427/475
 
-### fullbody-curto — Full-body 3d, 30 min (curto)
-split: Peito + Tríceps + Ombros / Costas + Bíceps / Pernas → Peito + Tríceps + Ombros / Costas + Bíceps / Pernas | slots: 12 → 12 | séries: 37 → 37
-duração máx (Σ dias): 5180s → 5180s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 21/26 → 21/26
-  (plano idêntico)
-  ⓘ Peito + Tríceps + Ombros — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
+REGRESSÕES corrigido vs base: NENHUMA
 
-### fullbody-muito-curto — Full-body 2d, 20 min (muito curto)
-split: Superiores / Pernas → Superiores / Pernas | slots: 6 → 6 | séries: 18 → 18
-duração máx (Σ dias): 2220s → 2220s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 14/19 → 14/19
-  (plano idêntico)
-  ⓘ Superiores — não identificados: qu:slots_do_dia_esgotados · ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-
-### foco-ombros — Foco em ombros (compensa peito), 4d/60 min
-split: Distribuição pela agenda → Distribuição pela agenda | slots: 25 → 25 | séries: 93 → 93
-duração máx (Σ dias): 12880s → 12880s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 27/32 → 27/32
-  (plano idêntico)
-  ⓘ Peito + Tríceps — não identificados: da:slots_do_dia_esgotados · dp:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-
-### foco-biceps — Foco em bíceps (compensa costas), 4d/60 min
-split: Distribuição pela agenda → Distribuição pela agenda | slots: 25 → 25 | séries: 93 → 93
-duração máx (Σ dias): 12740s → 12740s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 27/32 → 27/32
-  (plano idêntico)
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Ombros + complementares — não identificados: dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-
-### casa-halteres — Casa com halteres + elástico, 3d/45 min
-split: Peito + Tríceps + Ombros / Costas + Bíceps / Pernas → Peito + Tríceps + Ombros / Costas + Bíceps / Pernas | slots: 15 → 15 | séries: 59 → 59
-duração máx (Σ dias): 7740s → 7740s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 26/32 → 26/32
-  (plano idêntico)
-  ⓘ Peito + Tríceps + Ombros — não identificados: da:slots_do_dia_esgotados · dp:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: fc:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-
-### casa-vazia — Casa sem equipamento, 3d/40 min, iniciante
-split: Full-body ×3 → Full-body ×3 | slots: 14 → 14 | séries: 42 → 42
-duração máx (Σ dias): 6540s → 6540s | descanso mínimo: 60s → 60s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 18/22 → 18/22
-  trocas de exercício:
-  Full-body C: e16,e17,e18,e157,e149  →  e16,e17,e18,e157,e148
-  ⓘ Full-body A — não identificados: gd:sem_candidato_elegivel · gn:sem_candidato_elegivel · qu:slots_do_dia_esgotados · ti:slots_do_dia_esgotados · ts:sem_candidato_elegivel
-  ⓘ Full-body B — não identificados: qu:slots_do_dia_esgotados · ts:sem_candidato_elegivel
-  ⓘ Full-body C — não identificados: qu:slots_do_dia_esgotados
-
-### avancado-5d — Avançado 5d/90 min, academia
-split: Peito + Tríceps / Costas + Bíceps / Pernas / Ombros + Braços / Complementares → Peito + Tríceps / Costas + Bíceps / Pernas / Ombros + Braços / Complementares | slots: 27 → 27 | séries: 104 → 104
-duração máx (Σ dias): 17660s → 17660s | descanso mínimo: 90s → 90s
-estadoLimite: DENTRO_DO_LIMITE → DENTRO_DO_LIMITE
-alvos abordados: 26/35 → 30/35
-  ✅ GANHOU: dp (Deltoide — posterior) · oe (Oblíquo externo — parede lateral) · oi (Oblíquo interno — parede lateral) · ta (Transverso — parede profunda)
-  trocas de exercício:
-  Pernas: e16,e26,e17,e64,e27,e4  →  e16,e26,e17,e64,e27,e148
-  Ombros + Braços: e41,e42,e43,e44,e52,e68  →  e41,e42,e43,e44,e107,e68
-  Complementares: e36,e37,e5  →  e36,e37,e8
-  ⓘ Costas + Bíceps — não identificados: ti:slots_do_dia_esgotados · ts:slots_do_dia_esgotados
-  ⓘ Pernas — não identificados: gd:slots_do_dia_esgotados · gn:slots_do_dia_esgotados · qu:slots_do_dia_esgotados
-  ⓘ Complementares — não identificados: qu:slots_do_dia_esgotados · ta:slots_do_dia_esgotados
+=== trocas do corrigido, por dia ===
+  prioridades-4d         | Peito + Ombros             | e52   Elevação lateral             -> e107  Crucifixo invertido na máqui | alvos+['dp'] tracos+['acao:ombro_posterior']
+  prioridades-4d         | Peito + Ombros             | e53   Elevação lateral na polia    -> e99   Elevação frontal na polia    | alvos+['da'] tracos+['acao:elevacao_frontal']
+  prioridades-4d         | Costas + Bíceps            | e75   Rosca na polia               -> e72   Rosca martelo                | alvos+['bf'] tracos+['acao:rosca_neutra', 'pegada:neutra']
+  prioridades-4d-90      | Peito + Ombros             | e52   Elevação lateral             -> e107  Crucifixo invertido na máqui | alvos+['dp'] tracos+['acao:ombro_posterior']
+  prioridades-4d-90      | Peito + Ombros             | e53   Elevação lateral na polia    -> e99   Elevação frontal na polia    | alvos+['da'] tracos+['acao:elevacao_frontal']
+  prioridades-4d-90      | Peito + Ombros             | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  prioridades-4d-90      | Costas + Bíceps            | e75   Rosca na polia               -> e72   Rosca martelo                | alvos+['bf'] tracos+['acao:rosca_neutra', 'pegada:neutra']
+  prioridades-4d-90      | Braços + Core              | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  supinf-4d-60           | Upper A                    | e41   Desenvolvimento de ombros    -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  supinf-4d-90           | Upper A                    | e52   Elevação lateral             -> e107  Crucifixo invertido na máqui | alvos+['dp'] tracos+['acao:ombro_posterior']
+  supinf-4d-90           | Lower A                    | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  supinf-4d-90           | Lower B                    | e3    Agachamento livre            -> e142  Agachamento sissy            | alvos+[] tracos+['acao:extensao_joelho']
+  supinf-4d-90           | Lower B                    | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-6d-75             | Peito + Tríceps            | e15   Supino na máquina            -> e13   Supino declinado             | alvos+[] tracos+['acao:empurrar_declinado', 'inclinacao:negativa_angulo_nao_fixado']
+  auto-6d-75             | Peito + Tríceps            | e55   Crucifixo                    -> e56   Crucifixo inclinado          | alvos+[] tracos+['acao:aducao_inclinada', 'inclinacao:positiva_angulo_nao_fixado']
+  auto-6d-75             | Peito + Tríceps            | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-6d-75             | Quadríceps + complementare | e3    Agachamento livre            -> e142  Agachamento sissy            | alvos+[] tracos+['acao:extensao_joelho']
+  auto-6d-75             | Ombros + complementares    | e52   Elevação lateral             -> e98   Elevação frontal             | alvos+['da'] tracos+['acao:elevacao_frontal']
+  auto-6d-75             | Ombros + complementares    | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-6d-75             | Complementares             | e36   Elevação de panturrilha      -> e158  Panturrilha sentado          | alvos+[] tracos+['acao:panturrilha_sentada', 'joelho:flexionado']
+  auto-6d-75             | Complementares             | e6    Abdominal na máquina         -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-5d-90             | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  auto-5d-90             | Pernas                     | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-5d-90             | Ombros + Braços            | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  auto-5d-90             | Ombros + Braços            | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  auto-5d-90             | Complementares             | e36   Elevação de panturrilha      -> e158  Panturrilha sentado          | alvos+[] tracos+['acao:panturrilha_sentada', 'joelho:flexionado']
+  auto-5d-90             | Complementares             | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  auto-4d-60             | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  auto-4d-60             | Ombros + complementares    | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  auto-4d-60             | Ombros + complementares    | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  legado-12min           | Full-body C                | e149  Abdominal bicicleta          -> e147  Bird dog (perdigueiro)       | alvos+['er', 'ta'] tracos+['acao:bird_dog']
+  foco-ombros            | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  foco-biceps            | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  foco-biceps            | Ombros + complementares    | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  foco-biceps            | Ombros + complementares    | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  foco-posterior         | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  foco-posterior         | Pernas                     | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  foco-posterior         | Ombros + complementares    | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  foco-posterior         | Ombros + complementares    | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  foco-posterior         | Ombros + complementares    | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  casa-halteres          | Peito + Tríceps + Ombros   | e1    Flexão de braço              -> e2    Flexão com pés elevados      | alvos+[] tracos+['acao:empurrar_inclinado', 'apoio:pes_elevados_altura_nao_fixada']
+  casa-halteres          | Costas + Bíceps            | e45   Remada curvada               -> e120  Puxada com elástico          | alvos+[] tracos+['acao:puxada_vertical']
+  casa-halteres          | Costas + Bíceps            | e164  Remada invertida com pés ele -> e167  Elevação em Y-T-W de bruços  | alvos+['dp', 'ti'] tracos+['acao:ytw']
+  casa-vazia             | Full-body C                | e149  Abdominal bicicleta          -> e147  Bird dog (perdigueiro)       | alvos+['er', 'ta'] tracos+['acao:bird_dog']
+  casa-vazia-avancado    | Costas + Bíceps            | e164  Remada invertida com pés ele -> e167  Elevação em Y-T-W de bruços  | alvos+['dp', 'ti'] tracos+['acao:ytw']
+  iniciante-3d-60        | Full-body B                | e46   Remada baixa (na polia)      -> e49   Puxada alta na polia (lat pu | alvos+[] tracos+['acao:puxada_vertical']
+  iniciante-3d-60        | Full-body C                | e149  Abdominal bicicleta          -> e147  Bird dog (perdigueiro)       | alvos+['er', 'ta'] tracos+['acao:bird_dog']
+  semana1                | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  semana1                | Ombros + complementares    | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  semana1                | Ombros + complementares    | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  deload-semana6         | Peito + Tríceps            | e130  Voador (peck deck)           -> e131  Crossover (cabo cruzado)     | alvos+[] tracos+['acao:aducao_descendente', 'trajetoria:alto_para_baixo']
+  deload-semana6         | Ombros + complementares    | e41   Desenvolvimento de ombros    -> e119  Puxada para o rosto (face pu | alvos+['dp'] tracos+['acao:ombro_posterior']
+  deload-semana6         | Ombros + complementares    | e42   Desenvolvimento com halteres -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  retomada               | Upper A                    | e41   Desenvolvimento de ombros    -> e95   Remada alta                  | alvos+['ts'] tracos+['acao:remada_alta']
+  forca-pesada           | Superiores                 | e21   Barra fixa                   -> e45   Remada curvada               | alvos+['rom', 'tc'] tracos+['acao:remada']
+  forca-pesada           | Superiores                 | e4    Abdominal (crunch)           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']
+  forca-pesada           | Pernas                     | e5    Abdominal na polia           -> e147  Bird dog (perdigueiro)       | alvos+['er', 'oe', 'oi', 'ta'] tracos+['acao:bird_dog']

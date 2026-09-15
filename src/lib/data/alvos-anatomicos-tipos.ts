@@ -87,6 +87,16 @@ export interface ExercicioAnatomico {
   /** Pares [alvo, papel] incondicionais. */
   alvos: readonly (readonly [AlvoId, PapelDoAlvo])[];
   condicionais: readonly CondicionalAnatomica[];
+  /**
+   * Descritores mecânicos DECLARADOS pelo catálogo (inclinação, pegada, posição do ombro, do
+   * quadril e do joelho, trajetória, apoio). Ausente nos 126 ids que não declaram nenhum — e
+   * ausência de descritor é ausência de DECLARAÇÃO, nunca ausência de característica.
+   *
+   * 🔴 Vivem no lado do MOTOR porque a complementaridade mecânica da seleção automática os lê.
+   * Continuam sendo DESCRITORES: distinguem TAREFA, não medem eficiência, e a magnitude nunca
+   * é usada — `positiva_angulo_nao_fixado` declara a orientação, não o ângulo.
+   */
+  descritores?: Readonly<Record<string, string>>;
 }
 
 /** Um alvo já resolvido para um id, com o papel que vale naquela consulta. */
@@ -175,13 +185,15 @@ export interface EnfaseContextual {
   usarComoPesoAutomatico: false;
 }
 
-/** Detalhe por id para a tela: descritores mecânicos, ênfases e a limitação declarada. */
+/**
+ * Detalhe por id para a tela: ação descrita, ênfases e a limitação declarada.
+ * 🔴 Sem `descritores`: eles moram em `ExercicioAnatomico` (lado do motor) e a rota os lê de
+ * lá. Duplicá-los criaria duas verdades para o mesmo campo.
+ */
 export interface DetalheAnatomico {
   nome: string;
   grupoCatalogo: string | null;
   descricaoAcao: string;
-  /** Inclinação, pegada, trajetória… 🔴 Descritores de complementaridade, não pesos. */
-  descritores: Readonly<Record<string, string>>;
   enfasesContextuais: readonly EnfaseContextual[];
   limitacao: string;
 }

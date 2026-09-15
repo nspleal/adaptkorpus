@@ -3,12 +3,12 @@
  * `mapa-consumo-motor-168-20260915` (MAPA-MOTOR.json, schema `adaptkorpus.alvos-operacionais.v1`).
  *
  * Escreve DOIS módulos, e a divisão não é estética:
- *  · `src/lib/data/alvos-anatomicos-dados.ts` — o que o MOTOR lê (alvos, papéis, condicionais).
- *    Vai no bundle do cliente, porque o motor roda no browser: fica só o necessário para
- *    decidir cobertura;
+ *  · `src/lib/data/alvos-anatomicos-dados.ts` — o que o MOTOR lê (alvos, papéis, condicionais
+ *    e DESCRITORES). Vai no bundle do cliente, porque o motor roda no browser: fica só o
+ *    necessário para decidir cobertura anatômica e complementaridade mecânica;
  *  · `src/lib/data/alvos-anatomicos-fontes.ts` — o que a TELA lê sob demanda (fontes, regras
- *    com justificativa, descritores, ênfases contextuais, limites de discriminação). Servido
- *    por `/api/catalogo/alvos-anatomicos`; nunca entra no caminho de decisão.
+ *    com justificativa, ênfases contextuais, limites de discriminação). Servido por
+ *    `/api/catalogo/alvos-anatomicos`; nunca entra no caminho de decisão.
  *
  * 🔴 O que NÃO é portado, de propósito:
  *  · `evidenciaOrigemIds` (1.706 relações de ORIGEM-CP02.json) — o RELATORIO.md do pacote diz
@@ -95,7 +95,8 @@ const exerciciosLinhas = linhasDe(mapa.exercicios.map((e) => {
   const condicionais = e.condicionais
     .map((c) => `{ quando: ${j(c.quando)}, alvos: [${c.alvos.map(j).join(', ')}], papel: ${j(c.papel)} }`)
     .join(', ');
-  return [e.id, `{ regra: ${j(e.regra)}, uso: ${j(e.uso)}, alvos: [${alvos}], condicionais: [${condicionais}] }`];
+  const descritores = Object.keys(e.descritores).length > 0 ? `, descritores: ${j(e.descritores)}` : '';
+  return [e.id, `{ regra: ${j(e.regra)}, uso: ${j(e.uso)}, alvos: [${alvos}], condicionais: [${condicionais}]${descritores} }`];
 }));
 
 const dados = `/**
@@ -106,8 +107,8 @@ const dados = `/**
  *
  * 🔒 Este é o lado do MOTOR: alvo, papel e condição. É o mínimo para decidir cobertura, e o
  * único arquivo desta integração que entra no bundle do cliente. Fontes, justificativas,
- * descritores, ênfases e limites vivem em \`alvos-anatomicos-fontes.ts\` e são servidos sob
- * demanda — nada disso participa de decisão.
+ * ênfases e limites vivem em \`alvos-anatomicos-fontes.ts\` e são servidos sob demanda — nada
+ * disso participa de decisão.
  *
  * 🔴 \`direto\` é classificação FUNCIONAL pela tarefa (inferência anatômica explícita): não é
  * maior EMG, não é exclusividade e não é garantia de dose suficiente. \`auxiliar\` não fecha
@@ -154,7 +155,15 @@ export const ALVOS_ANATOMICOS: Readonly<Record<string, AlvoAnatomico>> = {
 ${alvosLinhas}
 };
 
-/** Os 168 ids. \`alvos\` é [alvo, papel]; \`condicionais\` só resolve com execução declarada. */
+/**
+ * Os 168 ids. \`alvos\` é [alvo, papel]; \`condicionais\` só resolve com execução declarada.
+ *
+ * 🔴 \`descritores\` está aqui — e não só no módulo da tela — porque a COMPLEMENTARIDADE
+ * MECÂNICA da seleção automática os lê (inclinação, pegada, posição do ombro, do quadril e do
+ * joelho, trajetória, apoio). São 42 dos 168 ids; os outros não declaram nenhum, e ausência de
+ * descritor NÃO é ausência de característica: é ausência de declaração no catálogo.
+ * Continuam sendo DESCRITORES: explicam diferença de tarefa, não medem eficiência.
+ */
 export const ANATOMIA_POR_EXERCICIO: Readonly<Record<string, ExercicioAnatomico>> = {
 ${exerciciosLinhas}
 };
@@ -165,11 +174,12 @@ const fontesLinhas = linhasDe(Object.entries(mapa.fontes).map(([k, f]) => [k, j(
 const regrasLinhas = linhasDe(Object.entries(mapa.regras).map(([k, r]) => [k, j({
   acao: r.acao, natureza: r.natureza, justificativa: r.justificativa, fontes: r.fontes,
 })]));
+// 🔴 Sem \`descritores\`: eles vivem no módulo do motor (a tela os lê de lá pela rota), e
+// duplicá-los criaria duas verdades para o mesmo campo.
 const detalheLinhas = linhasDe(mapa.exercicios.map((e) => [e.id, j({
   nome: e.nome,
   grupoCatalogo: e.grupoCatalogo,
   descricaoAcao: e.descricaoAcao,
-  descritores: e.descritores,
   enfasesContextuais: e.enfasesContextuais,
   limitacao: e.limitacao,
 })]));
@@ -181,8 +191,7 @@ const fontes = `/**
  * limites de discriminação. Servido por \`/api/catalogo/alvos-anatomicos\`; **nenhuma decisão
  * do motor lê este arquivo** — por isso ele pode crescer sem pesar no caminho de geração.
  *
- * 🔴 \`descritores\` (inclinação, pegada, trajetória…) explicam diferença mecânica; não são
- * peso de eficiência. \`enfasesContextuais\` carrega o protocolo, o comparador e o limite da
+ * 🔴 \`enfasesContextuais\` carrega o protocolo, o comparador e o limite da
  * comparação de Cabral 2022: distribuição espacial de EMG sob barra a 0° vs 45°, 50–70% 1RM.
  * Não é prova de hipertrofia, não vale para halteres e \`usarComoPesoAutomatico\` é \`false\`.
  */

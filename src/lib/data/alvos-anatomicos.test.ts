@@ -266,7 +266,19 @@ describe('⑳ ênfase contextual do supino é contexto, nunca peso', () => {
   });
 
   it('nenhuma ênfase é lida pelo motor — elas vivem no módulo de fontes, não no de dados', () => {
-    for (const id of ids) expect(Object.keys(ANATOMIA_POR_EXERCICIO[id]!)).toEqual(['regra', 'uso', 'alvos', 'condicionais']);
+    // 🔴 O módulo do motor carrega `descritores` (a complementaridade mecânica os lê) e NADA
+    // mais: nenhuma ênfase contextual, nenhuma fonte, nenhuma justificativa. Se `enfasesContextuais`
+    // aparecer aqui, a comparação de Cabral 2022 terá entrado no caminho de decisão.
+    for (const id of ids) {
+      for (const chave of Object.keys(ANATOMIA_POR_EXERCICIO[id]!)) {
+        expect(['regra', 'uso', 'alvos', 'condicionais', 'descritores'], `${id}.${chave}`).toContain(chave);
+      }
+    }
+    // E os descritores que chegaram ao motor são exatamente os do pacote, sem invenção:
+    // e9 declara a horizontal; e15 (supino na máquina) não declara nada, e ausência de
+    // declaração NÃO é preenchida.
+    expect(ANATOMIA_POR_EXERCICIO.e9!.descritores).toEqual({ inclinacao: 'horizontal' });
+    expect(ANATOMIA_POR_EXERCICIO.e15!.descritores).toBeUndefined();
   });
 });
 

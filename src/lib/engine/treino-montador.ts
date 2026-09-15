@@ -30,6 +30,7 @@ import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from '.
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, mev, ordenarComFoco, tetoSeriesGrupoNaSessao, type DecisaoFoco, FOCO_SEMANAS } from './trilhos';
+import { otimizarCoberturaAnatomica } from './cobertura-anatomica';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
@@ -430,8 +431,6 @@ export function montarRotina(
     tetoSlotsSemana: (g: GrupoPrimario) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
     coreMin: CORE_MIN,
     coreMax: CORE_MAX,
-    // 🦴 Só para a classe de intercâmbio do passe de cobertura anatômica (faixa de hold por nível).
-    nivel: perfil.nivelExperiencia,
     // Disponibilidade é teto: não acrescentar slots só para preencher o dia.
     preencherAteOrcamento: false,
     respeitarGruposDoDia: true,
@@ -550,6 +549,45 @@ export function montarRotina(
         ? 'equilibrio_puxar_empurrar' : 'transferencia_nao_realizada',
     };
   }
+
+  /**
+   * 🦴 COBERTURA ANATÔMICA E COMPLEMENTARIDADE MECÂNICA (mapa dos 168 ids) ────────────────
+   *
+   * 🔒 AQUI, e não dentro de `alocarSemana`: quando esta linha roda, a alocação FINAL já está
+   * escolhida — a passada neutra, a decisão da cascata do foco, a eventual transferência de
+   * slot e a eventual realocação coverage-first já aconteceram e já foram lidas. Nada do que
+   * o passe faz pode voltar a alimentar uma decisão tomada antes dele.
+   *
+   * 🔴 O defeito que isto fecha, medido: com o passe dentro do alocador, a 1ª passada já saía
+   * trocada, e `coberturaTemporalCompleta` — que lê `padraoMovimento` dos exercícios — via
+   * outra semana e disparava uma realocação que não teria acontecido. Em foco/ombros 4d/60 o
+   * dia "Peito + Tríceps" terminava com dois desenvolvimentos (180 s) no lugar de duas
+   * elevações laterais (90 s), a degradação de descanso descia um degrau e o dia mudava de
+   * 12 880 s para 12 500 s. Ninguém autorizou a cobertura anatômica a mexer no foco.
+   *
+   * Dentro de cada slot, troca o exercício por outro do MESMO grupo e da MESMA assinatura de
+   * custo quando ele aborda um alvo direto do dia ainda descoberto, ou traz uma tarefa
+   * mecânica que o grupo ainda não tem naquele dia. Não cria slot, série, tempo ou descanso.
+   */
+  const trocasAnatomicas = otimizarCoberturaAnatomica(
+    diasAlocados.map((dia, d) => ({ grupos: templates[d]!.grupos, slots: dia.slots })),
+    (g, favorito) => pool.filter((e) => e.grupoPrimario === g && e.padraoMovimento !== 'cardio'
+      && favoritosEfetivos.has(e.id) === favorito),
+    {
+      seriesPlanejamento: prescricao.seriesPorExercicio.max,
+      // O MESMO piso que o guard de cobertura usa mais abaixo — autoridade real, não cópia.
+      pisoCobertura: mev(perfil.nivelExperiencia, prescricao.objetivoEfetivo ?? perfil.objetivo),
+      /**
+       * 🔒 Exatamente os grupos que o BLOCO ADICIONAL do foco vai receber, com o mesmo
+       * filtro — `core` fora (o foco de core sobe séries nos slots que já existem, não
+       * acrescenta exercício) e nada na retomada (lá o bloco não é aplicado). Espelhar o
+       * argumento, e não repeti-lo por aproximação, é o que impede o passe de se comportar
+       * diferente conforme exista um foco que nem chega a criar slot.
+       */
+      gruposPreservados: semanaCiclo?.retomada ? [] : prioritarios.filter((g) => g !== 'core'),
+    },
+  );
+  void trocasAnatomicas;
 
   /**
    * 🔒 O PIPELINE COMPARTILHADO — tudo o que vem DEPOIS de saber quais exercícios entram:

@@ -15,18 +15,19 @@ universal, não garantia de estímulo.
 | Camada | Arquivo | Papel |
 |---|---|---|
 | Contrato | `src/lib/data/alvos-anatomicos-tipos.ts` | Tipos e vocabulário. Escrito à mão. |
-| Dados (motor) | `src/lib/data/alvos-anatomicos-dados.ts` | **GERADO.** 168 ids, 44 alvos, papéis e condicionais. 41 KB. É o único arquivo desta integração no bundle do cliente. |
-| Dados (tela) | `src/lib/data/alvos-anatomicos-fontes.ts` | **GERADO.** 17 fichas de fonte, 59 regras com justificativa, descritores, ênfases, 6 limites de discriminação. 76 KB, **fora do bundle** — só a rota o lê. |
+| Dados (motor) | `src/lib/data/alvos-anatomicos-dados.ts` | **GERADO.** 168 ids, 44 alvos, papéis, condicionais e **descritores**. 43 KB. É o único arquivo desta integração no bundle do cliente. |
+| Dados (tela) | `src/lib/data/alvos-anatomicos-fontes.ts` | **GERADO.** 17 fichas de fonte, 59 regras com justificativa, ênfases contextuais, 6 limites de discriminação. 72 KB, **fora do bundle** — só a rota o lê. |
 | Leitura | `src/lib/data/alvos-anatomicos.ts` | Porta única. Porte fiel de `consulta.py`: mesmas recusas, mesmas saídas. |
-| Uso no motor | `src/lib/engine/cobertura-anatomica.ts` | Classe de intercâmbio, passe de cobertura e diagnóstico. |
+| Uso no motor | `src/lib/engine/cobertura-anatomica.ts` | Assinatura de custo, traços mecânicos, passe de cobertura + complementaridade e diagnóstico. |
 | Gerador | `scripts/gerar-alvos-anatomicos.mjs` | Lê o pacote e escreve os dois módulos. `--check` prova idempotência. |
 | API | `src/app/api/catalogo/alvos-anatomicos/route.ts` | Lista (proveniência + 44 alvos + limites) e detalhe por id. |
 | UI | `src/components/painel/AlvosAnatomicos.tsx` | Bloco "O que este exercício aborda", no detalhe e no seletor. |
-| Guards | `alvos-anatomicos.test.ts` · `cobertura-anatomica.test.ts` · `alvos-anatomicos-render.test.ts` | **112 testes novos** (40 + 54 + 18). |
+| Guards | `alvos-anatomicos.test.ts` · `cobertura-anatomica.test.ts` · `alvos-anatomicos-render.test.ts` | **185 testes novos** (40 + 127 + 18). |
+| Verificação | `scripts/dump-planos.ts` · `scripts/analisar-complementaridade.test.ts` | Instrumentos que produzem a evidência de 3 vias e o mapa PERMITE/BLOQUEIA. |
 
-Um ponto de contato no motor: `alocarSemana` ganhou um **passe final** e dois campos opcionais
-(`nivel`, `relatoCoberturaAnatomica`). `treino-montador.ts` só passa `perfil.nivelExperiencia`.
-Nenhuma outra linha do motor mudou.
+Um ponto de contato no motor: `treino-montador.ts` chama o passe **uma vez**, depois de a
+alocação final estar escolhida. **`alocador.ts` está byte a byte igual a `origin/main`** — o
+passe saiu de dentro dele (ver §5). Nenhuma outra linha do motor mudou.
 
 ## 2. Relação com a integração muscular anterior
 
@@ -63,79 +64,150 @@ nomes não colidem.
   `equipamento`, `equipamentoDetalhe`, `local`, `tier`, `comoFazer`) coincidem em **todos** —
   zero divergências. `grupoCatalogo` do mapa == `grupoPrimario` do app em 168/168.
 
-## 4. Como a cobertura entra na seleção
+## 4. Como a cobertura e a complementaridade entram na seleção
 
 Os alvos desejados de um dia são os alvos dos grupos que **o template do dia já previa**.
 Nada é acrescentado: os três grupos do pacote que não são grupo do catálogo — `adutores`,
 `flexores_quadril`, `perna_anterior` — nunca viram obrigação, e sinergista não vira grupo novo.
 
-O passe roda **por último**, depois de tudo estar decidido (slots por dia, grupo de cada slot,
-favoritos, padrões contados, foco, reservas, dias curtos). Dentro de cada slot ele troca o
-exercício por outro do **mesmo grupo** e da **mesma classe de intercâmbio**, e só quando o
-outro aborda um alvo do dia que **nenhum outro slot aborda**.
+O passe roda **no montador**, depois de a alocação FINAL estar escolhida: a passada neutra, a
+decisão da cascata do foco, a transferência de slot e a eventual realocação coverage-first já
+aconteceram e já foram lidas. Dentro de cada slot ele troca o exercício por outro do **mesmo
+grupo** e da **mesma assinatura de custo**.
 
-### Classe de intercâmbio — a trava
+### Os dois critérios de troca
 
-Dois exercícios da mesma classe são indistinguíveis para todo o resto do motor:
+| Critério | Quando conta |
+|---|---|
+| **Alvo novo** | o candidato aborda um alvo direto do dia que **nenhum outro slot** aborda |
+| **Complementaridade mecânica** | o grupo tem 2+ slots no dia, o exercício atual **não acrescenta traço nenhum** ao que os outros slots do grupo já trazem, e o candidato traz um traço que falta |
 
-`padraoMovimento` · `tipo` · `temCarga` · isometria (com a faixa de hold do nível) ·
-`UNILATERAL_DOIS_LADOS` · **conjunto de grupos secundários**
+Cobertura vence complementaridade; entre iguais, a ordem do pool (tier↑, id) decide, e empate
+total mantém o exercício de antes. Sem nenhum dos dois, **não há troca**.
 
-Os cinco primeiros fixam descanso e execução; o sexto fixa o crédito ponderado de 0,5, que é
-o que alimenta o déficit e decide **quantos** slots cada grupo recebe.
+### O vocabulário da complementaridade — e o que é ganho fictício
 
-### Duas versões que foram medidas e descartadas
+Um **traço mecânico** vem só do contrato:
 
-1. **Desempate dentro de `escolher`.** A escolha diferente movia o cursor de rotação e os
-   usados do dia; os slots seguintes caíam em candidatos de outra classe. Medido em
-   6d/75 min avançado: **32 → 34 slots, 124 → 130 séries**, e em `Ombros +
-   complementares` um slot de `e54` (isolado, 90 s) virava `e119` (puxar, 180 s) — +380 s.
-   Cobertura anatômica comprando volume e tempo. Descartada.
-2. **Trocar também em empate**, usando a ação classificada como critério. Em Prioridades 4d
-   trocava `e22` (barra fixa supinada) por `e162` (remada com elástico) num perfil de academia
-   **sem ganhar um alvo sequer**. O pool vem ordenado por popularidade (tier↑, id); mexer nele
-   de graça piora a escolha em troca de nada. Descartada — a ação classificada ficou como
-   **desempate** entre candidatos que já ganham o mesmo número de alvos novos.
+- `acao:<regra>` — a ação classificada (59 regras, cada uma com `acao`, `natureza:
+  inferencia_anatomica`, `justificativa` e fontes). É ela que separa empurrar horizontal de
+  inclinado e de declinado, adução horizontal de inclinada e de descendente, remada de puxada
+  vertical e de encolhimento, dobradiça de flexão de joelho, desenvolvimento de elevação;
+- `<chave>:<valor>` de cada **descritor declarado** — inclinação, pegada, ombro, quadril,
+  joelho, trajetória, apoio. São 42 dos 168 ids; os outros 126 não declaram nenhum.
 
-## 5. Antes × depois, medido
+Não vira traço, e isso é o que impede ganho fictício:
 
-`origin/main` (`64c2e7b`, worktree limpo) × esta branch, mesmos perfis, mesma semana (3).
-O nome do cenário é o **perfil**; a divisão sai do motor (`divisaoPreferida: 'prioridades'`
-no primeiro, `auto` nos demais).
+- **descritor que o catálogo não define** — nada é preenchido. Ausência de declaração não é
+  uma inclinação diferente: os traços de `e15` (supino na máquina) são um SUBCONJUNTO dos de
+  `e9` (supino reto, que declara `inclinacao: horizontal`), então `e15` não acrescenta nada a
+  um grupo que já tenha `e9`;
+- **valor que é uma disjunção do próprio pacote** — `supinada_ou_execucao_a_confirmar`,
+  `sentado_ou_deitado_nao_fixado`, `estendido_ou_pouco_flexionado`. O pacote está dizendo que
+  a execução não está determinada; usá-los como distinção seria afirmar o que ele recusa;
+- **nome, marca, implemento e sinônimo** — supino com barra, com halteres e na máquina têm a
+  mesma ação; elevação lateral, na polia e deitado também. Ganho zero, de propósito;
+- **magnitude** — `positiva_angulo_nao_fixado` declara a ORIENTAÇÃO; o ângulo continua não
+  fixado e nunca é usado.
 
+🔴 Nada disso é peso. "Traço novo" é presença/ausência de uma característica declarada, e o
+contrato de peitoral continua com DUAS cabeças: variedade de orientação não é prova de que um
+exercício isola uma faixa.
 
-| Cenário | Slots | Séries | Duração máx (Σ) | Descanso mín | Alvos abordados |
-|---|---|---|---|---|---|
-| Prioridades 4d/60 min | 24 → 24 | 93 → 93 | 13160 → 13160 s | 60 → 60 s | 26 → **28** |
-| 6d/75 min, avançado | 32 → 32 | 124 → 124 | 19970 → 19970 s | 60 → 60 s | 26 → **30** |
-| 4d/60 min, intermediário | 23 → 23 | 89 → 89 | 12280 → 12280 s | 60 → 60 s | 27 → 27 (idêntico) |
-| 3d/30 min, intermediário | 12 → 12 | 37 → 37 | 5180 → 5180 s | 60 → 60 s | 21 → 21 (idêntico) |
-| 2d/20 min, iniciante | 6 → 6 | 18 → 18 | 2220 → 2220 s | 60 → 60 s | 14 → 14 (idêntico) |
-| Foco ombros (compensa peito) | 25 → 25 | 93 → 93 | 12880 → 12880 s | 60 → 60 s | 27 → 27 (idêntico) |
-| Foco bíceps (compensa costas) | 25 → 25 | 93 → 93 | 12740 → 12740 s | 60 → 60 s | 27 → 27 (idêntico) |
-| Casa com halteres+elástico, 3d/45 min | 15 → 15 | 59 → 59 | 7740 → 7740 s | 60 → 60 s | 26 → 26 (idêntico) |
-| Casa sem equipamento, 3d/40 min, iniciante | 14 → 14 | 42 → 42 | 6540 → 6540 s | 60 → 60 s | 18 → 18 |
-| 5d/90 min, avançado | 27 → 27 | 104 → 104 | 17660 → 17660 s | 90 → 90 s | 26 → **30** |
+### A assinatura de custo — a trava, agora pelas autoridades reais
 
-**Nenhuma duração de dia mudou** (mín e máx, dia a dia, nos 10 cenários). Slots, séries e
-descanso idênticos. Nenhum alvo perdido em lugar nenhum. Cinco cenários saem **byte a byte
-iguais** ao de antes.
+O candidato anterior usava PROXIES (`padraoMovimento`, `tipo`, `temCarga`, isometria,
+lateralidade, secundários). Medido: de 162 pares redundantes, a classe antiga permitia
+alternativa em **9** e bloqueava **153** — e em **0** deles faltava alternativa no catálogo.
+Boa parte dos eixos era inerte para o custo: `puxar`, `empurrar`, `agachar` e
+`dobradica_quadril` são todos COMPOSTO e descansam igual.
 
-Foram **10 trocas em 8 dias**, de 38 dias somados nos dez cenários. Por dia, o que o dia passou a abordar:
+No lugar, `assinaturaDeCusto(e)` chama **`descansoDoExercicio`** sobre toda a grade de
+parâmetros que o montador pode produzir (RIR × modo força × rampa de retomada × degradação) e
+junta a unidade de execução (isometria com o hold dos três níveis, lateralidade). Dois
+exercícios com a mesma assinatura ocupam exatamente o mesmo tempo em qualquer semana e
+qualquer perfil. O custo do candidato é computado do próprio candidato — nunca reaproveitado.
 
-| Cenário · dia | Trocas | Alvos que o DIA ganhou |
+### As guardas que sobraram, e por que cada uma existe
+
+| Guarda | Autoridade | Por quê |
 |---|---|---|
-| Prioridades · Peito + Ombros | `e52` Elevação lateral → `e107` Crucifixo invertido na máquina · `e53` Elevação lateral na polia → `e99` Elevação frontal na polia | `da` Deltoide anterior · `dp` Deltoide posterior |
-| 6d/75 · Peito + Tríceps | `e4` Abdominal (crunch) → `e148` Inseto morto | `oe` · `oi` Oblíquos · `ta` Transverso |
-| 6d/75 · Ombros + complementares | `e52` → `e98` Elevação frontal · `e5` Abdominal na polia → `e8` Roda abdominal | `da` · `oe` · `oi` |
-| 6d/75 · Complementares | `e6` Abdominal na máquina → `e8` Roda abdominal | `oe` · `oi` |
-| 5d/90 · Pernas | `e4` → `e148` | `oe` · `oi` · `ta` |
-| 5d/90 · Ombros + Braços | `e52` → `e107` | `dp` |
-| 5d/90 · Complementares | `e5` → `e8` | `oe` · `oi` |
-| Casa sem equipamento · Full-body C | `e149` Abdominal bicicleta → `e148` Inseto morto | `ta` |
+| assinatura de custo idêntica | `descansoDoExercicio`, `repUnitDe`, `faixaSegundos`, `execucao` | duração, certificação, degradação e deload não se movem |
+| balanço `puxar − empurrar` não piora; padrão coberto não some | contagem da semana | saúde do ombro e cobertura temporal obrigatória |
+| nenhum **grupo grande** ganha crédito ponderado | `secundariosDe`, `PESO_SECUNDARIO` | `cobertura-teto.ts` e `placarDaSemana` leem exatamente `GRUPOS_GRANDES`; sem isto o passe fazia elástico "fechar ombro" no iniciante |
+| nenhum grande cai abaixo do MEV; nenhum grupo zera | `mev(nível, objetivo)`, passado pelo montador | lombar e antebraço só existem por crédito indireto |
+| grupos do FOCO não são tocados | `prioritarios`, com o mesmo filtro do bloco adicional | ver §5 |
+| mesmo grupo, mesmo estado de favorito, id livre no dia | alocador | DF #12 e não repetir exercício no dia |
 
-Nos outros 30 dias, nenhuma troca: ou o dia já abordava tudo o que os alvos dos seus grupos
-pediam, ou não havia candidato da mesma classe que abordasse algo novo.
+## 5. Antes × depois, medido em 3 vias
+
+`origin/main` (**b** = `64c2e7b`) × candidato (**c** = `4576201`) × corrigido (**x**), mesmos
+23 perfis, mesmas entradas. Tabela completa em
+[docs/evidencia-alvos-anatomicos-antes-depois.txt](evidencia-alvos-anatomicos-antes-depois.txt).
+
+| Métrica (soma dos 23 cenários) | base | candidato | corrigido |
+|---|---|---|---|
+| slots | 461 | 461 | **461** |
+| séries | 1628 | 1628 | **1628** |
+| duração máxima somada | 247 430 s | 247 430 s | **247 430 s** |
+| descanso mínimo por cenário | — | igual à base | **igual à base** |
+| alvos anatômicos abordados (de 921) | 701 | 746 | **761** |
+| **pares redundantes** | 171 | 162 | **112** |
+| traços mecânicos distintos | 421 | 427 | **475** |
+
+**Regressões do corrigido contra a base: nenhuma.** Slots, séries, duração mínima e máxima por
+dia, descanso mínimo e `estadoLimite` são idênticos em todos os 23 cenários.
+
+### A limitação do candidato, reproduzida
+
+Um "par redundante" é: dois slots **do mesmo grupo**, no **mesmo dia**, com os **mesmos alvos
+diretos** e a **mesma tarefa mecânica**. O candidato `4576201` só aceitava troca com ganho de
+ALVO; como dois stiffs, três remadas ou quatro desenvolvimentos recebem os mesmos alvos, ele
+concluía que o trabalho estava feito e deixava 162 pares. Por grupo, no candidato:
+
+| grupo | tarefa repetida | pares |
+|---|---|---|
+| quadríceps | `agachar_avancar` | 49 |
+| ombros | `desenvolvimento` | 44 |
+| costas | `remada` | 43 |
+| posterior | `dobradica` | 12 |
+| costas | `puxada_vertical` | 5 |
+| ombros · panturrilha · peito · tríceps · bíceps | — | 9 |
+
+E a análise de onde a classe antiga travava: **PERMITE = 9 · BLOQUEIA = 153 · sem alternativa
+no catálogo = 0**.
+
+### As trocas do corrigido, por tipo
+
+| Exemplo real | Ganho |
+|---|---|
+| `e15` Supino na máquina → `e13` Supino declinado | orientação (horizontal → negativa) |
+| `e55` Crucifixo → `e56` Crucifixo inclinado | orientação (adução horizontal → inclinada) |
+| `e130` Voador → `e131` Crossover | trajetória (alto para baixo) |
+| `e75` Rosca na polia → `e72` Rosca martelo | pegada neutra + braquiorradial (`bf`) |
+| `e3` Agachamento livre → `e142` Agachamento sissy | ação (agachar/avançar → extensão de joelho) |
+| `e36` Panturrilha em pé → `e158` Panturrilha sentado | joelho flexionado |
+| `e41` Desenvolvimento → `e119` Face pull | **alvo** `dp` deltoide posterior |
+| `e42` Desenvolvimento → `e95` Remada alta | **alvo** `ts` trapézio superior |
+| `e52` Elevação lateral → `e107` Crucifixo invertido na máquina | **alvo** `dp` |
+| `e53` Elevação lateral na polia → `e99` Elevação frontal na polia | **alvo** `da` |
+| `e4` Abdominal → `e147` Bird dog | **alvos** `er`, `oe`, `oi`, `ta` |
+
+### Duas versões medidas e descartadas no caminho
+
+1. **Passe dentro de `alocarSemana`** (era assim no candidato). A 1ª passada já saía trocada e
+   `coberturaTemporalCompleta` — que lê `padraoMovimento` — via outra semana, disparando uma
+   realocação que não teria acontecido. Em foco/ombros 4d/60 o dia "Peito + Tríceps" terminava
+   com dois desenvolvimentos (180 s) no lugar de duas elevações laterais (90 s) e a duração ia
+   de 12 880 s para 12 500 s. O passe saiu para o montador, e `alocador.ts` voltou a ser
+   idêntico à base.
+2. **Passe tocando os grupos do FOCO.** O bloco adicional (`bloco-foco-adicional.ts`) roda
+   depois e escolhe os extras entre os ids do grupo **ainda livres na semana**. Trocar `e41`/
+   `e42` por `e119`/`e95` no dia de ombros deixava `e41`/`e42` livres, e o bloco os punha no
+   dia de peito no lugar de `e52`/`e53` — dois compostos de 180 s onde havia dois isolados de
+   90 s. O dia apertava e o **descanso dos outros seis slots caía de 90 s para 60 s**. Os
+   grupos do foco passaram a ser preservados, com o mesmo filtro que o bloco recebe (`core`
+   fora, nada na retomada).
 
 ## 6. Diagnóstico do que não foi identificado
 
@@ -153,22 +225,46 @@ Casos reais medidos: `mu` (multífido) e `it` (tibial anterior) são
 exercício foi criado para esconder a ausência**. Em casa sem equipamento, `gd`/`gn` (glúteo
 médio/mínimo) e `ts` (trapézio superior) saem como `sem_candidato_elegivel`.
 
+E, quando a **complementaridade** não coube, o mesmo diagnóstico registra por quê — com os
+mesmos critérios do passe, na mesma ordem:
+
+| Motivo da redundância | Significa |
+|---|---|
+| `sem_alternativa_no_catalogo_elegivel` | não há exercício do grupo com outra tarefa declarada entre os elegíveis |
+| `alternativa_custaria_outro_tempo` | existe alternativa, mas a assinatura de custo dela é outra |
+| `alternativa_mudaria_credito` | existe alternativa de mesmo custo, mas ela mexeria no crédito ponderado |
+
 O diagnóstico **não** entra em `rotina.avisos`, não bloqueia o editor e não diz que o treino é
 ruim. É consultado sob demanda.
+
+### O que continua limitado, e por quê
+
+| Caso | Motivo |
+|---|---|
+| **quadríceps composto** (agachamento, afundo, passada, leg press, hack…) | os 20 ids caem na MESMA regra `agachar_avancar` e nenhum declara descritor. O mapa não distingue as tarefas, e inventar a distinção seria preencher o que o catálogo não define |
+| **costas: remada × puxada no mesmo dia** | `remada` credita `biceps` e `puxada_vertical` não; a troca mexeria no crédito. Fica registrada como `alternativa_mudaria_credito` |
+| **posteriores: dobradiça × mesa flexora** | a mesa flexora é ISOLADO (60–120 s) e o stiff é COMPOSTO de alta exigência (180 s). Custa outro tempo, então não troca. Onde existe alternativa de mesmo custo — `e123` glute-ham raise, que é `flexao_joelho` com padrão `dobradica_quadril` — a troca acontece e ganha a cabeça curta (`fc`) |
+| **grupos sob FOCO** | preservados; a composição deles é do bloco adicional (§5) |
+| **`mu` (multífido) e `it` (tibial anterior)** | sem candidato direto no catálogo, em condição nenhuma |
+| **e104, e139, e85/e88/e89** | o catálogo do app não declara execução; ficam pendentes e nunca são presumidos |
 
 ## 7. O que a integração não faz — e o que garante que continue assim
 
 | Não faz | Garantido por |
 |---|---|
-| Aumentar duração, volume, séries ou reduzir descanso | classe de intercâmbio + teste ③ (duração idêntica desfazendo as trocas) |
-| Criar peso de ativação ou hipertrofia | teste ⑤ (nenhum export casa `peso\|quota\|score\|ativação\|hipertrofia\|prescr\|substitu\|frequência`) |
-| Transformar sinergista em grupo obrigatório | alvos do dia saem só dos grupos do template; teste ⑤ |
-| Mexer no crédito parcial de 0,5 | secundários entram na classe: exercício trocado credita igual |
-| Tocar no treino manual | `rotinaCustom` não passa pelo alocador; teste ④ cobra os ids exatos |
-| Bloquear o editor ou declarar treino perigoso | diagnóstico separado dos avisos; teste ⑥ |
-| Presumir execução | e104, e139, e85/e88/e89 ficam pendentes; testes ⑨ ⑩ ⑪ e ⑦ |
-| Promover rótulo antigo ou sítio de eletrodo a região | `limitesDeDiscriminacao` portado e cobrado nos testes ⑲ ㉒ |
-| Trazer as 1.706 relações de origem para o seletor | teste ㉑ (o JSON dos dados não contém `R\d{4}` nem `evidenciaOrigemIds`) |
+| Aumentar duração, volume, séries ou reduzir descanso | assinatura de custo + `cobertura-anatomica.test.ts` ④ (duração idêntica desfazendo as trocas, nos 22 perfis) |
+| Trocar sem ganho identificável | ④ (toda troca relatada tem `alvosGanhos` ou `tracosGanhos` não vazio) e ③ (nada muda quando só há implementos da mesma tarefa) |
+| Ganho fictício por nome, marca ou implemento | ① (traços de `e11`/`e15` são subconjunto dos de `e9`) |
+| Preencher ângulo, trajetória ou posição não declarados | ① (nenhum traço casa `_ou_` ou `_a_confirmar`; 126 ids têm só a ação) |
+| Criar peso de ativação ou hipertrofia | ⑥ (nenhum export casa `peso\|quota\|score\|ativação\|hipertrofia\|prescr\|substitu\|frequência`) |
+| Transformar sinergista em grupo obrigatório | alvos do dia saem só dos grupos do template; ⑥ |
+| Mexer no crédito parcial de 0,5 | ④ (nenhum grande ganha crédito; nenhum grupo zera) |
+| Tocar no treino manual | `rotinaCustom` não passa pelo alocador; ⑤ cobra os ids exatos, inclusive na retomada e no deload |
+| Mexer no foco adicional | grupos do foco preservados com o mesmo filtro do bloco; `trilhos.test.ts` continua exigindo estrutura idêntica no foco de core |
+| Bloquear o editor ou declarar treino perigoso | diagnóstico separado dos avisos; ⑦ |
+| Presumir execução | e104, e139, e85/e88/e89 pendentes; ⑥ e `alvos-anatomicos.test.ts` ⑨ ⑩ ⑪ |
+| Promover rótulo antigo, sítio de eletrodo ou "largura/espessura" a região | ② (nenhum traço casa `largura\|espessura`) + `limitesDeDiscriminacao` |
+| Trazer as 1.706 relações de origem para o seletor | `alvos-anatomicos.test.ts` ㉑ |
 
 ## 8. Distinções que os testes travam
 
@@ -197,12 +293,23 @@ resposta é analisar os ids alterados, nunca descartar a pesquisa.
 
 1. **Base = `origin/main` (`64c2e7b`)**, não a branch da integração muscular. Ela está atrás
    da produção; usá-la seria importar um checkout antigo por cima (§2).
-2. **Passe final, não desempate no alocador** — medido, e a alternativa comprava volume (§4).
-3. **Melhora estrita** como única razão de trocar; ação classificada só desempata (§4).
-4. **Secundários dentro da classe de intercâmbio.** Sem isso a cobertura mexe no déficit e,
-   por ele, na quantidade de slots. É a decisão que separa "escolher melhor" de "treinar mais".
-5. **`evidenciaOrigemIds` e `preferenciaRegionalComprovada` não foram portados.** As 1.706
+2. **Passe no montador, não dentro do alocador** — medido: dentro dele, a saída do passe
+   voltava a alimentar `coberturaTemporalCompleta` e mudava o plano (§5). `alocador.ts` é
+   byte a byte igual à base.
+3. **Dois critérios de troca, e só eles**: alvo novo ou traço mecânico ausente no grupo
+   naquele dia. Sem ganho identificável, não há troca (§4).
+4. **Custo pelas autoridades reais, não por proxy.** `descansoDoExercicio` sobre a grade
+   inteira de parâmetros substituiu `padraoMovimento`/`temCarga`, que bloqueavam 153 de 162
+   casos sem proteger nada — e o custo do candidato é computado do próprio candidato.
+5. **Crédito: trava só nos GRUPOS GRANDES.** São os únicos que `cobertura-teto.ts` e
+   `placarDaSemana` leem. Travar todos bloquearia complementaridade legítima sem proteger
+   nada; não travar nenhum fazia elástico "fechar ombro" no iniciante.
+6. **Grupos sob foco não são tocados.** O bloco adicional escolhe entre os ids livres, e
+   liberar ids mudava o que ele pegava — piorando o descanso do dia (§5).
+7. **`evidenciaOrigemIds` e `preferenciaRegionalComprovada` não foram portados.** As 1.706
    relações são contexto científico e ficam no pacote; um campo vazio de preferência viajaria
    como lugar a preencher com peso.
-6. **Descritores não viraram critério de escolha.** São dados do contrato e aparecem na tela
-   ditos como descritores; o seletor não os lê.
+8. **Descritores AGORA são critério de escolha** — autorizado pelo autor nesta rodada, como
+   critério QUALITATIVO de complementaridade. Continuam sendo descritores: distinguem tarefa,
+   não medem eficiência, não viraram peso, e a magnitude nunca é usada. Por isso eles saíram
+   do módulo da tela e passaram a viver no módulo do motor: fonte única, lida pelos dois.

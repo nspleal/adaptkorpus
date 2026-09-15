@@ -27,7 +27,6 @@
 import type { Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 import type { DivisaoPreferida, NivelExperiencia } from './treino-types';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
-import { otimizarCoberturaAnatomica, type TrocaAnatomica } from './cobertura-anatomica';
 
 /** DF②: quem é banda, quem é piso, quem é só-indireto. */
 export const GRUPOS_GRANDES: readonly GrupoPrimario[] = ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'];
@@ -236,18 +235,6 @@ export interface ArgsAlocacao {
    * estes padrões ocupam os primeiros slots disponíveis antes das reservas acessórias.
    */
   coberturaTemporalObrigatoria?: readonly ('puxar' | 'empurrar' | 'agachar')[];
-  /**
-   * 🦴 Nível — usado SÓ pela classe de intercâmbio do passe de cobertura anatômica (a faixa de
-   * hold do isométrico é por nível). Não decide série, descanso, teto nem elegibilidade.
-   * Ausente ⇒ `intermediario`: afeta apenas a comparação entre dois isométricos, e jamais
-   * deixa um exercício de custo diferente entrar na troca.
-   */
-  nivel?: NivelExperiencia;
-  /**
-   * 🦴 SAÍDA opcional: as trocas que o passe de cobertura anatômica fez. Existe para o
-   * diagnóstico e para os testes poderem afirmar o que mudou — nunca é lida de volta.
-   */
-  relatoCoberturaAnatomica?: TrocaAnatomica[];
 }
 
 /** Um dia comporta reservar um acessório além do core? (≥ 3 slots livres p/ os grandes —
@@ -858,27 +845,6 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
      */
     dias[d]!.motivoCurto = !diasSemRedundancia.has(d) && templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
   }
-
-  /**
-   * ── Passo 8: COBERTURA ANATÔMICA (mapa dos 168 ids, 2026-09-15) ─────────────────────
-   *
-   * 🔒 O ÚLTIMO passo, e de propósito: quando ele roda, tudo já está decidido — quantos slots
-   * cada dia tem, de que grupo é cada um, quais são favoritos, quais padrões foram contados,
-   * quem cedeu slot para o foco e quais dias ficaram curtos. Ele não mexe em nada disso.
-   * Dentro de cada slot, troca o exercício por outro do MESMO grupo e da MESMA classe de
-   * intercâmbio (`cobertura-anatomica.ts`) quando o outro aborda alvos diretos do dia que
-   * ainda não foram abordados. Mesma classe ⇒ mesmo descanso, mesma execução, mesmo crédito
-   * ponderado, mesmo padrão: nem o tempo, nem a dose, nem as invariantes se movem.
-   *
-   * 🔴 Não acrescenta exercício para "fechar" um alvo, não aumenta o dia e não declara nada
-   * perigoso. Alvo que continuar sem cobertura vira diagnóstico (`diagnosticarDia`), não aviso.
-   */
-  const trocasAnatomicas = otimizarCoberturaAnatomica(
-    dias.map((dia, d) => ({ grupos: templates[d]!.grupos, slots: dia.slots })),
-    (g, favorito) => (favorito ? favPorGrupo.get(g) : porGrupo.get(g)) ?? [],
-    args.nivel ?? 'intermediario',
-  );
-  if (args.relatoCoberturaAnatomica) args.relatoCoberturaAnatomica.push(...trocasAnatomicas);
 
   return dias;
 }

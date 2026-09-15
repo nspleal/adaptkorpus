@@ -58,7 +58,8 @@ export function GET(req: Request) {
       ...c, fichas: c.alvos.map((t) => ALVOS_ANATOMICOS[t]!),
     })),
     regra: { id: anatomia.regra, ...regra, fichas: regra.fontes.map((f) => FONTES_ANATOMICAS[f]!) },
-    descritores: detalhe.descritores,
+    // Descritores vêm do lado do motor (fonte única); a tela só os exibe.
+    descritores: anatomia.descritores ?? {},
     enfasesContextuais: detalhe.enfasesContextuais.map((e) => ({ ...e, ficha: FONTES_ANATOMICAS[e.fonte]! })),
     limitacao: detalhe.limitacao,
     definicaoDeAlvoDireto: PROCEDENCIA_ANATOMICA.definicaoDeAlvoDireto,
