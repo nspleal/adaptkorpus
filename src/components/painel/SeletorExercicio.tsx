@@ -9,6 +9,7 @@ import { secundariosDe } from '@/lib/engine/secundarios';
 import { ROTULO_GRUPO, ROTULO_PADRAO } from '@/lib/frequencia-grupos';
 import { casaComBusca } from '@/lib/busca-exercicio';
 import { identidadeCanonica } from '@/lib/exercicio-identidade';
+import AlvosAnatomicos from './AlvosAnatomicos';
 import type { EquipamentoCasa, EquipamentoDisp } from '@/lib/data/types';
 import type { NivelExperiencia } from '@/lib/engine';
 
@@ -232,6 +233,9 @@ export default function SeletorExercicio({
                   <summary aria-label={`Como fazer ${ex.nomePt}`}>Como fazer</summary>
                   <p>{ex.comoFazer || 'Este exercício ainda não possui instruções cadastradas.'}</p>
                 </details>
+                {/* 🦴 Alvos anatômicos — irmão de "Como fazer", carregado só quando aberto.
+                    Fica AO LADO da instrução, não no lugar dela. */}
+                <AlvosAnatomicos id={ex.id} nomePt={ex.nomePt} />
                 {banido && onDesbanir ? (
                   <button onClick={() => onDesbanir(ex.id)} style={botao} aria-label={`Trazer ${ex.nomePt} de volta`}>Trazer de volta</button>
                 ) : noTreino ? (

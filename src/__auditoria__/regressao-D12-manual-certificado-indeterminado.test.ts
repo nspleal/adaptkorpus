@@ -23,9 +23,16 @@ import { EXERCISES_SEED } from '@/lib/data/seed';
 import { vereditoDoPlano } from '@/lib/veredito-motor';
 import type { Weekday } from '@/lib/semana';
 
-const TEMPO = 70;
+/**
+ * 🔴 Reajuste 2026-09-15: era 70. O caminho do desenho da pessoa passou a estimar a
+ * degradação com as SÉRIES DECLARADAS (antes projetava `sPlan` em todos os slots), então
+ * 5 × 6 séries em 70 min passaram a caber com folga e o dia deixou de ser indeterminado —
+ * a fixture perdeu o estado que ela existe para vigiar, não a propriedade. Em 55 min o
+ * mesmo desenho volta a medir `min ≤ limite < max`, que é a pré-condição do caso.
+ */
+const TEMPO = 55;
 
-/** Desenho manual mínimo que reproduz o caso: 5 exercícios × 6 séries em 1 dia de 60 min. */
+/** Desenho manual mínimo que reproduz o caso: 5 exercícios × 6 séries em 1 dia. */
 const EXERCICIOS = ['e14', 'e22', 'e16', 'e72', 'e70'];
 
 const perfil: PerfilTreino = {
