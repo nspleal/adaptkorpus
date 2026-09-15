@@ -1,4 +1,5 @@
 'use client';
+import PlanejarCardio from './PlanejarCardio';
 
 import { seriesDoSlot } from '@/lib/series-treino';
 import ResumoSeries from './ResumoSeries';
@@ -66,7 +67,7 @@ import SeletorExercicio from './SeletorExercicio';
 import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
-import { useRegistro, HistoricoDieta, type StatusRefeicao } from './RegistroRefeicao';
+import { useRegistro, HistoricoDieta, MEAL_LABEL, type StatusRefeicao } from './RegistroRefeicao';
 import { EmptyCard, estiloBotaoPrimario } from '@/components/estados/ui';
 import { EXERCISES_SEED, FOODS_BY_ID_SEED, RECIPES_SEED } from '@/lib/data/seed';
 import type {
@@ -760,7 +761,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     aplicarRotacao({ ...perfil, orcamento: v });
   }
 
-  function gerarOpcoesPrato(idx: number, excluir: string[]): OpcaoPrato[] {
+  function gerarOpcoesPrato(idx: number, excluir: string[], max = 3): OpcaoPrato[] {
     if (!dieta.plano || !cardTotais) return [];
     const item = cardItens[idx]!;
     // Bloqueamos os pratos das outras refeições + os já mostrados. O motor deduplica e para
@@ -770,7 +771,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       pratoAtual: item.prato, slot: item.refeicao, recipes: RECIPES_SEED, foodsById: FOODS_BY_ID_SEED,
       plano: dieta.plano, totaisDiaAtual: cardTotais, escalaAtual: item.escala, restricoes,
       gosto: { excluirPratoIds: [...outros, ...excluir, ...cansadosAtivos], excluirAlimentoIds: perfil.naoCurto },
-    }).map((rr) => ({ prato: rr.prato!, escala: rr.escala!, macros: rr.macrosNovo!, diaNew: rr.totaisDiaNovo! }));
+    }, max).map((rr) => ({ prato: rr.prato!, escala: rr.escala!, macros: rr.macrosNovo!, diaNew: rr.totaisDiaNovo! }));
   }
   const abrirTrocaPrato = (idx: number) => { const o = gerarOpcoesPrato(idx, []); setModal({ tipo: 'prato', idx, base: cardItens[idx]!.prato.nome, opcoes: o, excl: o.map((x) => x.prato.id) }); };
   const maisVariedadePrato = () => {
@@ -1560,10 +1561,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {/* Contador de treinos (chama dos 4 marcos) — PRIMEIRO elemento da Hoje, acima da
             saudação (handoff §Posição). Substitui o indicador de marco 7/30 que ficava abaixo. */}
         {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} modoDiario={modoDiario} />}
-        <div style={{ marginBottom: 28 }}>
+        {!vista && (aba === 'hoje' || aba === 'treino' || aba === 'cardio') && <div style={{ marginBottom: 28 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 'clamp(1.5rem,3vw,2rem)', fontWeight: 800, letterSpacing: '-.02em' }}>Bom treino 👊</h1>
           <p style={{ margin: 0, color: 'rgba(234,229,219,.55)', fontSize: '.98rem' }}>{dataHoje || 'Seu dia'}</p>
-        </div>
+        </div>}
 
         {vista === 'compras' && <ListaCompras itens={cardItens} foodsById={FOODS_BY_ID_SEED} onVoltar={() => setVista(null)} />}
         {/* 🔒 MODO DIÁRIO — a Hoje é a porta do DIÁRIO, não o plano do dia (que não existe).
@@ -1665,7 +1666,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <div style={{ ...kicker, color: '#BDFF00' }}>Seu movimento</div>
             <h2 style={{ fontSize: '1.8rem', margin: '8px 0 12px' }}>Cardio</h2>
             {!modoDiario && <>
-              <p style={{ color: 'rgba(234,229,219,.75)', lineHeight: 1.6 }}>Escolha os dias disponíveis e confira o cardio previsto no seu plano.</p>
+              <PlanejarCardio onRegistrar={dia => { setCardioPre(dia); setRegistrandoCardio(true); window.scrollTo(0, 0); }} />
+              <details><summary>Ver sugestão automática</summary>
                           <OfertaCardio
               value={diasOferecidosCardio}
               onChange={(proximaOferta) => {
@@ -1685,6 +1687,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                   <button type="button" onClick={() => { setCardioPre(dia); setRegistrandoCardio(true); window.scrollTo(0, 0); }} style={{ padding: '10px 16px', borderRadius: 10, background: '#BDFF00', color: '#0D2818', border: 'none', fontWeight: 700 }}>Registrar cardio</button>
                 </article>)}
               </div>
+              </details>
             </>}
             <CardioSemana {...propsCardio} />
           </section>
@@ -1698,6 +1701,14 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         {!vista && aba === 'dieta' && modoDiario && (
           <DietaDiario logs={registro.logs} notes={registro.notes} onStatus={registro.setStatus} onNote={registro.setNote} />
         )}
+        {!vista && aba === 'dieta' && !modoDiario && <details style={{ ...cardSoft, padding: 20, marginBottom: 20 }}>
+          <summary style={{ cursor: 'pointer', color: '#BDFF00', fontWeight: 700 }}>Montar minha dieta</summary>
+          <p>Escolha um prato para cada refeição. A biblioteca respeita suas alergias e seu padrão alimentar; as porções usam o ajuste existente. Estas escolhas valem enquanto esta página estiver aberta; não são salvas como uma dieta permanente.</p>
+          {cardItens.map((item, idx) => <details key={item.refeicao + idx} style={{ padding: '14px 0', borderBottom: '1px solid #ffffff20' }}>
+            <summary style={{ cursor: 'pointer' }}>{MEAL_LABEL[item.refeicao] ?? item.refeicao} · {item.prato.nome}</summary>
+            <BibliotecaPratos opcoes={() => gerarOpcoesPrato(idx, [], RECIPES_SEED.length)} onEscolher={o => { const atual = gerarOpcoesPrato(idx, [], RECIPES_SEED.length).find(x => x.prato.id === o.prato.id); if (atual) aplicarPrato(idx, atual); }} />
+          </details>)}
+        </details>}
         {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
           <Progresso resumo={resumoPeso} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
@@ -2592,4 +2603,20 @@ function RegistrarPesoRow({ onRegistrar, aviso }: {
 
 function Grafico({ pesos }: { pesos: number[] }) {
   return <GraficoLinha serie={pesos} gradId="evkChartPeso" />;
+}
+
+
+
+function BibliotecaPratos({ opcoes, onEscolher }: { opcoes: () => OpcaoPrato[]; onEscolher: (o: OpcaoPrato) => void }) {
+  const [busca, setBusca] = useState('');
+  const [lista, setLista] = useState<OpcaoPrato[] | null>(null);
+  const filtradas = lista?.filter(o => o.prato.nome.toLocaleLowerCase('pt').includes(busca.trim().toLocaleLowerCase('pt'))) ?? [];
+  const botaoBiblioteca = { padding: '10px 14px', borderRadius: 10, background: '#BDFF00', color: '#0D2818', border: 'none', fontWeight: 700 };
+  return <div style={{ padding: '16px 0' }}>
+    <button style={botaoBiblioteca} type="button" onClick={() => setLista(opcoes())}>Carregar biblioteca de pratos</button>
+    {lista && <><input aria-label="Buscar prato" placeholder="Buscar prato pelo nome" value={busca} onChange={e => setBusca(e.target.value)} style={{ display: 'block', padding: 12, margin: '14px 0', width: '100%', background: '#0D2818', color: '#EAE5DB', border: '1px solid #ffffff40', borderRadius: 10 }} />
+      <div style={{ maxHeight: 380, overflowY: 'auto', display: 'grid', gap: 12 }}>{filtradas.map(o => <article key={o.prato.id} style={{ padding: 16, border: '1px solid #ffffff30', borderRadius: 12 }}><strong>{o.prato.nome}</strong><p>~{Math.round(o.macros.kcal)} kcal</p><button type="button" style={botaoBiblioteca} onClick={() => { onEscolher(o); setLista(null); }}>Escolher este prato</button></article>)}</div>
+      {!filtradas.length && <p>{lista.length ? 'Nenhum prato encontrado para esta busca.' : 'Nenhuma alternativa disponível para esta refeição com suas restrições atuais.'}</p>}
+    </>}
+  </div>;
 }
