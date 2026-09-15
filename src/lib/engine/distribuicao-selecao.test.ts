@@ -24,10 +24,11 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
   expect(assinatura(r)).not.toEqual(assinatura(gerar(['seg','qua','sex'])));
   expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(false);
  });
- it('quatro dias com braços: sessão específica, sem abandonar superiores/pernas/ombros',()=>{
+ it('quatro dias com braços: bloco sem abandonar superiores/pernas/ombros',()=>{
   const r=gerar(['seg','ter','qui','sex'],'bracos');
   const especifica=r.dias.filter(d=>grupos(d).includes('biceps')&&grupos(d).includes('triceps')&&!grupos(d).includes('peito')&&!grupos(d).includes('costas')&&!pernas(d));
-  expect(especifica).toHaveLength(1);
+  expect(especifica).toHaveLength(0);
+  expect(r.blocoFoco?.grupos).toEqual(['biceps','triceps']);
   expect(r.dias.flatMap(grupos)).toEqual(expect.arrayContaining(['peito','costas','quadriceps','posterior','ombros']));
   expect(assinatura(r)).not.toEqual(assinatura(gerar(['seg','ter','qui','sex'])));
   expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(false);
@@ -39,8 +40,8 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
  });
  it('equipamento impede braços no terminal: um exercício isolado não satisfaz a sessão',()=>{
   const r=gerarTreino({...base,equipamento:'nenhum',treinoDias:['seg','ter','qui','sex'],diasDisponiveis:4,focoAgregado:{grupo:'bracos',semana:1}},{exercises:EXERCISES,semanaCiclo:{semana:1}}).rotina!;
-  expect(r.distribuicao).toMatchObject({recortesPlanejados:1,recortesEntregues:0,limitadaPeloCalendario:false,atendida:false});
-  expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(true);
+  expect(r.blocoFoco?.grupos).toEqual(['biceps','triceps']);
+  expect(r.avisos.some(a=>a.includes('completar o bloco adicional'))).toBe(true);
  });
  it('duas ênfases exigem sessões distintas; full-body único não vale por duas',()=>{
   expect(contarRecortesEntregues([['quadriceps'],['posterior']],[['quadriceps','posterior']])).toBe(1);

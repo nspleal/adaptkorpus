@@ -47,6 +47,7 @@ export interface OrcamentoDia {
   diaId: string;
   /** B do dia; `undefined`/`null` ⇒ ausente (destino inelegível; origem vira saldo). */
   orcamentoSegundos: number | undefined;
+  semLimite?: boolean;
 }
 
 export interface PrescricaoCardioSemana {
@@ -140,7 +141,7 @@ function projecaoCanonica(e: EntradaDistribuicaoSemana): unknown {
       .map((p) => ({ diaId: p.diaId, temMusculacao: p.temMusculacao, maxResistidaSegundos: p.maxResistidaSegundos })),
     orcamentos: [...e.orcamentoPorDia]
       .sort((a, b) => (a.diaId < b.diaId ? -1 : 1))
-      .map((o) => ({ diaId: o.diaId, orcamentoSegundos: o.orcamentoSegundos ?? null })),
+      .map((o) => ({ diaId: o.diaId, orcamentoSegundos: o.orcamentoSegundos ?? null, ...(o.semLimite ? { semLimite: true } : {}) })),
     prescricoes: [...e.prescricoesCardio]
       .sort((a, b) => (a.prescricaoId < b.prescricaoId ? -1 : 1))
       .map((p) => ({
@@ -270,7 +271,12 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
   const cardioProprioNoDia = new Map<string, number>();
 
   for (const [diaId, prescs] of prescricoesPorDia) {
-    const cap = capacidadeCardioDoDia({
+    // Sem limite explícito: atender somente a demanda finita prescrita deste dia.
+    // A soma é demanda, não orçamento artificial ou sentinela de duração.
+    const semLimite=e.orcamentoPorDia.some(o=>o.diaId===diaId&&o.semLimite);
+    const cap = semLimite && (!temMusculacao(diaId)||maxResistida(diaId)!=null)
+      ? {tipo:'CALCULAVEL' as const,segundos:prescs.reduce((n,p)=>n+(Number.isSafeInteger(p.duracaoPrescritaSegundos)&&p.duracaoPrescritaSegundos>0?p.duracaoPrescritaSegundos:0),0)}
+      : capacidadeCardioDoDia({
       temMusculacao: temMusculacao(diaId),
       orcamentoSegundos: orcPorDia.get(diaId),
       maxResistidaSegundos: maxResistida(diaId),
@@ -329,9 +335,11 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
       if (!destino.oferecido) continue; // só dia oferecido
       if (temMusculacao(destino.diaId)) continue; // destino não pode conter musculação
       const b = orcPorDia.get(destino.diaId);
-      if (b === undefined || !intSeguro(b) || !(b > 0)) continue; // capacidade desconhecida ⇒ pulado
+      const semLimite = e.orcamentoPorDia.some(o => o.diaId === destino.diaId && o.semLimite);
+      if (!semLimite && (b === undefined || !intSeguro(b) || !(b > 0))) continue;
       const jaNoDia = (cardioProprioNoDia.get(destino.diaId) ?? 0) + (recebidoNoDia.get(destino.diaId) ?? 0);
-      const residual = Math.max(b - jaNoDia, 0);
+      // No modo explícito, recebe somente o saldo finito, sem criar orçamento artificial.
+      const residual = semLimite ? st.saldo : Math.max(b! - jaNoDia, 0);
       if (residual <= 0) continue;
       const parcela = Math.min(st.saldo, residual);
       if (parcela <= 0) continue;

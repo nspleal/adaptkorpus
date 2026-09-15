@@ -24,6 +24,7 @@ export interface PreferenciasPerfil {
   treinoDias: PerfilResumo['treinoDias'];
   diasDisponiveis: PerfilResumo['diasDisponiveis'];
   tempoPorSessaoMin: PerfilResumo['tempoPorSessaoMin'];
+  limiteTempoTreino?: PerfilResumo['limiteTempoTreino'];
   naoCurto: PerfilResumo['naoCurto'];
   favoritos: PerfilResumo['favoritos'];
   pratosCansados: PerfilResumo['pratosCansados'];
@@ -107,6 +108,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       treinoDias: p.treinoDias,
       diasDisponiveis: p.diasDisponiveis,
       tempoPorSessaoMin: p.tempoPorSessaoMin,
+      ...(p.limiteTempoTreino != null ? { limiteTempoTreino: p.limiteTempoTreino } : {}),
       naoCurto: p.naoCurto,
       favoritos: p.favoritos,
       pratosCansados: p.pratosCansados,
@@ -180,6 +182,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     alergenos: row.alergenos,
     diasDisponiveis: pref.diasDisponiveis,
     tempoPorSessaoMin: pref.tempoPorSessaoMin,
+    ...(pref.limiteTempoTreino != null ? { limiteTempoTreino: pref.limiteTempoTreino } : {}),
     treinoDias: pref.treinoDias,
     naoCurto: pref.naoCurto,
     favoritos: pref.favoritos,

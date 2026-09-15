@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { montarRotina } from './treino-montador';
 import { prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
-import { classeDeDescanso } from './descanso';
+import { altaExigenciaDocumental, classeDeDescanso, PISO_DEGRADACAO } from './descanso';
 import { EXERCISES } from '../data/exercises';
 import type { PerfilTreino } from './treino-types';
 
@@ -44,8 +44,11 @@ function plano(s: number, over: Partial<PerfilTreino> = {}) {
   return r.dias.map((d) => ({
     nome: d.nome,
     slots: d.slots.map((sl) => ({
+      id: sl.exercicio.id,
       classe: classeDeDescanso(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
+      exigente: altaExigenciaDocumental(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       descansoSeg: sl.descansoSeg ?? null,
+      series: sl.series,
     })),
   }));
 }
@@ -71,7 +74,7 @@ describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', ()
     // Antes do conserto os dois conjuntos eram [120, 180] — byte-idênticos.
     expect(s1, `semana 1 e semana 5 emitem o mesmo conjunto: ${s1.join(',')}`).not.toEqual(s5);
     // E a direção é a da spec: longe da falha (RIR 3) → piso; perto (RIR 1) → topo.
-    expect(Math.max(...s1)).toBeLessThan(Math.max(...s5));
+    expect(Math.min(...s1)).toBeLessThan(Math.min(...s5));
   });
 
   it('as 6 semanas, juntas, usam mais de 2 valores — o "sempre o mesmo" morre', () => {
@@ -89,8 +92,8 @@ describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', ()
         isolado: [...new Set(slots.filter((x) => x.classe === 'ISOLADO').map((x) => x.descansoSeg))],
       };
     };
-    expect(porSemana(1)).toEqual({ composto: [120], isolado: [60] });   // RIR 3 → piso
-    expect(porSemana(3)).toEqual({ composto: [150], isolado: [90] });   // RIR 2 → meio
+    expect(porSemana(1)).toEqual({ composto: [120,180], isolado: [60] });   // RIR 3 → piso
+    expect(porSemana(3)).toEqual({ composto: [150,180], isolado: [90] });   // RIR 2 → meio
     expect(porSemana(5)).toEqual({ composto: [180], isolado: [120] });  // RIR 1 → topo
   });
 });
@@ -120,18 +123,31 @@ describe('🔒 aceite 1 — classes diferentes na MESMA sessão recebem descanso
 
 describe('🔒 aceite 5 — o orçamento cede descanso, nunca exercício', () => {
   /**
-   * ⚠️ A 1ª escrita comparava 30 min × 90 min e exigia o MESMO número de exercícios — e isso
-   * a spec nunca prometeu: meia hora comporta menos trabalho que uma hora e meia, e a
-   * medição confirma (12 × 14). A regra é outra: *nunca se corta exercício para caber
-   * descanso*. Ela só se testa **dentro do mesmo orçamento**, comparando semanas em que a
-   * exigência de descanso cresce.
+   * SER-4 preserva exercícios cedendo séries, portanto queda no número de exercícios
+   * entre semanas não é mais a testemunha necessária da redução temporal. Neste perfil
+   * intermediário, uma série abaixo de três testemunha a etapa E3 ou posterior.
+   * Cobra-se que os compostos já estejam no piso quando isso ocorre, com casos dos dois
+   * lados. Os orçamentos originais permanecem e acrescentamos 5/10/20 min.
+   * O nome histórico fica preservado por ser chave da classificação do Vitest.
    */
-  it('🔑 no MESMO orçamento, a cobertura não cede quando o descanso cresce', () => {
-    for (const tempoPorSessaoMin of [30, 45, 60, 90]) {
-      const contagem = [1, 3, 5].map((s) => plano(s, { tempoPorSessaoMin }).flatMap((d) => d.slots).length);
-      // Semana 5 exige o topo das faixas; se algum exercício sumisse para caber, a contagem cairia.
-      expect(new Set(contagem).size, `${tempoPorSessaoMin} min: contagens ${contagem.join('/')} nas semanas 1/3/5`).toBe(1);
+  it('🔑 no MESMO orçamento, exercício só cede DEPOIS que todo o descanso cedeu', () => {
+    let comReducao = 0; let semReducao = 0;
+    for (const tempoPorSessaoMin of [5, 10, 20, 30, 45, 60, 90]) {
+      const semanas = [1, 3, 5].map((s) => plano(s, { tempoPorSessaoMin }));
+      const cedeuSeries = (dias: ReturnType<typeof plano>) =>
+        dias.some(d => d.slots.some(s => (s.series ?? 4) < 3));
+      if (!semanas.some(cedeuSeries)) { semReducao += 1; continue; }
+      comReducao += 1;
+      for (const dias of semanas) {
+        if (!cedeuSeries(dias)) continue;
+        const compostos = dias.flatMap((d) => d.slots).filter((s) => s.classe === 'COMPOSTO');
+        const acimaDoPiso = compostos.filter((s) => (s.descansoSeg ?? 0) > (s.exigente ? 120 : PISO_DEGRADACAO.COMPOSTO));
+        expect(acimaDoPiso.map((s) => `${s.id}@${s.descansoSeg}`),
+          `${tempoPorSessaoMin} min: séries cederam com descanso ainda acima do piso`).toEqual([]);
+      }
     }
+    expect(comReducao, 'nenhum orçamento cedeu séries: a implicação não foi exercida').toBeGreaterThan(0);
+    expect(semReducao, 'todos os orçamentos cederam séries: o contraste sumiu').toBeGreaterThan(0);
   });
 
   it('quando o tempo aperta, quem cede é o DESCANSO — até os pisos de degradação', () => {

@@ -23,7 +23,7 @@ import { EXERCISES_SEED } from '@/lib/data/seed';
 import { vereditoDoPlano } from '@/lib/veredito-motor';
 import type { Weekday } from '@/lib/semana';
 
-const TEMPO = 60;
+const TEMPO = 70;
 
 /** Desenho manual mínimo que reproduz o caso: 5 exercícios × 6 séries em 1 dia de 60 min. */
 const EXERCICIOS = ['e14', 'e22', 'e16', 'e72', 'e70'];

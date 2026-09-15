@@ -196,10 +196,17 @@ export interface ArgsDescanso {
  * O orçamento de tempo NÃO entra aqui — ele degrada por classe no montador, que é quem
  * conhece a sessão inteira.
  */
+/** Critério operacional do autor14/09: composto com equipamento de carga.
+ * Não mede peso real; os demais mantêm suas regras, não são declarados leves. */
+export function altaExigenciaDocumental(ex: Exercise): boolean {
+  return classeDeDescanso(ex) === 'COMPOSTO' && temCarga(ex);
+}
+
 export function descansoDoExercicio(args: ArgsDescanso): number | null {
   const faixa = faixaDoExercicio(args.exercicio, args.modoForca === true);
   if (!faixa) return null;
-  const base = deslocarPorRir(faixa, args.rirAlvo);
+  const exigente = altaExigenciaDocumental(args.exercicio);
+  const base = Math.max(deslocarPorRir(faixa, args.rirAlvo), exigente ? 180 : 0);
   const naRampa = args.semanaRampa != null && args.semanaRampa > 0;
   const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
   // 🔒 Na rampa NÃO se degrada: o piso do FIT é inviolável e quem cede é o nº de itens.
@@ -207,7 +214,7 @@ export function descansoDoExercicio(args: ArgsDescanso): number | null {
   const final = naRampa || classe === 'NAO_SE_APLICA'
     ? comPiso
     : degradar(comPiso, classe, args.degradacao ?? 0, args.modoForca === true && temCarga(args.exercicio));
-  return Math.max(DESCANSO_PISO_DURO_SEG, final);
+  return Math.max(DESCANSO_PISO_DURO_SEG, exigente ? 120 : 0, final);
 }
 
 /** Rótulo humano em passos legíveis: "2 min", "2 min 30", "1 min 30", "45 s". */
@@ -224,33 +231,22 @@ export function ehIsometrico(ex: Exercise): boolean {
 }
 
 /**
- * Descanso estimado a partir do PADRÃO DE MOVIMENTO, para a fase de orçamento do montador —
- * quando os exercícios ainda não foram escolhidos e só se conhece o padrão do slot.
+ * 🔵 P-05 (decisão do autor 2026-09-16) — `descansoDoPadrao` FOI REMOVIDA.
  *
- * ⚠️ É estimativa de PLANEJAMENTO, não o valor exibido. O definitivo sai de
- * `descansoDoExercicio` depois da escolha, que é quem enxerga `tipo: 'pliometrico'` e o
- * override de força pesada (ambos dependem do exercício, não do padrão).
+ * Ela estimava o descanso a partir do PADRÃO DE MOVIMENTO, para a fase de orçamento do
+ * montador. Duas coisas a condenaram, nesta ordem:
  *
- * `degradacao` implementa a regra 3 (cobertura > descanso longo), na ordem travada:
- *   0 = faixa cheia · 1 = ISOLADO cede até 60 s · 2 = COMPOSTO também cede, até 90 s.
- * Na rampa o chamador NÃO degrada: o piso do FIT é inviolável e quem cede é o nº de itens.
+ * 1. **Não tinha consumidor de produção.** A revisão independente 14/09 (P-05) varreu `src`
+ *    e achou só o próprio teste; o montador usa `descansoDoExercicio` desde o conserto
+ *    1.3/1.4. Era autoridade concorrente parada, disponível para quem reusasse.
+ * 2. **Ela não conseguia aplicar a exigência documental.** O critério do autor é «composto
+ *    COM carga» (`altaExigenciaDocumental`) — carga é campo do EXERCÍCIO. Quem só vê o
+ *    padrão não pode decidir os 180 s preferenciais nem o mínimo de 120 s, e devolveria 90 s
+ *    onde a política manda 120. Determinar exigência documental pelo padrão, faltando o
+ *    dado do exercício, é o que o autor proibiu.
+ *
+ * 🔒 A autoridade única passa a ser `descansoDoExercicio`. Os pisos e exceções aprovados
+ * ficam onde sempre estiveram e continuam exportados: `degradar`, `PISO_DEGRADACAO`,
+ * `PISO_DEGRADACAO_FORCA_PESADA`, `pisoFitDaRampa` e `DESCANSO_PISO_DURO_SEG`.
+ * Um teste de regressão varre `src/` e falha se o caminho obsoleto voltar.
  */
-export function descansoDoPadrao(
-  padrao: string,
-  args: { rirAlvo: number; modoForca?: boolean; semanaRampa?: number | null; degradacao?: 0 | 1 | 2 },
-): number {
-  const isolado = PADROES_ISOLADO.has(padrao);
-  const classe: Exclude<ClasseDescanso, 'NAO_SE_APLICA'> = isolado ? 'ISOLADO' : 'COMPOSTO';
-  // Força pesada é modal e depende de carga — no planejamento assume-se o caso com carga,
-  // que é o mais custoso: subestimar o tempo é o erro que faz a sessão não fechar.
-  const faixa = args.modoForca === true && classe === 'COMPOSTO' ? FAIXA_FORCA_PESADA : FAIXA_DESCANSO[classe];
-  const base = deslocarPorRir(faixa, args.rirAlvo);
-  const naRampa = args.semanaRampa != null && args.semanaRampa > 0;
-  const comPiso = naRampa ? Math.max(pisoFitDaRampa(args.semanaRampa!), base) : base;
-  if (naRampa) return Math.max(DESCANSO_PISO_DURO_SEG, comPiso); // piso do FIT inviolável
-
-  // 🔒 O MESMO `degradar` do valor exibido: se o orçamento e a tela usassem pisos
-  // diferentes, o `min(exato, teto)` do montador reintroduziria o corte que 1.3 removeu.
-  const deg = degradar(comPiso, classe, args.degradacao ?? 0, args.modoForca === true);
-  return Math.max(DESCANSO_PISO_DURO_SEG, deg);
-}

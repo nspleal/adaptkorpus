@@ -33,13 +33,20 @@ export const preferenciasTreinoSchema = z.object({
 
 export const focoSchema = z.object({
   grupo: grupoPrimario,
-  compensa: grupoPrimario,
+  compensa: grupoPrimario.optional(),
   semana: z.number().int().min(1),
 });
 
 export const focoAgregadoSchema = z.object({ grupo: z.enum(['bracos', 'pernas']), semana: z.number().int().min(1) });
 
 export const divisaoPreferidaSchema = z.enum(['auto', 'superior-inferior', 'prioridades']);
+
+/** Metadado versionado; inválido é descartado sem apagar desenho/intenção legados. */
+const referenciaDoseSchema = z.object({
+  versao: z.literal(1), contexto: z.string().max(120),
+  series: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
+  escolhas: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
+}).optional().catch(undefined);
 
 export const rotinaCustomSchema = z.object({
   origem: z.literal('usuario'),
@@ -48,6 +55,7 @@ export const rotinaCustomSchema = z.object({
     /** Ausente só em rotinas legadas; novas gravações carregam o dia real. */
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
+    referenciaDose: referenciaDoseSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)).optional(),
   })).max(7),
 }).superRefine((rotina, ctx) => {
@@ -77,6 +85,7 @@ export const rotinaCustomHidratacaoSchema = z.object({
     nome: z.string().max(60),
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
+    referenciaDose: referenciaDoseSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number()).optional(),
   })).max(7),
 });
@@ -156,6 +165,7 @@ export const perfilResumoSchema = z.object({
   alergenos: z.array(z.string()).default([]),
   diasDisponiveis: z.number().int().min(1).max(7),
   tempoPorSessaoMin: z.number().int().min(10).max(240),
+  limiteTempoTreino: z.enum(['limitado', 'sem_limite']).optional(),
   treinoDias: z.array(z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'])).min(1),
   naoCurto: z.array(z.string()).default([]),
   favoritos: z.array(z.string()).optional(),
@@ -308,6 +318,7 @@ const LISTAS_RECUPERAVEIS = {
 
 /** Opcionais: presente e ilegível ⇒ some (a ausência já é um estado que o motor trata). */
 const OPCIONAIS_DESCARTAVEIS = {
+  limiteTempoTreino: perfilResumoSchema.shape.limiteTempoTreino,
   orcamento: perfilResumoSchema.shape.orcamento,
   cardioFavorito: perfilResumoSchema.shape.cardioFavorito,
   tecnicasAvancadas: perfilResumoSchema.shape.tecnicasAvancadas,

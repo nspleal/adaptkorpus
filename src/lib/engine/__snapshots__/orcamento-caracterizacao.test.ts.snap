@@ -1,379 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/emagrecimento, 12 min — objetivo muda o restMid no divisor 1`] = `
-{
-  "objetivo": "emagrecimento",
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 10 min — faixa em que o cap LIMITA 1`] = `
-{
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-  "tempo": 10,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 12 min — objetivo muda o restMid no divisor 1`] = `
-{
-  "objetivo": "massa",
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 15 min — faixa em que o cap LIMITA 1`] = `
-{
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-  "tempo": 15,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 20 min — faixa em que o cap LIMITA 1`] = `
-{
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-  "tempo": 20,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/massa, 25 min — faixa em que o cap LIMITA 1`] = `
-{
-  "slots": [
-    4,
-    4,
-    4,
-  ],
-  "tempo": 25,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > iniciante/saude, 12 min — objetivo muda o restMid no divisor 1`] = `
-{
-  "objetivo": "saude",
-  "slots": [
-    3,
-    3,
-    3,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
-{
-  "slots": [
-    2,
-    2,
-    2,
-    2,
-  ],
-  "tempo": 10,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 15 min — cap limitando com sPlan saturado 1`] = `
-{
-  "slots": [
-    2,
-    2,
-    2,
-    2,
-  ],
-  "tempo": 15,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 20 min — cap limitando com sPlan saturado 1`] = `
-{
-  "slots": [
-    3,
-    3,
-    3,
-    3,
-  ],
-  "tempo": 20,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 25 min — cap limitando com sPlan saturado 1`] = `
-{
-  "slots": [
-    3,
-    3,
-    3,
-    3,
-  ],
-  "tempo": 25,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > intermediário/massa, 30 min — cap limitando com sPlan saturado 1`] = `
-{
-  "slots": [
-    4,
-    4,
-    4,
-    4,
-  ],
-  "tempo": 30,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 30 min por sessão 1`] = `
-{
-  "slots": [
-    4,
-    4,
-    4,
-    4,
-  ],
-  "tempo": 30,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 45 min por sessão 1`] = `
-{
-  "slots": [
-    5,
-    5,
-    5,
-    5,
-  ],
-  "tempo": 45,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 60 min por sessão 1`] = `
-{
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-  "tempo": 60,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 75 min por sessão 1`] = `
-{
-  "slots": [
-    7,
-    6,
-    7,
-    7,
-  ],
-  "tempo": 75,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > massa/intermediário, 90 min por sessão 1`] = `
-{
-  "slots": [
-    7,
-    6,
-    7,
-    7,
-  ],
-  "tempo": 90,
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força em sessão curta — o piso de 180 s da força pesada custa exercício 1`] = `
-[
-  2,
-  2,
-  2,
-  2,
-]
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > modo força ligado (composto a 6RM) — o caminho do teto de 180 s 1`] = `
-[
-  6,
-  6,
-  6,
-  6,
-]
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > nível avancado, 60 min 1`] = `
-{
-  "nivel": "avancado",
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > nível iniciante, 60 min 1`] = `
-{
-  "nivel": "iniciante",
-  "slots": [
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > nível intermediario, 60 min 1`] = `
-{
-  "nivel": "intermediario",
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > objetivo emagrecimento, 60 min 1`] = `
-{
-  "objetivo": "emagrecimento",
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > objetivo massa, 60 min 1`] = `
-{
-  "objetivo": "massa",
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > objetivo saude, 60 min 1`] = `
-{
-  "objetivo": "saude",
-  "slots": [
-    6,
-    5,
-    6,
-    5,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > semana 1 do mesociclo 1`] = `
-{
-  "semana": 1,
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > semana 3 do mesociclo 1`] = `
-{
-  "semana": 3,
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > semana 5 do mesociclo 1`] = `
-{
-  "semana": 5,
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > semana 6 do mesociclo 1`] = `
-{
-  "semana": 6,
-  "slots": [
-    6,
-    6,
-    6,
-    6,
-  ],
-}
-`;
-
-exports[`📸 caracterização — nº de exercícios por dia, com o estimador ATUAL > sessão de 30 min, avançado (o caso mais apertado) 1`] = `
-[
-  4,
-  4,
-  4,
-  4,
-  4,
-]
-`;
-
-exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo da semana — objetivo emagrecimento 1`] = `
-{
-  "descanso": {
-    "max": 90,
-    "min": 60,
-  },
-  "objetivo": "emagrecimento",
-}
-`;
-
-exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo da semana — objetivo massa 1`] = `
-{
-  "descanso": {
-    "max": 180,
-    "min": 90,
-  },
-  "objetivo": "massa",
-}
-`;
-
-exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo da semana — objetivo saude 1`] = `
-{
-  "descanso": {
-    "max": 90,
-    "min": 60,
-  },
-  "objetivo": "saude",
-}
-`;
-
 exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo — massa, 30 min (o teto de 180 s depende do tempo) 1`] = `
 {
   "descanso": {
@@ -397,24 +23,84 @@ exports[`📸 caracterização — orçamento temporal atual e composição da s
 exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo — massa, 90 min (o teto de 180 s depende do tempo) 1`] = `
 {
   "descanso": {
-    "max": 180,
+    "max": 120,
     "min": 90,
   },
   "tempo": 90,
 }
 `;
 
-exports[`📸 caracterização — orçamento temporal atual e composição da sessão > descanso efetivo — modo força liga o teto de 180 s em faixa baixa 1`] = `
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo da semana — objetivo emagrecimento 1`] = `
 {
-  "max": 180,
-  "min": 60,
+  "descanso": {
+    "max": 180,
+    "min": 120,
+  },
+  "objetivo": "emagrecimento",
 }
 `;
 
-exports[`📸 caracterização — orçamento temporal atual e composição da sessão > o cap inicial não depende de quais exercícios caíram na sessão 1`] = `
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo da semana — objetivo massa 1`] = `
+{
+  "descanso": {
+    "max": 180,
+    "min": 120,
+  },
+  "objetivo": "massa",
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo da semana — objetivo saude 1`] = `
+{
+  "descanso": {
+    "max": 180,
+    "min": 120,
+  },
+  "objetivo": "saude",
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo — massa, 30 min (o teto de 180 s depende do tempo) 1`] = `
+{
+  "descanso": {
+    "max": 120,
+    "min": 90,
+  },
+  "tempo": 30,
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo — massa, 60 min (o teto de 180 s depende do tempo) 1`] = `
+{
+  "descanso": {
+    "max": 180,
+    "min": 90,
+  },
+  "tempo": 60,
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo — massa, 90 min (o teto de 180 s depende do tempo) 1`] = `
+{
+  "descanso": {
+    "max": 180,
+    "min": 120,
+  },
+  "tempo": 90,
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > descanso efetivo — modo força liga o teto de 180 s em faixa baixa 1`] = `
+{
+  "max": 180,
+  "min": 120,
+}
+`;
+
+exports[`📸 etapa3 — composição seletor atual > o cap inicial não depende de quais exercícios caíram na sessão 1`] = `
 [
   {
-    "compostos": 2,
+    "compostos": 0,
     "slots": 5,
   },
   {
@@ -426,8 +112,353 @@ exports[`📸 caracterização — orçamento temporal atual e composição da s
     "slots": 5,
   },
   {
-    "compostos": 4,
+    "compostos": 5,
     "slots": 5,
   },
 ]
 `;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/emagrecimento, 12 min — objetivo muda o restMid no divisor 1`] = `
+{
+  "objetivo": "emagrecimento",
+  "slots": [
+    3,
+    2,
+    3,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 10 min — faixa em que o cap LIMITA 1`] = `
+{
+  "slots": [
+    3,
+    2,
+    3,
+  ],
+  "tempo": 10,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 12 min — objetivo muda o restMid no divisor 1`] = `
+{
+  "objetivo": "massa",
+  "slots": [
+    3,
+    2,
+    3,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 15 min — faixa em que o cap LIMITA 1`] = `
+{
+  "slots": [
+    3,
+    3,
+    3,
+  ],
+  "tempo": 15,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 20 min — faixa em que o cap LIMITA 1`] = `
+{
+  "slots": [
+    3,
+    3,
+    3,
+  ],
+  "tempo": 20,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 25 min — faixa em que o cap LIMITA 1`] = `
+{
+  "slots": [
+    4,
+    4,
+    4,
+  ],
+  "tempo": 25,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/saude, 12 min — objetivo muda o restMid no divisor 1`] = `
+{
+  "objetivo": "saude",
+  "slots": [
+    3,
+    2,
+    3,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
+{
+  "slots": [
+    3,
+    3,
+    2,
+    2,
+  ],
+  "tempo": 10,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 15 min — cap limitando com sPlan saturado 1`] = `
+{
+  "slots": [
+    3,
+    3,
+    3,
+    3,
+  ],
+  "tempo": 15,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 20 min — cap limitando com sPlan saturado 1`] = `
+{
+  "slots": [
+    3,
+    3,
+    3,
+    3,
+  ],
+  "tempo": 20,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 25 min — cap limitando com sPlan saturado 1`] = `
+{
+  "slots": [
+    4,
+    4,
+    4,
+    4,
+  ],
+  "tempo": 25,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 30 min — cap limitando com sPlan saturado 1`] = `
+{
+  "slots": [
+    4,
+    4,
+    4,
+    4,
+  ],
+  "tempo": 30,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 30 min por sessão 1`] = `
+{
+  "slots": [
+    4,
+    4,
+    4,
+    4,
+  ],
+  "tempo": 30,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 45 min por sessão 1`] = `
+{
+  "slots": [
+    5,
+    5,
+    5,
+    5,
+  ],
+  "tempo": 45,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 60 min por sessão 1`] = `
+{
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+  "tempo": 60,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 75 min por sessão 1`] = `
+{
+  "slots": [
+    6,
+    7,
+    6,
+    5,
+  ],
+  "tempo": 75,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 90 min por sessão 1`] = `
+{
+  "slots": [
+    6,
+    7,
+    6,
+    5,
+  ],
+  "tempo": 90,
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > modo força em sessão curta — o piso de 180 s da força pesada custa exercício 1`] = `
+[
+  3,
+  3,
+  3,
+  3,
+]
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > modo força ligado (composto a 6RM) — o caminho do teto de 180 s 1`] = `
+[
+  5,
+  6,
+  5,
+  4,
+]
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > nível avancado, 60 min 1`] = `
+{
+  "nivel": "avancado",
+  "slots": [
+    6,
+    6,
+    6,
+    6,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > nível iniciante, 60 min 1`] = `
+{
+  "nivel": "iniciante",
+  "slots": [
+    6,
+    6,
+    6,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > nível intermediario, 60 min 1`] = `
+{
+  "nivel": "intermediario",
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo emagrecimento, 60 min 1`] = `
+{
+  "objetivo": "emagrecimento",
+  "slots": [
+    5,
+    6,
+    5,
+    4,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo massa, 60 min 1`] = `
+{
+  "objetivo": "massa",
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo saude, 60 min 1`] = `
+{
+  "objetivo": "saude",
+  "slots": [
+    5,
+    6,
+    5,
+    4,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 1 do mesociclo 1`] = `
+{
+  "semana": 1,
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 3 do mesociclo 1`] = `
+{
+  "semana": 3,
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 5 do mesociclo 1`] = `
+{
+  "semana": 5,
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 6 do mesociclo 1`] = `
+{
+  "semana": 6,
+  "slots": [
+    6,
+    6,
+    6,
+    5,
+  ],
+}
+`;
+
+exports[`📸 etapa3 — nº de exercícios, seletor atual > sessão de 30 min, avançado (o caso mais apertado) 1`] = `
+[
+  4,
+  4,
+  4,
+  4,
+  3,
+]
+`;
+

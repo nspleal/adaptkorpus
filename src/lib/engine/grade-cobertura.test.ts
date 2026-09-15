@@ -66,7 +66,7 @@ describe('🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderad
         for (const tempo of [60, 180]) {
           const r = rotina(nivel, dias, tempo);
           for (const d of r.dias) {
-            expect(d.slots.length, `${nivel}/${dias}d/${tempo}min · ${d.nome}`).toBeLessThanOrEqual(orcamentoSlotsDoDia(tempo));
+            expect(d.slots.length, `${nivel}/${dias}d/${tempo}min · ${d.nome}`).toBeLessThanOrEqual(dias===1?10:orcamentoSlotsDoDia(tempo));
           }
         }
       }

@@ -119,6 +119,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   const diasIniciais = inicial.treinoDias?.length ? inicial.treinoDias : diasPadrao(inicial.diasDisponiveis);
   const [treinoDias, setTreinoDias] = useState<Weekday[]>(diasIniciais);
   const [tempo, setTempo] = useState(inicial.tempoPorSessaoMin);
+  const [limiteTempoTreino, setLimiteTempoTreino] = useState(inicial.limiteTempoTreino);
+  const escolherTempo = (t: number) => { setTempo(t); setLimiteTempoTreino(t === 75 ? 'sem_limite' : 'limitado'); };
   const [padrao, setPadrao] = useState<'' | 'vegetariano' | 'vegano'>(inicial.preferencia ?? '');
   const [alergias, setAlergias] = useState<Alergeno[]>(inicial.alergenos);
   const [naoCurto, setNaoCurto] = useState<string[]>(inicial.naoCurto ?? []);
@@ -161,11 +163,11 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
   // monta a rotina determinística com os campos atuais e avalia cada favorito (B5).
   const rotinaAtual = useMemo(() => {
     const r = gerarTreino(
-      { pesoKg: +peso || inicial.pesoKg, alturaCm: +altura || inicial.alturaCm, idade: +idade || inicial.idade, flagsSaude: inicial.flagsSaude, objetivo, nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo },
+      { pesoKg: +peso || inicial.pesoKg, alturaCm: +altura || inicial.alturaCm, idade: +idade || inicial.idade, flagsSaude: inicial.flagsSaude, objetivo, nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [], diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, limiteTempoTreino },
       { exercises: EXERCISES_SEED, favoritos: new Set(favoritos) },
     );
     return r.rotina;
-  }, [peso, altura, idade, objetivo, experiencia, local, equipsCasa, treinoDias, tempo, favoritos, inicial]);
+  }, [peso, altura, idade, objetivo, experiencia, local, equipsCasa, treinoDias, tempo, limiteTempoTreino, favoritos, inicial]);
   const historicoRef = useMemo(() => lerHistorico(), []);
 
   const i = +idade, a = +altura, pz = +peso;
@@ -185,15 +187,15 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       ...inicial,
       sexo, idade: i, alturaCm: a, pesoKg: pz, objetivo, nivelAtividade: atividade,
       nivelExperiencia: experiencia, equipamento: local, equipamentosCasa: local === 'casa' ? equipsCasa : [],
-      diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo,
+      diasDisponiveis: treinoDias.length, tempoPorSessaoMin: tempo, limiteTempoTreino,
       preferencia: padrao || null, alergenos: alergias, treinoDias, naoCurto, favoritos, orcamento,
       // 🎛️ v3 · Bloco A: as trocas ficam intactas; só a lista de banidos é editável aqui.
       preferencias: { trocas: inicial.preferencias?.trocas ?? [], banidos },
-      // Só vira foco quando o par está completo — meio foco não é foco.
+      // Core conserva o par legado; os demais focos automáticos não exigem compensador.
       focoAgregado: focoGrupo === 'bracos' || focoGrupo === 'pernas'
         ? { grupo: focoGrupo, semana: inicial.focoAgregado?.grupo === focoGrupo ? inicial.focoAgregado.semana : 1 } : undefined,
-      foco: focoGrupo && focoCompensa && !['bracos', 'pernas'].includes(focoGrupo)
-        ? { grupo: focoGrupo as never, compensa: focoCompensa as never, semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
+      foco: focoGrupo && (focoGrupo !== 'core' || focoCompensa) && !['bracos', 'pernas'].includes(focoGrupo)
+        ? { grupo: focoGrupo as never, ...(focoCompensa ? {compensa: focoCompensa as never} : {}), semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
         : undefined,
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
@@ -297,7 +299,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
 
           <div>
             <div style={cap}>Tempo por sessão</div>
-            <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <div key={t} onClick={() => setTempo(t)} style={{ ...seg, ...(tempo === t ? segOn : {}) }}>{t === 75 ? '75+' : t}</div>)}</div>
+            <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <button type="button" aria-pressed={t === 75 ? limiteTempoTreino === 'sem_limite' : tempo === t && limiteTempoTreino !== 'sem_limite'} key={t} onClick={() => escolherTempo(t)} style={{ ...seg, ...((t === 75 ? limiteTempoTreino === 'sem_limite' : tempo === t && limiteTempoTreino !== 'sem_limite') ? segOn : {}) }}>{t === 75 ? '75+' : t}</button>)}</div>
+            {limiteTempoTreino !== 'sem_limite' && tempo >= 75 && <p>Tempo atual: {tempo} min, limitado. Selecione 75+ para confirmar sem limite de tempo.</p>}
           </div>
 
           <div>

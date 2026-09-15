@@ -47,7 +47,7 @@ function rotinaComCiclo(over: Partial<PerfilTreino> = {}, semana = 1) {
 /** Nº de slots por dia — a saída observável do `maxExercicios` que `sPlan` produz. */
 const slotsPorDia = (r: ReturnType<typeof rotinaComCiclo>): number[] => r.dias.map((d) => d.slots.length);
 
-describe('📸 caracterização — nº de exercícios por dia, com o estimador ATUAL', () => {
+describe(`📸 etapa3 — nº de exercícios, seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
   /**
    * O eixo que mais mexe no `cap()`: o tempo por sessão entra no numerador direto.
    * Objetivo `massa` = descanso composto 90–120 (média 105) → o divisor é `sPlan × 145`.
@@ -139,7 +139,7 @@ describe('📸 caracterização — nº de exercícios por dia, com o estimador 
   });
 });
 
-describe('📸 caracterização — orçamento temporal atual e composição da sessão', () => {
+describe(`📸 etapa3 — composição seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
   /**
    * 🔑 A contagem INICIAL de slots ainda depende de tempo e volume, antes de existir
    * uma lista concreta de exercícios. Depois da alocação, o orçamento temporal avalia
@@ -166,23 +166,40 @@ describe('📸 caracterização — orçamento temporal atual e composição da 
   });
 
   /**
-   * 🔑 `descansoEfetivo` — o escalar da semana, hoje LEGADO. Caracterizado por objetivo
-   * porque é ele que decide o `elegivel180`: massa (90–120) e modo força entram no teto de
-   * 180 s; saúde e emagrecimento (60–90) não. Sem esta fotografia, forçar
-   * `elegivel180 = true` não aparecia na contagem de slots, só no valor do descanso.
+   * 🔑 `descansoCompostoSeg` — o escalar da semana.
+   *
+   * 🔵 REANCORADO pela decisão do autor de 2026-09-16 (P-04). Ele era a FAIXA DA PRESCRIÇÃO
+   * (massa 90–120 · saúde e emagrecimento 60–90) com o teto de 180 s do `elegivel180`, e
+   * portanto podia discordar dos exercícios: no caminho automático a etapa 3 deixou de
+   * aplicar o teto e o campo passou a fotografar uma faixa que nenhum slot tinha. Agora ele
+   * é o min/max dos descansos EFETIVAMENTE prescritos aos compostos do plano.
+   *
+   * 🔒 A fotografia continua sendo fotografia — mas com uma identidade cobrada ANTES dela,
+   * para que o snapshot não possa legitimar qualquer número que venha a sair.
    */
+  const faixaObservada = (r: ReturnType<typeof rotinaComCiclo>) => {
+    const valores = r.dias.flatMap((d) => d.slots)
+      .filter((s) => s.descansoSeg != null && classeDeDescanso(s.exercicio) !== 'ISOLADO' && classeDeDescanso(s.exercicio) !== 'NAO_SE_APLICA')
+      .map((s) => s.descansoSeg!);
+    expect(valores.length, 'nenhum composto no plano: a identidade seria vácua').toBeGreaterThan(0);
+    return { min: Math.min(...valores), max: Math.max(...valores) };
+  };
+
   it.each(['massa', 'emagrecimento', 'saude'] as const)('descanso efetivo da semana — objetivo %s', (objetivo) => {
     const r = rotinaComCiclo({ objetivo, tempoPorSessaoMin: 90 });
+    expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
     expect({ objetivo, descanso: r.semana?.descansoCompostoSeg }).toMatchSnapshot();
   });
 
   it.each([30, 60, 90])('descanso efetivo — massa, %i min (o teto de 180 s depende do tempo)', (tempoPorSessaoMin) => {
     const r = rotinaComCiclo({ tempoPorSessaoMin });
+    expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
     expect({ tempo: tempoPorSessaoMin, descanso: r.semana?.descansoCompostoSeg }).toMatchSnapshot();
   });
 
   it('descanso efetivo — modo força liga o teto de 180 s em faixa baixa', () => {
     const r = rotinaComCiclo({ objetivo: 'emagrecimento', modoForca: true, tempoPorSessaoMin: 90 });
+    expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
     expect(r.semana?.descansoCompostoSeg).toMatchSnapshot();
   });
 
@@ -300,7 +317,7 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
     // — acessório a 60 s, composto INTACTO no topo (180 s). A ordem invertida rebaixaria o
     // composto a 90 aqui. Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela
     // faixa: na semana 1 (RIR 3) ele JÁ é 60 s e degradar fica indistinguível.
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 90, nivelExperiencia: 'intermediario' }, 5);
+    const r = rotinaComCiclo({ tempoPorSessaoMin: 60, nivelExperiencia: 'intermediario' }, 5);
     const diaDegradado = r.dias.find((d) =>
       d.slots.some((x) => (x.padrao === 'isolado' || x.padrao === 'core') && x.descansoSeg === 60));
     expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();

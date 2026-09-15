@@ -38,7 +38,35 @@ const plano = (p: PerfilTreino, semana: number) =>
 
 const conta = (r: ReturnType<typeof plano>, padrao: string) =>
   r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === padrao).length, 0);
-const equilibrada = (r: ReturnType<typeof plano>) => conta(r, 'puxar') >= conta(r, 'empurrar');
+
+/**
+ * 🔴 REANCORAGEM 15/09, POR DECISÃO EXPRESSA DA COORDENAÇÃO (revisão independente, D-03).
+ *
+ * O texto recebido: «O balanceamento é referência para o plano SEM foco. O foco pode gerar
+ * desequilíbrio decorrente dos extras autorizados. Não bloqueie um extra apenas para manter
+ * igualdade puxar/empurrar e não acrescente compensação de outro grupo.»
+ *
+ * O que mudou e o que NÃO mudou:
+ *  · C6 continua valendo integralmente para o BASELINE — nenhum plano pode nascer, nem ficar,
+ *    com `empurrar > puxar` entre os exercícios que não são do bloco adicional;
+ *  · deixou de ser proibido o desequilíbrio que vem SÓ dos extras do foco. Ele era recusado
+ *    por uma guarda assimétrica (só olhava `empurrar`, e `>=` já bloqueava semana equilibrada)
+ *    que negava o foco de peito/tríceps/ombros e nunca o de costas/bíceps — medido: dos 200
+ *    planos com "não foi possível completar o bloco", 72 eram peito e 64 tríceps, zero puxar.
+ *
+ * Não é abandono do invariante: a grade abaixo mede o baseline E exige que todo excesso do
+ * plano cheio seja explicado, item a item, pelos extras de `empurrar`.
+ */
+const chaveExtras = (r: ReturnType<typeof plano>) =>
+  new Set((r.blocoFoco?.adicionais ?? []).map((a) => `${a.diaId ?? ''}|${a.exercicioId}`));
+const contaFiltrada = (r: ReturnType<typeof plano>, padrao: string, manterExtras: boolean) => {
+  const extras = chaveExtras(r);
+  return r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === padrao
+    && extras.has(`${d.diaId ?? ''}|${s.exercicio.id}`) === manterExtras).length, 0);
+};
+const contaBaseline = (r: ReturnType<typeof plano>, padrao: string) => contaFiltrada(r, padrao, false);
+const contaExtras = (r: ReturnType<typeof plano>, padrao: string) => contaFiltrada(r, padrao, true);
+const equilibrada = (r: ReturnType<typeof plano>) => contaBaseline(r, 'puxar') >= contaBaseline(r, 'empurrar');
 
 describe('🔴 C6 — o foco NÃO pode introduzir `empurrar > puxar` (reprodução mínima)', () => {
   const base = perfil();
@@ -104,10 +132,13 @@ describe('🔴 C6 — o foco NÃO pode introduzir `empurrar > puxar` (reproduç�
  * Recorte dos eixos que a varredura de 190.080 planos apontou como os únicos que chegam ao
  * degrau ② — manter estreito de propósito (a suíte inteira não cabe num teste).
  */
-describe('🔒 C6 — grade: o foco nunca introduz `empurrar > puxar`', () => {
+describe('🔒 C6 — grade: o foco nunca introduz `empurrar > puxar` no baseline', () => {
   it('varre nível × equipamento × objetivo × divisão × dias × tempo × semana × par focado', () => {
     const GRUPOS: GrupoPrimario[] = ['peito', 'ombros', 'triceps', 'biceps', 'costas'];
     const falhas: string[] = [];
+    /** Anti-vacuidade: a grade tem de conter casos em que o extra REALMENTE é `empurrar`. */
+    let comExtraEmpurrar = 0;
+    let comparados = 0;
     for (const nivelExperiencia of ['intermediario', 'avancado'] as NivelExperiencia[])
       for (const equipamento of ['academia', 'casa'] as EquipamentoDisp[])
         for (const objetivo of ['massa', 'emagrecimento', 'saude'] as Objetivo[])
@@ -121,12 +152,23 @@ describe('🔒 C6 — grade: o foco nunca introduz `empurrar > puxar`', () => {
                       const p = { nivelExperiencia, equipamento, objetivo, divisaoPreferida, diasDisponiveis, tempoPorSessaoMin };
                       const semFoco = plano(perfil(p), semana);
                       const comF = plano(perfil({ ...p, foco: { grupo, compensa, semana: 1 } }), semana);
+                      comparados += 1;
+                      if (contaExtras(comF, 'empurrar') > 0) comExtraEmpurrar += 1;
+                      const rotulo = `${nivelExperiencia}/${equipamento}/${objetivo}/${divisaoPreferida}/${diasDisponiveis}d/${tempoPorSessaoMin}min/S${semana} foco=${grupo}←${compensa}`;
                       // Limitação preexistente não é defeito do foco: só acusa o que o foco INTRODUZ.
-                      if (!equilibrada(semFoco) || equilibrada(comF)) continue;
-                      falhas.push(
-                        `${nivelExperiencia}/${equipamento}/${objetivo}/${divisaoPreferida}/${diasDisponiveis}d/${tempoPorSessaoMin}min/S${semana} foco=${grupo}←${compensa}: ${conta(semFoco, 'puxar')}/${conta(semFoco, 'empurrar')} → ${conta(comF, 'puxar')}/${conta(comF, 'empurrar')}`,
-                      );
+                      if (equilibrada(semFoco) && !equilibrada(comF)) {
+                        falhas.push(`${rotulo} [BASELINE]: ${contaBaseline(semFoco, 'puxar')}/${contaBaseline(semFoco, 'empurrar')} → ${contaBaseline(comF, 'puxar')}/${contaBaseline(comF, 'empurrar')}`);
+                        continue;
+                      }
+                      // E todo excesso do plano CHEIO tem de caber nos extras de `empurrar`:
+                      // desequilíbrio sem extra que o explique volta a ser violação.
+                      const excesso = conta(comF, 'empurrar') - conta(comF, 'puxar');
+                      if (excesso > 0 && excesso > contaExtras(comF, 'empurrar')) {
+                        falhas.push(`${rotulo} [NÃO EXPLICADO]: excesso ${excesso} > extras empurrar ${contaExtras(comF, 'empurrar')}`);
+                      }
                     }
+    expect(comparados, 'a grade não comparou nada — o teste seria vazio').toBeGreaterThan(1000);
+    expect(comExtraEmpurrar, 'nenhum extra de `empurrar` entrou na grade: sem isso a nova regra não é exercida').toBeGreaterThan(0);
     expect(falhas, `${falhas.length} combinações em que o FOCO introduziu o desequilíbrio:\n${falhas.slice(0, 20).join('\n')}`).toEqual([]);
   }, 600000);
 });

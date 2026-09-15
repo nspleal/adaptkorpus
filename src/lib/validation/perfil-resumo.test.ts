@@ -43,3 +43,16 @@ describe('rotinaCustom · um treino por dia', () => {
     expect(resultado.success).toBe(true);
   });
 });
+
+
+describe('limite temporal explícito',()=>{
+ it.each(['limitado','sem_limite'])('aceita modo %s sem sentinela de minutos',limiteTempoTreino=>{
+  expect(perfilResumoSchema.parse({...BASE,tempoPorSessaoMin:75,limiteTempoTreino}).limiteTempoTreino).toBe(limiteTempoTreino);
+ });
+ it('ausência não converte o 75 legado em sem limite',()=>{
+  expect(perfilResumoSchema.parse({...BASE,tempoPorSessaoMin:75}).limiteTempoTreino).toBeUndefined();
+ });
+ it('rejeita modo arbitrário',()=>{
+  expect(perfilResumoSchema.safeParse({...BASE,limiteTempoTreino:'infinito'}).success).toBe(false);
+ });
+});

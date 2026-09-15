@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 interface Classificacao {
   arquivos: { arquivo: string; historicos: { nome: string; motivo: string; sucessor: string }[] }[];
@@ -20,10 +21,28 @@ for (const { arquivo, historicos } of classificacao.arquivos) {
   }
 }
 
+/**
+ * O mesmo arquivo de caracterização roda em dois projetos, e o nome do `describe` vem de
+ * ADAPT_TEST_SELETOR_ATUAL — logo cada projeto registra só metade das chaves. Com uma única
+ * fotografia compartilhada, cada projeto enxerga a metade do outro como obsoleta e o gate cai
+ * em CI. Cada projeto passa a ter a sua própria fotografia.
+ *
+ * 🔴 O resolvedor vale só na RAIZ: o Vitest monta um único SnapshotManager a partir da config
+ * raiz e apaga `resolveSnapshotPath` das configs de projeto antes de serializá-las. Declarado
+ * dentro de um projeto, ele é silenciosamente ignorado. O projeto vem pelo 3º argumento,
+ * em `context.config.name` — verificado em execução nesta versão (Vitest 4.1.11).
+ */
+const PROJETO_HISTORICO = 'historico-seletor-etapa1';
+
 export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
+    resolveSnapshotPath: (arquivo, extensao, contexto) => {
+      const projeto = (contexto as { config?: { name?: string } } | undefined)?.config?.name;
+      const base = join(dirname(arquivo), '__snapshots__', basename(arquivo));
+      return projeto === PROJETO_HISTORICO ? `${base}.${PROJETO_HISTORICO}${extensao}` : `${base}${extensao}`;
+    },
     projects: [
       {
         extends: true,
@@ -41,7 +60,7 @@ export default defineConfig({
       {
         extends: true,
         test: {
-          name: 'historico-seletor-etapa1', include: arquivos,
+          name: PROJETO_HISTORICO, include: arquivos,
           env: { ADAPT_TEST_SELETOR_ATUAL: '0' },
         },
       },

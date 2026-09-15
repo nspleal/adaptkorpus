@@ -91,7 +91,10 @@ describe('error-hunt: corpus do motor de treino', () => {
 
               // Invariantes do montador.
               const conta = (pad: string) => r.rotina!.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === pad).length, 0);
-              if (conta('puxar') < conta('empurrar')) viol.push(`puxar<empurrar ${rot}`);
+              if (conta('puxar') < conta('empurrar')) {
+                //14/09:1por grupo pode ser incompatível sem equipamento; nunca certificar.
+                if(r.rotina.resultadoGeracao?.tipo!=='ERRO_ALOCADOR')viol.push(`puxar<empurrar sem recusa ${rot}`);
+              }
               if (diasForcaEsp >= 2 && conta('dobradica_quadril') < 1) viol.push(`sem dobradiça ${rot}`);
               if (diasForcaEsp >= 2 && (conta('core') < 2 || conta('core') > 3)) viol.push(`core fora 2-3x ${rot}: ${conta('core')}`);
 
@@ -104,7 +107,7 @@ describe('error-hunt: corpus do motor de treino', () => {
                   if (!liberadas.has(s.exercicio.nivel)) viol.push(`dificuldade inválida ${rot}: ${s.exercicio.id}`);
                 }
             }
-    expect(viol).toEqual([]);
+    expect(viol,viol.join('\n')).toEqual([]);
   });
 
   it('gate: RESTRINGIR (baixo peso no corte) prescreve como Saúde', () => {

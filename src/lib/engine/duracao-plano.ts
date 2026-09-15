@@ -106,8 +106,9 @@ export function avaliarDuracaoResistida(
   slots: readonly SlotParaDuracao[],
   nivel: NivelExperiencia,
   orcamentoSegundos?: number,
+  limiteEstrito = false,
 ): ResultadoDuracao {
-  return avaliarDuracaoFinalDoDia(slots, nivel, orcamentoSegundos, 0);
+  return avaliarDuracaoFinalDoDia(slots, nivel, orcamentoSegundos, 0, false, limiteEstrito);
 }
 
 /**
@@ -121,6 +122,7 @@ export function avaliarDuracaoFinalDoDia(
   orcamentoSegundos: number | undefined,
   cardioMaterializadoSegundos: number,
   cardioPrescritoSemDuracao = false,
+  limiteEstrito = false,
 ): ResultadoDuracao {
   const { itens, faltou } = itensResistidosDeSlots(slots, nivel);
   const cardioInvalido = cardioMaterializadoSegundos !== 0
@@ -145,5 +147,5 @@ export function avaliarDuracaoFinalDoDia(
   const itensFinais: ItemDuracao[] = cardioMaterializadoSegundos > 0
     ? [...itens, { tipo: 'CONTINUO', duracaoTotalSegundos: cardioMaterializadoSegundos }]
     : itens;
-  return avaliarDuracaoSessao({ itens: itensFinais, orcamentoSegundos, origemPlano: 'AUTOMATICO' });
+  return avaliarDuracaoSessao({ itens: itensFinais, orcamentoSegundos, origemPlano: 'AUTOMATICO', limiteEstrito });
 }

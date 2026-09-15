@@ -52,17 +52,18 @@ function podeUltrapassar(rotina: Pick<RotinaSemanal, 'dias'>, indices: readonly 
  * sem prometer o que o motor não mediu.
  */
 export function vereditoDoPlano(
-  rotina: Pick<RotinaSemanal, 'dias' | 'resultadoGeracao'> | null | undefined,
+  rotina: Pick<RotinaSemanal, 'dias' | 'resultadoGeracao' | 'limiteTempoTreino'> | null | undefined,
   tempoPorSessaoMin: number,
 ): Veredito | null {
   const rg: ResultadoGeracaoRotina | undefined = rotina?.resultadoGeracao;
   if (!rotina || !rg) return null;
   switch (rg.tipo) {
     case 'CERTIFICADO':
+      if(rotina.limiteTempoTreino==='sem_limite')return {tom:'ok',titulo:'Plano calculado sem limite de tempo por sessão.',detalhe:'O tempo livre não acrescenta exercícios ao plano.'};
       return {
         tom: 'ok',
         titulo: 'A duração calculada está dentro dos limites do app.',
-        detalhe: `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais; essa tolerância não vale para acrescentar cardio automático.`,
+        detalhe: rotina.limiteTempoTreino==='limitado' ? `Referência: ${tempoPorSessaoMin} min por sessão.` : `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais; essa tolerância não vale para acrescentar cardio automático.`,
       };
     case 'NAO_AVALIADO_ENTREGAVEL':
       return {
@@ -97,11 +98,33 @@ export function vereditoDoPlano(
         ].filter(Boolean).join(' '),
       };
     }
+    /**
+     * 🔴 P-01 (revisão independente 15/09) — O QUE ESTE ESTADO É, E O QUE ELE NÃO É.
+     *
+     * `bloqueio` aqui é TOM DE AVISO, não impedimento: o plano continua listado, o dia
+     * continua selecionável e a sessão continua podendo ser iniciada e registrada
+     * (`AvisosMotor` só pinta a faixa; `TreinoTab` renderiza os dias do mesmo jeito).
+     * A frase tinha de dizer isso e oferecer os caminhos reais — sem prometer que algum
+     * deles faz o treino caber, porque o motor não mediu nenhum deles.
+     *
+     * O que NÃO se faz para sair daqui: afrouxar o limite escolhido, o piso de descanso
+     * ou a cobertura aprovada. Qualquer mudança nessas três políticas é decisão do autor.
+     */
     case 'INCOMPATIVEL':
       return {
         tom: 'bloqueio',
         titulo: `Não encontramos uma versão com a cobertura exigida dentro do limite de tempo para sessões de ${tempoPorSessaoMin} min.`,
-        detalhe: 'Aumentar o tempo por sessão no seu perfil é o que abre espaço — não vamos cortar exercício a ponto de o treino deixar de cobrir os padrões básicos.',
+        detalhe: [
+          `O plano continua aqui para consultar, iniciar e registrar — o que não dá para afirmar é que ele caiba em ${tempoPorSessaoMin} min.`,
+          rotina.limiteTempoTreino === 'sem_limite'
+            ? 'Você já está sem limite de tempo por sessão, então o que falta é exercício elegível: confira os avisos de cobertura e equipamento.'
+            : 'Três caminhos abrem espaço, e nenhum deles garante que caiba: aumentar o tempo por sessão, espalhar o treino por mais dias da semana, ou escolher 75+ (sem limite de tempo por sessão).',
+          // 🔵 P-01 (decisão do autor 2026-09-16): no full-body de um dia o plano PODE ter
+          // dispensado o exercício direto de core/panturrilha para tentar caber. Afirmar
+          // aqui que nada foi cortado seria falso justamente no estado em que isso
+          // acontece — quem nomeia o que saiu é o aviso do motor. Ficou o que segue exato.
+          'O que não fazemos para caber: encurtar o descanso abaixo do mínimo, nem tirar o único exercício dos grupos principais. Se algum grupo ficou sem exercício direto, está dito nos avisos.',
+        ].join(' '),
       };
     case 'ERRO_ALOCADOR':
       return {

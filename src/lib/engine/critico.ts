@@ -119,6 +119,7 @@ export interface ContextoCritico {
   objetivo: Objetivo;
   /** Minutos por sessão do perfil — o aviso de sessão longa compara com isto. */
   tempoPorSessaoMin: number;
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   /**
    * Dias da semana em que cada dia do desenho cai, na MESMA ordem de `dias` (índice
    * Seg=0…Dom=6). Ausente = o aviso de dias consecutivos não é emitido (sem agenda não há
@@ -254,11 +255,11 @@ export function avisos(
   //    MESMA do gerador, sobre o plano final (séries e descanso REAIS por slot). 🔒 Sem
   //    fallback silencioso 1 série / 90 s: faltou dado ⇒ NAO_AVALIADO e o crítico NÃO afirma
   //    que cabe. O editor é SOFT — isto informa, nunca trava (DF①).
-  const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
+  const orcamentoSeg = ctx.limiteTempoTreino==='sem_limite'?undefined:ctx.tempoPorSessaoMin * 60;
   dias.forEach((d, i) => {
     const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k], holdSeg: d.holdSeg?.[k] }));
     const r = avaliarDuracaoFinalDoDia(slots, ctx.nivel, orcamentoSeg, d.cardioSegundos ?? 0);
-    if (r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
+    if (orcamentoSeg!==undefined && r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
       const min = Math.round(r.duracaoMaximaEstimadaSegundos! / 60);
       itens.push({
         codigo: 'sessao_longa',
@@ -321,7 +322,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   if (fatosInformados && fatosInformados.diasHorizonte.length !== horizonteEsperado) {
     motivosEstruturais.push(`horizonte dos fatos diverge da entrada externa: ${fatosInformados.diasHorizonte.length} != ${horizonteEsperado}`);
   }
-  const orcamentoSeg = ctx.tempoPorSessaoMin * 60;
+  const orcamentoSeg = ctx.limiteTempoTreino==='sem_limite'?undefined:ctx.tempoPorSessaoMin * 60;
   // Reconstrói os campos DERIVADOS a partir dos slots e do contexto do crítico. Dos fatos publicados
   // não lê horizonte nem oferta: os dois são entradas externas à saída que está sob julgamento.
   const ofertaExterna = [...ctx.diasOferecidosCardioEsperados];
@@ -356,7 +357,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     motivosEstruturais.push('oferta de cardio dos fatos diverge da entrada externa');
   }
   const duracaoResistidaCritico = rotina.dias.map((d) =>
-    avaliarDuracaoFinalDoDia(d.slots, ctx.nivel, orcamentoSeg, 0));
+    avaliarDuracaoFinalDoDia(d.slots, ctx.nivel, orcamentoSeg, 0, false, rotina.limiteTempoEstrito));
   const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
       ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
     : 0;
@@ -368,6 +369,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
         })),
         diasOferecidosCardio: oferecidos,
         orcamentoSegundos: orcamentoSeg,
+    ...(ctx.limiteTempoTreino==='sem_limite'?{semLimite:true}:{}),
         cardioPrescritoPorDiaSegundos,
         aggregateId: 'rotina-cardio', expectedRevision: 0,
         formulaVersion: FORMULA_DURACAO_VERSION,
@@ -516,7 +518,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
       && oferecidos.includes(dia.diaId as Weekday);
     const critico = avaliarDuracaoFinalDoDia(
       treino?.slots ?? [], ctx.nivel, orcamentoSeg, cardioCanonicoSegundos,
-      cardioQualitativoEsperado,
+      cardioQualitativoEsperado, rotina.limiteTempoEstrito,
     );
     return { diaId: dia.diaId, converge: duracoesIguais(dia.duracao, critico), gerador: dia.duracao, critico };
   });

@@ -69,13 +69,14 @@ describe('decisões 13/09: resultado do motor com catálogo real', () => {
       if (equipamento === 'nenhum' || tempoPorSessaoMin === 20) expect(r.avisos.length).toBeGreaterThan(0);
     }
   });
-  it('braços agregados escolhem sessão própria, preservando pernas e prioridades', () => {
+  it('braços agregados somam bloco aos primários, preservando pernas e prioridades', () => {
     const sem = gerar(['seg','ter','qui','sex']);
     const com = gerar(['seg','ter','qui','sex'], { focoAgregado: { grupo: 'bracos', semana: 1 } });
     const ids = (r: typeof sem) => r.dias.map(d => d.slots.map(s => [s.exercicio.id,s.series]).sort()).flat();
     expect(ids(com)).not.toEqual(ids(sem));
     const grupos = com.dias.map(d => d.slots.map(s => s.exercicio.grupoPrimario));
-    expect(grupos.filter(g => g.includes('biceps') && g.includes('triceps') && !g.some(x => ['peito','costas','quadriceps','posterior'].includes(x!)))).toHaveLength(1);
+    expect(com.blocoFoco?.grupos).toEqual(['biceps','triceps']);
+    expect(com.blocoFoco?.adicionais.length).toBeGreaterThan(0);
     expect(grupos.flat()).toEqual(expect.arrayContaining(['quadriceps','posterior','ombros','peito','costas']));
     for (const d of com.dias.filter(d => d.slots.some(s => ['biceps','triceps'].includes(s.exercicio.grupoPrimario!))))
       expect(['biceps','triceps']).toContain(d.slots[0]!.exercicio.grupoPrimario);

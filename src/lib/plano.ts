@@ -70,7 +70,7 @@ export function recomputarPlano(
     pesoKg, alturaCm: perfil.alturaCm, idade: perfil.idade, flagsSaude: perfil.flagsSaude,
     objetivo: perfil.objetivo, nivelExperiencia: perfil.nivelExperiencia, equipamento: perfil.equipamento,
     equipamentosCasa: perfil.equipamentosCasa, // checklist de casa (modelo 2 níveis)
-    diasDisponiveis, treinoDias: perfil.treinoDias, tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+    diasDisponiveis, treinoDias: perfil.treinoDias, tempoPorSessaoMin: perfil.tempoPorSessaoMin, limiteTempoTreino: perfil.limiteTempoTreino,
     // Modo força (v2 §4): preset opt-in — o motor ignora p/ iniciante.
     ...(perfil.modoForca ? { modoForca: true } : {}),
     /**

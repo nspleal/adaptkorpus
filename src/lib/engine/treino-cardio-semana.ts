@@ -33,7 +33,8 @@ export interface EntradaCardioSemanaViva {
   /** 🔒 Conjunto de dias reais oferecidos pelo usuário para cardio. */
   diasOferecidosCardio: readonly (Weekday | number)[];
   /** Orçamento por sessão (s) = tempoPorSessaoMin·60, igual para todos os dias. */
-  orcamentoSegundos: number;
+  orcamentoSegundos: number | undefined;
+  semLimite?: boolean;
   /** Duração de cardio prescrita por dia OFERECIDO (s). 0/ausente ⇒ sem prescrição (ex.: meta em sessões). */
   cardioPrescritoPorDiaSegundos: number;
   aggregateId: string;
@@ -89,6 +90,7 @@ export function fatosDistribuicaoCardioDaRotina(e: EntradaCardioSemanaViva): Ent
   const orcamentos: OrcamentoDia[] = ORDEM_SEMANA.map((diaId) => ({
     diaId,
     orcamentoSegundos: e.orcamentoSegundos,
+    ...(e.semLimite ? { semLimite: true } : {}),
   }));
 
   // Uma prescrição de cardio por dia OFERECIDO (origem), só quando há duração prescrita.

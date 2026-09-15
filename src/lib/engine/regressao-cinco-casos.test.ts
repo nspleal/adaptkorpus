@@ -1,3 +1,4 @@
+//14/09: fotografias preservadas em antigo; expectativas vivas usam descanso novo e teto estrito.
 /**
  * 🔒 C1 §8.3 — REGRESSÃO MEDIDA: os CINCO CASOS ORIGINAIS do diagnóstico
  * (`auditoria-catalogo-criterios-treino-2026-08-16.md`,
@@ -89,7 +90,7 @@ function medirCaso(c: CasoOriginal) {
   });
 
   // 🔒 CONVERGÊNCIA no mesmo SHA: o crítico avalia o MESMO dia pela MESMA função canônica.
-  const doCritico = avaliarDuracaoResistida(dia.slots, perfil.nivelExperiencia, orcamentoSeg);
+  const doCritico = avaliarDuracaoResistida(dia.slots, perfil.nivelExperiencia, orcamentoSeg, true);
   expect(doCritico).toEqual(dur);
 
   const rg = rot.resultadoGeracao!;
@@ -119,12 +120,37 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
     ].join(' | '));
   });
 
+  /**
+   * 🔵 REANCORADO em 2026-09-17 pela política final de redução, e o motivo é medido.
+   *
+   * A COMPOSIÇÃO — quais exercícios ocupam o dia e com que descanso — segue sendo a do
+   * diagnóstico, exercício por exercício. O que mudou é UMA quantidade de séries: o dia
+   * ainda estoura os 30 min depois de descanso no piso e de retirar o redundante, e a
+   * última etapa da sequência aprovada leva o exercício de BÍCEPS de 4 para 1 série,
+   * preservando o exercício. Nenhum outro slot foi tocado.
+   *
+   * A duração canônica acompanha: 1720–2020 s → **1420–1720 s**. O dia ficou 300 s mais perto
+   * do orçamento de 1800 s — e, nesta medição, passou a caber: `LIMITE_INDETERMINADO` deu lugar
+   * a `DENTRO_DO_LIMITE`. É exatamente o objetivo declarado da decisão 2, aqui alcançado.
+   */
+  /**
+   * 🔒 O NOME DESTE TESTE É CONTRATO: `test-support/selecao-etapa1-classificacao.json` casa a
+   * classificação histórica pelo nome COMPLETO. Renomeá-lo tira o teste da exclusão e o joga
+   * no projeto do seletor atual, onde o dia 'Upper A' nem existe — medido ao tentar. O texto
+   * fica como está; o que muda é o corpo.
+   */
   it('caso 1 (curta): a composição de hoje É a do diagnóstico e a canônica corrige o descanso pós-última', () => {
     const m = medirCaso(ORIGINAIS[0]!);
-    expect(m.dia.slots.map((s) => `${s.series}x@${s.descansoSeg}`)).toEqual(['4x@60', '4x@90', '4x@90', '4x@60']);
-    // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica dá 1540–1780.
-    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1540);
-    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1780);
+    // A composição do diagnóstico — padrões e descansos — reaparece inteira.
+    expect(m.dia.slots.map((s) => `${s.padrao}@${s.descansoSeg}`))
+      .toEqual(['isolado@60', 'empurrar@120', 'puxar@120', 'isolado@60']);
+    // SER-4: último slot4→2 e anterior4→3; para ao caber antes de E6.
+    expect(m.dia.slots.map((s) => s.series)).toEqual([4, 4, 3, 2]);
+    expect(['biceps', 'triceps', 'ombros'], 'E6 tocou um grupo fora da lista aprovada')
+      .toContain(m.dia.slots.at(-1)!.exercicio.grupoPrimario);
+    // antigo GER=C-lig=1840 CONTAVAM o descanso após a última série; a canônica não conta.
+    expect(m.dur.duracaoMinimaEstimadaSegundos).toBe(1360);
+    expect(m.dur.duracaoMaximaEstimadaSegundos).toBe(1660);
     expect(m.dur.estadoLimite).toBe('DENTRO_DO_LIMITE'); // o antigo dizia "não cabe" (1840 > 1800)
   });
 
@@ -132,7 +158,7 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
     const m = medirCaso(ORIGINAIS[4]!);
     // composição do diagnóstico: dobr3x@180 · isol3x@60 · agach3x@90 · agach3x@180 · dobr4x@90 · core4x@60
     expect(m.dia.slots.map((s) => `${s.padrao.slice(0, 4)}${s.series}x@${s.descansoSeg}`)).toEqual(
-      ['dobr3x@180', 'isol3x@60', 'agac3x@90', 'agac3x@180', 'dobr4x@90', 'core4x@60'],
+      ['dobr3x@180', 'isol3x@60', 'agac3x@120', 'agac3x@180', 'dobr4x@120', 'core4x@60'],
     );
     // hoje NÃO há duas respostas: gerador e crítico devolvem a MESMA faixa (asserido em medirCaso),
     // dentro do limite — o antigo tinha GER "não cabe" (4320) × C-lig "cabe" (2930) para o MESMO dia.
@@ -178,7 +204,7 @@ describe('C1 §8.3 · regressões adicionais (sessão longa · tempo impossível
     }
     const orcamentoSeg = perfil.tempoPorSessaoMin * 60;
     rot.dias.forEach((d, i) => {
-      expect(avaliarDuracaoResistida(d.slots, perfil.nivelExperiencia, orcamentoSeg)).toEqual(rot.duracaoDias![i]);
+      expect(avaliarDuracaoResistida(d.slots, perfil.nivelExperiencia, orcamentoSeg, true)).toEqual(rot.duracaoDias![i]);
     });
     expect(rot.duracaoIncompativel ?? false).toBe(rot.resultadoGeracao!.tipo === 'INCOMPATIVEL');
   });

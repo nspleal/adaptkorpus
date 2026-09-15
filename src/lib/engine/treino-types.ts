@@ -1,3 +1,4 @@
+import type { ReferenciaDose } from './referencia-dose';
 /**
  * Tipos do motor de TREINO (FITT).
  * Fonte: conceitos/parametros-motor-treino-adaptkorpus (DFs travadas 2026-06-28).
@@ -79,20 +80,17 @@ export type DivisaoPreferida = 'auto' | 'superior-inferior' | 'prioridades';
 /**
  * 🧭 A ROTINA MONTADA PELO USUÁRIO (editor guiado — DF② de 2026-08-13).
  *
- * 🔒 Guarda **só o desenho**: quais exercícios, em que dia, em que ordem. Séries, reps,
- * RIR, descanso, rampa e deload continuam do MOTOR — literal do autor: *"igual ao motor
- * normal, a única diferença é que foi o usuário que fez o treino"*. Guardar o plano inteiro
- * congelaria a pessoa fora de todo conserto futuro do motor (a lição do v3 · Bloco A:
- * *override não é só uma segunda verdade — é segunda verdade que envelhece sozinha*).
- *
- * 🔑 É por isso que ela cabe em ~380 bytes (medido, 6 dias × 7 slots) contra ~18 KB do
- * plano serializado: o que se persiste é a DECISÃO, não o resultado dela.
+ * Guarda o desenho e as escolhas explícitas de séries. Na retomada, o editor também
+ * registra uma referência versionada da dose realmente exibida, por dia e exercício.
+ * Essa referência conserva os donos das séries entre edições no mesmo contexto;
+ * contexto incompatível ou dose acima dos tetos exige novo cálculo pelo motor.
+ * Reps, RIR, descanso, rampa e deload continuam sob autoridade do motor.
  */
 export interface RotinaCustom {
   /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
   origem: 'usuario';
   /** `diaId` explícito passou a ser gravado pelo editor. Ausente só em rotina legada; o montador deriva uma vez da agenda e preserva compatibilidade. */
-  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number> }[];
+  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number>; referenciaDose?: ReferenciaDose }[];
 }
 
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
@@ -130,6 +128,8 @@ export interface PerfilTreino {
   treinoDias?: readonly Weekday[];
   /** Tempo por sessão em minutos. */
   tempoPorSessaoMin: number;
+  /** Ausente em perfis legados: conserva o limite numérico, sem inferir a escolha 75+. */
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   /** 🎛️ v4 · DF③ — divisão preferida. Ausente = `auto` (padrão por dias disponíveis). */
   divisaoPreferida?: DivisaoPreferida;
   /**
@@ -253,6 +253,9 @@ export interface SlotExercicio {
   series?: number;
   /** Explicit manual choice (visual laboratory, author request 2026-09-10). */
   seriesDefinidasPeloUsuario?: boolean;
+  /** Referência real antes do deload automático, para não reduzir duas vezes ao editar.
+   * Metadado do plano entregue; não é um novo campo do desenho persistido. */
+  seriesAntesDoDeload?: number;
   /**
    * 🔒 Descanso entre séries DESTE exercício, em segundos (cofre §🕐, DF 2026-07-31).
    *
@@ -380,6 +383,8 @@ export interface PlanoFinalDia {
 }
 
 export interface RotinaSemanal {
+  limiteTempoEstrito?: boolean;
+  limiteTempoTreino?: 'limitado' | 'sem_limite';
   diasForcaAgendados: number;
   diasCardioRecuperacao: number;
   split: string;
@@ -415,6 +420,18 @@ export interface RotinaSemanal {
    * ver nada é indistinguível de quebrado — foi o que transformou o 1º teste do autor em
    * ambiguidade. Ausente quando não há foco vigente.
    */
+  /** Adição automática14/09: entrega concreta, separada da transferência legada.
+   *
+   * 🔴 Revisão 15/09 — INTENÇÃO × ENTREGA em campos separados. `solicitados` é quanto
+   * esta montagem pediu; `adicionais` é o que SOBREVIVEU ao corte temporal. A tela
+   * anunciava "2 exercícios adicionais" contando a intenção, inclusive quando o tempo
+   * já tinha removido um deles. `adicionais.length < solicitados` ⇒ entrega parcial. */
+  blocoFoco?: {
+    grupos: GrupoPrimario[];
+    solicitados: number;
+    adicionais: {diaId?: Weekday; exercicioId: string; series: number}[];
+    adaptado: boolean;
+  };
   foco?: {
     grupo: GrupoPrimario;
     compensa: GrupoPrimario;

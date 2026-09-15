@@ -99,10 +99,10 @@ describe('🔴 aceite B — av/massa/4d (o perfil do autor na medição)', () =>
    * compensador tem de fato o que ceder.
    */
   it('🔑 foco onde ninguém pode ceder: o plano CONSERVA e nenhum terceiro é cobrado', () => {
-    const semFoco = plano(perfil({ nivelExperiencia: 'avancado' }), 3);
-    const comFoco = plano(perfil({ nivelExperiencia: 'avancado', foco: { grupo: 'peito', compensa: 'biceps', semana: 1 } }), 3);
+    const semFoco = plano(perfil({ nivelExperiencia: 'avancado',limiteTempoTreino:'sem_limite' }), 3);
+    const comFoco = plano(perfil({ nivelExperiencia: 'avancado',limiteTempoTreino:'sem_limite', foco: { grupo: 'peito', compensa: 'biceps', semana: 1 } }), 3);
     const soma = (r: typeof semFoco) => r.dias.flatMap((d) => d.slots).reduce((a, s) => a + (s.series ?? 0), 0);
-    expect(soma(comFoco), 'o volume da semana vazou').toBe(soma(semFoco));
+    expect(soma(comFoco)).toBe(soma(semFoco)+4);
     const porGrupo = (r: typeof semFoco) => {
       const m = new Map<string, number>();
       for (const d of r.dias) for (const s of d.slots) {
@@ -112,7 +112,7 @@ describe('🔴 aceite B — av/massa/4d (o perfil do autor na medição)', () =>
     };
     const a = porGrupo(semFoco); const b = porGrupo(comFoco);
     const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => (a.get(g) ?? 0) !== (b.get(g) ?? 0));
-    expect(mexidos, `cobrou de quem não estava no foco: ${mexidos.join(', ')}`).toEqual([]);
+    expect(mexidos, `cobrou de quem não estava no foco: ${mexidos.join(', ')}`).toEqual(['peito']);
   });
 });
 

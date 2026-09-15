@@ -33,6 +33,26 @@ export const GRUPOS_GRANDES: readonly GrupoPrimario[] = ['peito', 'costas', 'qua
 export const GRUPOS_PEQUENOS_PISO: readonly GrupoPrimario[] = ['biceps', 'triceps', 'panturrilha'];
 export const GRUPOS_SO_INDIRETO: readonly GrupoPrimario[] = ['lombar', 'antebraco'];
 
+/**
+ * 🔵 DECISÃO DO AUTOR 2026-09-16, AMPLIADA EM 2026-09-17 — ordem de DISPENSA no full-body de
+ * um dia que não cabe no tempo escolhido. Entra como **E5** da sequência única de redução
+ * (`ajuste-tempo-estrutura.ts`): depois de o descanso estar no piso, de os extras do foco
+ * terem saído, de as três séries virarem duas e de os exercícios redundantes terem sido
+ * retirados. Pára assim que couber; grupo ausente é pulado.
+ *
+ * 🔒 A ampliação de 17/09 acrescentou **glúteos** à lista. Ela **não** foi generalizada para
+ * outras divisões: continua sendo a exceção do full-body curto, e o chamador é quem decide
+ * habilitá-la (`permitirDispensa`). Fora dela, o único exercício de cada grupo não sai.
+ *
+ * 🔒 `antebraco` está aqui por ordem do autor, mas NÃO é um dos dez grupos do full-body
+ * vigente (ele é só-indireto, acima): a entrada existe para fixar a ordem caso ele passe a
+ * ser coberto, e hoje é sempre pulada — jamais acrescentado só para depois ser retirado.
+ *
+ * ⚠️ É prioridade de produto para sessão curta. Não é afirmação sobre a importância
+ * biológica destes músculos, e a interface não usa essa expressão.
+ */
+export const GRUPOS_DISPENSAVEIS_FULLBODY_CURTO: readonly GrupoPrimario[] = ['core', 'antebraco', 'panturrilha', 'gluteos'];
+
 /** Piso direto dos pequenos (DF②: "1–2 exercícios/semana") e teto que o acompanha. */
 export const PEQUENOS_PISO_DIRETO = 1;
 export const PEQUENOS_TETO_DIRETO = 2;

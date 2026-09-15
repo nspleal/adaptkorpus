@@ -92,7 +92,7 @@ export interface PerfilResumo {
   camposInvalidos?: string[];
   sexo: Sexo; idade: number; alturaCm: number; pesoKg: number; objetivo: Objetivo;
   nivelAtividade: NivelAtividade; nivelExperiencia: NivelExperiencia; equipamento: EquipamentoDisp;
-  preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number;
+  preferencia: 'vegano' | 'vegetariano' | null; alergenos: Alergeno[]; diasDisponiveis: number; tempoPorSessaoMin: number; limiteTempoTreino?: 'limitado' | 'sem_limite';
   /** Dias da semana em que treina (Seg→Dom). É a fonte de verdade da agenda; `diasDisponiveis` = length. */
   treinoDias: Weekday[];
   /** "Alimentos que não curto" — IDs da paleta curada (preferência relaxável no motor). */
@@ -622,7 +622,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      */
     const focoAntes = perfil.foco;
     let focoDepois = novo.foco;
-    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo && focoDepois.grupo === 'core') {
+    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo && focoDepois.grupo === 'core' && focoDepois.compensa) {
       /**
        * 🔒 FOCO DE CORE (DF 2026-08-05): mecânica de SÉRIES NOS SLOTS EXISTENTES, com teto
        * de séries por exercício do nível.
@@ -687,7 +687,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, opcoesDoPlano({ pesoEfetivoKg }));
       const efeito = medirEntregaDoFoco(nt, ntSemFoco, focoDepois.grupo);
       if (efeito) {
-        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, compensa: focoDepois.compensa, entrega: efeito.entrega, delta: efeito.delta });
+        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, ...(focoDepois.compensa ? {compensa: focoDepois.compensa} : {}), entrega: efeito.entrega, delta: efeito.delta });
         setAvisoFoco(null);
       }
     }
@@ -911,14 +911,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   /**
    * 🧭 EDITOR GUIADO — abrir, salvar e voltar ao recomendado.
    *
-   * 🔒 DF② — o que se PERSISTE é só o desenho (ids por dia): séries/RIR/descanso continuam
-   * do motor a cada recompute, e o plano custom progride igual ao gerado. Guardar o plano
-   * inteiro congelaria a pessoa fora de todo conserto futuro do motor.
+   * O desenho persiste IDs e escolhas de séries. Ao partir do automático, a dose entregue
+   * vira a escolha inicial; ao reabrir custom, preserva-se a intenção salva. Reps/RIR/
+   * descanso continuam no motor, assim como as reduções de recuperação. Abrir/cancelar
+   * não persiste o rascunho.
    */
   function abrirEditor() {
     const origem = perfil.rotinaCustom ? 'plano' : rotinaDias.length > 0 ? 'plano' : 'vazio';
     registrarEvento('editor_aberto', { origem });
-    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? [], perfil.rotinaCustom));
+    setEditorDias(doPlano(rotinaDias, perfil.treinoDias ?? [], perfil.rotinaCustom, opcoesDoPlano().semanaCiclo?.retomada));
   }
 
   function salvarTreinoCustom(dias: DiaEditavel[], avaliacao: Avaliacao) {
@@ -1374,7 +1375,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       semana: ciclo.semanaEfetiva,
       nivel: perfil.nivelExperiencia,
       objetivo: prescricaoEfetiva.objetivoEfetivo ?? perfil.objetivo,
-      tempoPorSessaoMin: perfil.tempoPorSessaoMin,
+      tempoPorSessaoMin: perfil.tempoPorSessaoMin, limiteTempoTreino: perfil.limiteTempoTreino,
       // Entrada independente do plano final: o crítico não pode aprender o horizonte do próprio
       // agregado que está tentando validar.
       diasNoHorizonteEsperado: ORDEM_SEMANA.length,
@@ -1635,6 +1636,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             nivel={perfil.nivelExperiencia}
             objetivo={prescricao.objetivoEfetivo ?? perfil.objetivo}
             tempoPorSessaoMin={perfil.tempoPorSessaoMin}
+            limiteTempoTreino={perfil.limiteTempoTreino}
             preverPlano={preverPlano}
             temCustom={!!perfil.rotinaCustom}
             onSalvar={salvarTreinoCustom}
@@ -1951,7 +1953,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   /** Crítico visível do plano salvo: editor ou recomposição independente do automático final. */
   criticoPlano: Avaliacao | null;
   rotina: RotinaSemanal | null;
-  tempoPorSessaoMin: number;
+  tempoPorSessaoMin: number; limiteTempoTreino?: 'limitado' | 'sem_limite';
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   const [diaSelecionado, setDiaSelecionado] = useState(0);

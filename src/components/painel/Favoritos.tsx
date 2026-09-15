@@ -202,10 +202,10 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
         * pressupõe uma prescrição inexistente — a classe de vazamento que já custou caro.
         */}
       <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>
-        Um foco por vez, por 4 a 6 semanas. Braços e pernas priorizam a ordem e a distribuição, sem aumento agregado de séries nesta etapa. Nos grupos individuais, o volume só muda quando há folga e compensação; o total da sua semana não muda.{' '}
+        Um foco por vez, por 4 a 6 semanas. Na nova montagem automática, o foco acrescenta até dois exercícios de duas séries. Braços e pernas dividem esse bloco entre seus componentes. Em um dia de treino, o foco fica com dois exercícios no total. O tempo disponível pode reduzir o bloco.{' '}
         {foco === 'core'
           ? 'No core, as séries entram nos exercícios que você já faz — a quantidade de dias não muda. Se não houver folga, o app avisa e não ativa o foco.'
-          : 'Se o grupo já estiver no topo, não recebe séries extras. Braços e ombros podem vir primeiro na sessão; nos demais grupos, a prioridade mantém o mesmo tipo junto. O personalizado mantém sua ordem.'}
+          : 'Braços e ombros vêm primeiro na sessão. O treino personalizado mantém seus exercícios e sua ordem.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <button type="button" onClick={() => { onFoco(null); onCompensa(null); }} aria-pressed={foco === null} style={pill(foco === null)}>Nenhum</button>
@@ -213,7 +213,7 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
           <button key={g.id} type="button" onClick={() => onFoco(g.id)} aria-pressed={foco === g.id} style={pill(foco === g.id)}>{g.rotulo}</button>
         ))}
       </div>
-      {foco && !['bracos', 'pernas'].includes(foco) && (
+      {foco === 'core' && (
         <>
           <div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Qual grupo cede as séries?</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

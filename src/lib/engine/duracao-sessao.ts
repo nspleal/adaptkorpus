@@ -90,6 +90,8 @@ export interface ItemContinuo {
 export type ItemDuracao = ItemResistido | ItemContinuo;
 
 export interface EntradaDuracao {
+  /** Política14/09: sem os480s de tolerância legada. Não altera a fórmula. */
+  limiteEstrito?: boolean;
   itens: readonly ItemDuracao[];
   /** Orçamento em segundos = tempoPorSessaoMin·60. Ausente ⇒ faixa calcula, mas limite = NAO_AVALIADO. */
   orcamentoSegundos?: number;
@@ -290,7 +292,7 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
     };
   }
 
-  const limiteOperacional = orcamentoSegundos + TOLERANCIA_EXCESSO_SEG;
+  const limiteOperacional = orcamentoSegundos + (entrada.limiteEstrito ? 0 : TOLERANCIA_EXCESSO_SEG);
 
   // 🔒 C1.1-B — só musculação pode usar a tolerância de +480. O cardio automático deveria chegar
   // JÁ adaptado: se chega e empurra MAX acima de B, é falha de fiação, não sessão "na tolerância".

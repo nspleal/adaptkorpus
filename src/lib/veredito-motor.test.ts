@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import * as blocoFoco from './engine/bloco-foco-adicional';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { recomputarPlano } from './plano';
@@ -89,6 +90,43 @@ describe('D1 — o canal existe e é verbatim', () => {
  * de entrar em silêncio. (`avisos.push(...avisosCustom)` é repasse, não família própria.)
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
+  ['fullbody sem elegível', /Sem exercício elegível/, () => gerar({equipamento:'nenhum',treinoDias:['seg'],diasDisponiveis:1})],
+  ['foco limitado por retomada', /bloco adicional do foco não foi aplicado/, () => gerar({foco:{grupo:'peito',semana:1}}, {semanaCiclo:{semana:3,retomada:{semana:1,fator:0.5,volumeReferencia:14}}})],
+  ['segunda exposição adaptada', /Segunda exposição adaptada/, () => gerar({treinoDias:['seg','ter'],diasDisponiveis:2,foco:{grupo:'peito',semana:1}})],
+  ['bloco elegível incompleto', /completar o bloco adicional/, () => gerar({equipamento:'nenhum',foco:{grupo:'antebraco',semana:1}})],
+  ['bloco reduzido por tempo', /Bloco do foco reduzido pelo tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20,foco:{grupo:'peito',semana:1}})],
+  ['estrutura incompatível', /Estrutura incompatível com o tempo/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  /**
+   * 🔵 P-01 (decisão do autor 2026-09-16) — o full-body de um dia pode dispensar o direto de
+   * core → antebraço → panturrilha para caber. A retirada tem de ser NOMEADA: é a única coisa
+   * que impede o plano de parecer coberto depois dela.
+   */
+  ['full-body dispensou grupo por tempo', /Para caber em \d+ min nesta sess[ãa]o [úu]nica, o plano ficou sem exerc[íi]cio direto de/, () => gerar({treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  /**
+   * 🔵 POLÍTICA FINAL 2026-09-17 — as quatro famílias da sequência única de redução. Cada
+   * uma só sai quando o ajuste correspondente ACONTECEU, e uma única vez no plano (a
+   * comunicação é agregada, nunca por exercício nem por dia).
+   */
+  ['séries de 3 para 2', /reduzimos s[ée]ries progressivamente, at[ée] o piso de 2, em \d+ exerc[íi]cios?/, () => gerar({nivelExperiencia:'iniciante',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:15})],
+  ['exercícios redundantes retirados', /retiramos \d+ exerc[íi]cios? repetidos?/, () => gerar({nivelExperiencia:'intermediario',treinoDias:['seg','qua','sex'],diasDisponiveis:3,tempoPorSessaoMin:10})],
+  ['braços/ombros a 1 série', /ficaram? com 1 s[ée]rie\. Os exerc[íi]cios foram mantidos/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  ['estimativa ainda acima do limite', /a estimativa ainda passa do seu tempo/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
+  ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
+    const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
+    try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}
+  }],
+  /**
+   * 🔴 Revisão 15/09 — a decisão 6 manda o descanso ceder ANTES de qualquer exercício,
+   * inclusive para acomodar o bloco. Quando isso acontece o dia inteiro fica com descanso
+   * mais curto (nunca abaixo do piso da classe), e a pessoa precisa saber por quê.
+   */
+  ['descanso encurtado pelo bloco', /descanso de .* foi encurtado at[ée] o piso/, () => gerar({ nivelExperiencia: 'iniciante', equipamento: 'academia', treinoDias: ['seg', 'qui'], diasDisponiveis: 2, tempoPorSessaoMin: 30, foco: { grupo: 'peito', semana: 1 } })],
+  /**
+   * 🔴 Revisão independente 15/09 — o custo da separação dos recortes de pernas passou a ser
+   * DITO. Ele já existia no candidato reprovado (medido: as MESMAS 91 configurações perdiam
+   * volume, com os mesmos números), só que em silêncio. Perfil real, sem injeção.
+   */
+  ['recortes de pernas custam séries', /Separar os recortes de pernas custou s[ée]ries/, () => gerar({ nivelExperiencia: 'intermediario', equipamento: 'academia', treinoDias: ['seg', 'qua', 'sex'], diasDisponiveis: 3, tempoPorSessaoMin: 30, focoAgregado: { grupo: 'pernas', semana: 1 } })],
   ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
   ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ equipamento: 'nenhum', foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
   ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
@@ -127,7 +165,10 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
       - (MONTADOR.match(/avisos\.push\(\.\.\.avisosCustom\)/g) ?? []).length;
     // Tripwire: um `avisos.push` novo entra descoberto e derruba este teste em vez de virar
     // mais um aviso que ninguém prova que chega à tela — o defeito que D1 fecha.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(20);
+    // 29 → 30 em 2026-09-16: a dispensa do full-body curto (P-01).
+    // 30 → 34 em 2026-09-17: as quatro famílias da sequência única de redução (séries 3→2,
+    // redundantes retirados, braços/ombros a 1 série, estimativa ainda acima do limite).
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(34);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

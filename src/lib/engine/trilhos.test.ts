@@ -195,16 +195,34 @@ describe('🔒 o foco chega ao PLANO', () => {
     }
   });
 
-  it('🔴 e o volume total da semana NÃO cresce — o foco redistribui', () => {
+  it('autor14/09: só os extras aumentam o volume total', () => {
     const soma = (r: ReturnType<typeof plano>) => [...seriesPorGrupo(r).values()].reduce((a, b) => a + b, 0);
-    expect(soma(plano(comFoco))).toBe(soma(plano(perfil())));
+    const com=plano({...comFoco,limiteTempoTreino:'sem_limite'});
+    expect(soma(com)).toBe(soma(plano(perfil({limiteTempoTreino:'sem_limite'})))+(com.blocoFoco?.adicionais.reduce((n,a)=>n+a.series,0)??0));
   });
 
-  it('nenhum grupo do plano ultrapassa o MRV, com foco ou sem', () => {
+  /**
+   * 🔴 L-01 (revisão independente 15/09) — a mesma identidade com tempo LIMITADO, onde o
+   * candidato `badcea47` tirava do baseline para acomodar o bloco. O total sobe exatamente o
+   * que o bloco entregou, e nenhum grupo fora do foco muda de volume.
+   */
+  it('tempo LIMITADO: o total sobe só o que o bloco entregou, e ninguém mais muda', () => {
+    const soma = (r: ReturnType<typeof plano>) => [...seriesPorGrupo(r).values()].reduce((a, b) => a + b, 0);
+    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }));
+    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 });
+    const entregue = com.blocoFoco?.adicionais.reduce((n, a) => n + a.series, 0) ?? 0;
+    expect(entregue, 'bloco vazio — a identidade seria trivial').toBeGreaterThan(0);
+    expect(soma(com)).toBe(soma(sem) + entregue);
+    const a = seriesPorGrupo(sem); const b = seriesPorGrupo(com);
+    const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => g !== 'peito' && (a.get(g) ?? 0) !== (b.get(g) ?? 0));
+    expect(mexidos, `grupos alterados fora do foco: ${mexidos.join(', ')}`).toEqual([]);
+  });
+
+  it('MRV do baseline preservado; extras do foco têm exceção explícita14/09', () => {
     const teto = mrv('intermediario', 'massa');
     for (const p of [perfil(), comFoco])
       for (const [grupo, series] of seriesPorGrupo(plano(p)))
-        expect(series, `${grupo} passou do MRV`).toBeLessThanOrEqual(teto);
+        expect(series, `${grupo} passou do teto aplicável`).toBeLessThanOrEqual(teto+(p.foco?.grupo===grupo?4:0));
   });
 });
 
@@ -226,21 +244,21 @@ describe('🔒 o foco tem superfície, e ela promete o que o motor cumpre', () =
     expect(antes.endsWith('&&') || antes.endsWith('?'), 'o seletor está atrás de uma condição').toBe(false);
   });
 
-  it('🔑 a copy NÃO promete volume a quem já está no topo', () => {
+  it('copy14/09 explicita adição e restrição temporal', () => {
     const favs = fonte('src/components/painel/Favoritos.tsx');
     const i = favs.indexOf('export function GrupoEmFoco');
     const bloco = favs.slice(i, i + 2200);
     // A janela declarada e a compensação 1:1 aparecem…
     expect(bloco).toMatch(/4 a 6 semanas/);
-    expect(bloco).toMatch(/o total da sua semana não muda/);
+    expect(bloco).toMatch(/até dois exercícios de duas séries/);
     // …e o caso do teto duro é dito, não escondido.
     expect(bloco, 'a copy some com o caso "já está no topo" — que é a maioria de quem foca')
-      .toMatch(/j[áa] estiver no topo/i);
+      .toMatch(/tempo disponível pode reduzir o bloco/i);
   });
 
-  it('meio foco não é foco: sem o compensador, nada é salvo', () => {
+  it('compensador só é exigido para core', () => {
     const editar = fonte('src/components/painel/EditarPerfil.tsx');
-    expect(editar).toMatch(/foco: focoGrupo && focoCompensa/);
+    expect(editar).toContain("focoGrupo !== 'core' || focoCompensa");
   });
 
   it('os dois eventos do bloco têm call site', () => {
@@ -432,7 +450,7 @@ describe('🔒 foco de core — superfície, evento e copy', () => {
    */
   it('🔴 a saída por ORDEM não é prometida a quem escolhe Core', () => {
     const favoritos = fonte('src/components/painel/Favoritos.tsx');
-    const i = favoritos.indexOf('vir primeiro na sessão');
+    const i = favoritos.indexOf('Braços e ombros vêm primeiro na sessão');
     expect(i, 'a frase da saída por ordem sumiu — reancore este guard').toBeGreaterThan(-1);
 
     // Sobe até o início da expressão condicional que a governa e exige que ela cite core.
