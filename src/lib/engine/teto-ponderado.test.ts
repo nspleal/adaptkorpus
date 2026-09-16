@@ -110,6 +110,49 @@ describe('podarExcessoPonderado — o excesso do BASELINE', () => {
     expect(slots[5]!.series, 'costas pagou por um teto que não é dele').toBe(antesCostas);
   });
 
+  /**
+   * 🔒 O predicado `podavel` — o que protege a dose que a PESSOA escolheu no seu desenho.
+   * O crédito continua sendo do plano INTEIRO (filtrar a entrada daria um total falso);
+   * o predicado só decide de quem se pode tirar.
+   */
+  it('🔒 slot protegido não cede série — mas continua contando no crédito', () => {
+    const slots = slotsDePeito([4, 4, 4, 4, 4]);
+    const protegido = slots[0]!;
+    const r = podarExcessoPonderado(slots, 18, 2, (s) => s !== protegido);
+    expect(protegido.series, 'a dose protegida foi alterada').toBe(4);
+    expect(creditoPonderadoDaSemana(slots).get('peito')).toBeLessThanOrEqual(18);
+    // O corte inteiro saiu dos outros quatro: 20 − 2 = 18, com o protegido intacto.
+    expect(slots.map((s) => s.series).sort()).toEqual([3, 3, 4, 4, 4]);
+    expect(r.podados).toEqual([{ grupo: 'peito', series: 2 }]);
+  });
+
+  it('🔒 se TUDO está protegido, o excesso fica e vira `irredutiveis` — nada some calado', () => {
+    const slots = slotsDePeito([4, 4, 4, 4, 4]);
+    const r = podarExcessoPonderado(slots, 18, 2, () => false);
+    expect(slots.map((s) => s.series), 'mexeu em dose protegida').toEqual([4, 4, 4, 4, 4]);
+    expect(r.podados).toEqual([]);
+    expect(r.irredutiveis).toContain('peito');
+  });
+
+  /**
+   * ⚠️ REGRESSÃO do QA desta correção: com TODO o plano protegido, o orçamento de voltas era
+   * `0 séries podáveis + 1` — uma volta só — e a função devolvia apenas o PRIMEIRO grupo
+   * estourado. Na tela, com peito, costas e ombros a 24 contra 16, `irredutiveis` vinha com
+   * peito sozinho. Cada grupo irredutível consome uma volta, e o orçamento tem de contá-las.
+   */
+  it('🔴 TRÊS grupos estourados e tudo protegido: os três entram em `irredutiveis`', () => {
+    const costas = EXERCISES.find((e) => e.grupoPrimario === 'costas')!;
+    const ombros = EXERCISES.find((e) => e.grupoPrimario === 'ombros')!;
+    const slots = [
+      ...slotsDePeito([6, 6, 6, 6]),
+      { exercicio: costas, series: 24 },
+      { exercicio: ombros, series: 24 },
+    ];
+    const r = podarExcessoPonderado(slots, 16, 2, () => false);
+    expect(r.podados).toEqual([]);
+    expect([...r.irredutiveis].sort()).toEqual(['costas', 'ombros', 'peito']);
+  });
+
   it('termina mesmo com entrada absurda (sem laço infinito)', () => {
     const slots = slotsDePeito([4, 4, 4]);
     expect(() => podarExcessoPonderado(slots, 0, 0)).not.toThrow();

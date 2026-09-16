@@ -52,9 +52,9 @@
       "arquivo": "src/lib/engine/deload-volume-entregue.test.ts",
       "historicos": [
         {
-          "nome": "D13 · os casos nomeados pela auditoria o caso que D2 mediu continua exatamente onde estava (96 → 48)",
+          "nome": "D13 · os casos nomeados pela auditoria o caso que D2 mediu continua onde estava, na moeda decidida (96 → 93 na S5; a S6 fica em 48)",
           "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "96→48 é fotografia; redução efetiva, propagação e piso de séries continuam sob testes deste arquivo. Não exige a mesma quantidade inicial de slots.",
+          "motivo": "Fotografia. O 96 era volume DIRETO; com a decisão de 2026-09-16 (o MRV limita o volume PONDERADO) a S5 perde as séries que estavam acima do teto na conta que vale — 93 no seletor histórico, 92 no atual, por isso o caso segue restrito ao histórico. Redução efetiva, propagação e piso de séries continuam sob os demais testes deste arquivo.",
           "sucessor": "Todos os demais testes deste arquivo passam no seletor atual"
         }
       ]

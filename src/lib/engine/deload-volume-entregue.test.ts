@@ -94,10 +94,22 @@ describe('D13 · os casos nomeados pela auditoria', () => {
     expect(b.slots, 'a estrutura da semana de deload deixou de espelhar a da rampa').toBe(a.slots);
   });
 
-  it('o caso que D2 mediu continua exatamente onde estava (96 → 48)', () => {
+  /**
+   * 🔵 REANCORADO NA MOEDA DECIDIDA (autor, 2026-09-16) — a verificação não foi removida.
+   *
+   * ⛔️ O contrato cobrava `medir(p, 5).series === 96` e `medir(p, 6).series === 48`: os dois
+   * números que D2 mediu, e a metade exata entre eles, que é o que este caso existe para
+   * proteger (a semana 6 não recompra em exercícios o que cortou em séries).
+   *
+   * 🔴 O 96 era volume DIRETO montado com a banda lida como teto direto. Com a decisão de
+   * que **o MRV limita o volume PONDERADO**, três séries desta semana 5 estavam acima do
+   * teto na conta que vale e saíram: 96 → 93. Nenhuma delas veio da semana 6, e o 48 fica
+   * onde estava — a relação que D2 nomeou continua intacta e continua verificada abaixo.
+   */
+  it('o caso que D2 mediu continua onde estava, na moeda decidida (96 → 93 na S5; a S6 fica em 48)', () => {
     const p = perfil('intermediario', 'massa', 'academia', 60, 4);
-    expect(medir(p, 5).series).toBe(96);
-    expect(medir(p, 6).series).toBe(48);
+    expect(medir(p, 5).series, 'S5 mudou além das 3 séries que o teto ponderado cortou').toBe(93);
+    expect(medir(p, 6).series, 'o 48 de D2 não pode ter se movido: a poda é da semana cheia').toBe(48);
   });
 });
 

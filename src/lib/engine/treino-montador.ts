@@ -33,7 +33,7 @@ import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, foco
 import { otimizarCoberturaAnatomica } from './cobertura-anatomica';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
-import { creditar, creditoAtual, gruposSemEspaco, seriesQueCabemNoTeto } from './teto-ponderado';
+import { creditar, creditoAtual, gruposSemEspaco, MARCA_PODA_TETO, podarExcessoPonderado, seriesQueCabemNoTeto } from './teto-ponderado';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
@@ -256,6 +256,39 @@ export function montarRotina(
    */
   const deloadAgendado = semanaCiclo != null && !semanaCiclo.retomada
     && semanaCiclo.semana === DELOAD_SEMANAS_DEFAULT;
+  /**
+   * 🔴 A FAIXA DA SEMANA — UMA AUTORIDADE, UMA MOEDA (decisão do autor 2026-09-16).
+   *
+   * Até `f035d6c` o mesmo `volumePorGrupoSemana` era cobrado em DUAS moedas dentro do
+   * mesmo motor: PONDERADA no alocador (`alvoPonderado`), no guard de cobertura e no
+   * crítico do editor; DIRETA na rampa (`alvoDaSemana`) e no bloco do foco. Medido em
+   * `3d86cbf`: 212 de 3 888 combinações entregavam um grande acima do MRV **sem foco
+   * nenhum** (costas 21 contra 20 em avançado/massa; 14 contra 12 em avançado/saúde).
+   *
+   * 🔵 A decisão vigente fecha a ambiguidade: **o MRV é ponderado** — série direta 1,0 e
+   * indireta 0,5 (`PESO_SECUNDARIO`) —, para todos os grupos, no baseline e no foco. A
+   * rampa continua sendo a INTENÇÃO (quantas diretas o grupo mira na semana); o teto é
+   * uma restrição GLOBAL, porque o crédito indireto de um grupo depende dos slots dos
+   * outros. Por isso ele é cobrado UMA vez, depois que todas as séries estão decididas
+   * (`podarExcessoPonderado`): um cap por grupo dentro do laço da rampa dependeria da
+   * ordem em que os grupos são visitados — seria uma terceira conta, não a canônica.
+   *
+   * 🔒 Nenhum número novo: a faixa é a que `aplicarDeload` e `volumeDaRetomada` já
+   * produzem. Esta constante é só o ÚNICO ponto onde ela é lida — a poda do baseline, o
+   * teto dos extras do foco e o `faixaVolumeSemana` publicado leem daqui.
+   */
+  const faixaDaSemana: Faixa = semanaCiclo?.retomada
+    ? { min: volumeDaRetomada(semanaCiclo.retomada.volumeReferencia, semanaCiclo.retomada.fator), max: prescricao.volumePorGrupoSemana.max }
+    : (deloadAgendado ? aplicarDeload(prescricao) : prescricao).volumePorGrupoSemana;
+  /**
+   * 🔒 O PISO por exercício nesta semana — o limite de até onde a poda pode descer.
+   * Na retomada o piso operacional é 1 por slot (é com 1 que `repartir` começa, e o alvo
+   * da fase fica ABAIXO do piso da banda por definição); usar o `sMin` do nível ali
+   * impediria qualquer poda e ainda afirmaria um piso que a fase não tem.
+   */
+  const sMinDaSemana = semanaCiclo?.retomada
+    ? 1
+    : (deloadAgendado ? aplicarDeload(prescricao) : prescricao).seriesPorExercicio.min;
   // 🎛️ v3 · Bloco A: revalidadas AQUI, na montagem — equipamento e nível mudam no perfil, e
   // preferência que deixou de caber é ignorada na geração (o plano sai correto) sem ser
   // apagada do perfil: se a pessoa recuperar o equipamento, ela volta a valer sozinha.
@@ -1106,6 +1139,20 @@ export function montarRotina(
       // Autor14/09: as séries do baseline já foram decididas pela rampa. A adição
       // não redistribui essas séries; o deload continua reduzindo uma única vez.
       if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,series:seriesEmDeload(s.series??0)}))}));
+      /**
+       * 🔒 O AJUSTE DO PLANO-BASE TAMBÉM É DITO NA SEMANA 6.
+       *
+       * Medido na varredura desta correção: em 40 das 3 888 células — todas S6 — o volume
+       * entregue caiu e NENHUMA frase saiu. A razão: quem podou foi a montagem interna do
+       * plano-base (`rotinaBaseDoDeload`), cujos avisos são descartados; na semana 6 a poda
+       * não tem mais nada a cortar e fica calada. Quem abre o app direto na semana 6 nunca
+       * viu a frase da semana 5, e a redução ficaria sem causa na tela — exatamente o defeito
+       * que o relato de 15/09 descreve, de outro lado.
+       *
+       * 🔒 Sem nomear grupo: os nomes são da semana CHEIA, e repeti-los aqui afirmaria da
+       * semana 6 um corte que não aconteceu nela.
+       */
+      if(rotinaBaseDoDeload?.avisos.some(a=>a.includes(MARCA_PODA_TETO)))avisos.push('O plano-base desta semana de deload já vinha ajustado para não passar do máximo de volume da semana cheia. Por isso alguns grupos entram com menos séries do que a rampa pediria, antes mesmo da redução do deload.');
       const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
       const limiteDia=limiteDiarioSegundos;
       /** Descanso pela autoridade única (`descansoDoExercicio`), no nível pedido. */
@@ -1270,31 +1317,43 @@ export function montarRotina(
        * pelo baseline: a adição também não encurta o descanso de quem já estava no plano.
        */
       /**
-       * 🟠 EXCESSO DO BASELINE — MEDIDO, SEPARADO DO FOCO, **AGUARDANDO DECISÃO**.
+       * 🟠 A PODA DO BASELINE — LIGADA (decisão do autor 2026-09-16).
        *
-       * Medido em `3d86cbf` e reconfirmado aqui: **212 de 3 888 combinações entregam um grande
-       * acima do MRV SEM foco nenhum** (costas 21 contra 20 em avançado/massa; 14 contra 12 em
-       * avançado/saúde). Não é causado pelo bloco do foco — por isso a verificação do bloco,
-       * logo abaixo, mede a folga a partir do baseline como ele está, sem lhe cobrar este
-       * excesso.
+       * Até `f035d6c` este ponto só DOCUMENTAVA o excesso: 212 de 3 888 combinações
+       * entregavam um grande acima do MRV **sem foco nenhum**, e a correção ficou parada
+       * porque o teto era lido em duas moedas (ver `faixaDaSemana`, no topo desta função).
+       * A decisão fechou a moeda em PONDERADA, e o excesso do baseline deixa de ser um
+       * estado aceito: ele é um defeito do montador e é corrigido aqui.
        *
-       * 🔴 A causa NÃO é um descuido de código: a banda é lida em DUAS MOEDAS no mesmo motor.
-       *   · ponderada (direto 1,0 + indireto 0,5): `alocador.alvoPonderado = banda.max`, o
-       *     guard de cobertura (`mev`) e o crítico do editor (`mrv`);
-       *   · direta: a rampa (`alvoDaSemana`) e os contratos que `treino-montador.test.ts`
-       *     cobra — *"grupos com slots suficientes ATINGEM o topo da banda na semana 5"*.
-       * Com crédito indireto > 0 as duas leituras são aritmeticamente incompatíveis: ou o
-       * grupo chega a 16 diretas (e passa de 16 ponderadas), ou fica na banda ponderada (e não
-       * chega a 16 diretas). Escolher aqui reverteria, calado, um contrato que a coordenação
-       * não revisou — e a regra da casa é apresentar o conflito, não inventar a saída.
+       * 🔒 Roda NESTE ponto — depois da rampa e da fase A, ANTES do bloco do foco — e a
+       * ordem é contrato, não conveniência:
+       *  · o foco precisa enxergar o baseline JÁ corrigido, senão herdaria folga falsa e
+       *    gastaria com extras um teto que o baseline já tinha estourado;
+       *  · e nada do baseline pode ser cortado por causa dos extras (D-01/D-02): a poda roda
+       *    sobre o plano SEM extras, então seu resultado é idêntico ao do plano sem foco das
+       *    mesmas entradas — a existência de um foco nunca a provoca nem a agrava.
        *
-       * 🔧 O conserto está PRONTO e testado: `podarExcessoPonderado` (`teto-ponderado.ts`, com
-       * testes de unidade próprios) poda o excesso ponderado tirando série só do grupo que
-       * estourou e nunca abaixo do piso do nível. Ligá-lo é uma chamada aqui. Medido: derruba
-       * 3 casos de `treino-montador.test.ts` e `deload-volume-entregue.test.ts`, que são
-       * justamente os que afirmam a leitura DIRETA. Enquanto a moeda não for decidida, o
-       * excesso do baseline continua VISÍVEL para a pessoa — o crítico do editor diz
-       * `acima_do_maximo` com o número —, que é a situação honesta: nada é escondido.
+       * 🔒 Ela tira série só dos slots DIRETOS do grupo que estourou (nenhum terceiro paga
+       * por um teto que não é dele) e nunca abaixo de `sMinDaSemana`. Quem não tem como
+       * ceder entra em `irredutíveis`: o excesso FICA e o crítico continua dizendo —
+       * silenciar aqui esconderia no montador o que o editor existe para mostrar.
+       *
+       * 🔒 E ela é DITA. A redução de volume de um grupo é exatamente o tipo de mudança que
+       * a casa não faz calada (D-01/D-02: "o custo é dito, nunca silencioso").
+       */
+      const podaBaseline = podarExcessoPonderado(diasTreino.flatMap(d => d.slots), faixaDaSemana.max, sMinDaSemana);
+      if (podaBaseline.podados.length > 0) {
+        const quantas = podaBaseline.podados.reduce((n, p) => n + p.series, 0);
+        avisos.push(`Ajustamos o volume de ${podaBaseline.podados.map(p => ROTULO_GRUPO[p.grupo]).join(', ')} ${MARCA_PODA_TETO} (${faixaDaSemana.max} séries, somando diretas e indiretas): ${quantas} ${plural(quantas, 'série saiu', 'séries saíram')} ${plural(podaBaseline.podados.length, 'do próprio grupo', 'dos próprios grupos')}. Nenhum outro exercício foi alterado.`);
+      }
+      /**
+       * 🔒 SEM frase para `irredutiveis` NESTE caminho — e isto foi MEDIDO, não suposto.
+       * Na varredura das 3 888 combinações o caso não ocorre nenhuma vez: o alocador já mira
+       * `banda.max` na conta ponderada, então sempre há série direta acima do piso de onde
+       * tirar. Escrever a frase aqui seria aviso morto na tela, que a casa recusa (e que o
+       * tripwire de `veredito-motor.test.ts` cobra). No desenho da PESSOA o caso é real — as
+       * séries dela são intocáveis — e a frase existe lá, com caso. Quando o excesso fica,
+       * quem diz é o crítico do editor (`acima_do_maximo`), como sempre disse.
        */
       const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[] as GrupoPrimario[],faltantes:[] as GrupoPrimario[],solicitados:0} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
       diasTreino=bloco.dias;
@@ -1322,7 +1381,7 @@ export function montarRotina(
        * não ganha volume; ganha ORDEM"* (claim --006), entregue por `reordenarPeloFoco`.
        */
       const nominalDoExtra=deloadAgendado?seriesEmDeload(2):2;
-      const tetoDaSemana=(deloadAgendado?aplicarDeload(prescricao):prescricao).volumePorGrupoSemana.max;
+      const tetoDaSemana=faixaDaSemana.max; // 🔒 mesma faixa da poda acima — uma leitura só.
       const creditoBaseline=creditoAtual(diasTreino.flatMap(d=>d.slots).filter(s=>!bloco.adicionais.has(s)));
       const extrasRecusados=new Set<SlotExercicio>();
       const bloqueadores=new Set<GrupoPrimario>();
@@ -1537,9 +1596,7 @@ export function montarRotina(
       ...(semanaCiclo
         ? {
           faseVolume: (semanaCiclo.retomada ? 'retomada' : deloadAgendado ? 'deload' : 'normal') as FaseVolume,
-          faixaVolumeSemana: semanaCiclo.retomada
-            ? { min: volumeDaRetomada(semanaCiclo.retomada.volumeReferencia, semanaCiclo.retomada.fator), max: prescricao.volumePorGrupoSemana.max }
-            : (deloadAgendado ? aplicarDeload(prescricao) : prescricao).volumePorGrupoSemana,
+          faixaVolumeSemana: faixaDaSemana,
         }
         : {}),
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
@@ -1918,6 +1975,47 @@ export function montarRotina(
           : deloadAgendado ? seriesEmDeload(escolhidas) : escolhidas;
         slot.seriesDefinidasPeloUsuario = true;
       }
+    }
+    /**
+     * 🟠 O TETO PONDERADO NO DESENHO DA PESSOA — e SÓ sobre o que o APP dosou.
+     *
+     * 🔒 A instrução vigente (2026-09-16) manda valer o MRV ponderado "para todos os grupos,
+     * no baseline e no foco", e manda não alterar em silêncio treino manual salvo. As duas
+     * coisas cabem juntas porque num desenho manual convivem DOIS tipos de número: a série que
+     * a pessoa digitou (`seriesDefinidasPeloUsuario`, aplicada no laço logo acima) e a série que
+     * o app calculou pela rampa para o exercício que ela não dosou. A poda alcança apenas o
+     * segundo: o app corrige o número do app. O da pessoa fica onde ela pôs — e se for ele que
+     * estoura, o grupo cai em `irredutíveis` e o crítico continua dizendo, que é o comportamento
+     * que o editor já tem hoje.
+     *
+     * 🔒 O crédito é calculado sobre TODOS os slots — filtrar a entrada daria um total falso.
+     * Quem filtra é o predicado `podavel`, que decide só de quem se pode tirar.
+     *
+     * 🔒 E é DITA: a mesma frase do caminho automático, nunca uma mudança calada.
+     */
+    {
+      const podaCustom = podarExcessoPonderado(
+        rotinaCustomEstrutural.dias.flatMap((d) => d.slots),
+        faixaDaSemana.max,
+        sMinDaSemana,
+        (s) => !(s as SlotExercicio).seriesDefinidasPeloUsuario,
+      );
+      const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios);
+      if (podaCustom.podados.length > 0) {
+        const quantas = podaCustom.podados.reduce((n, x) => n + x.series, 0);
+        avisos.push(`Ajustamos o volume de ${podaCustom.podados.map((x) => ROTULO_GRUPO[x.grupo]).join(', ')} ${MARCA_PODA_TETO} (${faixaDaSemana.max} séries, somando diretas e indiretas): ${quantas} ${plural(quantas, 'série saiu', 'séries saíram')} de ${plural(quantas, 'exercício', 'exercícios')} que o app dosou. As séries que você escolheu ficaram como estão.`);
+      }
+      /**
+       * 🔒 SEM frase para `irredutiveis` — D16, uma voz por fato.
+       *
+       * ⚠️ Medido no QA desta correção: com o desenho todo em 6 séries, a tela mostrava
+       * TRÊS linhas do crítico (*"Peito está acima do volume máximo do seu nível (24 contra
+       * 16 séries)"*, idem costas e ombros) e, logo abaixo, uma quarta frase nossa dizendo o
+       * mesmo com menos informação. O crítico já é a autoridade sobre o excesso que FICA, com
+       * o número por grupo; a nossa só teria a acrescentar que o app não mexeu no que a
+       * pessoa digitou — que é o esperado num desenho manual, não notícia.
+       * Quando a poda AGE, aí sim ela fala: é a frase logo acima.
+       */
     }
     /**
      * 🔵 2026-09-15 — a cobertura é REMEDIDA aqui, com as séries que a pessoa de fato escolheu.

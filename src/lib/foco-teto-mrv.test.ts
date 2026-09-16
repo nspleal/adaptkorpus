@@ -91,41 +91,47 @@ describe('🔴 relato 2026-09-15 — o bloco do foco não passa do MRV', () => {
 // ── 2. O BASELINE, sem foco nenhum ───────────────────────────────────────────
 
 /**
- * 🟠 PENDÊNCIA DECLARADA, não corrigida nesta entrega — e por isso MEDIDA aqui.
+ * 🟢 A PENDÊNCIA FOI DECIDIDA E FECHADA (autor, 2026-09-16) — a redação de 15/09 fica abaixo.
  *
- * O baseline sozinho, sem foco nenhum, passa do MRV em parte do avançado. A causa é um
- * conflito entre duas leituras da MESMA banda, as duas vivas no motor:
- *  · ponderada — `alocador.alvoPonderado`, o guard de cobertura e o crítico do editor;
- *  · direta — a rampa (`alvoDaSemana`) e o contrato que `treino-montador.test.ts` cobra
- *    ("grupos com slots suficientes ATINGEM o topo da banda na semana 5").
- * Com crédito indireto > 0 elas são incompatíveis. Escolher uma reverte a outra, e essa
- * escolha é da coordenação — este arquivo registra o fato para que ele não se perca nem
- * seja confundido com o defeito do FOCO, que esta entrega corrige.
+ * ⛔️ Como estava, e por que: *"O baseline sozinho, sem foco nenhum, passa do MRV em parte do
+ * avançado. A causa é um conflito entre duas leituras da MESMA banda, as duas vivas no motor:
+ * ponderada — `alocador.alvoPonderado`, o guard de cobertura e o crítico do editor; direta —
+ * a rampa (`alvoDaSemana`) e o contrato que `treino-montador.test.ts` cobra. Com crédito
+ * indireto > 0 elas são incompatíveis. Escolher uma reverte a outra, e essa escolha é da
+ * coordenação."* O conserto ficou pronto e DESLIGADO em `podarExcessoPonderado`.
  *
- * O conserto está pronto em `podarExcessoPonderado` (com testes próprios) e desligado.
+ * ✅ A decisão: **o MRV limita o volume PONDERADO** — direta 1,0 + indireta 0,5 —, para todos
+ * os grupos, no baseline e no foco. A poda foi ligada em `treino-montador.ts`, e a leitura
+ * direta que os contratos de `treino-montador.test.ts` cobravam foi substituída lá, na moeda
+ * nova, com a redação antiga preservada.
+ *
+ * 🔑 O que estes dois casos passam a medir: exatamente as mesmas células que ESTOURAVAM agora
+ * cabem — é a prova de regressão do conserto, nas coordenadas em que o defeito foi medido. A
+ * garantia original do arquivo (o foco não acrescenta excesso) continua valendo por cima.
  */
-describe('🟠 o excesso do BASELINE existe e é independente do foco (pendência de decisão)', () => {
+describe('🟢 o excesso do BASELINE foi corrigido nas células em que foi medido', () => {
   const CASOS = [
     { nivel: 'avancado', objetivo: 'massa', dias: 3, tempo: 60, limite: 'sem_limite', semana: 5 },
     { nivel: 'avancado', objetivo: 'saude', dias: 3, tempo: 60, limite: 'limitado', semana: 3 },
   ] as const;
 
   for (const c of CASOS) {
-    it(`${c.nivel}/${c.objetivo}/${c.dias}d/${c.tempo}min/${c.limite}/S${c.semana}: o excesso é do baseline, não do foco`, () => {
+    it(`${c.nivel}/${c.objetivo}/${c.dias}d/${c.tempo}min/${c.limite}/S${c.semana}: o baseline volta para dentro do teto`, () => {
       const p = perfil({ nivelExperiencia: c.nivel, objetivo: c.objetivo, diasDisponiveis: c.dias,
         treinoDias: DIAS.slice(0, c.dias) as never, tempoPorSessaoMin: c.tempo, limiteTempoTreino: c.limite } as never);
       const teto = mrv(c.nivel, c.objetivo);
       const semFoco = rotina(p, c.semana);
       const comFoco = rotina({ ...p, foco: { grupo: 'peito', compensa: 'ombros', semana: c.semana } } as never, c.semana);
-      const excessoBaseline = acimaDoTeto(semFoco, teto);
-      // anti-vacuidade: este recorte é mesmo um dos que estouram sem foco
-      expect(excessoBaseline.length, 'o recorte deixou de estourar — reancorar o caso').toBeGreaterThan(0);
-      // 🔑 o que esta entrega garante: o FOCO não acrescenta nenhum grupo à lista de excessos
-      const excessoComFoco = acimaDoTeto(comFoco, teto);
-      const grupo = (s: string) => s.split(' ')[0]!;
-      for (const e of excessoComFoco) {
-        expect(excessoBaseline.map(grupo), `o foco criou excesso novo em ${grupo(e)}`).toContain(grupo(e));
-      }
+      // 🔑 O que era a pendência: esta lista NÃO era vazia. Agora é, e o foco não a reabre.
+      expect(acimaDoTeto(semFoco, teto), 'o baseline voltou a estourar o teto').toEqual([]);
+      expect(acimaDoTeto(comFoco, teto), 'o foco criou excesso que o baseline não tinha').toEqual([]);
+      /**
+       * ⚠️ ANTI-VACUIDADE — sem isto, as duas listas vazias passariam também num plano vazio
+       * ou num recorte que nunca chegou perto do teto. A célula só serve como regressão se
+       * ela AINDA é apertada: algum grande tem de terminar a menos de uma série do teto.
+       */
+      const folgaMinima = Math.min(...GRUPOS_GRANDES.map((g) => teto - (ponderado(semFoco).get(g) ?? 0)));
+      expect(folgaMinima, 'a célula deixou de ser apertada — reancorar o caso').toBeLessThan(1);
     });
   }
 

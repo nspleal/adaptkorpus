@@ -111,6 +111,16 @@ export function creditar(
   for (const sec of secundariosDe(exercicio)) credito.set(sec, (credito.get(sec) ?? 0) + n * PESO_SECUNDARIO);
 }
 
+/**
+ * 🔒 A MARCA da frase da poda — uma constante, não um literal repetido.
+ *
+ * A semana de deload monta o plano-base internamente (`rotinaBaseDoDeload`) e só aproveita
+ * os DIAS dele; os avisos daquela montagem são descartados. Sem esta marca, a semana 6 não
+ * teria como saber que o base já tinha sido podado — e entregaria menos séries sem dizer
+ * por quê (medido: 40 das 3 888 células, todas S6). Quem emite e quem detecta leem daqui.
+ */
+export const MARCA_PODA_TETO = 'para não passar do máximo desta semana';
+
 export interface PodaPonderada {
   /** Grupos que estavam acima do teto e quantas séries diretas foram devolvidas. */
   podados: { grupo: GrupoPrimario; series: number }[];
@@ -138,11 +148,26 @@ export function podarExcessoPonderado(
   slots: readonly SlotPonderavel[],
   teto: number,
   seriesMinimas: number,
+  /**
+   * 🔒 Quem PODE ceder série. Recebe TODOS os slots (o crédito ponderado é do plano
+   * inteiro — filtrar a entrada daria um total falso) e decide, slot a slot, quem está
+   * disponível para a poda. O desenho da pessoa usa isto para proteger as séries que ela
+   * mesma escolheu: o app corrige o número que o app decidiu, nunca o dela.
+   */
+  podavel: (slot: SlotPonderavel) => boolean = () => true,
 ): PodaPonderada {
   const podados = new Map<GrupoPrimario, number>();
   const irredutiveis: GrupoPrimario[] = [];
-  // Limite de voltas = total de séries podáveis + 1: termina sempre, e nunca antes da hora.
-  const maxVoltas = slots.reduce((n, s) => n + Math.max(0, (s.series ?? 0) - seriesMinimas), 0) + 1;
+  /**
+   * Limite de voltas: cada volta ou tira UMA série, ou marca UM grupo como irredutível.
+   *
+   * ⚠️ O `+ GRUPOS_GRANDES.length` foi medido, não precaução: com TODOS os slots protegidos
+   * (o desenho da pessoa inteiro dosado por ela), o orçamento antigo era 0 + 1 = 1 volta, e a
+   * função devolvia só o PRIMEIRO grupo estourado — com peito, costas e ombros a 24 contra 16,
+   * `irredutiveis` vinha com peito sozinho. Termina sempre, e nunca antes da hora.
+   */
+  const maxVoltas = slots.reduce((n, s) => n + (podavel(s) ? Math.max(0, (s.series ?? 0) - seriesMinimas) : 0), 0)
+    + GRUPOS_GRANDES.length + 1;
   for (let volta = 0; volta < maxVoltas; volta += 1) {
     const credito = creditoPonderadoDaSemana(slots);
     const excedido = GRUPOS_GRANDES.find(
@@ -150,7 +175,7 @@ export function podarExcessoPonderado(
     );
     if (!excedido) break;
     const candidatos = slots.filter(
-      (s) => s.exercicio.grupoPrimario === excedido && (s.series ?? 0) > seriesMinimas,
+      (s) => s.exercicio.grupoPrimario === excedido && (s.series ?? 0) > seriesMinimas && podavel(s),
     );
     if (candidatos.length === 0) {
       irredutiveis.push(excedido);
