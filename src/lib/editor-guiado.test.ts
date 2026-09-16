@@ -105,8 +105,12 @@ describe('🔒 DF② — edição manual de séries; reps e RIR permanecem autom
    */
   it('o placar do editor vem do motor (preverPlano), nunca de séries chutadas', () => {
     expect(editor, 'o editor voltou a estimar séries por conta própria').not.toMatch(/seriesPadrao/);
-    expect(editor).toMatch(/const previsto = useMemo\(\(\) => preverPlano\(dias\)/);
-    expect(painel, 'a prévia não usa o mesmo recompute do salvamento').toMatch(/function preverPlano[\s\S]{0,400}recomputarPlano\(\{ \.\.\.perfil, rotinaCustom \}/);
+    // 🔵 2026-09-15: a prévia passou a devolver TAMBÉM o contexto (faixa/fase da semana e os
+    // avisos do motor), então os dias saem de `previsao.dias`. O que este guard protege é o
+    // mesmo de sempre — o placar vem de `preverPlano`, na mesma memo, nunca de estimativa.
+    expect(editor).toMatch(/const previsao = useMemo\(\(\) => preverPlano\(dias\)/);
+    expect(editor).toMatch(/const previsto = previsao\.dias/);
+    expect(painel, 'a prévia não usa o mesmo recompute do salvamento').toMatch(/function preverPlano[\s\S]{0,600}recomputarPlano\(\{ \.\.\.perfil, rotinaCustom \}/);
   });
 
   it('o crítico permanece no plano JÁ SALVO, no mesmo componente (faixa compacta)', () => {

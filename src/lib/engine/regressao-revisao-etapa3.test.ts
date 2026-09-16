@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { gerarTreino } from './index';
 import { EXERCISES } from '../data/exercises';
 import { vereditoDoPlano } from '../veredito-motor';
+import { creditoPonderadoDaSemana } from './alocador';
 import type { PerfilTreino, RotinaSemanal } from './treino-types';
 import type { Weekday } from '../semana';
 import type { GrupoPrimario } from '../data/types';
@@ -90,25 +91,53 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
     treinoDias: ['seg', 'ter', 'qui', 'sex'],
   });
   const neutro = gerar(entrada);
-  const comFoco = gerar({ ...entrada, foco: { grupo: 'costas', semana: 1 } });
+  /**
+   * 🔵 2026-09-15 — este perfil passou a ter DOIS casos, não um.
+   *
+   * Neste recorte o baseline de COSTAS fecha em 15,5 ponderadas contra um teto de 16: nem uma
+   * série de extra cabe, e o bloco é recusado pelo teto duro (cofre
+   * `motor-treino-grupo-em-foco-x-mrv`). Medir D-02 só ali tornaria a identidade trivial —
+   * então o ganho líquido é medido com foco em PEITO, que tem folga, e a recusa de costas vira
+   * caso próprio. Nenhuma das duas propriedades foi afrouxada: as duas são exigidas.
+   */
+  const focoNoTeto = gerar({ ...entrada, foco: { grupo: 'costas', semana: 1 } });
+  const comFoco = gerar({ ...entrada, foco: { grupo: 'peito', semana: 1 } });
 
   it('anti-vacuidade: o bloco realmente entregou extras neste perfil', () => {
     expect(comFoco.blocoFoco?.adicionais.length, 'sem extras entregues não há o que conferir').toBeGreaterThan(0);
   });
 
-  it('o baseline dos outros grupos sai idêntico, dia a dia', () => {
-    expect(baselineFora(comFoco, 'costas')).toEqual(baselineFora(neutro, 'costas'));
+  it('o baseline dos outros grupos sai idêntico nos dias que NÃO receberam extra', () => {
+    /**
+     * 🔑 D-02 é sobre o dia que NÃO recebeu extra: em `badcea47` a quinta-feira trocava a
+     * remoção de um exercício por outro só porque extras tinham entrado na segunda. É essa
+     * contaminação à distância que se mede aqui, e ela continua proibida.
+     *
+     * 🔒 No dia que RECEBEU o extra, encurtar o descanso até o piso permitido é a etapa E1 da
+     * sequência aprovada (o motor a declara: "para caber o bloco do foco, o descanso de … foi
+     * encurtado"). Exigir descanso idêntico ali cobraria o contrário da decisão vigente.
+     */
+    const comExtra = new Set((comFoco.blocoFoco?.adicionais ?? []).map((a) => a.diaId));
+    expect(comExtra.size, 'nenhum dia recebeu extra — o recorte abaixo seria o plano inteiro').toBeGreaterThan(0);
+    const foraDosDiasComExtra = (r: RotinaSemanal) =>
+      baselineFora(r, 'peito').filter((d) => !comExtra.has(d.dia as Weekday));
+    expect(foraDosDiasComExtra(comFoco)).toEqual(foraDosDiasComExtra(neutro));
+    // e no dia do extra, exercícios e séries do baseline continuam os mesmos — só o descanso cede
+    const semDescanso = (r: RotinaSemanal) => baselineFora(r, 'peito')
+      .filter((d) => comExtra.has(d.dia as Weekday))
+      .map((d) => ({ dia: d.dia, slots: d.slots.map((s) => s.split(':').slice(0, 2).join(':')) }));
+    expect(semDescanso(comFoco)).toEqual(semDescanso(neutro));
   });
 
   it('🔑 o ganho líquido do grupo focado é EXATAMENTE o que o bloco declara', () => {
-    expect(seriesDe(comFoco, 'costas') - seriesDe(neutro, 'costas')).toBe(seriesDoBloco(comFoco));
+    expect(seriesDe(comFoco, 'peito') - seriesDe(neutro, 'peito')).toBe(seriesDoBloco(comFoco));
     expect(seriesDoBloco(comFoco), 'bloco declarado vazio — a identidade seria trivial').toBeGreaterThan(0);
   });
 
   it('nenhum grupo fora do foco ganha nem perde séries', () => {
     const a = porGrupo(neutro); const b = porGrupo(comFoco);
     const mexidos = [...new Set([...a.keys(), ...b.keys()])]
-      .filter((g) => g !== 'costas' && (a.get(g) ?? 0) !== (b.get(g) ?? 0));
+      .filter((g) => g !== 'peito' && (a.get(g) ?? 0) !== (b.get(g) ?? 0));
     expect(mexidos, `grupos alterados sem estar no foco: ${mexidos.join(', ')}`).toEqual([]);
   });
 
@@ -118,6 +147,22 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
       expect(dia, `dia ${a.diaId} não existe no plano`).toBeTruthy();
       expect(dia!.slots.some((s) => s.exercicio.id === a.exercicioId && (s.series ?? 0) === a.series)).toBe(true);
     }
+  });
+
+  it('🔴 grupo no teto: o bloco é recusado e o plano fica IDÊNTICO ao neutro', () => {
+    // anti-vacuidade: costas está mesmo no topo (senão este caso não é sobre o teto)
+    const teto = focoNoTeto.faixaVolumeSemana!.max;
+    const ponderado = creditoPonderadoDaSemana(focoNoTeto.dias.flatMap((d) => d.slots)).get('costas') ?? 0;
+    expect(ponderado, 'costas não está no topo — o caso deixou de ser sobre o teto').toBeGreaterThan(teto - 1);
+    expect(ponderado).toBeLessThanOrEqual(teto);
+    expect(focoNoTeto.blocoFoco?.adicionais).toEqual([]);
+    // recusar não pode custar nada a ninguém: o plano INTEIRO é o neutro, costas incluído
+    const planoInteiro = (r: RotinaSemanal) => r.dias.map((d) => ({
+      dia: d.diaId, slots: d.slots.map((s) => `${s.exercicio.id}:${s.series}:${s.descansoSeg}`).sort(),
+    }));
+    expect(planoInteiro(focoNoTeto)).toEqual(planoInteiro(neutro));
+    expect(focoNoTeto.avisos.some((a) => /(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),
+      'recusa sem explicação na tela').toBe(true);
   });
 });
 

@@ -21,12 +21,28 @@ describe('etapa2: possibilidades na saída final',()=>{
   expect(gs.some(g=>g[0]==='triceps'&&g.includes('peito')&&!g.includes('costas'))).toBe(true);
   expect(gs.flat()).toEqual(expect.arrayContaining(['quadriceps','posterior','ombros']));
  });
+ /**
+  * 🔵 REANCORADO em 2026-09-15 — a SEGUNDA sessão do grupo focado é a entrega do bloco, e o
+  * bloco agora para no MRV (cofre `motor-treino-grupo-em-foco-x-mrv`, claims --005/--010).
+  * Onde o grupo já está no teto, a segunda sessão não existe — e o que o foco entrega é
+  * ORDEM, que é a saída que a mesma DF previu (claim --006). O caso continua exigindo a
+  * segunda sessão SEMPRE que houve entrega, e cobra a explicação quando não houve.
+  */
  it.each([4,5,6])('%i peito/costas: sessões reais do foco e diferença estrutural',n=>{
+  for(const [foco,rot] of [['peito','peito'],['costas','costas']] as const){
+   const r=run(n,foco);
+   const gs=grupos(r);
+   const entregues=(r.blocoFoco?.adicionais??[]).length;
+   if(entregues>0)expect(gs.filter(g=>g.includes(rot)),`${n}d/${foco}: bloco entregue sem segunda sessão`).toHaveLength(2);
+   else expect(r.avisos.some(a=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),`${n}d/${foco}: sem segunda sessão e sem explicação`).toBe(true);
+  }
   const p=grupos(run(n,'peito')),c=grupos(run(n,'costas'));
-  expect(p.filter(g=>g.includes('peito'))).toHaveLength(2);
-  expect(c.filter(g=>g.includes('costas'))).toHaveLength(2);
   expect(p).not.toEqual(c);
   for(const g of [p,c])expect(g.flat()).toEqual(expect.arrayContaining(['peito','costas','quadriceps','posterior','ombros','biceps','triceps']));
+ });
+ it('anti-vacuidade: em alguma agenda o foco ainda entrega a segunda sessão',()=>{
+  const comSegunda=[4,5,6].filter(n=>(run(n,'peito').blocoFoco?.adicionais??[]).length>0);
+  expect(comSegunda.length,'o bloco deixou de entregar em TODAS as agendas — o caso acima seria vazio').toBeGreaterThan(0);
  });
  it.each([4,5])('%i pernas: duas ênfases e dois superiores separados',n=>{
   const gs=grupos(run(n,'pernas'));
@@ -117,8 +133,15 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
   const a=run(p),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}});
   const totais=(r:typeof a)=>{const m=new Map<string,number>();for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m.set(g,(m.get(g)??0)+(s.series??0));}return m;};
   const x=totais(a),y=totais(b);
-  expect(y.get('peito')).toBeGreaterThan(x.get('peito')!);
-  expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0)+4);
+  // 🔵 2026-09-15: o `+4` literal virou "exatamente o que o bloco declarou entregar". O bloco
+  // agora para no MRV (teto duro do cofre), então o delta é 4 onde há folga e menos onde não
+  // há — mas continua EXATO, e continua sem cobrar de terceiro nenhum.
+  const entregue=(b.blocoFoco?.adicionais??[]).reduce((n,i)=>n+i.series,0);
+  expect(entregue,`S${semana}: bloco vazio — as igualdades abaixo seriam triviais`).toBeGreaterThan(0);
+  expect(y.get('peito')).toBe(x.get('peito')!+entregue);
+  expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0)+entregue);
   expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito']);
+  // e o teto duro fechou a conta: o focado nunca passa da banda, na régua canônica.
+  expect(creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')).toBeLessThanOrEqual(b.faixaVolumeSemana!.max);
  });
 });

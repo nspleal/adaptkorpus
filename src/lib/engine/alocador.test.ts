@@ -102,7 +102,11 @@ describe('🔴 aceite B — av/massa/4d (o perfil do autor na medição)', () =>
     const semFoco = plano(perfil({ nivelExperiencia: 'avancado',limiteTempoTreino:'sem_limite' }), 3);
     const comFoco = plano(perfil({ nivelExperiencia: 'avancado',limiteTempoTreino:'sem_limite', foco: { grupo: 'peito', compensa: 'biceps', semana: 1 } }), 3);
     const soma = (r: typeof semFoco) => r.dias.flatMap((d) => d.slots).reduce((a, s) => a + (s.series ?? 0), 0);
-    expect(soma(comFoco)).toBe(soma(semFoco)+4);
+    // 🔵 2026-09-15: o `+4` virou "o que o bloco DECLAROU entregar" — o teto duro agora vale
+    // também para os extras (instrução vigente, que substitui a exceção de 14/09). A
+    // propriedade deste caso — conserva e nenhum terceiro é cobrado — segue exata.
+    const entregue = (comFoco.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
+    expect(soma(comFoco)).toBe(soma(semFoco) + entregue);
     const porGrupo = (r: typeof semFoco) => {
       const m = new Map<string, number>();
       for (const d of r.dias) for (const s of d.slots) {

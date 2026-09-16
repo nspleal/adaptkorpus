@@ -33,6 +33,7 @@ import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, foco
 import { otimizarCoberturaAnatomica } from './cobertura-anatomica';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
+import { creditar, creditoAtual, gruposSemEspaco, seriesQueCabemNoTeto } from './teto-ponderado';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
@@ -45,7 +46,7 @@ import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
 import { distribuirGruposNoCalendario, diasConsecutivos } from './calendario-grupos';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
-import type { DiaCardio, DiaNaoAtendido, Faixa, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
@@ -198,6 +199,53 @@ export function montarRotina(
   diasOferecidosCardio: readonly (Weekday | number)[] = [],
 ): RotinaSemanal {
   const avisos: string[] = [];
+  /** 🔴 D16 — fatos estruturais dos avisos de cobertura desta montagem (paralelos à prosa). */
+  const fatosCobertura: FatoCoberturaGrupo[] = [];
+  /**
+   * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este grupo
+   * foi coberto?" — vira verificação. Grupo GRANDE abaixo do MEV em contagem PONDERADA
+   * (direto 1,0 + secundário 0,5) ⇒ aviso honesto. Fora da retomada (lá o volume baixo é a
+   * feature) e só com séries decididas (ramo do ciclo).
+   *
+   * 🔵 2026-09-15 — virou FUNÇÃO, para poder ser REMEDIDA.
+   *
+   * No desenho manual a escolha de séries da pessoa só é aplicada junto da certificação de
+   * duração, muito depois desta medição — que via, portanto, as séries da rampa e não as
+   * entregues. Medido: plano idêntico ao automático, motor dizendo `costas 12 · quadríceps 8 ·
+   * glúteos 6 · ombros 12` e crítico dizendo `10 · 6 · 5 · 10`. Enquanto o editor não mostrava
+   * os avisos do motor isso passava despercebido; ao mostrá-los, a mesma medição apareceria na
+   * tela com dois números — o eco que D16 existe para fechar. Remedir na origem resolve sem
+   * criar um segundo sistema de avisos.
+   */
+  const medirCobertura = (dias: readonly DiaTreino[]) => {
+    if (!semanaCiclo) return;
+    // Substitui a medição anterior: dois pares para o mesmo grupo seriam o eco que D16 proíbe.
+    for (const antigo of fatosCobertura.splice(0)) {
+      const i = avisos.indexOf(antigo.aviso);
+      if (i >= 0) avisos.splice(i, 1);
+    }
+    const ponderado = creditoPonderadoDaSemana(dias.flatMap((d) => d.slots));
+    const objetivoEf = prescricao.objetivoEfetivo ?? perfil.objetivo;
+    const piso = mev(perfil.nivelExperiencia, objetivoEf);
+    for (const g of GRUPOS_GRANDES) {
+      if ((ponderado.get(g) ?? 0) < piso) {
+        // Catálogo-limitado (não alcança nem no teto, e um item do checklist fecha) ⇒ a
+        // frase que aponta o equipamento mínimo. Senão (orçamento/estrutural) ⇒ a de sempre.
+        const cat = classificarCoberturaCatalogo(exercises, g, perfil.nivelExperiencia, objetivoEf, perfil.equipamento, perfil.equipamentosCasa);
+        const texto = cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`;
+        avisos.push(texto);
+        /**
+         * 🔴 D16 — o FATO viaja junto do aviso. Sem ele, a única forma de saber se o crítico
+         * está dizendo a mesma coisa seria comparar frases — e frase igual não prova fato
+         * igual, nem frase diferente prova fato diferente.
+         */
+        fatosCobertura.push({
+          grupo: g, semana: semanaCiclo.semana, escopo: 'semana', metrica: 'series_ponderadas',
+          limiar: 'mev', alvo: piso, valor: ponderado.get(g) ?? 0, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
+        });
+      }
+    }
+  };
   // B5 suspensa na retomada: os exercícios já executados entram no MESMO trilho de isenção
   // dos favoritos (mecanismo existente), para o montador preferi-los em vez de rotacionar.
   const recentes = semanaCiclo?.retomada?.exerciciosRecentes;
@@ -646,8 +694,6 @@ export function montarRotina(
         else avisos.push(`Sem exercício elegível para ${ROTULO_GRUPO[g]} no full-body.`);
       }
     }
-    /** 🔴 D16 — fatos estruturais dos avisos de cobertura desta montagem (paralelos à prosa). */
-    const fatosCobertura: FatoCoberturaGrupo[] = [];
     // --- Orçamento de tempo: DEGRADAÇÃO do descanso p/ a sessão caber -----------
     // v4: o nº de slots vem da tabela f(tempo) (`orcamentoSlotsDoDia`); o que o orçamento
     // decide aqui é o NÍVEL DE DEGRADAÇÃO do descanso (regra 3 — cede ISOLADO até 60 s,
@@ -1223,14 +1269,102 @@ export function montarRotina(
        * bloco inteiro). O descanso dos extras usa o MESMO nível de degradação já fixado
        * pelo baseline: a adição também não encurta o descanso de quem já estava no plano.
        */
+      /**
+       * 🟠 EXCESSO DO BASELINE — MEDIDO, SEPARADO DO FOCO, **AGUARDANDO DECISÃO**.
+       *
+       * Medido em `3d86cbf` e reconfirmado aqui: **212 de 3 888 combinações entregam um grande
+       * acima do MRV SEM foco nenhum** (costas 21 contra 20 em avançado/massa; 14 contra 12 em
+       * avançado/saúde). Não é causado pelo bloco do foco — por isso a verificação do bloco,
+       * logo abaixo, mede a folga a partir do baseline como ele está, sem lhe cobrar este
+       * excesso.
+       *
+       * 🔴 A causa NÃO é um descuido de código: a banda é lida em DUAS MOEDAS no mesmo motor.
+       *   · ponderada (direto 1,0 + indireto 0,5): `alocador.alvoPonderado = banda.max`, o
+       *     guard de cobertura (`mev`) e o crítico do editor (`mrv`);
+       *   · direta: a rampa (`alvoDaSemana`) e os contratos que `treino-montador.test.ts`
+       *     cobra — *"grupos com slots suficientes ATINGEM o topo da banda na semana 5"*.
+       * Com crédito indireto > 0 as duas leituras são aritmeticamente incompatíveis: ou o
+       * grupo chega a 16 diretas (e passa de 16 ponderadas), ou fica na banda ponderada (e não
+       * chega a 16 diretas). Escolher aqui reverteria, calado, um contrato que a coordenação
+       * não revisou — e a regra da casa é apresentar o conflito, não inventar a saída.
+       *
+       * 🔧 O conserto está PRONTO e testado: `podarExcessoPonderado` (`teto-ponderado.ts`, com
+       * testes de unidade próprios) poda o excesso ponderado tirando série só do grupo que
+       * estourou e nunca abaixo do piso do nível. Ligá-lo é uma chamada aqui. Medido: derruba
+       * 3 casos de `treino-montador.test.ts` e `deload-volume-entregue.test.ts`, que são
+       * justamente os que afirmam a leitura DIRETA. Enquanto a moeda não for decidida, o
+       * excesso do baseline continua VISÍVEL para a pessoa — o crítico do editor diz
+       * `acima_do_maximo` com o número —, que é a situação honesta: nada é escondido.
+       */
       const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[] as GrupoPrimario[],faltantes:[] as GrupoPrimario[],solicitados:0} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
       diasTreino=bloco.dias;
+      /**
+       * 🔴 O BLOCO DO FOCO RESPEITA O MRV (correção 2026-09-15) — o defeito do relato.
+       *
+       * O cofre travou a resolução em 2026-07-31 (`motor-treino-grupo-em-foco-x-mrv`, claims
+       * --005/--010/--011): *"o foco sobe até o MRV do nível e PARA"*, *"o teto duro continua
+       * duro"*, e elevar o teto durante o foco foi RECUSADO — *"transformaria o único
+       * guarda-corpo de volume em algo negociável"*. O bloco adicional entrava com 2 séries
+       * fixas sem consultar ninguém: peito 13 → 17 contra teto 16 (o caso da captura), e até 20
+       * em 4d/75min/S4. Os 0,5 indiretos desses extras ainda levavam OMBROS — que o usuário não
+       * focou — a 17 e 18.
+       *
+       * 🔵 A instrução vigente desta correção (2026-09-15) manda respeitar o MRV inclusive nos
+       * extras, e SUBSTITUI neste ponto a exceção de 14/09 que os autorizava a ultrapassá-lo.
+       * A exceção anterior foi uma decisão deliberada, não um engano de transcrição: ela vale
+       * como histórico e está registrada no caso de `etapa3-foco-tempo.test.ts`.
+       *
+       * 🔒 O contrato do bloco fica intacto: o treino normal é montado primeiro, o extra entra
+       * noutro dia, e **nada do baseline é retirado para o extra caber**. O que muda é só
+       * quanto o extra pode somar: o nominal continua 2 × 2 e é cortado pela folga real até o
+       * teto, na conta canônica (direto 1,0 + indireto 0,5, todos os grandes afetados). Folga
+       * zero ⇒ o extra NÃO entra — o degrau que a mesma DF já previa: *"quem já está no topo
+       * não ganha volume; ganha ORDEM"* (claim --006), entregue por `reordenarPeloFoco`.
+       */
+      const nominalDoExtra=deloadAgendado?seriesEmDeload(2):2;
+      const tetoDaSemana=(deloadAgendado?aplicarDeload(prescricao):prescricao).volumePorGrupoSemana.max;
+      const creditoBaseline=creditoAtual(diasTreino.flatMap(d=>d.slots).filter(s=>!bloco.adicionais.has(s)));
+      const extrasRecusados=new Set<SlotExercicio>();
+      const bloqueadores=new Set<GrupoPrimario>();
+      let extrasAparados=0;
       for(const adicional of bloco.adicionais){
-        adicional.series=deloadAgendado?seriesEmDeload(2):2;
+        const cabem=seriesQueCabemNoTeto(adicional.exercicio,nominalDoExtra,creditoBaseline,tetoDaSemana);
+        if(cabem<=0){
+          for(const g of gruposSemEspaco(adicional.exercicio,creditoBaseline,tetoDaSemana))bloqueadores.add(g);
+          extrasRecusados.add(adicional);continue;
+        }
+        if(cabem<nominalDoExtra)extrasAparados+=1;
+        adicional.series=cabem;
+        creditar(creditoBaseline,adicional.exercicio,cabem);
         const hold=repUnitDe(adicional.exercicio.id)==='segundos'?faixaSegundos(adicional.exercicio.id,perfil.nivelExperiencia)?.min:undefined;
         if(hold!=null)adicional.holdSeg=hold;
         if(escolhasExecucao.has(adicional.exercicio.id))adicional.execucaoSelecionada=resolverExecucao(adicional.exercicio.id,adicional.exercicio.execucao,escolhasExecucao.get(adicional.exercicio.id));
       }
+      if(extrasRecusados.size>0){
+        // O extra recusado sai do plano E do conjunto de adicionais: a partir daqui ele nunca
+        // existiu, e o dia volta a ser o do plano sem foco pelo caminho já existente.
+        for(const d of diasTreino)d.slots=d.slots.filter(s=>!extrasRecusados.has(s));
+        for(const s of extrasRecusados)bloco.adicionais.delete(s);
+        /**
+         * 🔒 A frase nomeia QUEM barrou, não quem foi barrado.
+         *
+         * Dois casos diferentes, e dizer o errado seria afirmar o que não é verdade:
+         *  · o próprio grupo focado está no topo ⇒ a frase é sobre ele;
+         *  · um TERCEIRO está no topo e recebe crédito indireto do exercício do foco (medido:
+         *    peito em 18/20 barrado por ombros em 19,5/20) ⇒ a frase nomeia o terceiro e diz
+         *    por que ele entra na conta.
+         * Num foco agregado (pernas) um componente pode entrar e o outro não; por isso a lista
+         * sai dos extras REALMENTE recusados, nunca de `prioritarios`.
+         */
+        const recusados=[...new Set([...extrasRecusados].map(s=>s.exercicio.grupoPrimario).filter((g):g is GrupoPrimario=>g!=null))];
+        const terceiros=[...bloqueadores].filter(g=>!recusados.includes(g));
+        if(terceiros.length===0){
+          avisos.push(`O volume de ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} já está no máximo do seu nível (${tetoDaSemana} séries, contando o trabalho indireto). Nesta semana o foco entra na ORDEM dos exercícios, não em séries a mais.`);
+        } else {
+          avisos.push(`O bloco do foco não entrou: somar ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} aqui levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima do máximo do seu nível (${tetoDaSemana} séries), porque esses exercícios também trabalham esse grupo de forma indireta. Nesta semana o foco entra na ORDEM dos exercícios.`);
+        }
+      }
+      if(extrasAparados>0)avisos.push('O bloco do foco entrou com menos séries do que o previsto para não passar do volume máximo do seu nível.');
       if(semanaCiclo?.retomada&&prioritarios.length)avisos.push('Retomada: mantivemos os limites desta fase; o bloco adicional do foco não foi aplicado.');
       if(bloco.adaptados.length)avisos.push('Segunda exposição adaptada à sessão existente do foco para respeitar a recuperação entre os dias escolhidos.');
       if(bloco.faltantes.length)avisos.push('Não foi possível completar o bloco adicional do foco com os exercícios elegíveis neste plano.');
@@ -1333,29 +1467,7 @@ export function montarRotina(
      * PONDERADA (direto 1,0 + secundário 0,5) ⇒ aviso honesto. Fora da retomada (lá o
      * volume baixo é a feature) e só com séries decididas (ramo do ciclo).
      */
-    if (semanaCiclo && !ret && semanaCiclo.semana !== 6) {
-      const ponderado = creditoPonderadoDaSemana(diasTreino.flatMap((d) => d.slots));
-      const objetivoEf = prescricao.objetivoEfetivo ?? perfil.objetivo;
-      const piso = mev(perfil.nivelExperiencia, objetivoEf);
-      for (const g of GRUPOS_GRANDES) {
-        if ((ponderado.get(g) ?? 0) < piso) {
-          // Catálogo-limitado (não alcança nem no teto, e um item do checklist fecha) ⇒ a
-          // frase que aponta o equipamento mínimo. Senão (orçamento/estrutural) ⇒ a de sempre.
-          const cat = classificarCoberturaCatalogo(exercises, g, perfil.nivelExperiencia, objetivoEf, perfil.equipamento, perfil.equipamentosCasa);
-          const texto = cat ? mensagemCoberturaCatalogo(cat) : `Atenção: o volume de ${g} ficou abaixo do mínimo desta semana.`;
-          avisos.push(texto);
-          /**
-           * 🔴 D16 — o FATO viaja junto do aviso. Sem ele, a única forma de saber se o crítico
-           * está dizendo a mesma coisa seria comparar frases — e frase igual não prova fato
-           * igual, nem frase diferente prova fato diferente.
-           */
-          fatosCobertura.push({
-            grupo: g, semana: semanaCiclo.semana, escopo: 'semana', metrica: 'series_ponderadas',
-            limiar: 'mev', alvo: piso, valor: ponderado.get(g) ?? 0, causa: cat ? 'catalogo' : 'orcamento', aviso: texto,
-          });
-        }
-      }
-    }
+    if (semanaCiclo && !ret && semanaCiclo.semana !== 6) medirCobertura(diasTreino);
 
     /**
      * 🔴 D14 — DIA VAZIO NÃO É SESSÃO ENTREGUE. Ele sai de `dias` (e portanto da certificação
@@ -1409,6 +1521,27 @@ export function montarRotina(
       cardio: prescricao.cardio,
       avisos,
       ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
+      /**
+       * 🔴 A FAIXA QUE VALE NESTA SEMANA, PUBLICADA (correção 2026-09-15).
+       *
+       * O crítico do editor comparava o volume de uma semana de DELOAD (ou de retomada) com o
+       * piso TERMINAL do mesociclo e dizia "abaixo da faixa mínima **desta semana**" — 6 de 6
+       * grupos acusados na semana em que o motor reduz o volume de propósito, e o montador,
+       * que sabe disso, se cala (o guard pula `semana === 6` e a retomada).
+       *
+       * 🔒 Nenhum número novo: `deload` é a banda que `aplicarDeload` já produz e a rampa já
+       * usa; `retomada` é o alvo de `volumeDaRetomada`, que já decide as séries do grupo — e o
+       * teto continua o da banda, porque a retomada nunca elevou teto nenhum. Quem consome
+       * (Painel e Editor) lê daqui em vez de recalcular: uma autoridade só.
+       */
+      ...(semanaCiclo
+        ? {
+          faseVolume: (semanaCiclo.retomada ? 'retomada' : deloadAgendado ? 'deload' : 'normal') as FaseVolume,
+          faixaVolumeSemana: semanaCiclo.retomada
+            ? { min: volumeDaRetomada(semanaCiclo.retomada.volumeReferencia, semanaCiclo.retomada.fator), max: prescricao.volumePorGrupoSemana.max }
+            : (deloadAgendado ? aplicarDeload(prescricao) : prescricao).volumePorGrupoSemana,
+        }
+        : {}),
       // Metadados do mesociclo (v2) — spread condicional preserva a saída v1 byte a byte.
       ...(semanaCiclo
         ? { semana: { numero: semanaCiclo.semana, deload: semanaCiclo.semana === 6, descansoCompostoSeg: descansoCompostoDaSemana } }
@@ -1785,6 +1918,22 @@ export function montarRotina(
           : deloadAgendado ? seriesEmDeload(escolhidas) : escolhidas;
         slot.seriesDefinidasPeloUsuario = true;
       }
+    }
+    /**
+     * 🔵 2026-09-15 — a cobertura é REMEDIDA aqui, com as séries que a pessoa de fato escolheu.
+     * A medição do meio da montagem via a rampa; esta vê o plano entregue. Mesma função, mesma
+     * régua, mesmos limiares — só o momento muda.
+     */
+    if (semanaCiclo && !semanaCiclo.retomada && semanaCiclo.semana !== 6) {
+      medirCobertura(rotinaCustomEstrutural.dias);
+      /**
+       * ⚠️ A rotina guarda uma CÓPIA dos fatos (`[...fatosCobertura]`) do instante em que foi
+       * construída; a remedição acima é posterior. Sem refazer a cópia, `avisos` (por
+       * referência) ficaria certo e `fatosCobertura` errado — e a deduplicação do D16, que
+       * compara `valor`, falharia CALADA: a tela mostraria a mesma medição duas vezes, com
+       * números diferentes. Foi o que o QA desta correção mediu aos 30 min.
+       */
+      rotinaCustomEstrutural.fatosCobertura = fatosCobertura.length > 0 ? [...fatosCobertura] : undefined;
     }
     const rotinaCustomCertificada = certificarDuracao(rotinaCustomEstrutural, perfil.nivelExperiencia, limiteCertificacao);
     const motivos = [...new Set((rotinaCustomCertificada.duracaoDias ?? []).flatMap((d) => d.motivosNaoAvaliados))];

@@ -18,7 +18,7 @@
  * PURO e determinístico: sem relógio, sem rede, sem estado.
  */
 import type { Exercise, GrupoPrimario } from '../data/types';
-import type { NivelExperiencia, RotinaSemanal } from './treino-types';
+import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './treino-types';
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
@@ -128,6 +128,25 @@ export interface ContextoCritico {
   diasDaSemanaIdx?: readonly number[];
   /** Séries usadas no PLACAR quando o motor ainda não anotou (piso do nível). */
   seriesPadrao?: number;
+  /**
+   * 🔴 A FAIXA REALMENTE APLICÁVEL a esta semana (correção 2026-09-15), publicada pelo motor
+   * em `RotinaSemanal.faixaVolumeSemana`. Ausente ⇒ a faixa terminal do nível/objetivo, que é
+   * o comportamento de sempre nas semanas de rampa (onde as duas coincidem).
+   *
+   * ⚠️ Não é um número novo: no deload é a banda de `aplicarDeload` que a própria rampa usa;
+   * na retomada é o alvo de `volumeDaRetomada`, com o teto da banda intacto. Recalcular aqui
+   * seria a segunda verdade que este arquivo existe para não criar.
+   */
+  faixaSemanal?: Faixa;
+  /**
+   * 🔒 A FASE. Em `deload` e `retomada` o volume baixo é a FEATURE e o guard de cobertura do
+   * montador (`treino-montador.ts`, `semana !== 6 && !retomada`) já não fala — o crítico passa
+   * a respeitar o mesmo contrato, em vez de acusar 6 déficits na semana de alívio.
+   *
+   * 🔴 O que NÃO muda com a fase: `acima_do_maximo`, sessão longa, dias consecutivos e
+   * puxar/empurrar seguem sendo avaliados. Suprimir o mínimo não é desligar o crítico.
+   */
+  faseVolume?: FaseVolume;
 }
 
 /**
@@ -163,8 +182,10 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
     series: d.series?.[i] ?? ctx.seriesPadrao ?? 1,
   })));
   const ponderado = creditoPonderadoDaSemana(slots);
-  const piso = mev(ctx.nivel, ctx.objetivo);
-  const teto = mrv(ctx.nivel, ctx.objetivo);
+  // A faixa da SEMANA quando o motor a publicou; a do nível quando não há fase a considerar.
+  // Nas semanas normais as duas são a mesma — por isso a rampa não muda de comportamento.
+  const piso = ctx.faixaSemanal?.min ?? mev(ctx.nivel, ctx.objetivo);
+  const teto = ctx.faixaSemanal?.max ?? mrv(ctx.nivel, ctx.objetivo);
   return GRUPOS_GRANDES.map((g) => {
     const v = Math.round((ponderado.get(g) ?? 0) * 10) / 10;
     const status: StatusGrupo = v <= 0 ? 'sem_estimulo' : v < piso ? 'abaixo_mev' : v > teto ? 'acima_mrv' : 'na_banda';
@@ -178,11 +199,20 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
  * E grupo abaixo ⇒ sugere mover UM exercício. Linguagem de sugestão ("tente"), nunca de
  * prescrição nem de resultado.
  */
-export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number): ItemCritico[] {
+export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number, fase: FaseVolume = 'normal'): ItemCritico[] {
   const itens: ItemCritico[] = [];
   const acima = [...placar].filter((l) => l.status === 'acima_mrv').sort((a, b) => b.ponderado - a.ponderado);
-  const abaixo = [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
-    .sort((a, b) => a.ponderado - b.ponderado);
+  /**
+   * 🔒 Em `deload` e `retomada` o volume reduzido é a PRESCRIÇÃO, não um déficit — é o mesmo
+   * contrato que faz o montador pular o guard de cobertura nessas fases. Sem isto, a semana de
+   * alívio abria com 6 acusações e contradizia a própria copy do editor ("nas fases de
+   * recuperação, o volume pode ser reduzido"). A sugestão de TROCA cai junto: ela nasce do
+   * déficit, e sugerir remanejar exercício durante a recuperação é o conselho oposto ao da fase.
+   */
+  const abaixo = fase === 'normal'
+    ? [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
+      .sort((a, b) => a.ponderado - b.ponderado)
+    : [];
 
   if (acima.length > 0 && abaixo.length > 0) {
     itens.push({
@@ -285,7 +315,7 @@ export function avisos(
 /** A avaliação completa — o que a tela consome, no editor e no plano salvo (DF②). */
 export function avaliarSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): Avaliacao {
   const placar = placarDaSemana(dias, ctx);
-  return { placar, recomendacoes: recomendacoes(placar, ctx.semana), avisos: avisos(dias, placar, ctx) };
+  return { placar, recomendacoes: recomendacoes(placar, ctx.semana, ctx.faseVolume ?? 'normal'), avisos: avisos(dias, placar, ctx) };
 }
 
 /** Compara resultados sem depender da identidade do objeto nem de serialização incidental. */

@@ -176,6 +176,13 @@ export interface Faixa {
   max: number;
 }
 
+/**
+ * A fase de volume da semana. `normal` = rampa do mesociclo; `deload` = semana 6 (banda de
+ * `aplicarDeload`); `retomada` = rampa de volta (alvo de `volumeDaRetomada`, que supersede o
+ * mesociclo). Nas duas últimas o volume baixo é a FEATURE, não um déficit.
+ */
+export type FaseVolume = 'normal' | 'deload' | 'retomada';
+
 /** Prescrição de cardio (depende do objetivo). */
 export type CardioPrescricao =
   | { tipo: 'minutos_semana'; min: number; max: number }
@@ -407,6 +414,20 @@ export interface RotinaSemanal {
    * grupo, semana, escopo, métrica e limiar — e não comparando frases.
    */
   fatosCobertura?: FatoCoberturaGrupo[];
+  /**
+   * 🔴 A FASE DE VOLUME desta semana e a FAIXA que ela realmente aplica (correção 2026-09-15).
+   *
+   * Existe porque o crítico do editor usava sempre a faixa TERMINAL do mesociclo e dizia
+   * "faixa mínima **desta semana**" — o que é falso no deload (a banda é a de `aplicarDeload`)
+   * e na retomada (o alvo é `volumeDaRetomada`). Publicar aqui mantém UMA autoridade: a tela
+   * lê o que o motor decidiu, em vez de refazer a conta com outro número.
+   *
+   * 🔒 `faseVolume` também diz quando a AUSÊNCIA de volume é a feature: em `deload` e
+   * `retomada` o guard de cobertura do montador já se cala, e o crítico passa a se calar
+   * junto — só para o aviso de MÍNIMO. O máximo continua valendo em todas as fases.
+   */
+  faseVolume?: FaseVolume;
+  faixaVolumeSemana?: Faixa;
   /** Comparação da intenção de divisão com o terminal, não com um candidato intermediário. */
   distribuicao?: { planejada: string; recortesPlanejados: number; recortesEntregues: number; limitadaPeloCalendario: boolean; adaptada: boolean; atendida: boolean };
   /**

@@ -64,7 +64,7 @@ import ListaCompras from './ListaCompras';
 import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
-import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel } from './EditorTreino';
+import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel, type PrevisaoEditor } from './EditorTreino';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { useRegistro, HistoricoDieta, MEAL_LABEL, type StatusRefeicao } from './RegistroRefeicao';
@@ -947,20 +947,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * com as séries/descanso que o plano salvo teria. Nada de estimativa paralela — é o
    * mesmo `recomputarPlano` do salvamento, só que sem persistir.
    */
-  function preverPlano(dias: readonly DiaEditavel[]) {
+  /**
+   * 🔴 A PRÉVIA CARREGA O CONTEXTO, NÃO SÓ OS DIAS (correção 2026-09-15).
+   *
+   * Antes devolvia apenas `DiaDoEditor[]`, e o editor ficava sem duas coisas que só o motor
+   * sabe: a FAIXA/FASE de volume desta semana (sem elas o crítico acusava 6 déficits no
+   * deload) e os AVISOS do motor (sem eles o corte por tempo aparecia no editor como déficit
+   * sem causa). Tudo sai da MESMA chamada que produziu os dias — então nenhuma explicação
+   * sobrevive à edição que a invalidou.
+   */
+  function preverPlano(dias: readonly DiaEditavel[]): PrevisaoEditor {
     const rotinaCustom = paraRotinaCustom(dias);
-    if (rotinaCustom.dias.length === 0) return [];
+    if (rotinaCustom.dias.length === 0) return { dias: [], avisos: [] };
     const { treino: nt } = recomputarPlano({ ...perfil, rotinaCustom }, opcoesDoPlano());
-    return (nt.rotina?.dias ?? []).map((d) => ({
-      nome: d.nome,
-      exercicios: d.slots.map((s) => s.exercicio),
-      // 🔒 C1 — séries/descanso REAIS do motor, sem preencher o que falta: o critério de tempo
-      // abstém-se (NAO_AVALIADO) em vez de afirmar sobre número inventado; o placar de volume
-      // usa `ctx.seriesPadrao` como piso.
-      series: d.slots.map((s) => s.series),
-      descansoSeg: d.slots.map((s) => s.descansoSeg),
-      holdSeg: d.slots.map((s) => s.holdSeg),
-    }));
+    return {
+      dias: (nt.rotina?.dias ?? []).map((d) => ({
+        nome: d.nome,
+        exercicios: d.slots.map((s) => s.exercicio),
+        // 🔒 C1 — séries/descanso REAIS do motor, sem preencher o que falta: o critério de tempo
+        // abstém-se (NAO_AVALIADO) em vez de afirmar sobre número inventado; o placar de volume
+        // usa `ctx.seriesPadrao` como piso.
+        series: d.slots.map((s) => s.series),
+        descansoSeg: d.slots.map((s) => s.descansoSeg),
+        holdSeg: d.slots.map((s) => s.holdSeg),
+      })),
+      avisos: nt.rotina?.avisos ?? [],
+      ...(nt.rotina?.fatosCobertura ? { fatosCobertura: nt.rotina.fatosCobertura } : {}),
+      ...(nt.rotina?.faixaVolumeSemana ? { faixaVolumeSemana: nt.rotina.faixaVolumeSemana } : {}),
+      ...(nt.rotina?.faseVolume ? { faseVolume: nt.rotina.faseVolume } : {}),
+    };
   }
 
   /** "Voltar ao recomendado" = apagar o campo, e SÓ ele. O gerador recomputa na hora. */
@@ -1384,6 +1399,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       diasTreinoEsperados: perfil.treinoDias ?? [],
       diasDaSemanaIdx: rotinaDias.map((d, i) => ORDEM_SEMANA.indexOf(d.diaId ?? perfil.treinoDias?.[i] ?? ORDEM_SEMANA[i]!)),
       seriesPadrao: prescricaoEfetiva.seriesPorExercicio.min,
+      // 🔴 A régua da FASE vem do motor (mesma correção do editor): no deload/retomada o piso
+      // terminal do mesociclo não é "a faixa mínima desta semana".
+      ...(treino.rotina?.faixaVolumeSemana ? { faixaSemanal: treino.rotina.faixaVolumeSemana } : {}),
+      ...(treino.rotina?.faseVolume ? { faseVolume: treino.rotina.faseVolume } : {}),
     };
     const atual = avaliarSemana(
       rotinaDias.map((d) => ({
@@ -1639,6 +1658,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             tempoPorSessaoMin={perfil.tempoPorSessaoMin}
             limiteTempoTreino={perfil.limiteTempoTreino}
             preverPlano={preverPlano}
+            semana={ciclo.semanaEfetiva}
             temCustom={!!perfil.rotinaCustom}
             onSalvar={salvarTreinoCustom}
             onCancelar={() => setEditorDias(null)}
