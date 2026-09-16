@@ -970,9 +970,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         series: d.slots.map((s) => s.series),
         descansoSeg: d.slots.map((s) => s.descansoSeg),
         holdSeg: d.slots.map((s) => s.holdSeg),
+        /**
+         * ⚠️ Esta é a prévia do DESENHO: o motor não monta bloco adicional aqui, então
+         * `extraDoFoco` vem vazio e TODO exercício conta em `puxar ≥ empurrar` — a avaliação
+         * que o manual já tinha. Herdar a marca do plano automático de origem afirmaria uma
+         * procedência que o desenho não carrega e que a primeira edição invalidaria.
+         */
+        extraDoFoco: d.slots.map((s) => s.extraDoFoco),
       })),
       avisos: nt.rotina?.avisos ?? [],
       ...(nt.rotina?.fatosCobertura ? { fatosCobertura: nt.rotina.fatosCobertura } : {}),
+      ...(nt.rotina?.fatosInvariantes ? { fatosInvariantes: nt.rotina.fatosInvariantes } : {}),
       ...(nt.rotina?.faixaVolumeSemana ? { faixaVolumeSemana: nt.rotina.faixaVolumeSemana } : {}),
       ...(nt.rotina?.faseVolume ? { faseVolume: nt.rotina.faseVolume } : {}),
     };
@@ -1413,6 +1421,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         series: d.slots.map((s) => seriesDoSlot(s)),
         descansoSeg: d.slots.map((s) => s.descansoSeg),
         holdSeg: d.slots.map((s) => s.holdSeg),
+        // 🔒 Procedência do bloco do foco, para `puxar ≥ empurrar` medir o BASELINE — o
+        // mesmo escopo do montador (decisão do autor, 2026-09-16). Ausente ⇒ tudo conta.
+        extraDoFoco: d.slots.map((s) => s.extraDoFoco),
       })),
       ctx,
     );

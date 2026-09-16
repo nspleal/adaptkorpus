@@ -46,7 +46,7 @@ import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
 import { distribuirGruposNoCalendario, diasConsecutivos } from './calendario-grupos';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
-import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
+import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FatoCorteTempo, FatoInvariantePadrao, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
@@ -201,6 +201,7 @@ export function montarRotina(
   const avisos: string[] = [];
   /** 🔴 D16 — fatos estruturais dos avisos de cobertura desta montagem (paralelos à prosa). */
   const fatosCobertura: FatoCoberturaGrupo[] = [];
+  const fatosInvariantes: FatoInvariantePadrao[] = [];
   /**
    * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este grupo
    * foi coberto?" — vira verificação. Grupo GRANDE abaixo do MEV em contagem PONDERADA
@@ -1138,7 +1139,14 @@ export function montarRotina(
     if(automatico){
       // Autor14/09: as séries do baseline já foram decididas pela rampa. A adição
       // não redistribui essas séries; o deload continua reduzindo uma única vez.
-      if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,series:seriesEmDeload(s.series??0)}))}));
+      /**
+       * ⚠️ `seriesAntesDoCorteDeTempo` é ZERADO aqui, de propósito. Os dias vêm da montagem
+       * interna da semana CHEIA, que já rodou a própria fase A; herdar aquela referência faria
+       * o corte da semana 6 aparecer como "4 → 1" — medido —, somando ao tempo uma redução que
+       * foi do DELOAD. A fase A desta semana registra os seus próprios cortes, contra a dose
+       * já reduzida, e cada causa fica com o que é dela.
+       */
+      if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,seriesAntesDoCorteDeTempo:undefined,series:seriesEmDeload(s.series??0)}))}));
       /**
        * 🔒 O AJUSTE DO PLANO-BASE TAMBÉM É DITO NA SEMANA 6.
        *
@@ -1252,6 +1260,16 @@ export function montarRotina(
           });
           saida[i]=ajuste.dia;
           if(!registrar){if(!ajuste.cabe&&!ajuste.naoAvaliado)incompativeis.push(d.nome);continue;}
+          /**
+           * 🔒 A PROCEDÊNCIA DO CORTE, no slot. `seriesReduzidas` (E3) e `seriesMinimas` (E6)
+           * vêm da sequência que de fato rodou; o primeiro `de` de cada exercício é o número
+           * de antes. Guardado no slot para que o editor explique a dose que exibe sem ter
+           * de deduzir nada de uma diferença entre números.
+           */
+          for(const op of [...ajuste.seriesReduzidas,...ajuste.seriesMinimas]){
+            const alvo=ajuste.dia.slots.find(sl=>sl.exercicio.id===op.exercicioId);
+            if(alvo&&alvo.seriesAntesDoCorteDeTempo==null)alvo.seriesAntesDoCorteDeTempo=op.de;
+          }
           relatoReducao.series+=new Set(ajuste.seriesReduzidas.map(s=>s.exercicioId)).size;
           relatoReducao.minimas+=ajuste.seriesMinimas.length;
           relatoReducao.redundantes+=ajuste.redundantesRetirados.length;
@@ -1471,7 +1489,10 @@ export function montarRotina(
       }
       if(extrasRemovidos.dias.length)avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${extrasRemovidos.dias.join(', ')}.`);
       if(extrasRemovidos.descansoEncurtado.length)avisos.push(`Para caber o bloco do foco, o descanso de ${extrasRemovidos.descansoEncurtado.join(', ')} foi encurtado até o piso permitido.`);
-      for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s))extrasDoFoco.add(s);
+      // 🔒 A marca vai NO SLOT, do mesmo Set que decidiu a adição: quem avaliar o plano
+      // depois (crítico do editor, tela do plano salvo) lê a procedencia real em vez de
+      // tentar adivinhar pelo grupo focado — um peitoral do baseline não é extra.
+      for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s)){extrasDoFoco.add(s);s.extraDoFoco=true;}
       if (prioritarios.some(g => g !== 'core')) {
         const anteriores = rotinaBaseDoDeload?.blocoFoco?.adicionais ?? [];
         const entregues = diasTreino.flatMap(d => d.slots.filter(s => bloco.adicionais.has(s)
@@ -1508,7 +1529,19 @@ export function montarRotina(
     const contaPadraoBaseline = (p: PadraoMovimento) =>
       diasTreino.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p && !extrasDoFoco.has(s)).length, 0);
     if (contaPadraoBaseline('puxar') < contaPadraoBaseline('empurrar')) {
-      avisos.push('Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).');
+      const frase = 'Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).';
+      avisos.push(frase);
+      /**
+       * 🔒 O FATO vai junto da frase. O crítico do editor diz o mesmo desequilíbrio com os
+       * números (*"mais exercícios de empurrar (8) que de puxar (0)"*); sem o fato, a tela só
+       * poderia deduplicar comparando texto — e os dois textos são diferentes de propósito.
+       * Com o fato, `unificarAvisos` suprime esta linha quando o crítico já falou, e a mantém
+       * quando o crítico não está na tela.
+       */
+      fatosInvariantes.push({
+        invariante: 'puxar_maior_igual_empurrar', escopo: 'baseline',
+        puxar: contaPadraoBaseline('puxar'), empurrar: contaPadraoBaseline('empurrar'), aviso: frase,
+      });
     }
     if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
       avisos.push('Atenção: padrão de dobradiça/quadril (cadeia posterior) não foi coberto.');
@@ -1557,6 +1590,27 @@ export function montarRotina(
       ? { min: Math.min(...descansosCompostosDoPlano), max: Math.max(...descansosCompostosDoPlano) }
       : descansoEfetivo;
     const diasEntregues = diasTreino.filter((d) => d.slots.length > 0);
+    /**
+     * 🔴 OS CORTES POR TEMPO QUE SOBREVIVERAM ATÉ A ENTREGA (2026-09-16).
+     *
+     * 🔒 `para` vem do plano ENTREGUE, não do instante do corte: entre a fase A e aqui
+     * ainda rodam a poda do MRV e a remoção de extras por tempo. Um fato cujo `para` não
+     * fosse a dose exibida seria pior que nenhum — a tela atribuiria ao tempo um número que
+     * outra regra decidiu.
+     *
+     * 🔒 Só entra quem de fato ENCOLHEU (`para < de`). Se algo devolveu a série, não há
+     * corte a explicar.
+     */
+    const cortesDeTempo = (dias: readonly DiaTreino[]): FatoCorteTempo[] => dias.flatMap((d) =>
+      d.slots.flatMap((sl) => {
+        const de = sl.seriesAntesDoCorteDeTempo;
+        const para = sl.series;
+        if (de == null || para == null || para >= de) return [];
+        return [{
+          ...(d.diaId ? { diaId: d.diaId } : {}),
+          exercicioId: sl.exercicio.id, de, para, limiteMin: perfil.tempoPorSessaoMin,
+        }];
+      }));
     const diasNaoAtendidos: DiaNaoAtendido[] = diasTreino
       .filter((d) => d.slots.length === 0)
       .map((d) => ({
@@ -1580,6 +1634,8 @@ export function montarRotina(
       cardio: prescricao.cardio,
       avisos,
       ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
+      ...(fatosInvariantes.length > 0 ? { fatosInvariantes: [...fatosInvariantes] } : {}),
+      ...(cortesDeTempo(diasEntregues).length > 0 ? { fatosCorteTempo: cortesDeTempo(diasEntregues) } : {}),
       /**
        * 🔴 A FAIXA QUE VALE NESTA SEMANA, PUBLICADA (correção 2026-09-15).
        *

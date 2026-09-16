@@ -260,9 +260,34 @@ export interface SlotExercicio {
   series?: number;
   /** Explicit manual choice (visual laboratory, author request 2026-09-10). */
   seriesDefinidasPeloUsuario?: boolean;
+  /**
+   * 🔒 PROCEDÊNCIA: este slot veio do BLOCO ADICIONAL do foco, não do baseline
+   * (decisão do autor, 2026-09-16).
+   *
+   * ⚠️ É marcado pelo montador a partir do próprio `bloco.adicionais` — o mesmo Set que
+   * decidiu a adição —, nunca deduzido do grupo nem do nome do exercício. Um exercício de
+   * peito do baseline num plano com foco em peito NÃO é extra, e a marca sabe diferenciar.
+   *
+   * 🔒 Serve a UM uso só: tirar os extras da comparação `puxar ≥ empurrar`, que é um alvo
+   * do plano SEM foco (D-03, 15/09). Os extras continuam sujeitos a MRV ponderado, tempo,
+   * recuperação, equipamento e a todo o resto — nada aqui os isenta de nenhuma outra regra.
+   */
+  extraDoFoco?: boolean;
   /** Referência real antes do deload automático, para não reduzir duas vezes ao editar.
    * Metadado do plano entregue; não é um novo campo do desenho persistido. */
   seriesAntesDoDeload?: number;
+  /**
+   * 🔴 SÉRIES DESTE SLOT ANTES DO CORTE POR TEMPO (2026-09-16) — o que o APP tirou.
+   *
+   * ⚠️ Existe porque, ao abrir o editor, a dose já cortada é copiada para
+   * `seriesPorExercicio` e passa a parecer escolha da pessoa. Sem esta referência, a única
+   * saída seria atribuir o corte a ela — ou calar. É metadado do plano ENTREGUE, como
+   * `seriesAntesDoDeload`: não vai para o desenho persistido e não é a dose exibida.
+   *
+   * 🔒 Marcado só na fase A do caminho automático, a partir do que `reduzirDiaPorTempo`
+   * de fato executou (E3/E6). Nunca deduzido de uma diferença entre números.
+   */
+  seriesAntesDoCorteDeTempo?: number;
   /**
    * 🔒 Descanso entre séries DESTE exercício, em segundos (cofre §🕐, DF 2026-07-31).
    *
@@ -340,6 +365,40 @@ export interface FatoCoberturaGrupo {
   aviso: string;
 }
 
+/**
+ * 🔴 O FATO por trás do aviso de invariante de padrão (2026-09-16) — para a tela
+ * deduplicar por DADO, nunca por frase. As duas falas são diferentes de propósito: a do
+ * motor nomeia o alvo, a do crítico traz os números.
+ */
+export interface FatoInvariantePadrao {
+  invariante: 'puxar_maior_igual_empurrar';
+  /** O recorte medido. `baseline` = sem os extras do bloco do foco (D-03, 15/09). */
+  escopo: 'baseline';
+  puxar: number;
+  empurrar: number;
+  /** O texto exato que foi para `rotina.avisos` — a chave de remoção, sem reescrever nada. */
+  aviso: string;
+}
+
+/**
+ * 🔴 UM CORTE POR TEMPO, por exercício (2026-09-16) — o que o app reduziu para o dia
+ * caber no limite do perfil, com o número de antes e o de agora.
+ *
+ * 🔒 `para` é lido do plano ENTREGUE, não do momento do corte: se algo depois (a poda do
+ * MRV, a remoção de extras) mexeu no mesmo slot, o fato acompanha a dose real. Um fato que
+ * não corresponde à dose exibida não é publicado.
+ */
+export interface FatoCorteTempo {
+  diaId?: Weekday;
+  exercicioId: string;
+  /** Séries antes do corte por tempo. */
+  de: number;
+  /** Séries entregues — a dose que a tela mostra. */
+  para: number;
+  /** O limite de tempo por sessão que motivou o corte, em minutos. */
+  limiteMin: number;
+}
+
 export interface DiaNaoAtendido {
   nome: string;
   diaId?: Weekday;
@@ -414,6 +473,14 @@ export interface RotinaSemanal {
    * grupo, semana, escopo, métrica e limiar — e não comparando frases.
    */
   fatosCobertura?: FatoCoberturaGrupo[];
+  /** 🔒 Fatos dos invariantes de padrão emitidos nesta rotina (hoje: puxar ≥ empurrar). */
+  fatosInvariantes?: FatoInvariantePadrao[];
+  /**
+   * 🔒 Os cortes por TEMPO que o app fez neste plano, por exercício. O editor usa isto
+   * para explicar a dose que exibe sem atribuir à pessoa um corte automático. Ausente =
+   * nenhum corte (ou caminho sem fase A) — e aí a tela não inventa histórico.
+   */
+  fatosCorteTempo?: FatoCorteTempo[];
   /**
    * 🔴 A FASE DE VOLUME desta semana e a FAIXA que ela realmente aplica (correção 2026-09-15).
    *

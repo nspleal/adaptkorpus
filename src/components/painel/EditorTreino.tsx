@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
-import type { Faixa, FaseVolume, FatoCoberturaGrupo } from '@/lib/engine/treino-types';
+import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao } from '@/lib/engine/treino-types';
 import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
@@ -40,6 +40,31 @@ export interface DiaEditavel {
   exercicios: Exercise[];
   seriesPorExercicio?: Record<string, number>;
   referenciaDose?: ReferenciaDose;
+  /**
+   * 🔴 O QUE O APP CORTOU POR TEMPO neste dia, por exercício (2026-09-16).
+   *
+   * ⚠️ Sem isto, o corte automático vira invisível ao abrir o editor: `seriesPorExercicio`
+   * recebe a dose JÁ cortada e ela passa a parecer escolha da pessoa. Vem do plano de origem
+   * (`SlotExercicio.seriesAntesDoCorteDeTempo`), não de uma diferença calculada aqui.
+   *
+   * 🔒 Ausente quando o plano não traz procedência — desenho salvo, plano legado. A tela
+   * cala; não há histórico a inventar.
+   */
+  cortesDoApp?: { exercicioId: string; de: number; para: number }[];
+  /**
+   * 🔒 Os ids que vieram do BLOCO ADICIONAL do foco no plano de origem (2026-09-16).
+   *
+   * ⚠️ Mesma mecânica de `cortesDoApp`, e pelo mesmo motivo: ao abrir o editor a
+   * procedência AINDA é confiável (vem de `SlotExercicio.extraDoFoco`, marcado pelo Set que
+   * decidiu a adição). Sem carregá-la, a MESMA semana recebia dois vereditos: a aba do plano
+   * calada e "Montar meu treino" dizendo 🔴 *"mais exercícios de empurrar (7) que de puxar
+   * (5)"* — medido no QA desta correção.
+   *
+   * 🔒 Ausente quando não há procedência (desenho salvo, plano legado): aí todo exercício
+   * conta, que é a avaliação que o manual já tinha. E um exercício que a pessoa tirou some
+   * daqui junto, porque a marca é por id e só vale para quem continua no dia.
+   */
+  extrasDoFoco?: string[];
 }
 
 /**
@@ -53,6 +78,8 @@ export interface PrevisaoEditor {
   avisos: string[];
   /** D16 — os fatos por trás dos avisos de cobertura, para `unificarAvisos` deduplicar. */
   fatosCobertura?: FatoCoberturaGrupo[];
+  /** Os fatos dos invariantes de padrão (puxar ≥ empurrar), pela mesma razão. */
+  fatosInvariantes?: FatoInvariantePadrao[];
   /** A faixa REALMENTE aplicável nesta semana (deload/retomada mudam a régua). */
   faixaVolumeSemana?: Faixa;
   faseVolume?: FaseVolume;
@@ -73,6 +100,18 @@ export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday
     seriesPorExercicio: custom
       ? { ...custom.dias.find((dia, indice) => (dia.diaId ?? treinoDias[indice]) === (d.diaId ?? treinoDias[i]))?.seriesPorExercicio }
       : Object.fromEntries(d.slots.filter((s) => s.series != null).map((s) => [s.exercicio.id, s.seriesAntesDoDeload ?? s.series!])),
+    /**
+     * 🔒 SÓ quando o desenho vem do plano do app (`custom == null`). Recuperando um desenho
+     * SALVO, os slots vêm da regeneração manual — que não passa pela fase A e não corta nada —,
+     * então não há corte do app naquele plano para explicar, e afirmar um seria inventar.
+     */
+    ...(custom ? {} : (() => {
+      const cortes = d.slots.flatMap((s) => (s.seriesAntesDoCorteDeTempo != null && s.series != null
+        && s.series < s.seriesAntesDoCorteDeTempo)
+        ? [{ exercicioId: s.exercicio.id, de: s.seriesAntesDoCorteDeTempo, para: s.series }] : []);
+      const extras = d.slots.filter((s) => s.extraDoFoco).map((s) => s.exercicio.id);
+      return { ...(cortes.length > 0 ? { cortesDoApp: cortes } : {}), ...(extras.length > 0 ? { extrasDoFoco: extras } : {}) };
+    })()),
   }));
   if (contexto) editaveis.forEach((d, i) => {
     d.referenciaDose = { versao: 1, contexto,
@@ -89,6 +128,9 @@ export function atualizarReferencias(dias: readonly DiaEditavel[], previsto: rea
   return dias.map(d => {
     const p = d.exercicios.length ? previsto[indice++] : undefined;
     if (!d.referenciaDose || !p) return d;
+    // 🔒 `cortesDoApp` atravessa intacto (spread): ele é histórico do que o APP fez, e não
+    // muda por causa de uma edição. Quem decide se ainda vale é a renderização, comparando
+    // com a dose exibida agora — assim nada fica preso em estado velho.
     return { ...d, referenciaDose: { ...d.referenciaDose,
       series: Object.fromEntries(p.exercicios.flatMap((e, i) => p.series?.[i] == null ? [] : [[e.id, p.series[i]!]])),
       escolhas: { ...d.seriesPorExercicio },
@@ -151,6 +193,19 @@ export default function EditorTreino({
   const [abrindoEm, setAbrindoEm] = useState<number | null>(null);
   const [confirmarVolta, setConfirmarVolta] = useState(false);
   const previsao = useMemo(() => preverPlano(dias), [dias, preverPlano]);
+  /**
+   * 🔒 A procedência do bloco do foco chega ao crítico pelo ID, casando o dia editado com
+   * o dia previsto. É o que faz "Montar meu treino" e a aba do plano darem o MESMO veredito
+   * sobre `puxar ≥ empurrar` — o mesmo escopo do montador.
+   */
+  const previstoComProcedencia = useMemo(() => {
+    let indice = 0;
+    return dias.flatMap((d) => {
+      const p = d.exercicios.length ? previsao.dias[indice++] : undefined;
+      if (!p) return [];
+      return [d.extrasDoFoco ? { ...p, extraDoFoco: p.exercicios.map((e) => d.extrasDoFoco!.includes(e.id)) } : p];
+    });
+  }, [dias, previsao]);
   const previsto = previsao.dias;
 
   const avaliacao = useMemo<Avaliacao>(() => {
@@ -160,7 +215,7 @@ export default function EditorTreino({
     // 🔒 O editor NÃO supre `seriesPadrao`: o placar vem do MOTOR (preverPlano). Onde o motor
     // não anotou séries (deload/corpo-inteiro), o placar cai no piso do próprio crítico — e o
     // critério de TEMPO abstém-se (C1), nunca inventa.
-    return avaliarSemana(previsto, {
+    return avaliarSemana(previstoComProcedencia, {
       nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino,
       // 🔴 Fase e faixa vêm do MOTOR, pela mesma prévia: sem elas o deload abria com 6
       // acusações de "faixa mínima desta semana" usando o piso terminal do mesociclo.
@@ -169,7 +224,7 @@ export default function EditorTreino({
       ...(previsao.faseVolume ? { faseVolume: previsao.faseVolume } : {}),
       diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),
     });
-  }, [dias, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, previsto, previsao, semana]);
+  }, [dias, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, previsto, previstoComProcedencia, previsao, semana]);
 
   /**
    * 🔴 O QUE O MOTOR EXPLICA, NO EDITOR (correção 2026-09-15).
@@ -181,7 +236,9 @@ export default function EditorTreino({
    */
   const avisosMotor = useMemo(
     () => unificarAvisos(
-      { avisos: previsao.avisos, ...(previsao.fatosCobertura ? { fatosCobertura: previsao.fatosCobertura } : {}) },
+      { avisos: previsao.avisos,
+        ...(previsao.fatosCobertura ? { fatosCobertura: previsao.fatosCobertura } : {}),
+        ...(previsao.fatosInvariantes ? { fatosInvariantes: previsao.fatosInvariantes } : {}) },
       avaliacao,
     ).avisosMotor,
     [previsao, avaliacao],
@@ -207,6 +264,9 @@ export default function EditorTreino({
         {/* O que o MOTOR explica sobre ESTE desenho: corte por tempo, fase de recuperação,
             entrega parcial do foco. Recalculado junto com a prévia — nunca é fala velha. */}
         <AvisosDoMotorNoEditor avisos={avisosMotor} />
+        {/* Os cortes que o APP fez por tempo no plano de origem, enquanto ainda descrevem a
+            dose exibida. Sai sozinho quando a pessoa mexe no número ou tira o exercício. */}
+        <CortesDoAppNoEditor cortes={cortesVigentes(dias, previsto)} limiteMin={tempoPorSessaoMin} />
         <ResumoSeries slots={previsto.flatMap((dia) => dia.exercicios.map((exercicio, i) => ({ exercicio, series: dia.series?.[i] ?? 0 })))} />
 
         {dias.map((d, i) => (
@@ -386,6 +446,58 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
  * 🔒 Não trava nada: é texto. Os únicos bloqueios do produto continuam sendo o gate de saúde
  * e o piso legal de reps com carga — e nenhum dos dois passa por aqui.
  */
+/**
+ * 🔴 OS CORTES DO APP, EXPLICADOS NO EDITOR (2026-09-16) — e só os que ainda valem.
+ *
+ * ⚠️ O defeito que isto fecha: no caminho manual o reduce-to-fit não roda (contrato), e a
+ * prévia do desenho não tem o que explicar. Só que a dose exibida JÁ vem cortada do plano de
+ * origem — `doPlano` a copia para `seriesPorExercicio` — e a pessoa via um número menor sem
+ * causa, atribuído a ela.
+ *
+ * 🔒 Um corte só aparece se AINDA corresponde à tela: o exercício continua no dia e a dose
+ * exibida é exatamente o `para` do corte. Mudou a série, tirou o exercício ⇒ a linha sai
+ * sozinha, sem estado velho para limpar. E o que a pessoa digita nunca é atribuído ao app.
+ */
+export function cortesVigentes(
+  dias: readonly DiaEditavel[],
+  previsto: readonly DiaDoEditor[],
+): { nome: string; de: number; para: number }[] {
+  let indice = 0;
+  return dias.flatMap((d) => {
+    const p = d.exercicios.length ? previsto[indice++] : undefined;
+    if (!d.cortesDoApp || !p) return [];
+    return d.cortesDoApp.flatMap((c) => {
+      const i = d.exercicios.findIndex((e) => e.id === c.exercicioId);
+      if (i < 0) return [];
+      // A dose que a TELA mostra: a prévia do motor, com a escolha guardada como referência.
+      const j = p.exercicios.findIndex((e) => e.id === c.exercicioId);
+      const exibida = j >= 0 ? p.series?.[j] : undefined;
+      const escolhida = d.seriesPorExercicio?.[c.exercicioId];
+      if (exibida !== c.para || (escolhida != null && escolhida !== c.para)) return [];
+      return [{ nome: d.exercicios[i]!.nomePt, de: c.de, para: c.para }];
+    });
+  });
+}
+
+export function CortesDoAppNoEditor(
+  { cortes, limiteMin }: { cortes: readonly { nome: string; de: number; para: number }[]; limiteMin: number },
+) {
+  if (cortes.length === 0) return null;
+  const lista = cortes.map((c) => `${c.nome} (${c.de} → ${c.para})`).join(', ');
+  return (
+    <section
+      aria-label="Ajustes de série feitos pelo app"
+      style={{ background: 'rgba(13,40,24,.4)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 16, padding: 15, marginBottom: 16 }}
+    >
+      <p role="status" style={{ margin: 0, fontSize: '.86rem', lineHeight: 1.5, color: 'rgba(234,229,219,.8)' }}>
+        <span aria-hidden style={{ marginRight: 6 }}>🟡</span>
+        Para caber em {limiteMin} min, o app reduziu as séries de {lista}. A escolha é sua: mudar
+        qualquer um desses números substitui o ajuste.
+      </p>
+    </section>
+  );
+}
+
 export function AvisosDoMotorNoEditor({ avisos }: { avisos: readonly string[] }) {
   if (avisos.length === 0) return null;
   return (
