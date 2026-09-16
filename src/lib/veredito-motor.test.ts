@@ -156,6 +156,30 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['séries manuais inválidas (D3)', /n[ãa]o [ée] um n[úu]mero inteiro/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: [{ nome: 'A', diaId: 'seg', exercicioIds: ['e1'], seriesPorExercicio: { e1: 0 } }] } })],
   ['cardio faltante (D4)', /Cardio: o plano pede/, () => gerar({ objetivo: 'emagrecimento', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] }, { diasOferecidosCardio: ['ter', 'qua', 'sex', 'dom'] as readonly Weekday[] })],
   ['dias do desenho acima do teto do nível', /o seu n[íi]vel comporta/, () => gerar({ nivelExperiencia: 'iniciante', rotinaCustom: { origem: 'usuario', dias: (['seg', 'ter', 'qua', 'qui', 'sex'] as const).map((d) => ({ nome: d, diaId: d, exercicioIds: ['e1'] })) } })],
+  /**
+   * 🔵 2026-09-15 — as três famílias do TETO DURO na conta ponderada. Cada uma foi achada por
+   * varredura (2 268 combinações), não escolhida a dedo: são os recortes onde o teto morde.
+   */
+  ['teto: bloco barrado por um TERCEIRO no topo (crédito indireto)', /levaria .* acima do m[áa]ximo do seu n[íi]vel/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } }, { semanaCiclo: { semana: 3 } })],
+  ['teto: bloco do foco recusado (entrega ORDEM)', /j[áa] est[áa] no m[áa]ximo do seu n[íi]vel/, () => gerar({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 20, limiteTempoTreino: 'sem_limite', foco: { grupo: 'costas', compensa: 'peito', semana: 1 } })],
+  ['teto: bloco do foco aparado', /entrou com menos s[ée]ries do que o previsto/, () => gerar({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 20, limiteTempoTreino: 'sem_limite', foco: { grupo: 'peito', compensa: 'triceps', semana: 1 } })],
+  /**
+   * 🔵 2026-09-16 — as QUATRO famílias da poda do BASELINE, ligada pela decisão de que o
+   * MRV limita o volume PONDERADO. Nenhuma foi escolhida a dedo: as três primeiras são
+   * células da varredura das 3 888 que estouravam o teto antes da correção (274 no total).
+   *
+   * 🔒 O excesso que FICA (irredutível, porque toda a dose é da pessoa) não tem família aqui
+   * de propósito: quem o diz é o crítico do editor, com o número por grupo. D16, uma voz
+   * por fato — ver o comentário no caminho custom de `treino-montador.ts`.
+   */
+  ['poda do baseline (automático)', /para não passar do máximo desta semana/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 5 } })],
+  ['poda do baseline no desenho da pessoa (só o que o app dosou)', /s[ée]ries sa[íıi]ram de exerc[íi]cios que o app dosou/, () => {
+    const o = { nivelExperiencia: 'avancado', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' };
+    const auto = gerar(o, { semanaCiclo: { semana: 5 } })!;
+    const dias = auto.dias.map((d) => ({ nome: d.nome, diaId: d.diaId, exercicioIds: d.slots.map((s) => s.exercicio.id) }));
+    return gerar({ ...o, rotinaCustom: { origem: 'usuario', dias } }, { semanaCiclo: { semana: 5 } });
+  }],
+  ['deload que parte de um plano-base já ajustado', /plano-base desta semana de deload/, () => gerar({ nivelExperiencia: 'iniciante', objetivo: 'saude', equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 6 } })],
 ];
 
 describe('D1 · B1 — cada família de aviso do montador tem caso e caminho até a tela', () => {
@@ -168,7 +192,15 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // 29 → 30 em 2026-09-16: a dispensa do full-body curto (P-01).
     // 30 → 34 em 2026-09-17: as quatro famílias da sequência única de redução (séries 3→2,
     // redundantes retirados, braços/ombros a 1 série, estimativa ainda acima do limite).
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(34);
+    // 34 → 37 em 2026-09-15: o teto duro nos extras do foco — bloco recusado porque o próprio
+    // grupo está no topo, bloco recusado porque um TERCEIRO está no topo (crédito indireto), e
+    // bloco aparado para não passar.
+    // 37 → 40 em 2026-09-16: a poda do BASELINE foi LIGADA (o MRV limita o volume ponderado).
+    // As três: poda no automático, poda no desenho da pessoa (só o que o app dosou) e o deload
+    // que parte de um plano-base já ajustado. `irredutiveis` não virou aviso em nenhum dos dois
+    // caminhos: no automático não ocorre em nenhuma das 3 888 combinações varridas, e no
+    // desenho da pessoa quem diz é o crítico (D16, uma voz por fato).
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(40);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

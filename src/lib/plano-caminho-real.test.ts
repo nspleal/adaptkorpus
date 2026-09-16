@@ -37,6 +37,18 @@ const seriesPorGrupo = (r: ReturnType<typeof rotina>) => {
 };
 const diasComGrupo = (r: ReturnType<typeof rotina>, g: string) => r.dias.filter((d) => d.slots.some((s) => s.exercicio.grupoPrimario === g)).length;
 const assinatura = (r: ReturnType<typeof rotina>) => r.dias.map((d) => d.slots.map((s) => s.exercicio.id).join(',')).join('|');
+/**
+ * 🔵 2026-09-15 — as afirmações de "+4" viraram "exatamente o que o bloco DECLAROU entregar".
+ *
+ * A instrução vigente desta correção manda respeitar o MRV inclusive nos extras do foco, e
+ * SUBSTITUI neste ponto a exceção de 14/09 que os autorizava a ultrapassá-lo — uma decisão
+ * deliberada da época, preservada como histórico em `etapa3-foco-tempo.test.ts`. Neste perfil
+ * (avançado/6d) vários grandes fecham a semana NO topo da banda, e o crédito indireto que os
+ * exercícios de peito geram em ombros é o que barra o bloco. As propriedades que este arquivo
+ * existe para guardar — nenhum terceiro paga, nada é zerado, o foco não espalha peito pelos
+ * seis dias — continuam exigidas, e exatas.
+ */
+const entregue = (r: ReturnType<typeof rotina>) => (r.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
 
 describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
   const sem = rotina(perfil({limiteTempoTreino:'sem_limite'}));
@@ -44,12 +56,14 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
   const a = seriesPorGrupo(sem); const b = seriesPorGrupo(com);
 
   it('peito ganha no máximo a segunda exposição, sem espalhar nos seis dias', () => {
-    expect(diasComGrupo(com, 'peito')).toBe(Math.max(2,diasComGrupo(sem, 'peito')));
+    // Sem bloco entregue (teto), a exposição é a do plano base — nunca mais que a segunda.
+    const esperado = entregue(com) > 0 ? Math.max(2, diasComGrupo(sem, 'peito')) : diasComGrupo(sem, 'peito');
+    expect(diasComGrupo(com, 'peito')).toBe(esperado);
   });
 
-  it('NENHUM terceiro paga: só peito muda', () => {
+  it('NENHUM terceiro paga: só peito muda (e só se o bloco entrou)', () => {
     const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => (a.get(g) ?? 0) !== (b.get(g) ?? 0));
-    expect(mexidos.sort(), `grupos alterados: ${mexidos.join(', ')}`).toEqual(['peito']);
+    expect(mexidos.sort(), `grupos alterados: ${mexidos.join(', ')}`).toEqual(entregue(com) > 0 ? ['peito'] : []);
   });
 
   it('nenhum grupo é ZERADO pelo foco (bíceps/panturrilha/tríceps intactos)', () => {
@@ -59,14 +73,19 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
     }
   });
 
-  it('o total da semana acrescenta quatro séries', () => {
+  it('o total da semana acrescenta exatamente o que o bloco entregou', () => {
     const tot = (m: Map<string, number>) => [...m.values()].reduce((x, y) => x + y, 0);
-    expect(tot(b)).toBe(tot(a)+4);
+    expect(tot(b)).toBe(tot(a) + entregue(com));
   });
 
   it('a saída carrega o ramo do foco (a frase da tela tem de onde sair)', () => {
     expect(com.blocoFoco?.grupos).toEqual(['peito']);
-    expect(com.blocoFoco?.adicionais).toHaveLength(2);
+    expect(com.blocoFoco?.solicitados, 'a INTENÇÃO do bloco continua sendo 2').toBe(2);
+    // Entrega ≤ intenção: aqui o teto barra, e a tela precisa poder dizer isso.
+    expect((com.blocoFoco?.adicionais ?? []).length).toBeLessThanOrEqual(2);
+    if ((com.blocoFoco?.adicionais ?? []).length < 2) {
+      expect(com.avisos.some((x) => /m[áa]ximo do seu n[íi]vel/.test(x)), 'entrega parcial sem explicação').toBe(true);
+    }
   });
 
   /**
@@ -76,17 +95,39 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
    * cobrava de terceiros. Aqui o baseline não se mexe e o ganho é o do bloco entregue.
    */
   describe('tempo LIMITADO de 60 min — regressão de D-01/D-02', () => {
+    /**
+     * 🔵 2026-09-15 — o perfil AVANÇADO deste arquivo fecha a semana com vários grandes no topo
+     * da banda, e o crédito indireto que os exercícios de peito geram em ombros barra o bloco.
+     * Para que a regressão de D-01/D-02 continue provando algo, ela roda em DOIS perfis: o
+     * avançado (onde o teto morde, e o que se cobra é que nada do baseline se mexa) e um
+     * intermediário com folga (onde o bloco entra, e o que se cobra é a identidade do ganho).
+     */
+    const comFolga = (over: Partial<PerfilResumo> = {}) =>
+      perfil({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'],
+        tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
+    const semF = rotina(comFolga());
+    const comF = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
+    const entregueF = (comF.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
+    const xf = seriesPorGrupo(semF); const yf = seriesPorGrupo(comF);
+
     const semL = rotina(perfil({ limiteTempoTreino: 'limitado' } as never));
     const comL = rotina(perfil({ limiteTempoTreino: 'limitado', foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
     const x = seriesPorGrupo(semL); const y = seriesPorGrupo(comL);
     const entregue = (comL.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
 
-    it('anti-vacuidade: o bloco chega ao plano neste regime', () => {
-      expect(entregue, 'bloco vazio — nada é provado abaixo').toBeGreaterThan(0);
+    it('anti-vacuidade: no perfil com folga o bloco chega ao plano neste regime', () => {
+      expect(entregueF, 'bloco vazio — nada é provado abaixo').toBeGreaterThan(0);
     });
-    it('nenhum terceiro paga, com o relógio apertando', () => {
-      const mexidos = [...new Set([...x.keys(), ...y.keys()])].filter((g) => (x.get(g) ?? 0) !== (y.get(g) ?? 0));
+    it('perfil com folga: nenhum terceiro paga, com o relógio apertando', () => {
+      const mexidos = [...new Set([...xf.keys(), ...yf.keys()])].filter((g) => (xf.get(g) ?? 0) !== (yf.get(g) ?? 0));
       expect(mexidos.sort(), `grupos alterados: ${mexidos.join(', ')}`).toEqual(['peito']);
+      expect((yf.get('peito') ?? 0) - (xf.get('peito') ?? 0)).toBe(entregueF);
+    });
+    it('perfil AVANÇADO no teto: o bloco não entra e NINGUÉM paga por isso', () => {
+      expect(entregue, 'este perfil deixou de bater no teto — reancorar o caso').toBe(0);
+      const mexidos = [...new Set([...x.keys(), ...y.keys()])].filter((g) => (x.get(g) ?? 0) !== (y.get(g) ?? 0));
+      expect(mexidos, `alguém pagou por um bloco que nem entrou: ${mexidos.join(', ')}`).toEqual([]);
+      expect(comL.avisos.some((a) => /m[áa]ximo do seu n[íi]vel/.test(a)), 'recusa sem explicação').toBe(true);
     });
     it('o ganho do peito é exatamente o que o bloco declara', () => {
       expect((y.get('peito') ?? 0) - (x.get('peito') ?? 0)).toBe(entregue);
@@ -120,9 +161,22 @@ describe('🟠 D4 — "Nenhum" volta ao plano base', () => {
   });
 
   it('sanidade: com foco o plano MUDA (senão o teste acima seria vácuo)', () => {
-    const base = rotina(perfil());
-    const com = rotina(perfil({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } as never }));
+    /**
+     * 🔵 2026-09-15 — no perfil avançado deste arquivo o teto barra o bloco, então a mudança
+     * que o foco entrega é a ORDEM (claim --006 do cofre: "quem já está no topo ganha ORDEM").
+     * O caso continua não-vácuo: exige que ALGUMA coisa mude, e diz qual das duas foi.
+     */
+    // O perfil avançado deste arquivo fecha no topo da banda e o teto barra o bloco; a
+    // sanidade roda num perfil com folga, que é onde "o foco muda o plano" tem de valer.
+    const comFolga = (over: Partial<PerfilResumo> = {}) =>
+      perfil({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'],
+        tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
+    const base = rotina(comFolga());
+    const com = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
     expect(seriesPorGrupo(com).get('peito')).toBeGreaterThan(seriesPorGrupo(base).get('peito') ?? 0);
+    // e no perfil NO TETO o foco não muda volume — o que ele muda ali é dito na tela
+    const noTeto = rotina(perfil({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } as never }));
+    expect(noTeto.avisos.some((a) => /m[áa]ximo do seu n[íi]vel/.test(a)), 'recusa no teto sem explicação').toBe(true);
   });
 });
 

@@ -45,12 +45,15 @@ function mesmoFato(
 }
 
 export function unificarAvisos(
-  rotina: Pick<RotinaSemanal, 'avisos' | 'fatosCobertura'> | null | undefined,
-  avaliacao: Pick<Avaliacao, 'recomendacoes' | 'avisos'> | null | undefined,
+  rotina: Pick<RotinaSemanal, 'avisos' | 'fatosCobertura' | 'fatosInvariantes'> | null | undefined,
+  avaliacao: (Pick<Avaliacao, 'recomendacoes' | 'avisos'> & Partial<Pick<Avaliacao, 'medidas'>>) | null | undefined,
 ): AvisosUnificados {
   const avisosMotor = rotina?.avisos ?? [];
   const fatos = rotina?.fatosCobertura ?? [];
-  if (fatos.length === 0 || !avaliacao) return { avisosMotor: [...avisosMotor], suprimidos: [] };
+  const fatosInv = rotina?.fatosInvariantes ?? [];
+  if ((fatos.length === 0 && fatosInv.length === 0) || !avaliacao) {
+    return { avisosMotor: [...avisosMotor], suprimidos: [] };
+  }
 
   const doCritico = [...avaliacao.recomendacoes, ...avaliacao.avisos]
     .map((i) => i.fato)
@@ -69,5 +72,46 @@ export function unificarAvisos(
       porque: `mesmo fato já dito pelo crítico, com os números: ${fato.grupo} · ${fato.escopo} · ${fato.metrica} · ${fato.limiar} ${fato.alvo}`,
     });
   }
+  /**
+   * 🔴 INVARIANTES DE PADRÃO (2026-09-16) — o mesmo desequilíbrio dito duas vezes.
+   *
+   * ⚠️ Medido: com um desenho só de empurrar, a tela mostrava *"Atenção: volume de puxar
+   * ficou abaixo do de empurrar (alvo: puxar ≥ empurrar)"* (motor) E *"Sua semana tem mais
+   * exercícios de empurrar (8) que de puxar (0)…"* (crítico). Um fato, duas falas, e a do
+   * crítico é estritamente mais informativa — tem os números e o porquê.
+   *
+   * 🔒 A decisão é por DADO: mesmo invariante, mesmo escopo e as MESMAS contagens. Se o
+   * crítico não estiver na tela, ou estiver medindo outro recorte, a linha do motor fica.
+   */
+  const invDoCritico = [...avaliacao.recomendacoes, ...avaliacao.avisos]
+    .map((i) => i.fatoInvariante)
+    .filter((f): f is NonNullable<ItemCritico['fatoInvariante']> => f != null);
+  const medida = avaliacao.medidas?.puxarEmpurrar;
+  for (const fato of fatosInv) {
+    if (fato.invariante !== 'puxar_maior_igual_empurrar') continue;
+    const mesmaFala = invDoCritico.some((f) => f.invariante === fato.invariante && f.escopo === fato.escopo
+      && f.puxar === fato.puxar && f.empurrar === fato.empurrar);
+    /**
+     * 🔴 O CRÍTICO MEDIU O MESMO INVARIANTE COM MAIS INFORMAÇÃO.
+     *
+     * ⚠️ Caso medido no QA: o desenho aberto a partir do plano leva a procedência do bloco
+     * do foco por id, e o crítico conta 5 × 5; o montador, no caminho custom, não monta bloco
+     * nenhum e conta 5 × 7. A linha do motor afirmaria um desequilíbrio que o recorte certo
+     * não tem — o mesmo defeito do relato, do outro lado da tela.
+     *
+     * 🔒 A regra é estreita: só quando o crítico MEDIU este invariante (`medidas`, publicada
+     * mesmo sem aviso). Sem medição na tela, a linha do motor fica.
+     */
+    const medidoSemDesequilibrio = medida != null && medida.escopo === fato.escopo && medida.puxar >= medida.empurrar;
+    if (!mesmaFala && !medidoSemDesequilibrio) continue;
+    aRemover.add(fato.aviso);
+    suprimidos.push({
+      aviso: fato.aviso,
+      porque: mesmaFala
+        ? `mesmo fato já dito pelo crítico, com os números: ${fato.invariante} · ${fato.escopo} · puxar ${fato.puxar} × empurrar ${fato.empurrar}`
+        : `o crítico mediu o mesmo invariante com a procedência do bloco (${fato.escopo}): puxar ${medida!.puxar} × empurrar ${medida!.empurrar} — não há desequilíbrio a afirmar`,
+    });
+  }
+
   return { avisosMotor: avisosMotor.filter((a) => !aRemover.has(a)), suprimidos };
 }

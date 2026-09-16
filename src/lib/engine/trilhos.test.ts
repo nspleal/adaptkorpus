@@ -208,8 +208,17 @@ describe('🔒 o foco chega ao PLANO', () => {
    */
   it('tempo LIMITADO: o total sobe só o que o bloco entregou, e ninguém mais muda', () => {
     const soma = (r: ReturnType<typeof plano>) => [...seriesPorGrupo(r).values()].reduce((a, b) => a + b, 0);
-    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }));
-    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 });
+    /**
+     * 🔵 2026-09-15 — a semana mudou de 5 para 2, e a razão é a correção do relato.
+     *
+     * Na semana 5 a rampa leva o baseline ao TOPO da banda (16 de 16 em intermediário/massa) e
+     * o teto duro barra o bloco — que é justamente o defeito corrigido: antes ele entrava assim
+     * mesmo e entregava 20. A identidade "o total sobe só o que o bloco entregou" precisa de
+     * uma semana com folga para não ser trivial; a recusa no topo tem caso próprio em
+     * `foco-teto-mrv.test.ts`, com a explicação exigida na tela.
+     */
+    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }), 2);
+    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }, 2);
     const entregue = com.blocoFoco?.adicionais.reduce((n, a) => n + a.series, 0) ?? 0;
     expect(entregue, 'bloco vazio — a identidade seria trivial').toBeGreaterThan(0);
     expect(soma(com)).toBe(soma(sem) + entregue);
@@ -218,11 +227,17 @@ describe('🔒 o foco chega ao PLANO', () => {
     expect(mexidos, `grupos alterados fora do foco: ${mexidos.join(', ')}`).toEqual([]);
   });
 
-  it('MRV do baseline preservado; extras do foco têm exceção explícita14/09', () => {
+  /**
+   * 🔵 REANCORADO em 2026-09-15 — a exceção de 14/09 (extras podiam passar do MRV) foi
+   * SUBSTITUÍDA pela instrução vigente desta correção: o teto vale inclusive para os extras.
+   * A decisão anterior foi deliberada e está preservada como histórico em
+   * `etapa3-foco-tempo.test.ts`; aqui o que se cobra é o teto, sem folga de 4.
+   */
+  it('MRV preservado no baseline E com o bloco do foco — sem exceção', () => {
     const teto = mrv('intermediario', 'massa');
     for (const p of [perfil(), comFoco])
       for (const [grupo, series] of seriesPorGrupo(plano(p)))
-        expect(series, `${grupo} passou do teto aplicável`).toBeLessThanOrEqual(teto+(p.foco?.grupo===grupo?4:0));
+        expect(series, `${grupo} passou do teto`).toBeLessThanOrEqual(teto);
   });
 });
 

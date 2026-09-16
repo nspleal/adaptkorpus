@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { aplicarDeload, dificuldadesLiberadas, prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
+import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { FeedbackGrupo, PerfilTreino } from './treino-types';
@@ -182,31 +183,98 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
    * sMax, tetoSessão)` — um grupo com 3 slots num dia só não carrega mais que o teto da
    * sessão, mesmo que `n × sMax` coubesse.
    */
-  it('aceitação: volume/grupo sobe do piso ao teto ALCANÇÁVEL em 5 semanas e NUNCA ultrapassa o topo', () => {
-    // Avançado/massa: banda 16–20, séries/exercício 3–4.
-    const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 });
-    const presc = prescreverTreino(p, avaliarGateTreino(p));
-    const banda = presc.volumePorGrupoSemana;
-    const porSemana = SEMANAS.map((s) => totalPorGrupo(rotinaSemana(s)));
-    // Slots POR DIA do grupo (a fórmula do teto alcançável precisa do layout, não só do n).
-    const layout = (grupo: string) => {
-      const r = rotinaSemana(1);
-      return r.dias.map((d) => d.slots.filter((s) => s.exercicio.grupoPrimario === grupo).length).filter((n) => n > 0);
-    };
-    for (const [grupo, { slots }] of porSemana[0]!) {
-      const porDia = layout(grupo);
-      const tetoSessao = Math.ceil(banda.max / Math.max(1, porDia.length));
-      const tetoAlcancavel = porDia.reduce((a, n) => a + Math.min(n * presc.seriesPorExercicio.max, tetoSessao), 0);
-      const base = slots * presc.seriesPorExercicio.min;
-      const alvos = SEMANAS.map((s) => Math.min(Math.max(banda.min + (s - 1), base), Math.min(banda.max, tetoAlcancavel)));
-      const totais = porSemana.map((m) => m.get(grupo)!.series);
-      expect(totais, `grupo ${grupo} (layout ${porDia.join('+')})`).toEqual(alvos);
-      for (const t of totais) expect(t).toBeLessThanOrEqual(banda.max); // nunca ultrapassa o topo
-      for (let i = 1; i < totais.length; i++) expect(totais[i]!).toBeGreaterThanOrEqual(totais[i - 1]!); // monotônico
+  /**
+   * 🔵 REESCRITO NA MOEDA DECIDIDA (autor, 2026-09-16) — a verificação não foi removida.
+   *
+   * ⛔️ Como este contrato estava até `f035d6c`, e o que ele cobrava:
+   *   `expect(totais, 'grupo ${grupo}').toEqual(alvos)` — com `totais` em séries DIRETAS e
+   *   `alvos = min(max(banda.min + (s-1), base), min(banda.max, tetoAlcançável))`, isto é, a
+   *   banda lida como teto de séries DIRETAS.
+   *
+   * 🔴 Por que ele não podia continuar: a MESMA banda era lida como PONDERADA no alocador
+   * (`alvoPonderado`), no guard de cobertura e no crítico do editor. Com crédito indireto > 0
+   * as duas leituras são aritmeticamente incompatíveis — ou o grupo chega a 20 diretas (e
+   * passa de 20 ponderadas), ou fica na banda ponderada (e não chega a 20 diretas). Medido:
+   * 274 das 3 888 combinações entregavam um grande acima do MRV ponderado sem foco nenhum.
+   *
+   * ✅ A decisão fechou a ambiguidade: **o MRV limita o volume PONDERADO**. Aqui, ombros era
+   * o caso: a rampa pedia 16→20 diretas e o entregue passa a ser 16,17,18,18,18, porque cada
+   * série de peito e de costas já credita 0,5 a ele.
+   *
+   * 🔒 O contrato NÃO virou desigualdade frouxa. Ele continua exato, só que na conta certa:
+   * o entregue é o alvo da rampa MENOS exatamente o que o teto ponderado obrigou a cortar, e
+   * cada corte tem de ser mínimo (uma série a mais estouraria). O teste distingue os dois
+   * regimes e exige que os DOIS apareçam.
+   */
+  it('aceitação: volume/grupo sobe do piso ao teto ALCANÇÁVEL em 5 semanas e NUNCA ultrapassa o topo PONDERADO', () => {
+    /**
+     * 🔒 DOIS cenários, de propósito. O layout de 6d/90min (o original deste contrato) é
+     * folgado e quase nunca encosta no teto ponderado; o de 3d/75min é uma das células que
+     * a varredura mediu ESTOURANDO antes da correção. Só com os dois os ramos ② e ③ abaixo
+     * são ambos exercidos, em qualquer um dos dois projetos de seleção.
+     */
+    const CENARIOS: Partial<PerfilTreino>[] = [
+      { nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 },
+      { nivelExperiencia: 'avancado', diasDisponiveis: 3, tempoPorSessaoMin: 75 },
+    ];
+    let semCorte = 0;
+    let comCorte = 0;
+    for (const over of CENARIOS) {
+      // Avançado/massa: banda 16–20, séries/exercício 3–4.
+      const p = perfil(over);
+      const presc = prescreverTreino(p, avaliarGateTreino(p));
+      const banda = presc.volumePorGrupoSemana;
+      const rotinas = SEMANAS.map((s) => rotinaSemana(s, over));
+      const porSemana = rotinas.map((r) => totalPorGrupo(r));
+      const pondSemana = rotinas.map((r) => creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots)));
+      // Slots POR DIA do grupo (a fórmula do teto alcançável precisa do layout, não só do n).
+      const layout = (grupo: string) => rotinas[0]!.dias
+        .map((d) => d.slots.filter((s) => s.exercicio.grupoPrimario === grupo).length).filter((n) => n > 0);
+      for (const [grupo, { slots }] of porSemana[0]!) {
+        const porDia = layout(grupo);
+        const tetoSessao = Math.ceil(banda.max / Math.max(1, porDia.length));
+        const tetoAlcancavel = porDia.reduce((a, n) => a + Math.min(n * presc.seriesPorExercicio.max, tetoSessao), 0);
+        const base = slots * presc.seriesPorExercicio.min;
+        const alvos = SEMANAS.map((s) => Math.min(Math.max(banda.min + (s - 1), base), Math.min(banda.max, tetoAlcancavel)));
+        const totais = porSemana.map((m) => m.get(grupo)!.series);
+        const ehGrande = (GRUPOS_GRANDES as readonly string[]).includes(grupo);
+        for (let i = 0; i < SEMANAS.length; i += 1) {
+          const ctx = `${over.diasDisponiveis}d · grupo ${grupo} (layout ${porDia.join('+')}) · semana ${SEMANAS[i]}`;
+          const entregue = totais[i]!;
+          const alvo = alvos[i]!;
+          const pond = pondSemana[i]!.get(grupo as GrupoPrimario) ?? 0;
+          // ① O TETO, na conta que passa a valer.
+          if (ehGrande) expect(pond, `${ctx}: passou do topo ponderado`).toBeLessThanOrEqual(banda.max);
+          // ② A rampa nunca entrega MAIS do que pediu.
+          expect(entregue, `${ctx}: entregou acima do alvo da rampa`).toBeLessThanOrEqual(alvo);
+          if (entregue === alvo) { semCorte += 1; continue; }
+          // ③ Cortou? Então o corte foi FORÇADO pelo teto e é MÍNIMO: mais uma série estouraria.
+          expect(ehGrande, `${ctx}: grupo sem faixa não pode ter sido cortado`).toBe(true);
+          expect(pond + 1, `${ctx}: cortou além do necessário (${entregue} contra alvo ${alvo})`).toBeGreaterThan(banda.max);
+          comCorte += 1;
+        }
+        for (let i = 1; i < totais.length; i++) expect(totais[i]!).toBeGreaterThanOrEqual(totais[i - 1]!); // monotônico
+      }
     }
+    // ⚠️ ANTI-VACUIDADE: os dois regimes têm de existir, senão os ramos ② e ③ nunca são
+    // exercidos e o teste passaria com qualquer motor.
+    expect(semCorte, 'nenhum grupo entregou o alvo cheio — o cenário degenerou').toBeGreaterThan(0);
+    expect(comCorte, 'nenhum grupo foi limitado pelo teto ponderado — reancorar o cenário').toBeGreaterThan(0);
   });
 
-  it('grupos com slots suficientes ATINGEM o topo da banda na semana 5 (interm./massa: 16)', () => {
+  /**
+   * 🔵 REESCRITO NA MOEDA DECIDIDA (autor, 2026-09-16) — a verificação não foi removida.
+   *
+   * ⛔️ Como estava até `f035d6c`: `expect(sem5.get(g)!.series, g).toBe(topo)` — "atingir o
+   * topo" significava **16 séries DIRETAS**. Medido depois da decisão: posterior entrega 14
+   * diretas, porque já recebe crédito indireto de quadríceps e glúteos.
+   *
+   * ✅ Com o MRV ponderado, "atingir o topo" passa a ser atingi-lo **na conta que vale**. O
+   * teste não afrouxa para `≤ topo`: exige que o grupo CHEGUE ao topo — a menos de uma
+   * série, que é o mais perto que a granularidade de 0,5 permite — e que uma série direta a
+   * mais o estouraria. Grupo que ficasse em 10 de 16 falha aqui, como antes.
+   */
+  it('grupos com slots suficientes ATINGEM o topo da banda na semana 5, na conta PONDERADA (interm./massa: 16)', () => {
     // 🔻 v4: "suficiente" agora considera também o teto da SESSÃO (§1.2, nota de coerência):
     // o grupo alcança o topo quando o layout por dia comporta — n × sMax sozinho não basta.
     const over: Partial<PerfilTreino> = { nivelExperiencia: 'intermediario', diasDisponiveis: 4, tempoPorSessaoMin: 90 };
@@ -232,7 +300,18 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
       return comSlot.reduce((a, n) => a + Math.min(n * presc.seriesPorExercicio.max, tetoSessao), 0) >= topo;
     });
     expect(atingiveis.length).toBeGreaterThan(0); // o cenário tem grupos com teto alcançável ≥ topo
-    for (const [g] of atingiveis) expect(sem5.get(g)!.series, g).toBe(topo); // 16
+    const pond5 = creditoPonderadoDaSemana(r5.dias.flatMap((d) => d.slots));
+    for (const [g] of atingiveis) {
+      if (!(GRUPOS_GRANDES as readonly string[]).includes(g)) {
+        // Grupo sem faixa não tem teto ponderado a respeitar: o contrato direto segue inteiro.
+        expect(sem5.get(g)!.series, g).toBe(topo);
+        continue;
+      }
+      const v = pond5.get(g as GrupoPrimario) ?? 0;
+      expect(v, `${g}: não chegou ao topo`).toBeGreaterThan(topo - 1);
+      expect(v, `${g}: passou do topo`).toBeLessThanOrEqual(topo);
+      expect(v + 1, `${g}: ainda cabia série direta — não estava no topo`).toBeGreaterThan(topo);
+    }
   });
 
   it('toda série por slot fica dentro de seriesPorExercicio {min..max}', () => {

@@ -40,6 +40,17 @@ const porGrupo = (r: ReturnType<typeof plano>) => {
   return m;
 };
 const total = (r: ReturnType<typeof plano>) => r.dias.flatMap((d) => d.slots).reduce((n, s) => n + (s.series ?? 0), 0);
+/**
+ * 🔵 2026-09-15 — o `+4` literal virou "exatamente o que o bloco DECLAROU entregar".
+ *
+ * A instrução vigente desta correção manda respeitar o MRV inclusive nos extras do foco, e
+ * SUBSTITUI neste ponto a exceção de 14/09 que os autorizava a ultrapassá-lo (uma decisão
+ * deliberada da época, registrada em `etapa3-foco-tempo.test.ts`, não um engano). O que estes
+ * casos protegem — adição SEM compensação, nenhum terceiro cobrado — segue idêntico e EXATO:
+ * o delta continua sendo uma igualdade, não uma faixa. O que deixou de ser afirmado é que o
+ * bloco entrega sempre as quatro séries: onde o grupo já está no topo, ele entrega ORDEM.
+ */
+const entregue = (r: ReturnType<typeof plano>) => (r.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
 
 /** O par do caso do autor, com compensador VÁLIDO (divide o dia de push com o peito). */
 const FOCADO: GrupoPrimario = 'peito';
@@ -57,8 +68,9 @@ describe('Adição14/09 — entrega sem compensação, nos dois seletores', () =
       expect(b.get(FOCADO) ?? 0, `focado ${a.get(FOCADO)} → ${b.get(FOCADO)}`).toBeGreaterThan(a.get(FOCADO) ?? 0);
     });
 
-    it(`semana ${semana} · ② o total sobe quatro séries`, () => {
-      expect(total(com), `total ${total(sem)} → ${total(com)}`).toBe(total(sem)+4);
+    it(`semana ${semana} · ② o total sobe exatamente o que o bloco entregou`, () => {
+      expect(entregue(com), `semana ${semana}: bloco vazio — a igualdade seria trivial`).toBeGreaterThan(0);
+      expect(total(com), `total ${total(sem)} → ${total(com)}`).toBe(total(sem) + entregue(com));
     });
 
     it(`semana ${semana} · ③ somente o grupo focado muda`, () => {
@@ -73,11 +85,11 @@ describe('Adição14/09 — entrega sem compensação, nos dois seletores', () =
    * degrau do slot — mover slot ali daria +sMax séries onde a spec manda 0.
    */
   for (const semana of [1, 4, 5] as SemanaCiclo[]) {
-    it(`semana ${semana} · também recebe o bloco adicional`, () => {
+    it(`semana ${semana} · também recebe o bloco adicional (no que couber no teto)`, () => {
       const sem = plano(perfil(), semana);
       const com = plano(perfil({ foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), semana);
-      expect(total(com)).toBe(total(sem)+4);
-      expect(porGrupo(com).get(FOCADO) ?? 0).toBe((porGrupo(sem).get(FOCADO) ?? 0)+4);
+      expect(total(com)).toBe(total(sem) + entregue(com));
+      expect(porGrupo(com).get(FOCADO) ?? 0).toBe((porGrupo(sem).get(FOCADO) ?? 0) + entregue(com));
     });
   }
 
@@ -89,7 +101,8 @@ describe('Adição14/09 — entrega sem compensação, nos dois seletores', () =
   it('compensador legado não cobra terceiros nem impede adição', () => {
     const sem = plano(perfil(), 3);
     const com = plano(perfil({ foco: { grupo: 'panturrilha', compensa: 'peito', semana: 1 } }), 3);
-    expect(total(com)).toBe(total(sem)+4);
+    expect(entregue(com), 'bloco vazio — a igualdade seria trivial').toBeGreaterThan(0);
+    expect(total(com)).toBe(total(sem) + entregue(com));
     const a = porGrupo(sem); const b = porGrupo(com);
     const mexidos = [...new Set([...a.keys(), ...b.keys()])].filter((g) => (a.get(g) ?? 0) !== (b.get(g) ?? 0));
     expect(mexidos, `alguém foi cobrado sem estar no foco: ${mexidos.join(', ')}`).toEqual(['panturrilha']);

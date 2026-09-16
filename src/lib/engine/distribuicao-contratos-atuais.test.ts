@@ -9,6 +9,7 @@ import {rirAlvoDaSemana} from './treino-mesociclo';
 import {distribuirCardioDaRotina} from './treino-cardio-semana';
 import {duracaoDoDiaDeCardio} from './dia-de-cardio';
 import {EXERCISES} from '../data/exercises';
+import {creditoPonderadoDaSemana} from './alocador';
 import type {PerfilTreino,SemanaCiclo} from './treino-types';
 const base:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false},objetivo:'massa',nivelExperiencia:'intermediario',equipamento:'academia',diasDisponiveis:4,tempoPorSessaoMin:60};
 const run=(p:PerfilTreino,semana:SemanaCiclo=1)=>gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
@@ -78,11 +79,50 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   const curtos=r.dias.filter(d=>d.slots.length<6);expect(curtos.length).toBeGreaterThan(0);
   expect(curtos.some(d=>r.avisos.join(' ').includes(d.nome))).toBe(true);
  });
- it.each([1,4,5] as const)('adição sem compensação na mesma divisão explícita, semana %i',semana=>{
-  const p:PerfilTreino={...base,divisaoPreferida:'superior-inferior',limiteTempoTreino:'sem_limite'};
+ /**
+  * 🔵 REANCORADO em 2026-09-15 — o `+4` fixo saiu, o CONTRATO ficou.
+  *
+  * O que este caso protege continua sendo "adição SEM compensação": o bloco do foco não se
+  * paga com séries de terceiros. O `+4` literal era, além disso, uma afirmação de que o
+  * bloco entrega sempre — e essa parte era o defeito: com peito no topo da banda o motor
+  * entregava 17/20 contra um teto de 16, e o crítico do editor acusava o próprio plano
+  * (relato 2026-09-15). O teto duro vem do cofre (`motor-treino-grupo-em-foco-x-mrv`,
+  * claims --005/--010/--011) e a entrega agora para nele.
+  *
+  * 🔒 A força do caso é mantida por duas vias: a identidade continua EXATA contra o que o
+  * bloco declara (nada de "aproximadamente"), e a anti-vacuidade logo abaixo exige que
+  * alguma das semanas entregue bloco de verdade.
+  */
+ const gruposDe=(r:ReturnType<typeof run>)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
+ const entregueDe=(r:ReturnType<typeof run>)=>(r.blocoFoco?.adicionais??[]).reduce((n,x)=>n+x.series,0);
+ const P_SEM_LIMITE:PerfilTreino={...base,divisaoPreferida:'superior-inferior',limiteTempoTreino:'sem_limite'};
+ const P_LIMITADO:PerfilTreino={...base,divisaoPreferida:'superior-inferior',tempoPorSessaoMin:60,limiteTempoTreino:'limitado'};
+ /** A propriedade, medida numa semana: terceiros intactos e focado = baseline + o declarado. */
+ const semCompensacao=(p:PerfilTreino,semana:SemanaCiclo)=>{
   const a=run(p,semana),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
-  const grupos=(r:typeof a)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
-  expect(grupos(b)).toEqual({...grupos(a),peito:grupos(a).peito!+4});
+  const entregue=entregueDe(b);
+  // 🔒 Vale nos dois casos: bloco entregue OU recusado pelo teto. Se o bloco não entrou,
+  // o plano tem de ser IDÊNTICO ao neutro — recusar não pode custar séries a ninguém.
+  expect(gruposDe(b)).toEqual({...gruposDe(a),peito:gruposDe(a).peito!+entregue});
+  return entregue;
+ };
+ it.each([1,4,5] as const)('adição sem compensação na mesma divisão explícita, semana %i',semana=>{
+  semCompensacao(P_SEM_LIMITE,semana);
+ });
+ it('anti-vacuidade: em alguma das semanas o bloco realmente entrega (sem_limite)',()=>{
+  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(P_SEM_LIMITE,s),0),
+   'nenhuma semana entregou bloco — as igualdades acima seriam triviais').toBeGreaterThan(0);
+ });
+ it('🔒 e quando o bloco é recusado, é porque o grupo está NO teto — não porque sumiu',()=>{
+  const recusadas=([1,4,5] as const).filter(s=>entregueDe(run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},s))===0);
+  for(const semana of recusadas){
+   const b=run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
+   const teto=b.faixaVolumeSemana!.max;
+   const ponderado=creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')??0;
+   expect(ponderado,`S${semana}: bloco recusado sem o grupo estar no teto`).toBeGreaterThan(teto-1);
+   expect(ponderado).toBeLessThanOrEqual(teto);
+   expect(b.avisos.some(a=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),`S${semana}: recusa sem explicação na tela`).toBe(true);
+  }
  });
  /**
   * 🔴 L-01 (revisão independente 15/09) — a MESMA propriedade com tempo LIMITADO de 60 min,
@@ -90,11 +130,10 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   * `badcea47` o bloco se pagava com séries de terceiros exatamente aqui.
   */
  it.each([1,4,5] as const)('tempo LIMITADO: adição sem compensação, semana %i',semana=>{
-  const p:PerfilTreino={...base,divisaoPreferida:'superior-inferior',tempoPorSessaoMin:60,limiteTempoTreino:'limitado'};
-  const a=run(p,semana),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
-  const grupos=(r:typeof a)=>{const m:Record<string,number>={};for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m[g]=(m[g]??0)+(s.series??0);}return m;};
-  const entregue=(b.blocoFoco?.adicionais??[]).reduce((n,x)=>n+x.series,0);
-  expect(entregue,'bloco vazio — a igualdade abaixo seria trivial').toBeGreaterThan(0);
-  expect(grupos(b)).toEqual({...grupos(a),peito:grupos(a).peito!+entregue});
+  semCompensacao(P_LIMITADO,semana);
+ });
+ it('anti-vacuidade: em alguma das semanas o bloco realmente entrega (LIMITADO)',()=>{
+  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(P_LIMITADO,s),0),
+   'nenhuma semana entregou bloco — as igualdades acima seriam triviais').toBeGreaterThan(0);
  });
 });

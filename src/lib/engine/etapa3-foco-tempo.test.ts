@@ -4,7 +4,7 @@ import {EXERCISES} from '../data/exercises';
 import {ORDEM_SEMANA,type Weekday} from '../semana';
 import type {PerfilTreino,RotinaSemanal} from './treino-types';
 import {altaExigenciaDocumental,descansoDoExercicio} from './descanso';
-import {GRUPOS_GRANDES,GRUPOS_PEQUENOS_PISO} from './alocador';
+import {creditoPonderadoDaSemana,GRUPOS_GRANDES,GRUPOS_PEQUENOS_PISO} from './alocador';
 const base:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false},objetivo:'massa',nivelExperiencia:'avancado',equipamento:'academia',diasDisponiveis:3,tempoPorSessaoMin:75,limiteTempoTreino:'sem_limite'};
 const agendas:Weekday[][]=[['seg'],['dom','seg'],['seg','qui'],['seg','qua','sex'],['seg','ter','qui','sex'],['seg','ter','qua','sex','sab'],['seg','ter','qua','qui','sex','sab'],[...ORDEM_SEMANA]];
 const run=(agenda:Weekday[],over:Partial<PerfilTreino>={},semana:1|5|6=1)=>gerarTreino({...base,...over,treinoDias:agenda,diasDisponiveis:agenda.length},{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
@@ -86,19 +86,66 @@ describe('etapa3: plano concreto',()=>{
    expect(semBloco,'aos 20 min a eliminação deixou de ser a regra').toBeGreaterThan(agendas.length/2);
   }
  });
- it('pernas: recortes reaproveitam todo o baseline de outros grupos, mais2 exercícios totais',()=>{
+ /**
+  * 🔵 REANCORADO em 2026-09-15 — o baseline de terceiros continua INTOCADO (a propriedade
+  * central deste caso). O que passou a variar é o tamanho do bloco: nas agendas de 6 e 7 dias
+  * o posterior já chega ao MRV no baseline, e o componente dele é recusado pelo teto duro
+  * (`motor-treino-grupo-em-foco-x-mrv`). Onde há folga, o bloco continua sendo 2 × 2.
+  */
+ it('pernas: recortes reaproveitam todo o baseline de outros grupos; o bloco para no teto',()=>{
+  let comDois=0;
   for(const agenda of agendas.slice(3)){
    const a=run(agenda),b=run(agenda,{focoAgregado:{grupo:'pernas',semana:1}});
    const assinatura=(r:RotinaSemanal)=>slots(r).filter(s=>!['quadriceps','posterior'].includes(s.exercicio.grupoPrimario!)).map(s=>`${s.exercicio.id}:${s.series}`).sort();
-   expect(assinatura(b)).toEqual(assinatura(a));expect(b.blocoFoco?.adicionais).toHaveLength(2);
-   expect(b.blocoFoco?.adicionais.every(s=>s.series===2)).toBe(true);
+   expect(assinatura(b),`${agenda.join('-')}: terceiros pagaram pelo foco`).toEqual(assinatura(a));
+   const entregues=b.blocoFoco?.adicionais??[];
+   expect(entregues.every(s=>s.series===2),`${agenda.join('-')}: série do extra fora do nominal`).toBe(true);
+   expect(b.blocoFoco?.solicitados,'a INTENÇÃO do bloco continua sendo 2').toBe(2);
+   if(entregues.length===2)comDois+=1;
+   else{
+    // recusa parcial só é aceitável com o componente no teto — e com a frase na tela
+    const teto=b.faixaVolumeSemana!.max;
+    const c=creditoPonderadoDaSemana(slots(b));
+    expect(['quadriceps','posterior'].some(g=>(c.get(g as never)??0)>=teto),`${agenda.join('-')}: bloco encolheu sem ninguém no teto`).toBe(true);
+    expect(b.avisos.some(x=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(x)),`${agenda.join('-')}: recusa sem explicação`).toBe(true);
+   }
   }
+  expect(comDois,'nenhuma agenda entregou o bloco inteiro — o caso deixou de discriminar').toBeGreaterThan(0);
  });
- it('extras podem exceder MRV conforme decisão explícita14/09, sem compensação',()=>{
+ /**
+  * 🔴 DECISÃO REVERTIDA em 2026-09-15 — este caso afirmava o CONTRÁRIO e precisa ser lido junto
+  * com o histórico, não apagado.
+  *
+  * Redação anterior: *"extras podem exceder MRV conforme decisão explícita 14/09, sem
+  * compensação"*, cobrando `n(b) === n(a)+4` **e** `n(b) > 16`.
+  *
+  * ⚠️ CONFLITO MATERIAL, explicitado: essa decisão de 14/09 contradiz uma decisão anterior e
+  * ainda vigente do cofre (`motor-treino-grupo-em-foco-x-mrv`, claims --005/--010/--011, todos
+  * `confirmed`): *"o foco sobe até o MRV do nível e PARA"*, *"o teto duro continua duro"*, e a
+  * alternativa de elevar o teto durante o foco foi **recusada** — *"transformaria o único
+  * guarda-corpo de volume em algo negociável"*. O claim --004 descreve LITERALMENTE este caso:
+  * *"massa/intermediário com peito já em 16 (o topo) e foco no peito → 18–20 > 16"*.
+  *
+  * 🔑 O que decidiu na prática: o relato do autor de 2026-09-15. O motor entregava peito 17
+  * contra 16 e o CRÍTICO DO PRÓPRIO APP acusava o plano na tela "Montar meu treino". Manter o
+  * excesso exigiria calar o crítico — ou seja, esconder o número em vez de respeitá-lo.
+  *
+  * 🔒 O que NÃO mudou: o foco continua ADIÇÃO, sem compensação. Nenhum terceiro cede série
+  * para o bloco entrar; o que muda é só que o bloco para no teto.
+  */
+ it('extras param no MRV — teto duro, sem compensação (reverte a decisão de 14/09)',()=>{
   const a=run(['seg','ter','qui','sex'],{nivelExperiencia:'intermediario'},5);
   const b=run(['seg','ter','qui','sex'],{nivelExperiencia:'intermediario',foco:{grupo:'peito',compensa:'triceps',semana:1}},5);
   const n=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario==='peito').reduce((n,s)=>n+s.series!,0);
-  expect(n(b)).toBe(n(a)+4);expect(n(b)).toBeGreaterThan(16);
+  const teto=b.faixaVolumeSemana!.max;
+  // anti-vacuidade: o baseline desta semana chega ao topo — é o caso que o claim --004 nomeia
+  expect(n(a),'o baseline não está no topo: o caso deixou de discriminar').toBe(teto);
+  // o foco NÃO passa do teto, na conta canônica (direto 1,0 + indireto 0,5)
+  expect(creditoPonderadoDaSemana(slots(b)).get('peito')).toBeLessThanOrEqual(teto);
+  // e não custa série de ninguém: quem está no topo recebe ORDEM, e a tela DIZ isso
+  const outros=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario!=='peito').map(s=>`${s.exercicio.id}:${s.series}`).sort();
+  expect(outros(b)).toEqual(outros(a));
+  expect(b.avisos.some(x=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(x)),'recusa sem explicação na tela').toBe(true);
  });
  /**
   * 🔴 Revisão 15/09 (D-03) — o equilíbrio puxar/empurrar é do BASELINE.

@@ -18,7 +18,7 @@
  * PURO e determinístico: sem relógio, sem rede, sem estado.
  */
 import type { Exercise, GrupoPrimario } from '../data/types';
-import type { NivelExperiencia, RotinaSemanal } from './treino-types';
+import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './treino-types';
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
@@ -46,6 +46,16 @@ export interface DiaDoEditor {
   holdSeg?: readonly (number | undefined)[];
   /** Bloco contínuo FINAL do dia automático; ausente/0 no plano editado ou sem cardio. */
   cardioSegundos?: number;
+  /**
+   * 🔒 PROCEDÊNCIA por exercício: veio do BLOCO ADICIONAL do foco (decisão do autor,
+   * 2026-09-16). Transportada do slot (`SlotExercicio.extraDoFoco`), que a recebeu do Set
+   * que decidiu a adição — nunca deduzida do grupo nem do nome.
+   *
+   * ⚠️ Ausente = sem procedência confiável (desenho manual, plano legado). Nesse caso TODO
+   * exercício conta, que é a avaliação que já existia: a marca só pode ISENTAR quando o motor
+   * afirmou a origem, nunca por suposição.
+   */
+  extraDoFoco?: readonly (boolean | undefined)[];
 }
 
 export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_mrv' | 'sem_estimulo';
@@ -91,10 +101,35 @@ export interface ItemCritico {
     limiar: 'mev' | 'mrv';
     alvo: number;
   };
+  /**
+   * 🔴 O fato de um INVARIANTE de padrão (2026-09-16). `fato` acima descreve volume por
+   * GRUPO e não serve aqui: `puxar ≥ empurrar` não é de nenhum grupo. Sem este campo, a
+   * única forma de saber que o motor e o crítico falam do mesmo desequilíbrio seria comparar
+   * as duas FRASES — que são diferentes de propósito (a do motor nomeia o alvo, a do crítico
+   * traz os números). Comparar texto acharia diferença onde não há.
+   */
+  fatoInvariante?: {
+    invariante: 'puxar_maior_igual_empurrar';
+    escopo: 'baseline';
+    puxar: number;
+    empurrar: number;
+  };
 }
 
 export interface Avaliacao {
   placar: LinhaPlacar[];
+  /**
+   * 🔴 O QUE O CRÍTICO MEDIU, mesmo quando não há o que avisar (2026-09-16).
+   *
+   * ⚠️ Nasceu de um caso medido no QA: no desenho aberto a partir do plano, o crítico tem a
+   * procedência do bloco do foco (por id) e o MONTADOR não — o caminho custom não monta bloco
+   * nenhum e conta todos os exercícios. Resultado: o motor dizia *"volume de puxar ficou
+   * abaixo do de empurrar"* e o crítico, que mediu 5 × 5, ficava calado. Sem publicar a
+   * MEDIÇÃO (e não só o aviso), a tela não teria como saber qual das duas contas viu mais.
+   */
+  medidas: {
+    puxarEmpurrar: { escopo: 'baseline'; puxar: number; empurrar: number };
+  };
   /** 🟡 Sugestões derivadas do déficit — nunca prescrição. */
   recomendacoes: ItemCritico[];
   /** 🔴 Riscos, com o porquê. **Não travam** (DF①). */
@@ -128,6 +163,25 @@ export interface ContextoCritico {
   diasDaSemanaIdx?: readonly number[];
   /** Séries usadas no PLACAR quando o motor ainda não anotou (piso do nível). */
   seriesPadrao?: number;
+  /**
+   * 🔴 A FAIXA REALMENTE APLICÁVEL a esta semana (correção 2026-09-15), publicada pelo motor
+   * em `RotinaSemanal.faixaVolumeSemana`. Ausente ⇒ a faixa terminal do nível/objetivo, que é
+   * o comportamento de sempre nas semanas de rampa (onde as duas coincidem).
+   *
+   * ⚠️ Não é um número novo: no deload é a banda de `aplicarDeload` que a própria rampa usa;
+   * na retomada é o alvo de `volumeDaRetomada`, com o teto da banda intacto. Recalcular aqui
+   * seria a segunda verdade que este arquivo existe para não criar.
+   */
+  faixaSemanal?: Faixa;
+  /**
+   * 🔒 A FASE. Em `deload` e `retomada` o volume baixo é a FEATURE e o guard de cobertura do
+   * montador (`treino-montador.ts`, `semana !== 6 && !retomada`) já não fala — o crítico passa
+   * a respeitar o mesmo contrato, em vez de acusar 6 déficits na semana de alívio.
+   *
+   * 🔴 O que NÃO muda com a fase: `acima_do_maximo`, sessão longa, dias consecutivos e
+   * puxar/empurrar seguem sendo avaliados. Suprimir o mínimo não é desligar o crítico.
+   */
+  faseVolume?: FaseVolume;
 }
 
 /**
@@ -163,8 +217,10 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
     series: d.series?.[i] ?? ctx.seriesPadrao ?? 1,
   })));
   const ponderado = creditoPonderadoDaSemana(slots);
-  const piso = mev(ctx.nivel, ctx.objetivo);
-  const teto = mrv(ctx.nivel, ctx.objetivo);
+  // A faixa da SEMANA quando o motor a publicou; a do nível quando não há fase a considerar.
+  // Nas semanas normais as duas são a mesma — por isso a rampa não muda de comportamento.
+  const piso = ctx.faixaSemanal?.min ?? mev(ctx.nivel, ctx.objetivo);
+  const teto = ctx.faixaSemanal?.max ?? mrv(ctx.nivel, ctx.objetivo);
   return GRUPOS_GRANDES.map((g) => {
     const v = Math.round((ponderado.get(g) ?? 0) * 10) / 10;
     const status: StatusGrupo = v <= 0 ? 'sem_estimulo' : v < piso ? 'abaixo_mev' : v > teto ? 'acima_mrv' : 'na_banda';
@@ -178,11 +234,20 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
  * E grupo abaixo ⇒ sugere mover UM exercício. Linguagem de sugestão ("tente"), nunca de
  * prescrição nem de resultado.
  */
-export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number): ItemCritico[] {
+export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number, fase: FaseVolume = 'normal'): ItemCritico[] {
   const itens: ItemCritico[] = [];
   const acima = [...placar].filter((l) => l.status === 'acima_mrv').sort((a, b) => b.ponderado - a.ponderado);
-  const abaixo = [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
-    .sort((a, b) => a.ponderado - b.ponderado);
+  /**
+   * 🔒 Em `deload` e `retomada` o volume reduzido é a PRESCRIÇÃO, não um déficit — é o mesmo
+   * contrato que faz o montador pular o guard de cobertura nessas fases. Sem isto, a semana de
+   * alívio abria com 6 acusações e contradizia a própria copy do editor ("nas fases de
+   * recuperação, o volume pode ser reduzido"). A sugestão de TROCA cai junto: ela nasce do
+   * déficit, e sugerir remanejar exercício durante a recuperação é o conselho oposto ao da fase.
+   */
+  const abaixo = fase === 'normal'
+    ? [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
+      .sort((a, b) => a.ponderado - b.ponderado)
+    : [];
 
   if (acima.length > 0 && abaixo.length > 0) {
     itens.push({
@@ -270,12 +335,25 @@ export function avisos(
   });
 
   // ④ Desequilíbrio puxar < empurrar (saúde do ombro — invariante do motor desde o v1).
-  const conta = (p: string) => dias.reduce((n, d) => n + d.exercicios.filter((e) => e.padraoMovimento === p).length, 0);
-  if (conta('puxar') < conta('empurrar')) {
+  /**
+   * 🔴 O MESMO ESCOPO DO MONTADOR (decisão do autor, 2026-09-16).
+   *
+   * ⚠️ O defeito: o montador já media `puxar ≥ empurrar` no BASELINE desde a revisão D-03
+   * de 15/09 (*"o bloco adicional é autorizado a desequilibrar"*), e o crítico contava o
+   * plano INTEIRO. Resultado medido em `5c3a6c0`, avançado/massa 3d/75min/S5 com foco no
+   * peito: o motor ficava calado e a tela dizia 🔴 *"mais exercícios de empurrar (7) que de
+   * puxar (5)"* — duas réguas para o mesmo invariante, e a que falava era a errada.
+   *
+   * 🔒 A isenção vale SÓ para esta comparação e SÓ com procedência declarada. Sem a marca
+   * (desenho manual, plano legado), todo exercício conta — a avaliação de hoje, preservada.
+   */
+  const { puxar, empurrar } = contarPadroesDoBaseline(dias);
+  if (puxar < empurrar) {
     itens.push({
       codigo: 'puxar_menor_que_empurrar',
       severidade: 'risco',
-      texto: `Sua semana tem mais exercícios de empurrar (${conta('empurrar')}) que de puxar (${conta('puxar')}). Manter puxar ao menos igual a empurrar ajuda a equilibrar o ombro.`,
+      texto: `Sua semana tem mais exercícios de empurrar (${empurrar}) que de puxar (${puxar}). Manter puxar ao menos igual a empurrar ajuda a equilibrar o ombro.`,
+      fatoInvariante: { invariante: 'puxar_maior_igual_empurrar', escopo: 'baseline', puxar, empurrar },
     });
   }
 
@@ -285,7 +363,20 @@ export function avisos(
 /** A avaliação completa — o que a tela consome, no editor e no plano salvo (DF②). */
 export function avaliarSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): Avaliacao {
   const placar = placarDaSemana(dias, ctx);
-  return { placar, recomendacoes: recomendacoes(placar, ctx.semana), avisos: avisos(dias, placar, ctx) };
+  return {
+    placar,
+    recomendacoes: recomendacoes(placar, ctx.semana, ctx.faseVolume ?? 'normal'),
+    avisos: avisos(dias, placar, ctx),
+    medidas: { puxarEmpurrar: { escopo: 'baseline', ...contarPadroesDoBaseline(dias) } },
+  };
+}
+
+/** A contagem única de `puxar ≥ empurrar` — usada pelo aviso e publicada em `medidas`. */
+function contarPadroesDoBaseline(dias: readonly DiaDoEditor[]): { puxar: number; empurrar: number } {
+  const doBaseline = (d: DiaDoEditor, i: number) => d.extraDoFoco?.[i] !== true;
+  const conta = (p: string) => dias.reduce(
+    (n, d) => n + d.exercicios.filter((e, i) => e.padraoMovimento === p && doBaseline(d, i)).length, 0);
+  return { puxar: conta('puxar'), empurrar: conta('empurrar') };
 }
 
 /** Compara resultados sem depender da identidade do objeto nem de serialização incidental. */
@@ -507,6 +598,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
       series: dia.slots.map((s) => s.series),
       descansoSeg: dia.slots.map((s) => s.descansoSeg),
       holdSeg: dia.slots.map((s) => s.holdSeg),
+      extraDoFoco: dia.slots.map((s) => s.extraDoFoco),
       cardioSegundos: blocosCanonicos.get(final?.diaId ?? '')?.duracaoTotalSegundos,
     };
   });
