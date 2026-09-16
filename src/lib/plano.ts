@@ -92,6 +92,9 @@ export function recomputarPlano(
     ...(perfil.rotinaCustom ? { rotinaCustom: perfil.rotinaCustom } : {}),
     // 🏃 C2: a modalidade escolhida alimenta o slot do dia excedente de cardio.
     ...(perfil.cardioFavorito ? { cardioFavorito: perfil.cardioFavorito } : {}),
+    // 🔁 A variação aceita em "Gerar novo treino" — entrada do montador, mesmo trilho de
+    // `divisaoPreferida`. Sem ela aqui, a proposta aceita morreria no primeiro recompute.
+    ...(perfil.variacaoTreino ? { variacaoTreino: perfil.variacaoTreino } : {}),
   };
   /**
    * 🔴 D11 (auditoria 2026-09-11) — A GERAÇÃO É SUSPENSA, NÃO ADIVINHADA.

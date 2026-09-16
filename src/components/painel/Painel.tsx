@@ -5,7 +5,7 @@ import { seriesDoSlot } from '@/lib/series-treino';
 import ResumoSeries from './ResumoSeries';
 import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 
-import { useEffect, useState, type CSSProperties, type ReactNode, useRef } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
@@ -65,6 +65,9 @@ import EditarPerfil from './EditarPerfil';
 import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
 import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel, type PrevisaoEditor } from './EditorTreino';
+import PropostaTreino from './PropostaTreino';
+import { proporTreino, type Proposta, type TipoDeProposta } from '@/lib/proposta-treino';
+import { poolElegivel } from '@/lib/engine';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { useRegistro, HistoricoDieta, MEAL_LABEL, type StatusRefeicao } from './RegistroRefeicao';
@@ -127,6 +130,15 @@ export interface PerfilResumo {
    * Ausente = o gerador monta. "Voltar ao recomendado" apaga este campo, e só ele.
    */
   rotinaCustom?: RotinaCustom;
+  /**
+   * 🔁 A VARIAÇÃO da montagem automática aceita pela pessoa em "Gerar novo treino".
+   *
+   * Persistida pelo mesmo motivo de `rotinaCustom`: sem ela, a proposta aceita não
+   * sobreviveria ao próximo recompute — a tela mostraria uma coisa e o app outra. Não é
+   * desenho manual: o plano continua AUTOMÁTICO e segue adaptando (semana, deload, retomada,
+   * preferências). Ausente/0 = a montagem canônica.
+   */
+  variacaoTreino?: number;
   /** Pratos em descanso ("Cansei deste prato") — nível do PRATO, distinto de `naoCurto`
    *  (nível do alimento). Retornam sozinhos após 21 dias. */
   pratosCansados: PratoCansado[];
@@ -979,6 +991,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         extraDoFoco: d.slots.map((s) => s.extraDoFoco),
       })),
       avisos: nt.rotina?.avisos ?? [],
+      /**
+       * 🔒 O TEMPO POR DIA vem da certificação do MOTOR (`duracaoResistidaDias`), na mesma
+       * rodada que produziu os dias. `NAO_AVALIADO` vira `null` — a tela não converte
+       * abstenção em número. É o que permite à cobertura dizer "+X min" sem estimar.
+       */
+      duracaoSegPorDia: (nt.rotina?.duracaoResistidaDias ?? []).map((r) =>
+        (r.estadoCalculo === 'CALCULADO' && r.duracaoMinimaEstimadaSegundos != null
+          ? r.duracaoMinimaEstimadaSegundos : null)),
+      excedeTempoPorDia: (nt.rotina?.duracaoResistidaDias ?? []).map((r) =>
+        r.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL'),
       ...(nt.rotina?.fatosCobertura ? { fatosCobertura: nt.rotina.fatosCobertura } : {}),
       ...(nt.rotina?.fatosInvariantes ? { fatosInvariantes: nt.rotina.fatosInvariantes } : {}),
       ...(nt.rotina?.faixaVolumeSemana ? { faixaVolumeSemana: nt.rotina.faixaVolumeSemana } : {}),
@@ -986,16 +1008,98 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     };
   }
 
-  /** "Voltar ao recomendado" = apagar o campo, e SÓ ele. O gerador recomputa na hora. */
-  function voltarAoRecomendado() {
-    const novoPerfil = { ...perfil, rotinaCustom: undefined };
-    setPerfil(novoPerfil);
-    notificarPerfil(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
-    setTreino(nt);
-    setRotinaDias(nt.rotina?.dias ?? []);
-    setEditorDias(null);
-    window.scrollTo(0, 0);
+  /**
+   * 🔁 AS DUAS AÇÕES DO TREINO — "Gerar novo treino" e "Atualizar treino".
+   *
+   * 🔒 O que vale para as DUAS, e é o ponto delas:
+   *  · a proposta é CALCULADA, mostrada e só então aplicada. Até a confirmação, o perfil, o
+   *    desenho salvo, o histórico e a fase do ciclo ficam exatamente como estavam;
+   *  · cancelar não grava nada — nem local, nem no servidor. Não há estado a desfazer;
+   *  · clique repetido não gera duas gravações: enquanto uma proposta está sendo calculada,
+   *    ou já está na tela, um novo pedido é ignorado, e o `aplicandoPropostaRef` fecha a porta
+   *    do salvamento até a aplicação terminar;
+   *  · a gravação usa o MESMO caminho de sempre (`notificarPerfil` → fila com CAS, revisão e
+   *    bloqueio por conflito), então falha de rede continua preservando o local e avisando.
+   *
+   * 🔴 "Gerar novo treino" NÃO devolve o desenho manual: `proporTreino` monta a proposta com
+   * `rotinaCustom` fora da entrada. Com ele na entrada, o montador respeitaria o desenho (a
+   * DF② do editor) e o botão não geraria nada — e o desenho seria apagado antes da prévia.
+   */
+  const [proposta, setProposta] = useState<Proposta | null>(null);
+  const [calculandoProposta, setCalculandoProposta] = useState<TipoDeProposta | null>(null);
+  const [erroProposta, setErroProposta] = useState<string | null>(null);
+  const aplicandoPropostaRef = useRef(false);
+  const [aplicandoProposta, setAplicandoProposta] = useState(false);
+
+  /** 🔒 O pool elegível do MOTOR — a mesma autoridade que decide o que entra no plano. */
+  const elegiveisDoPerfil = useMemo(
+    () => poolElegivel(EXERCISES_SEED, perfil, perfil.preferencias),
+    [perfil],
+  );
+
+  function pedirProposta(tipo: TipoDeProposta) {
+    if (calculandoProposta || proposta || aplicandoPropostaRef.current) return;
+    setErroProposta(null);
+    setCalculandoProposta(tipo);
+    /**
+     * 🔕 SEM EVENTO NOVO aqui, de propósito. O vocabulário de telemetria é FECHADO e cada
+     * tipo novo exige a migration que o `check` do banco espera (`metricas/eventos.ts`) —
+     * sem ela a gravação seria rejeitada em silêncio, que é pior do que não medir. Medir
+     * estas duas ações fica para a leva que trouxer a migration junto.
+     */
+    /**
+     * ⏳ O cálculo é síncrono e roda o motor várias vezes; sair do tique deixa o navegador
+     * PINTAR o estado "Montando…" antes de travar a thread. Sem isto o botão de carregamento
+     * seria uma decoração que nunca aparece.
+     */
+    window.setTimeout(() => {
+      try {
+        const p = proporTreino({
+          tipo,
+          perfil,
+          rotinaAtual: rotinaDias,
+          gerar: (candidato) => recomputarPlano(candidato, opcoesDoPlano()).treino.rotina,
+          elegiveis: new Set(elegiveisDoPerfil.map((e) => e.id)),
+        });
+        if (!p) {
+          setErroProposta('Não foi possível montar uma proposta agora. Seu treino atual continua como está.');
+        } else {
+          setProposta(p);
+        }
+      } catch {
+        // Falha de cálculo não vira plano: a tela diz que nada mudou, e nada mudou mesmo.
+        setErroProposta('Não foi possível montar uma proposta agora. Seu treino atual continua como está.');
+      } finally {
+        setCalculandoProposta(null);
+      }
+    }, 0);
+  }
+
+  /** Aplica a proposta JÁ confirmada. Única porta de gravação das duas ações. */
+  function aplicarProposta() {
+    if (!proposta || aplicandoPropostaRef.current) return;
+    aplicandoPropostaRef.current = true;
+    setAplicandoProposta(true);
+    try {
+      const novoPerfil = proposta.perfilProposto;
+      setPerfil(novoPerfil);
+      notificarPerfil(novoPerfil);
+      const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+      setTreino(nt);
+      setRotinaDias(nt.rotina?.dias ?? []);
+      setProposta(null);
+      setEditorDias(null);
+      window.scrollTo(0, 0);
+    } finally {
+      aplicandoPropostaRef.current = false;
+      setAplicandoProposta(false);
+    }
+  }
+
+  /** Cancelar é literalmente não fazer nada — não há rascunho para descartar. */
+  function cancelarProposta() {
+    if (aplicandoPropostaRef.current) return;
+    setProposta(null);
   }
 
   /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */
@@ -1670,16 +1774,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             limiteTempoTreino={perfil.limiteTempoTreino}
             preverPlano={preverPlano}
             semana={ciclo.semanaEfetiva}
-            temCustom={!!perfil.rotinaCustom}
+            elegiveis={elegiveisDoPerfil}
             onSalvar={salvarTreinoCustom}
             onCancelar={() => setEditorDias(null)}
-            onVoltarAoRecomendado={voltarAoRecomendado}
+            onGerarNovo={() => pedirProposta('gerar')}
             onDesbanir={desbanirExercicio}
             onAvisoMostrado={(codigos) => { for (const codigo of codigos) registrarEvento('aviso_risco_mostrado', { codigo, contexto: 'editor' }); }}
           />
         )}
         {!vista && aba === 'treino' && !editorDias && (prescricao
-          ? <TreinoTab dias={rotinaDias} rotina={treino.rotina ?? null} tempoPorSessaoMin={perfil.tempoPorSessaoMin} prescricao={prescricaoEfetiva ?? prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} onMontar={abrirEditor} criticoPlano={criticoPlano} />
+          ? <TreinoTab dias={rotinaDias} rotina={treino.rotina ?? null} tempoPorSessaoMin={perfil.tempoPorSessaoMin} prescricao={prescricaoEfetiva ?? prescricao} treinoNome={treino.rotina?.split ?? 'Treino'} trocados={trocados} feedback={feedback} progresso={progresso} favoritos={favoritosSet} onToggleFavorito={toggleFavorito} onTrocar={abrirTrocaEx} onFb={(k, f) => setFeedback((p) => ({ ...p, [k]: f }))} onIniciar={(d) => iniciarSessaoGuiada(d)} onDetalhe={(d, s) => setDetalhe({ tipo: 'ex', d, s })} onRegistrarTreino={() => setRegistrando(true)} avisoPausa={avisoPausa} onReconhecerPausa={reconhecerPausa} onMontar={abrirEditor} criticoPlano={criticoPlano} onGerarNovo={() => pedirProposta('gerar')} onAtualizar={() => pedirProposta('atualizar')} calculandoProposta={calculandoProposta} erroProposta={erroProposta} />
           : (
             <div style={sec}>
               {/* 🔒 Sem prescrição a aba Treino é só REGISTRO — o botão de registro manual
@@ -1805,6 +1909,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         />
       )}
       {detalheSessao && <DetalheSessao sessao={detalheSessao} rotulo={detalheSessao.manual ? fmtDataCurta(detalheSessao.dataISO) : `Sessão ${detalheSessao.n}`} onFechar={() => setDetalheSessao(null)} />}
+      {/* 🔁 A PRÉVIA DA PROPOSTA. Enquanto ela está na tela, nada foi gravado — nem perfil,
+          nem desenho. "Manter o meu" fecha e não escreve; só "Aplicar" persiste, pelo mesmo
+          caminho com fila/CAS de toda mudança de perfil. */}
+      {proposta && (
+        <PropostaTreino
+          proposta={proposta}
+          nomeDoExercicio={(id) => EXERCISES_SEED.find((e) => e.id === id)?.nomePt ?? id}
+          aplicando={aplicandoProposta}
+          onAplicar={aplicarProposta}
+          onCancelar={cancelarProposta}
+        />
+      )}
     </div>
   );
 }
@@ -1982,7 +2098,7 @@ function DiasNaoAtendidos({ dias }: { dias?: DiaNaoAtendido[] }) {
   );
 }
 
-function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, onMontar, criticoPlano, rotina, tempoPorSessaoMin }: {
+function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso, favoritos, onToggleFavorito, onTrocar, onFb, onIniciar, onDetalhe, onRegistrarTreino, avisoPausa, onReconhecerPausa, onMontar, criticoPlano, rotina, tempoPorSessaoMin, onGerarNovo, onAtualizar, calculandoProposta, erroProposta }: {
   dias: DiaTreino[]; prescricao: NonNullable<ResultadoTreino['prescricao']>; treinoNome: string;
   trocados: Set<string>; feedback: Record<string, Feedback>; progresso?: Record<string, ProgressoExercicio>;
   favoritos: Set<string>; onToggleFavorito: (id: string) => void;
@@ -1996,6 +2112,18 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
   criticoPlano: Avaliacao | null;
   rotina: RotinaSemanal | null;
   tempoPorSessaoMin: number; limiteTempoTreino?: 'limitado' | 'sem_limite';
+  /**
+   * 🔁 As DUAS ações do treino, com diferenças que a tela também explica:
+   *  · `onGerarNovo` — nova montagem automática com as preferências atuais;
+   *  · `onAtualizar` — adapta o treino que existe, preservando o que continua compatível.
+   * Nenhuma das duas substitui nada sem a confirmação na prévia.
+   */
+  onGerarNovo: () => void;
+  onAtualizar: () => void;
+  /** Qual ação está calculando agora — desabilita as duas e mostra o estado. */
+  calculandoProposta: TipoDeProposta | null;
+  /** Falha do cálculo, dita na tela. Ausente = nada a dizer. */
+  erroProposta: string | null;
 }) {
   const total = dias.reduce((n, d) => n + d.slots.length, 0);
   const [diaSelecionado, setDiaSelecionado] = useState(0);
@@ -2011,11 +2139,46 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
           <span style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.55)', background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 999, padding: '7px 14px' }}>{total} exercícios · {dias.reduce((n, d) => n + d.slots.reduce((sum, slot) => sum + series(slot), 0), 0)} séries na semana</span>
           {/* Entrada A2 do registro manual (handoff): no header da aba Treino. */}
           <button onClick={onRegistrarTreino} className="evk-registrar" style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Já treinei — registrar</button>
+          {/* 🔁 As DUAS ações do plano, lado a lado e com rótulos que dizem a diferença.
+              Render incondicional, como a porta do editor: controle atrás de condição some. */}
+          <button
+            onClick={onAtualizar}
+            disabled={calculandoProposta != null}
+            style={{ background: 'none', border: '1px solid rgba(234,229,219,.3)', color: '#EAE5DB', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: calculandoProposta ? 'progress' : 'pointer', opacity: calculandoProposta ? .55 : 1 }}
+          >
+            {calculandoProposta === 'atualizar' ? 'Conferindo…' : 'Atualizar treino'}
+          </button>
+          <button
+            onClick={onGerarNovo}
+            disabled={calculandoProposta != null}
+            style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: calculandoProposta ? 'progress' : 'pointer', opacity: calculandoProposta ? .55 : 1 }}
+          >
+            {calculandoProposta === 'gerar' ? 'Montando…' : 'Gerar novo treino'}
+          </button>
           {/* 🧭 A porta do EDITOR (pedido nº 5). Render incondicional dentro da aba — a
               regra da descobribilidade de 2026-08-08: controle atrás de condição some. */}
           <button onClick={onMontar} style={{ background: '#BDFF00', border: '1px solid #BDFF00', color: '#0D2818', fontWeight: 600, fontSize: '.94rem', padding: '12px 20px', borderRadius: 12, cursor: 'pointer' }}>Montar meu treino</button>
         </div>
       </div>
+      {/**
+        * 🔴 A DIFERENÇA ENTRE AS DUAS AÇÕES FICA VISÍVEL, não num `title` (QA 2026-09-16).
+        *
+        * A explicação morava no atributo `title`: invisível no celular, que não tem hover, e
+        * ela ainda sobrescrevia o NOME acessível do botão — o leitor de tela anunciava a frase
+        * inteira no lugar de "Gerar novo treino". Uma linha de texto resolve os dois.
+        */}
+      <p style={{ margin: '0 0 16px', fontSize: '.84rem', lineHeight: 1.5, color: 'rgba(234,229,219,.6)' }}>
+        <strong style={{ fontWeight: 600, color: 'rgba(234,229,219,.8)' }}>Atualizar treino</strong> adapta o que
+        você já tem às suas preferências atuais, preservando o que continua compatível.{' '}
+        <strong style={{ fontWeight: 600, color: 'rgba(234,229,219,.8)' }}>Gerar novo treino</strong> monta uma
+        proposta nova. Nos dois casos você vê antes de substituir.
+      </p>
+      {/* 🔴 Falha de cálculo é DITA, e diz também o que não aconteceu. */}
+      {erroProposta && (
+        <p role="alert" style={{ margin: '0 0 16px', fontSize: '.88rem', lineHeight: 1.5, color: '#ffb4a5', background: 'rgba(229,72,77,.08)', border: '1px solid rgba(229,72,77,.35)', borderRadius: 12, padding: '10px 14px' }}>
+          {erroProposta}
+        </p>
+      )}
       {/* 🧭 DF② — a faixa compacta do crítico no plano JÁ SALVO: os avisos ativos + 1
           recomendação, no mesmo componente do editor. */}
       {/* 🔴 D1 — a saída do MOTOR (veredito da geração + avisos honestos + conta do cardio).

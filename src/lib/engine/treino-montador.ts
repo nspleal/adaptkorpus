@@ -51,6 +51,43 @@ import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, Lo
 import { resolverExecucao } from '../data/lateralidade';
 import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
 
+/**
+ * 🔒 O POOL ELEGÍVEL — autoridade ÚNICA do "este exercício pode entrar no seu plano?".
+ *
+ * Extraído do corpo de `montarRotina` sem mudar uma vírgula do critério: banidos e preteridos
+ * fora, equipamento (modelo 2 níveis) e dificuldade liberada valendo, ordem estável
+ * (tier↑, id). Existe como função porque DOIS consumidores fora do montador precisam do
+ * MESMO conjunto — a atualização do desenho manual (que só preserva o que ainda cabe) e a
+ * cobertura muscular do editor (que só sugere o que a pessoa realmente pode usar).
+ *
+ * 🔴 Uma segunda cópia deste filtro é o defeito que esta função existe para impedir: a tela
+ * sugeriria um exercício que o motor recusa, ou preservaria um que ele descarta.
+ */
+export function poolElegivel(
+  exercises: readonly Exercise[],
+  perfil: Pick<PerfilTreino, 'equipamento' | 'equipamentosCasa' | 'nivelExperiencia'>,
+  preferencias?: PreferenciasTreino,
+): Exercise[] {
+  const prefs = preferenciasEfetivas(
+    { exercises, equipamento: perfil.equipamento, equipamentosCasa: perfil.equipamentosCasa, nivelExperiencia: perfil.nivelExperiencia },
+    preferencias,
+  );
+  return poolDosExcluidos(exercises, perfil, new Set<string>([...prefs.banidos, ...prefs.preteridos]));
+}
+
+/** O filtro propriamente dito, com os excluídos JÁ resolvidos (o montador já os tem). */
+function poolDosExcluidos(
+  exercises: readonly Exercise[],
+  perfil: Pick<PerfilTreino, 'equipamento' | 'equipamentosCasa' | 'nivelExperiencia'>,
+  excluidos: ReadonlySet<string>,
+): Exercise[] {
+  const liberadas = new Set(dificuldadesLiberadas(perfil.nivelExperiencia));
+  return exercises
+    .filter((e) => !excluidos.has(e.id) && exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
+    .slice()
+    .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** Locais acessíveis por disponibilidade de equipamento. */
 export function locaisPermitidos(equip: EquipamentoDisp): LocalExercicio[] {
   if (equip === 'nenhum') return ['casa_sem'];
@@ -336,12 +373,8 @@ export function montarRotina(
   }
 
   // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
-  // liberada. Ordenado (tier↑, depois id).
-  const liberadas = new Set(dificuldadesLiberadas(perfil.nivelExperiencia));
-  const pool = exercises
-    .filter((e) => !excluidos.has(e.id) && exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
-    .slice()
-    .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  // liberada. Ordenado (tier↑, depois id). 🔒 Mesma função que a tela consome.
+  const pool = poolDosExcluidos(exercises, perfil, excluidos);
 
   // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
   const divisao = perfil.divisaoPreferida ?? 'auto';
@@ -516,6 +549,12 @@ export function montarRotina(
     // Disponibilidade é teto: não acrescentar slots só para preencher o dia.
     preencherAteOrcamento: false,
     respeitarGruposDoDia: true,
+    /**
+     * 🔁 A variação vem do PERFIL, como `divisaoPreferida` e `foco`: é entrada, não estado
+     * interno. Ela só desloca o início da rotação dentro do pool já elegível — nenhum filtro,
+     * invariante, teto ou reserva muda. Ausente/0 ⇒ a alocação canônica de sempre.
+     */
+    ...(perfil.variacaoTreino ? { variacao: perfil.variacaoTreino } : {}),
   };
   let diasAlocados = alocarSemana(argsAloc);
   let transferenciaFoco: { de: GrupoPrimario; para: GrupoPrimario } | undefined;

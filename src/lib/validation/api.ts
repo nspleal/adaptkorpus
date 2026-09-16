@@ -57,6 +57,8 @@ export const perfilTreinoSchema = z.object({
   rotinaCustom: rotinaCustomSchema.optional(),
   cardioFavorito: z.enum(['caminhada', 'corrida', 'bike', 'pular_corda', 'lutas', 'outro']).optional(),
   modoForca: z.boolean().optional(),
+  /** 🔁 Mesma régua do perfil: sem ela a rota devolveria a montagem canônica, e não a do app. */
+  variacaoTreino: perfilResumoSchema.shape.variacaoTreino,
 
   // ── entradas transitórias da geração (as mesmas de `opcoesDeEntradaPlano`) ────────────
   favoritos: z.array(z.string().max(24)).max(200).optional(),
