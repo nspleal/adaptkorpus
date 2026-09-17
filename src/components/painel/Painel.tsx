@@ -66,7 +66,7 @@ import { DetalheExercicio, DetalhePrato, DetalheSessao } from './DetalheModais';
 import SeletorExercicio from './SeletorExercicio';
 import EditorTreino, { PainelCritico, recomendacoesVisiveis, doPlano, paraRotinaCustom, type DiaEditavel, type PrevisaoEditor } from './EditorTreino';
 import PropostaTreino from './PropostaTreino';
-import { proporTreino, type Proposta, type TipoDeProposta } from '@/lib/proposta-treino';
+import { aplicarPropostaSobre, assinaturaDasEntradas, proporTreino, type Proposta, type TipoDeProposta } from '@/lib/proposta-treino';
 import { poolElegivel } from '@/lib/engine';
 import { avaliarRotinaAutomaticaFinal, avaliarSemana, type Avaliacao } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
@@ -1030,6 +1030,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [erroProposta, setErroProposta] = useState<string | null>(null);
   const aplicandoPropostaRef = useRef(false);
   const [aplicandoProposta, setAplicandoProposta] = useState(false);
+  /** 🔒 A proposta na tela foi montada sobre preferências que já não valem. */
+  const [propostaDesatualizada, setPropostaDesatualizada] = useState(false);
 
   /** 🔒 O pool elegível do MOTOR — a mesma autoridade que decide o que entra no plano. */
   const elegiveisDoPerfil = useMemo(
@@ -1060,6 +1062,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           rotinaAtual: rotinaDias,
           gerar: (candidato) => recomputarPlano(candidato, opcoesDoPlano()).treino.rotina,
           elegiveis: new Set(elegiveisDoPerfil.map((e) => e.id)),
+          // 🔒 A mesma entrada canônica que o CAS certifica — a assinatura que detecta
+          // proposta velha sai dela, não de uma comparação inventada aqui.
+          entrada: entradaDoPlano(perfil),
         });
         if (!p) {
           setErroProposta('Não foi possível montar uma proposta agora. Seu treino atual continua como está.');
@@ -1075,19 +1080,41 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     }, 0);
   }
 
-  /** Aplica a proposta JÁ confirmada. Única porta de gravação das duas ações. */
+  /**
+   * Aplica a proposta JÁ confirmada. Única porta de gravação das duas ações.
+   *
+   * 🔴 DUAS TRAVAS QUE NASCERAM DA VALIDAÇÃO (2026-09-16):
+   *
+   * ① **Proposta velha não é aplicada.** A proposta guarda a fotografia das ENTRADAS que a
+   *    geraram. Se elas mudaram entre montar e aplicar — banimento noutra aba, virada da
+   *    semana do ciclo, peso resolvido que chegou depois, agenda editada —, o plano proposto
+   *    não descreve mais as preferências vigentes. A tela DIZ isso e oferece montar de novo;
+   *    aplicar assim mesmo seria gravar um treino montado sobre uma realidade que passou.
+   *
+   * ② **Aplicar é REBASE, não substituição.** A base é `perfilRef.current` (o perfil
+   *    CORRENTE), e a proposta contribui só com o que ela decide — `rotinaCustom` e
+   *    `variacaoTreino`. Gravar `proposta.perfilProposto` inteiro devolveria ao perfil tudo o
+   *    que mudou no meio do caminho, em silêncio.
+   */
   function aplicarProposta() {
     if (!proposta || aplicandoPropostaRef.current) return;
+    const atual = perfilRef.current;
+    if (proposta.assinaturaDasEntradas
+      && proposta.assinaturaDasEntradas !== assinaturaDasEntradas(atual, entradaDoPlano(atual))) {
+      setPropostaDesatualizada(true);
+      return;
+    }
     aplicandoPropostaRef.current = true;
     setAplicandoProposta(true);
     try {
-      const novoPerfil = proposta.perfilProposto;
+      const novoPerfil = aplicarPropostaSobre(atual, proposta);
       setPerfil(novoPerfil);
       notificarPerfil(novoPerfil);
       const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
       setTreino(nt);
       setRotinaDias(nt.rotina?.dias ?? []);
       setProposta(null);
+      setPropostaDesatualizada(false);
       setEditorDias(null);
       window.scrollTo(0, 0);
     } finally {
@@ -1100,6 +1127,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   function cancelarProposta() {
     if (aplicandoPropostaRef.current) return;
     setProposta(null);
+    setPropostaDesatualizada(false);
+  }
+
+  /** "Montar de novo": descarta a proposta velha e refaz com as preferências de agora. */
+  function remontarProposta() {
+    if (!proposta || aplicandoPropostaRef.current) return;
+    const tipo = proposta.tipo;
+    setProposta(null);
+    setPropostaDesatualizada(false);
+    // Fora do tique: `pedirProposta` recusa enquanto ainda houver proposta no estado.
+    window.setTimeout(() => pedirProposta(tipo), 0);
   }
 
   /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */
@@ -1917,7 +1955,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
           proposta={proposta}
           nomeDoExercicio={(id) => EXERCISES_SEED.find((e) => e.id === id)?.nomePt ?? id}
           aplicando={aplicandoProposta}
+          desatualizada={propostaDesatualizada}
           onAplicar={aplicarProposta}
+          onRemontar={remontarProposta}
           onCancelar={cancelarProposta}
         />
       )}

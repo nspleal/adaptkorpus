@@ -5,6 +5,7 @@ import type { Exercise } from '@/lib/data/types';
 import type { CondicaoExecucao } from '@/lib/data/alvos-anatomicos-tipos';
 import { coberturaDoDia, type CoberturaDoGrupo, type EstadoDaParte, type ParteDoGrupo } from '@/lib/engine/cobertura-editor';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
+import { AVISO_NAO_RESOLVE, ROTULO_CONDICIONAL, fraseDaCondicao } from '@/lib/condicao-execucao-copy';
 import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 
 /**
@@ -39,29 +40,6 @@ const rotulo: CSSProperties = {
 };
 const nota: CSSProperties = { fontSize: '.79rem', lineHeight: 1.55, color: 'rgba(234,229,219,.62)' };
 const item: CSSProperties = { fontSize: '.85rem', lineHeight: 1.5, color: 'rgba(234,229,219,.85)' };
-
-/** Rótulo humano da condição — o mesmo vocabulário do detalhe "O que este exercício aborda". */
-const TEXTO_CONDICAO: Record<string, Record<string, string>> = {
-  movimento: {
-    extensao_coluna: 'quando o movimento é extensão da coluna',
-    dobradica_quadril: 'quando o movimento é dobradiça de quadril',
-  },
-  acaoPunho: {
-    flexao: 'quando o punho flexiona',
-    extensao: 'quando o punho estende',
-    ambas: 'quando o punho faz os dois sentidos',
-  },
-  retroversaoPelvica: {
-    true: 'quando há retroversão pélvica',
-    false: 'quando não há retroversão pélvica',
-  },
-};
-
-function fraseDaCondicao(quando: CondicaoExecucao): string {
-  return Object.entries(quando)
-    .map(([k, v]) => TEXTO_CONDICAO[k]?.[String(v)] ?? `${k}: ${String(v)}`)
-    .join(' e ');
-}
 
 const MARCA: Record<EstadoDaParte, { marca: string; cor: string }> = {
   identificada: { marca: '●', cor: '#BDFF00' },
@@ -204,10 +182,18 @@ function Grupo({ grupo, nomeNoDia, porId, onAdicionar, efeitoDe }: {
         />
       )}
 
+      {/**
+        * 🔴 DECISÃO DO AUTOR (2026-09-16): o app NÃO vai ter superfície para declarar execução
+        * nesta entrega. Então o estado condicional é dito com o rótulo fechado — "depende da
+        * execução; NÃO CONFIRMADO" — com a condição em português, e com o aviso de que
+        * escolher o mesmo exercício de novo não resolve. Sem o aviso, a leitura natural é
+        * "é só adicionar", e o app estaria induzindo a uma conclusão que o dado não sustenta.
+        */}
       {pendentes.length > 0 && (
         <Bloco
           estado="condicional_pendente"
-          titulo="Depende de como o exercício é executado — a execução não foi declarada"
+          titulo={ROTULO_CONDICIONAL}
+          nota={AVISO_NAO_RESOLVE}
           partes={pendentes}
           detalhe={(p) => p.condicoesPendentes
             .map((c) => `${nomeNoDia.get(c.exercicioId) ?? c.exercicioId}: ${fraseDaCondicao(c.quando)}`)
@@ -228,9 +214,11 @@ function Grupo({ grupo, nomeNoDia, porId, onAdicionar, efeitoDe }: {
   );
 }
 
-function Bloco({ estado, titulo, partes, detalhe }: {
+function Bloco({ estado, titulo, nota: aviso, partes, detalhe }: {
   estado: EstadoDaParte;
   titulo: string;
+  /** Linha extra abaixo do título — hoje só o "adicionar não confirma". */
+  nota?: string;
   partes: readonly ParteDoGrupo[];
   detalhe: (p: ParteDoGrupo) => string;
 }) {
@@ -238,6 +226,7 @@ function Bloco({ estado, titulo, partes, detalhe }: {
   return (
     <div style={{ marginBottom: 8 }}>
       <p style={{ ...nota, margin: '0 0 4px' }}>{titulo}</p>
+      {aviso && <p style={{ ...nota, margin: '0 0 4px', color: 'rgba(234,229,219,.55)' }}>{aviso}</p>}
       {partes.map((p) => (
         <p key={p.alvo} style={{ ...item, margin: '0 0 2px' }}>
           <span aria-hidden style={{ color: cor, marginRight: 6 }}>{marca}</span>
@@ -316,8 +305,8 @@ function Sugestao({ ex, dependeDeExecucao, condicoes, onAdicionar, efeitoDe }: {
         <div style={{ ...item }}>{ex.nomePt}</div>
         {dependeDeExecucao && (
           <div style={nota}>
-            Só contempla esta região {condicoes.join(' ou ')} — e essa execução não é declarada
-            aqui.
+            <strong style={{ fontWeight: 600 }}>{ROTULO_CONDICIONAL}.</strong> Ele só contempla
+            esta região {condicoes.join(' ou ')}. {AVISO_NAO_RESOLVE}
           </div>
         )}
         {efeito !== undefined && <EfeitoLinha efeito={efeito} />}

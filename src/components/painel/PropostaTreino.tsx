@@ -85,13 +85,19 @@ function cabecalho(p: Proposta, nomeDoExercicio: (id: string) => string): { titu
 }
 
 export default function PropostaTreino({
-  proposta, nomeDoExercicio, aplicando, onAplicar, onCancelar,
+  proposta, nomeDoExercicio, aplicando, desatualizada, onAplicar, onRemontar, onCancelar,
 }: {
   proposta: Proposta;
   /** Resolve o nome de tela de um id — a lista de mudanças nunca mostra código interno. */
   nomeDoExercicio: (id: string) => string;
   aplicando: boolean;
+  /**
+   * 🔴 As preferências mudaram entre montar e aplicar. A proposta na tela descreve um estado
+   * que passou — e aplicá-la gravaria um treino montado sobre o que não vale mais.
+   */
+  desatualizada: boolean;
   onAplicar: () => void;
+  onRemontar: () => void;
   onCancelar: () => void;
 }) {
   const dialogo = useRef<HTMLDivElement>(null);
@@ -155,6 +161,16 @@ export default function PropostaTreino({
           </p>
         )}
 
+        {/* 🔴 Proposta velha: a tela para, explica e oferece o único caminho honesto — montar
+            de novo com o que vale agora. Nada é gravado neste estado. */}
+        {desatualizada && (
+          <p role="alert" style={{ ...nota, margin: '0 0 14px', color: '#ffb4a5', background: 'rgba(229,72,77,.08)', border: '1px solid rgba(229,72,77,.35)', borderRadius: 12, padding: '10px 12px' }}>
+            Suas preferências mudaram depois que esta proposta foi montada, então ela não
+            descreve mais o seu treino. Nada foi alterado — monte de novo para ver a proposta
+            com as preferências de agora.
+          </p>
+        )}
+
         {/* ═══ O que muda ═══ */}
         {!nada && !mudancas.identica && (
           <section aria-label="O que muda" style={{ background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 14, padding: 14, marginBottom: 14 }}>
@@ -204,7 +220,16 @@ export default function PropostaTreino({
           <button type="button" onClick={onCancelar} disabled={aplicando} style={{ ...btnGhost, opacity: aplicando ? .5 : 1 }}>
             {nada ? 'Fechar' : 'Manter o meu'}
           </button>
-          {!nada && (
+          {!nada && desatualizada && (
+            <button
+              type="button"
+              onClick={onRemontar}
+              style={{ flex: 1, minWidth: 170, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 13, border: 'none', borderRadius: 12, cursor: 'pointer', minHeight: 44 }}
+            >
+              Montar de novo
+            </button>
+          )}
+          {!nada && !desatualizada && (
             <button
               type="button"
               onClick={onAplicar}

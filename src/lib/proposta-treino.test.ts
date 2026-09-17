@@ -11,8 +11,10 @@ import { recomputarPlano } from './plano';
 import { poolElegivel } from './engine/treino-montador';
 import { EXERCISES_SEED } from './data/seed';
 import {
-  assinaturaDoTreino, atualizarDesenho, compararTreinos, proporTreino,
+  aplicarPropostaSobre, assinaturaDasEntradas, assinaturaDoTreino, atualizarDesenho,
+  compararTreinos, proporTreino,
 } from './proposta-treino';
+import { normalizarEntradaPlanoVisivel } from './plano-cas-comando';
 import { VARIACOES_TENTATIVAS_MAX } from './engine/treino-constants';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RotinaCustom } from './engine';
@@ -33,8 +35,11 @@ const elegiveisDe = (p: PerfilResumo) => new Set(poolElegivel(EXERCISES_SEED, p,
 const rotinaDe = (p: PerfilResumo) => gerar(p)?.dias ?? [];
 const ids = (p: PerfilResumo) => rotinaDe(p).flatMap((d) => d.slots.map((s) => s.exercicio.id));
 
+const entradaDe = (p: PerfilResumo) => normalizarEntradaPlanoVisivel(p, { semanaCiclo: { semana: 1, feedbackGrupos: [] } });
+
 const propor = (tipo: 'gerar' | 'atualizar', perfil: PerfilResumo = PERFIL) => proporTreino({
   tipo, perfil, rotinaAtual: rotinaDe(perfil), gerar, elegiveis: elegiveisDe(perfil),
+  entrada: entradaDe(perfil),
 });
 
 /**
@@ -345,5 +350,59 @@ describe('🔒 as preferências vigentes entram nas DUAS ações', () => {
     const p = propor('gerar', casa)!;
     for (const d of p.rotina.dias) for (const s of d.slots) expect(elegiveis.has(s.exercicio.id)).toBe(true);
     expect(ids(casa).length).toBeGreaterThan(0);
+  });
+});
+
+
+/**
+ * 🔴 A PROPOSTA VELHA — o defeito que a validação de 16/09 procurou e achou.
+ *
+ * A proposta carrega um perfil INTEIRO. Aplicá-lo mais tarde devolvia ao perfil tudo o que
+ * mudou no meio do caminho: um banimento feito noutra aba, a âncora de mesociclo que o próprio
+ * app moveu, o peso que chegou de uma resposta assíncrona. A pessoa aceitaria um treino e
+ * perderia, em silêncio, uma escolha mais nova.
+ */
+describe('🔒 proposta velha não grava, e aplicar é REBASE', () => {
+  it('a assinatura muda quando uma preferência que decide o plano muda', () => {
+    const a = assinaturaDasEntradas(PERFIL, entradaDe(PERFIL));
+    const comBanimento = { ...PERFIL, preferencias: { banidos: [ELEG_A], trocas: [] } } as unknown as PerfilResumo;
+    const outraAgenda = { ...PERFIL, treinoDias: ['seg', 'qua', 'sex'], diasDisponiveis: 3 } as unknown as PerfilResumo;
+    expect(assinaturaDasEntradas(comBanimento, entradaDe(comBanimento))).not.toBe(a);
+    expect(assinaturaDasEntradas(outraAgenda, entradaDe(outraAgenda))).not.toBe(a);
+  });
+
+  it('a assinatura muda quando a ENTRADA transitória muda (semana do ciclo)', () => {
+    const semana1 = normalizarEntradaPlanoVisivel(PERFIL, { semanaCiclo: { semana: 1, feedbackGrupos: [] } });
+    const semana6 = normalizarEntradaPlanoVisivel(PERFIL, { semanaCiclo: { semana: 6, feedbackGrupos: [] } });
+    expect(assinaturaDasEntradas(PERFIL, semana1)).not.toBe(assinaturaDasEntradas(PERFIL, semana6));
+  });
+
+  it('🔑 a assinatura IGNORA o que a própria proposta decide', () => {
+    const a = assinaturaDasEntradas(PERFIL, entradaDe(PERFIL));
+    const comDecisao = { ...PERFIL, variacaoTreino: 5, rotinaCustom: desenhoManual() } as PerfilResumo;
+    expect(assinaturaDasEntradas(comDecisao, entradaDe(comDecisao)), 'a saída entrou na assinatura da entrada').toBe(a);
+  });
+
+  it('a proposta carimba a assinatura das entradas que a geraram', () => {
+    const p = propor('gerar')!;
+    expect(p.assinaturaDasEntradas).toBe(assinaturaDasEntradas(PERFIL, entradaDe(PERFIL)));
+  });
+
+  it('aplicar preserva o que mudou depois: só `rotinaCustom` e `variacaoTreino` vêm da proposta', () => {
+    const p = propor('gerar')!;
+    // Entre montar e aplicar, o app moveu a âncora do ciclo e chegou um peso novo.
+    const agora = { ...PERFIL, mesocicloInicio: '2026-09-14', deloadAte: '2026-10-01', pesoKg: 78.4 } as PerfilResumo;
+    const aplicado = aplicarPropostaSobre(agora, p);
+    expect(aplicado.mesocicloInicio, 'a âncora do ciclo foi revertida').toBe('2026-09-14');
+    expect(aplicado.deloadAte, 'o deload foi revertido').toBe('2026-10-01');
+    expect(aplicado.pesoKg, 'o peso foi revertido').toBe(78.4);
+    expect(aplicado.variacaoTreino).toBe(p.perfilProposto.variacaoTreino);
+    expect(aplicado.rotinaCustom).toBe(p.perfilProposto.rotinaCustom);
+  });
+
+  it('aplicar NÃO ressuscita um desenho que a proposta apagou', () => {
+    const perfil = { ...PERFIL, rotinaCustom: desenhoManual() } as PerfilResumo;
+    const p = propor('gerar', perfil)!;
+    expect(aplicarPropostaSobre(perfil, p).rotinaCustom).toBeUndefined();
   });
 });

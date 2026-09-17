@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { AlvoAnatomico, EnfaseContextual, FonteAnatomica, PapelDoAlvo } from '@/lib/data/alvos-anatomicos-tipos';
+import { fraseDaCondicao } from '@/lib/condicao-execucao-copy';
 
 /**
  * 🦴 O QUE ESTE EXERCÍCIO ABORDA — a superfície onde o mapa anatômico dos 168 ids aparece
@@ -58,25 +59,12 @@ const rotulo: React.CSSProperties = {
 const nota: React.CSSProperties = { fontSize: '.8rem', lineHeight: 1.6, color: 'rgba(234,229,219,.66)' };
 const lista: React.CSSProperties = { fontSize: '.86rem', lineHeight: 1.6, color: 'rgba(234,229,219,.82)' };
 
-/** Rótulo humano da condição, sem inventar vocabulário: o termo do pacote, por extenso. */
-const TEXTO_CONDICAO: Record<string, Record<string, string>> = {
-  movimento: {
-    extensao_coluna: 'quando o movimento é extensão da coluna',
-    dobradica_quadril: 'quando o movimento é dobradiça de quadril',
-  },
-  acaoPunho: {
-    flexao: 'quando o punho flexiona',
-    extensao: 'quando o punho estende',
-    ambas: 'quando o punho faz os dois sentidos',
-  },
-  retroversaoPelvica: { true: 'quando há retroversão pélvica', false: 'quando não há retroversão pélvica' },
-};
-
-function frase(quando: Record<string, string | boolean>): string {
-  return Object.entries(quando)
-    .map(([k, v]) => TEXTO_CONDICAO[k]?.[String(v)] ?? `${k}: ${String(v)}`)
-    .join(' e ');
-}
+/**
+ * 🔒 A frase da condição vem de `lib/condicao-execucao-copy` — a MESMA que a cobertura do
+ * editor usa. Ela morava aqui em cópia própria; duas cópias do mesmo vocabulário divergem, e
+ * a pessoa leria a mesma condição com duas palavras diferentes em duas telas do app.
+ */
+const frase = fraseDaCondicao;
 
 export default function AlvosAnatomicos({ id, nomePt }: { id: string; nomePt: string }) {
   const [dados, setDados] = useState<Resposta | null>(null);

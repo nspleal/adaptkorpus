@@ -24,8 +24,10 @@
  * relógio nem React.
  */
 import { VARIACAO_TREINO_MAX, VARIACOES_TENTATIVAS_MAX } from '@/lib/engine/treino-constants';
+import { canonicalInputHash } from '@/lib/engine';
 import type { DiaTreino, RotinaCustom, RotinaSemanal } from '@/lib/engine';
 import type { PerfilResumo } from '@/components/painel/Painel';
+import type { EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
 import { ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 
 export type TipoDeProposta = 'gerar' | 'atualizar';
@@ -82,12 +84,57 @@ export interface Proposta {
   variedade: Variedade;
   /** O que acontece com o DESENHO salvo. Ver `DesenhoAlterado`. */
   desenhoAlterado: DesenhoAlterado;
+  /**
+   * 🔒 A fotografia das ENTRADAS no instante em que a proposta foi montada. Quem aplica
+   * compara com a assinatura de AGORA; diferente ⇒ a proposta está velha e a tela diz isso,
+   * em vez de gravar um plano montado sobre preferências que não valem mais.
+   *
+   * Ausente só quando o chamador não passou a entrada (caminho de teste puro).
+   */
+  assinaturaDasEntradas?: string;
   /** Quantas montagens foram testadas antes de parar. Evidência da busca, não enfeite. */
   tentativas: number;
 }
 
 /** O gerador real do app, injetado: `recomputarPlano(perfil, opcoes).treino.rotina`. */
 export type GerarRotina = (perfil: PerfilResumo) => RotinaSemanal | null;
+
+/**
+ * 🔒 OS DOIS CAMPOS QUE A PROPOSTA DECIDE. Tudo o mais no perfil é ENTRADA dela — e por isso
+ * não pode ser sobrescrito por uma fotografia velha na hora de aplicar.
+ */
+const CAMPOS_DECIDIDOS = ['rotinaCustom', 'variacaoTreino'] as const;
+
+/**
+ * 🔴 A ASSINATURA DAS ENTRADAS que produziram a proposta.
+ *
+ * ⚠️ O defeito que ela fecha: a proposta guarda um perfil INTEIRO, e aplicá-lo mais tarde
+ * devolveria ao perfil tudo o que mudou no meio do caminho — um banimento feito noutra aba,
+ * uma âncora de mesociclo que o próprio app moveu, o peso que chegou de uma resposta
+ * assíncrona. A pessoa aceitaria um treino e perderia, em silêncio, uma escolha mais nova.
+ *
+ * 🔒 Usa o MESMO `canonicalInputHash` do CAS — a autoridade que já existe para dizer "a
+ * entrada que gerou este plano mudou". Os dois campos que a proposta DECIDE ficam de fora:
+ * eles são a saída, não a entrada.
+ */
+export function assinaturaDasEntradas(perfil: PerfilResumo, entrada: EntradaPlanoVisivel): string {
+  const semDecisao: Record<string, unknown> = { ...perfil };
+  for (const campo of CAMPOS_DECIDIDOS) delete semDecisao[campo];
+  return canonicalInputHash({ perfil: semDecisao, opcoes: entrada });
+}
+
+/**
+ * 🔒 APLICAR = REBASE, nunca substituição. O perfil CORRENTE é a base; a proposta contribui
+ * só com o que decidiu. O chamador compara `assinaturaDasEntradas` ANTES de chamar isto — se
+ * a entrada mudou, a proposta está velha e não pode ser aplicada sem tratamento explícito.
+ */
+export function aplicarPropostaSobre(perfilAtual: PerfilResumo, proposta: Proposta): PerfilResumo {
+  return {
+    ...perfilAtual,
+    rotinaCustom: proposta.perfilProposto.rotinaCustom,
+    variacaoTreino: proposta.perfilProposto.variacaoTreino,
+  };
+}
 
 /** Dia da semana de um dia do plano, com o mesmo fallback que o resto do app usa. */
 function diaDoPlano(dia: DiaTreino, indice: number, agenda: readonly Weekday[]): Weekday {
@@ -253,13 +300,16 @@ export function proporTreino(args: {
   gerar: GerarRotina;
   /** Pool elegível atual, só para `atualizar`. */
   elegiveis?: ReadonlySet<string>;
+  /** Entrada canônica desta geração — vira a assinatura que detecta proposta velha. */
+  entrada?: EntradaPlanoVisivel;
   tentativas?: number;
 }): Proposta | null {
   const { perfil, rotinaAtual, gerar } = args;
   const agenda = ORDEM_SEMANA.filter((d) => (perfil.treinoDias ?? []).includes(d));
   const origemAntes: OrigemDoTreino = perfil.rotinaCustom ? 'manual' : 'automatico';
+  const assinatura = args.entrada ? assinaturaDasEntradas(perfil, args.entrada) : undefined;
 
-  if (args.tipo === 'atualizar') return propostaDeAtualizacao({ ...args, agenda, origemAntes });
+  if (args.tipo === 'atualizar') return propostaDeAtualizacao({ ...args, agenda, origemAntes, assinatura });
 
   /**
    * 🔴 A proposta automática é montada com `rotinaCustom` FORA da entrada. É a diferença
@@ -285,7 +335,7 @@ export function proporTreino(args: {
     primeira ??= { rotina, perfilProposto };
     if (assinaturaDoTreino(rotina.dias, agenda) !== atual) {
       return montar({
-        tipo: 'gerar', perfil, perfilProposto, rotina, rotinaAtual, agenda,
+        tipo: 'gerar', perfil, perfilProposto, rotina, rotinaAtual, agenda, assinatura,
         origemAntes, origemDepois: 'automatico', variedade: 'nova', tentativas,
       });
     }
@@ -294,7 +344,7 @@ export function proporTreino(args: {
   // Nenhuma das montagens testadas difere da atual. Isso é dito, não maquiado.
   return montar({
     tipo: 'gerar', perfil, perfilProposto: primeira.perfilProposto, rotina: primeira.rotina,
-    rotinaAtual, agenda, origemAntes, origemDepois: 'automatico',
+    rotinaAtual, agenda, origemAntes, origemDepois: 'automatico', assinatura,
     variedade: 'sem_alternativa', tentativas,
   });
 }
@@ -306,6 +356,7 @@ function propostaDeAtualizacao(args: {
   elegiveis?: ReadonlySet<string>;
   agenda: readonly Weekday[];
   origemAntes: OrigemDoTreino;
+  assinatura: string | undefined;
 }): Proposta | null {
   const { perfil, rotinaAtual, gerar, agenda, origemAntes } = args;
   const custom = perfil.rotinaCustom;
@@ -320,6 +371,7 @@ function propostaDeAtualizacao(args: {
     return montar({
       tipo: 'atualizar', perfil, perfilProposto: { ...perfil }, rotina, rotinaAtual, agenda,
       origemAntes, origemDepois: 'automatico', variedade: 'sem_alternativa', tentativas: 1,
+      assinatura: args.assinatura,
     });
   }
 
@@ -340,7 +392,7 @@ function propostaDeAtualizacao(args: {
   return montar({
     tipo: 'atualizar', perfil, perfilProposto, rotina, rotinaAtual, agenda, origemAntes,
     origemDepois: perfilProposto.rotinaCustom ? 'manual' : 'automatico',
-    variedade: 'sem_alternativa', tentativas: 1,
+    variedade: 'sem_alternativa', tentativas: 1, assinatura: args.assinatura,
   });
 }
 
@@ -370,8 +422,10 @@ function montar(args: {
   origemDepois: OrigemDoTreino;
   variedade: Variedade;
   tentativas: number;
+  assinatura?: string | undefined;
 }): Proposta {
   return {
+    ...(args.assinatura ? { assinaturaDasEntradas: args.assinatura } : {}),
     tipo: args.tipo,
     perfilProposto: args.perfilProposto,
     rotina: args.rotina,

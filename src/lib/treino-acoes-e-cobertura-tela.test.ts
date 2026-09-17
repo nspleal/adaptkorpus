@@ -66,7 +66,7 @@ describe('🔒 carregamento, falha e clique repetido', () => {
 
   it('aplicar é fechado por ref — clique repetido não grava duas vezes', () => {
     const i = painel.indexOf('function aplicarProposta');
-    const corpo = painel.slice(i, i + 300);
+    const corpo = painel.slice(i, painel.indexOf('function cancelarProposta'));
     expect(corpo).toMatch(/if \(!proposta \|\| aplicandoPropostaRef\.current\) return;/);
     expect(corpo).toMatch(/aplicandoPropostaRef\.current = true;/);
   });
@@ -74,6 +74,34 @@ describe('🔒 carregamento, falha e clique repetido', () => {
   it('falha de cálculo é DITA, e diz que nada mudou', () => {
     expect(painel).toMatch(/Não foi possível montar uma proposta agora\. Seu treino atual continua como está\./);
     expect(painel).toMatch(/role="alert"[\s\S]{0,300}erroProposta/);
+  });
+
+  /**
+   * 🔴 VALIDAÇÃO 16/09 — proposta velha não grava, e aplicar é REBASE sobre o perfil CORRENTE.
+   *
+   * Gravar `proposta.perfilProposto` inteiro devolvia ao perfil tudo o que mudou entre montar e
+   * aplicar. E aplicar uma proposta montada sobre preferências antigas gravaria um treino que
+   * não descreve mais o que a pessoa escolheu.
+   */
+  it('aplicar recusa proposta velha e rebase sobre o perfil corrente', () => {
+    const i = painel.indexOf('function aplicarProposta');
+    const corpo = painel.slice(i, painel.indexOf('function cancelarProposta'));
+    expect(corpo, 'a base da gravação deixou de ser o perfil corrente').toMatch(/const atual = perfilRef\.current;/);
+    expect(corpo, 'a assinatura das entradas não é conferida').toMatch(/proposta\.assinaturaDasEntradas !== assinaturaDasEntradas\(atual, entradaDoPlano\(atual\)\)/);
+    expect(corpo.replace(/\s+/g, ' ')).toMatch(/setPropostaDesatualizada\(true\); return;/);
+    expect(corpo, 'voltou a gravar a fotografia inteira').toMatch(/aplicarPropostaSobre\(atual, proposta\)/);
+    expect(/novoPerfil = proposta\.perfilProposto/.test(corpo), 'a gravação voltou a substituir o perfil').toBe(false);
+    // A recusa tem saída: montar de novo com o que vale agora.
+    expect(painel).toMatch(/function remontarProposta/);
+    expect(proposta).toMatch(/Montar de novo/);
+    expect(proposta).toMatch(/Suas preferências mudaram depois que esta proposta foi montada/);
+    // E no estado desatualizado o botão de aplicar não existe.
+    expect(proposta).toMatch(/\{!nada && !desatualizada && \(/);
+  });
+
+  it('a assinatura da proposta sai da MESMA entrada canônica que o CAS certifica', () => {
+    expect(painel).toMatch(/entrada: entradaDoPlano\(perfil\)/);
+    expect(fonte('src/lib/proposta-treino.ts')).toMatch(/canonicalInputHash\(\{ perfil: semDecisao, opcoes: entrada \}\)/);
   });
 
   it('a gravação usa o caminho normal do perfil (fila, CAS, conflito), não um atalho', () => {
@@ -102,7 +130,9 @@ describe('🔒 a proposta explica o que muda, e o que NÃO muda', () => {
 
   it('quando não há montagem diferente, a tela DIZ — e não oferece aplicar', () => {
     expect(proposta).toMatch(/Sem uma montagem diferente desta/);
-    expect(proposta).toMatch(/\{!nada && \(/);
+    // Sem mudança ⇒ nenhum dos dois botões de ação existe (nem aplicar, nem remontar).
+    expect(proposta).toMatch(/\{!nada && desatualizada && \(/);
+    expect(proposta).toMatch(/\{!nada && !desatualizada && \(/);
   });
 
   /** 🔴 QA 16/09: "nada a mudar" tem de considerar o DESENHO salvo, não só a tela. */
@@ -127,7 +157,35 @@ describe('🦴 a cobertura muscular: o que a tela pode afirmar', () => {
 
   it('nomeia inferência anatômica e participação auxiliar como coisas distintas', () => {
     expect(cobertura).toMatch(/Participação auxiliar \(por inferência anatômica\) — não fecha cobertura/);
-    expect(cobertura).toMatch(/Depende de como o exercício é executado — a execução não foi declarada/);
+    expect(cobertura).toMatch(/titulo=\{ROTULO_CONDICIONAL\}/);
+  });
+
+  /**
+   * 🔴 DECISÃO DO AUTOR (2026-09-16): sem superfície para declarar execução nesta entrega.
+   * Então o condicional usa o rótulo fechado, com a condição em português, e DIZ que escolher
+   * o mesmo exercício não resolve — senão a tela induz a uma conclusão que o dado não sustenta.
+   */
+  it('o condicional usa o rótulo fechado e avisa que adicionar não resolve', () => {
+    const copy = fonte('src/lib/condicao-execucao-copy.ts');
+    expect(copy).toMatch(/export const ROTULO_CONDICIONAL = 'Depende da execução; não confirmado';/);
+    expect(copy.replace(/\s+/g, ' ')).toMatch(/export const AVISO_NAO_RESOLVE = 'Adicionar não confirma esta região/);
+    // O aviso acompanha as DUAS superfícies do condicional: a parte pendente e a sugestão.
+    expect(cobertura).toMatch(/nota=\{AVISO_NAO_RESOLVE\}/);
+    expect(cobertura.replace(/\s+/g, ' ')).toMatch(/\{ROTULO_CONDICIONAL\}\.<\/strong> Ele só contempla esta região \{condicoes\.join\(' ou '\)\}\. \{AVISO_NAO_RESOLVE\}/);
+    // 🔒 Condicional NUNCA conta como cobertura: o estado é próprio e o motor não o soma.
+    expect(fonte('src/lib/engine/cobertura-editor.ts'))
+      .toMatch(/identificadas: partes\.filter\(\(p\) => p\.estado === 'identificada'\)\.length/);
+  });
+
+  it('a frase da condição tem UMA fonte, lida pelas duas telas', () => {
+    const copy = fonte('src/lib/condicao-execucao-copy.ts');
+    expect(copy).toMatch(/export function fraseDaCondicao/);
+    expect(cobertura).toMatch(/fraseDaCondicao/);
+    expect(fonte('src/components/painel/AlvosAnatomicos.tsx')).toMatch(/fraseDaCondicao/);
+    // Nenhuma das duas telas pode voltar a ter a tabela própria.
+    for (const arquivo of ['src/components/painel/CoberturaMuscular.tsx', 'src/components/painel/AlvosAnatomicos.tsx']) {
+      expect(/const TEXTO_CONDICAO/.test(fonte(arquivo)), `${arquivo} recriou a tabela de condições`).toBe(false);
+    }
   });
 
   it('não confunde cobertura com dose, ênfase ou resultado', () => {
