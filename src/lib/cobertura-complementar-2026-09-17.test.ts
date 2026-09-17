@@ -24,6 +24,7 @@ import { coberturaDoDia } from './engine/cobertura-editor';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './engine/alocador';
 import { alvosDesejadosDoDia, diretosDoExercicio, tracosMecanicos } from './engine/cobertura-anatomica';
 import { avaliarDuracaoResistida } from './engine/duracao-plano';
+import { pendentesParaTela } from './cobertura-pendente-copy';
 import type { PerfilTreino, RotinaSemanal } from './engine/treino-types';
 import type { AlvoId } from './data/alvos-anatomicos-tipos';
 
@@ -285,5 +286,50 @@ describe('🔒 o que a correção NÃO pode ter custado', () => {
       expect(b.dias.map((d) => d.slots.map((s) => `${s.exercicio.id}:${s.series}`)))
         .toEqual(a.dias.map((d) => d.slots.map((s) => `${s.exercicio.id}:${s.series}`)));
     }
+  }, 120_000);
+});
+
+describe('🔒 o plano e o editor contam a MESMA história do mesmo dia', () => {
+  /**
+   * Item 6 do pedido: "Mostrar a explicação de forma breve no plano/proposta e coerente com o
+   * editor". Coerente não é parecido: é a mesma lista, pela mesma autoridade.
+   *
+   * 🔒 O plano publica `rotina.coberturaAnatomica` (de `diagnosticarDia`); o editor calcula
+   * `coberturaDoDia` ao abrir. Os dois partem de `gruposDoDia` e de `candidatosParaAlvo`, e
+   * este teste trava que eles não divergem em nenhum dia de nenhum perfil da grade.
+   */
+  it('a região que o editor marca como pendente é exatamente a que o plano publica', () => {
+    const fora: string[] = [];
+    let medidos = 0;
+    let pendentes = 0;
+    for (const nivelExperiencia of ['iniciante', 'intermediario', 'avancado'] as const)
+      for (const diasDisponiveis of [3, 4, 5, 6] as const)
+        for (const tempoPorSessaoMin of [45, 60, 75] as const) {
+          const p = perfil({
+            nivelExperiencia, diasDisponiveis, treinoDias: [...DIAS.slice(0, diasDisponiveis)],
+            tempoPorSessaoMin, limiteTempoTreino: 'limitado',
+          });
+          const r = gerar(p);
+          const pool = poolElegivel(EXERCISES, p, p.preferencias);
+          const publicado = r.coberturaAnatomica ?? [];
+          for (const d of r.dias) {
+            medidos += 1;
+            const c = coberturaDoDia({ nome: d.nome, escolhidos: d.slots.map((s) => s.exercicio), elegiveis: pool });
+            const doEditor = c.grupos.flatMap((g) => g.partes)
+              .filter((pt) => ['sem_exercicio_identificado', 'sem_candidato_elegivel', 'sem_candidato_no_catalogo'].includes(pt.estado))
+              .map((pt) => pt.alvo).sort();
+            const doDia = publicado.find((x) => x.dia === d.nome);
+            const doPlano = (doDia ? pendentesParaTela(doDia) : [])
+              .filter((n) => n.motivo !== 'condicao_de_execucao_nao_declarada')
+              .map((n) => n.alvo).sort();
+            pendentes += doEditor.length;
+            if (JSON.stringify(doEditor) !== JSON.stringify(doPlano)) {
+              fora.push(`${nivelExperiencia}/${diasDisponiveis}d/${tempoPorSessaoMin} ${d.nome}: editor=[${doEditor}] plano=[${doPlano}]`);
+            }
+          }
+        }
+    expect(medidos, 'a varredura não mediu nada').toBeGreaterThan(100);
+    expect(pendentes, 'nenhuma região pendente na grade — a coerência não foi exercida').toBeGreaterThan(0);
+    expect(fora, `${fora.length} dias em que o plano e o editor discordam`).toEqual([]);
   }, 120_000);
 });

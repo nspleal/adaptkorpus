@@ -14,7 +14,7 @@
  *    diz o limite que agiu, não "não existe solução";
  *  · NÃO promete que mexer no plano resolveria, e não bloqueia salvar nada.
  */
-import type { MotivoRedundancia, MotivoSemCobertura } from './engine/cobertura-anatomica';
+import type { AlvoNaoIdentificado, DiagnosticoAnatomicoDia, MotivoRedundancia, MotivoSemCobertura } from './engine/cobertura-anatomica';
 
 /**
  * Por que a região ficou sem exercício com ação direta identificada.
@@ -56,3 +56,20 @@ export const MOTIVO_REDUNDANCIA: Record<MotivoRedundancia, string> = {
 /** A ressalva que acompanha qualquer leitura de cobertura. Presença não é dose. */
 export const RESSALVA_PENDENTE =
   'Isto é informação sobre o mapa de exercícios, não um problema no seu treino: não dá para afirmar que a região não trabalha, só que não há exercício com ação direta identificada para ela neste dia.';
+
+/**
+ * 🔒 O QUE A TELA CHAMA DE PENDENTE — uma autoridade só, e é a do EDITOR.
+ *
+ * 🔴 O diagnóstico do motor lista em `naoIdentificados` TODO alvo sem ação direta, e
+ * reporta a participação auxiliar à parte. A cobertura do editor, porém, tem um estado
+ * próprio para ela (`participacao_auxiliar`) e NÃO a chama de "sem exercício identificado".
+ * Publicar a lista crua no plano faria as duas telas discordarem do mesmo dia — medido em 36
+ * dias da grade, todos no trapézio inferior, que as remadas trabalham por inferência.
+ *
+ * Aqui o plano passa a falar o vocabulário do editor: participação auxiliar sai da lista de
+ * pendentes. Ela continua sem FECHAR cobertura — só deixa de ser dita como ausência.
+ */
+export function pendentesParaTela(dia: DiagnosticoAnatomicoDia): readonly AlvoNaoIdentificado[] {
+  const auxiliares = new Set(dia.participacaoAuxiliar);
+  return dia.naoIdentificados.filter((n) => !auxiliares.has(n.alvo));
+}

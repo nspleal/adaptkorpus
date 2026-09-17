@@ -12,7 +12,7 @@
  * duas telas. Não bloqueia salvar, não é alerta e não afirma que a região não é ativada.
  */
 import type { DiagnosticoAnatomicoDia } from '@/lib/engine/cobertura-anatomica';
-import { MOTIVO_REDUNDANCIA, MOTIVO_SEM_COBERTURA, RESSALVA_PENDENTE } from '@/lib/cobertura-pendente-copy';
+import { MOTIVO_REDUNDANCIA, MOTIVO_SEM_COBERTURA, RESSALVA_PENDENTE, pendentesParaTela } from '@/lib/cobertura-pendente-copy';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 
 const nota: React.CSSProperties = { fontSize: '.82rem', lineHeight: 1.5, color: 'rgba(234,229,219,.72)' };
@@ -24,7 +24,7 @@ export default function CoberturaPendente({ dia, compacto = false }: {
   compacto?: boolean;
 }) {
   if (!dia) return null;
-  const pendentes = dia.naoIdentificados;
+  const pendentes = pendentesParaTela(dia);
   const repetidas = dia.redundanciasMecanicas;
   if (pendentes.length === 0 && repetidas.length === 0) return null;
 
