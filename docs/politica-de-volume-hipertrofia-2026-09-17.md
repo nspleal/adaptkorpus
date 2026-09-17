@@ -10,17 +10,239 @@ alteração do cofre. Nenhuma gravação em conta real.
 | Base | `origin/main` = `8b41ec9389629258966b61c8dfd6e75849744170` (PR #15) |
 | Branch | `trabalho/volume-hipertrofia-tabela` |
 | Worktree | `adaptkorpus-volume-hipertrofia` (isolada; nenhuma outra worktree foi tocada) |
-| SHA do candidato | `d93028ba665b71a4f62e95219ecebe82eb852ec3` |
-| Prévia (isolada) | `evokorpus-git-trabalho-volume-hipertro-63c1e5-nspleals-projects.vercel.app` — `dpl_AZuPEiZMT1DtwsfQEqcPYfc1khrz`, target `null` (**preview**, não produção), `READY` |
+| SHA do candidato | `e1933bd4d1c8bb8d074d8bb334f03c61749d5b25` (1ª volta: `d93028b`; procedência: `6feab97`) |
+| Prévia (isolada) | `evokorpus-git-trabalho-volume-hipertro-63c1e5-nspleals-projects.vercel.app` — `dpl_3v6rgaFA1FpXQxJQ9irCXnLsmf1k`, target `null` (**preview**, não produção) |
 | Produção | intacta em `8b41ec9` (`dpl_8jmDTD7Nwc9F31R2GZzTrv5F3N2y`, target `production`) |
 
 A prévia responde `302` para quem não está logado: ela está sob a **proteção de deployment**
 da Vercel (SSO da conta). Abrir com a conta do autor logada serve normalmente; o SHA que o
-deployment reporta (`githubCommitSha`) é o mesmo `d93028b` do `HEAD` da branch — duas pontas,
+deployment reporta (`githubCommitSha`) é o mesmo `e1933bd` do `HEAD` da branch — duas pontas,
 o mesmo commit.
 
 `origin/main` está **155 commits à frente** de `origin/claude/evokorpus-app-dev-9in0hs` (o `HEAD`
 remoto herdado) e o contém por inteiro — por isso ela é a base.
+
+---
+
+# Segunda volta (2026-09-17) — `e1933bd`
+
+A decisão do autor **substituiu a obrigação absoluta de 12 por sessão**: 12 continua sendo o
+limite normal de montagem, e o excesso passa a ser aceito **depois** de esgotadas as
+alternativas válidas — e, quando sobra, é dito com grupo, dia, número e causa, antes da
+confirmação e depois dela. Esta volta implementa isso, e mais três correções que a validação
+pedida encontrou.
+
+## ① Tentar antes de aceitar
+
+A alternativa que faltava não era cortar série de ninguém: era **trocar o exercício** que
+deposita crédito indireto no grupo estourado por um equivalente que não deposita — mesmo grupo,
+mesmo padrão de movimento e **mesma assinatura de custo** (`mesmoCustoDeSlot`, a régua que a
+cobertura anatômica já usa para trocar sem mexer no relógio do dia). A troca roda **antes** das
+podas, porque ela não custa série a ninguém e a poda custa.
+
+O caso que era o resíduo, resolvido:
+
+| | `avançado · 6 dias · 45 min · limitado`, dia de posteriores |
+|---|---|
+| antes (`6feab97`) | `posterior 13 > 12` — 9 diretas já no piso + 4 indiretas de dois exercícios de glúteos |
+| depois (`e1933bd`) | `posterior 11` — `e57` *Ponte de glúteo* (`"Glúteos, posterior de coxa"`) vira `e153` (`"Glúteos"`) |
+| custo | **zero séries**: glúteos mantém as 8 do dia, o tempo do dia não muda, e nenhum terceiro paga |
+
+**Varredura de 10 080 combinações** (4 inventários × 3 níveis × 1–7 dias × 5 tempos × 2 limites
+× 4 semanas × 3 focos, incluindo `casa` e `nenhum`):
+
+| | `6feab97` | `e1933bd` |
+|---|---|---|
+| planos acima do teto de **sessão** | 12 células declaradas | **0** |
+| planos acima do teto **semanal** | 0 | **0** |
+| poda por sessão age | 108 células | 10 (`avançado/6–7 d/45 min/limitado`) |
+| poda semanal age (academia/massa) | 602 | **0** |
+| troca aplicada | — | 207 células |
+
+A busca é **finita e declarada**: cada candidato examinado sai nomeado, com o motivo da recusa
+(`candidato_ja_esta_no_plano`, `candidato_credita_o_mesmo_grupo`,
+`candidato_com_outro_custo_de_tempo`, `candidato_estoura_outro_limite`,
+`candidato_derruba_grupo_abaixo_do_minimo`…). A **mudança de dia** é examinada e recusada por
+razão concreta: mover um slot para um dia que não treina o grupo mudaria frequência e intervalo
+de 48 h, que são decisões de outra autoridade e não se alteram para acomodar um teto.
+
+O que sobra é publicado em `rotina.excecoesDeSessao` — grupo, dia, nome do dia, ponderado, teto,
+direto, indireto e a **origem** de cada crédito indireto — e dito por **um ponto de emissão só**
+(`dizerExcecaoDeSessao`), chamado pelos dois produtores de plano. **Nenhum limite semanal é
+afrouxado.**
+
+No **desenho da pessoa** não se troca exercício nem dia (são escolha dela) e a frase diz
+exatamente isso, em vez de afirmar um esforço que não houve. Exemplo medido — cinco exercícios
+de peito × 4 séries escolhidas por ela, num intermediário:
+
+> Neste plano, peito fica com 20 séries em Peito — acima das 12 que o app usa como limite de um
+> treino só, somando diretas e indiretas. Os exercícios, os dias e as séries deste treino são sua
+> escolha, e o app não mexe neles por conta própria. O plano vai assim, e por isso não dá para
+> dizer que ele está dentro de todos os limites.
+
+Nada é bloqueado: os cinco exercícios e as 4 séries de cada um continuam no plano entregue.
+
+## ② A faixa desejada não é meta obrigatória no topo
+
+Removida a frase `Semana N: alvo de X séries para G não cabe em M exercício(s) — planejadas P`.
+
+Medida na varredura das 756 células: ela saía **1 355 vezes, e em 1 300 delas o grupo terminava
+dentro da faixa desejada** (um intermediário com 12 numa faixa de 10–14; um iniciante com 6 numa
+de 6–10). Era insuficiência anunciada por não se ter chegado ao topo — o que a decisão proíbe. E
+ela comparava **moedas diferentes**: `alvo` é ponderado e `tetoGrupo` é capacidade DIRETA, então
+*"12 contra 16"* saía quando o entregue eram 15 ponderadas — a diferença real era 1, não 4.
+
+O déficit de verdade continua com voz e com o **critério pertinente**: o guard de cobertura mede
+o volume PONDERADO entregue contra o MEV, separa causa de catálogo de causa de orçamento e
+publica o fato. Uma voz por fato.
+
+**Achado desta limpeza:** o contrato *"a redução planejada do deload é explicada"*
+(`editor-avisos-e-paridade`) vinha passando **por acidente** — o que ele encontrava na semana 6
+era aquela frase, que não fala de deload nenhum. Retirada a frase errada, a semana 6 ficou sem
+explicação nenhuma no editor e o contrato caiu, corretamente. A semana de alívio ganhou a
+explicação que lhe faltava.
+
+## ③ A ressalva ANTES da confirmação
+
+`PropostaTreino.tsx` não renderizava aviso nenhum do motor — a lista fica na aba do plano e no
+editor. A pessoa confirmaria sem saber. A ressalva entra **antes do botão de aplicar**, lendo
+`rotina.excecoesDeSessao` (sem recalcular nada), dizendo o número, o dia e de onde vem o
+excedente, sem afirmar perigo ou lesão, e fechando com *"este treino não está dentro de todos os
+limites do app"*.
+
+A frase positiva do editor (*"Sua semana está dentro das faixas do seu nível"*) já é condicionada
+a `avisos.length === 0`, e o crítico emite `acima_do_maximo_na_sessao` como **risco** — logo as
+duas afirmações não podem coexistir.
+
+## ④ A repartição por identidade, validada — e corrigida
+
+A ordenação por identidade (`dia`, depois `id`) foi validada além do caso que a motivou, com uma
+**A/B de 22 680 combinações** comparando-a com a ordem por POSIÇÃO:
+
+| | |
+|---|---|
+| planos diferentes | 3 646 de 22 680 (16 %) |
+| … só redistribuição de dose (mesmos exercícios, mesmo total) | 3 260 — o conserto pretendido |
+| … com composição ou total diferente | 386 · **385 deles com foco**, nenhum em `massa` |
+| delta de séries | −1 em 360 células, +1 em 26 |
+| estado de duração mudou | **0** — nenhuma célula passou a exceder o tempo |
+
+**O que a A/B revelou, e esta volta corrige:** ordenar só por `id` é estável, mas arbitrário
+quanto ao que o slot ENTREGA. A sobra do round-robin passava a cair num exercício sem secundário
+grande, e o crédito indireto de um terceiro caía 0,5 junto — **255 células ganhavam um aviso de
+grupo abaixo do mínimo**, contra 2 que perdiam. Não era neutro, e o teto respeitado não provava
+que fosse.
+
+Com o **desempate por número de secundários GRANDES** antes do `id`:
+
+| comparação | planos diferentes | aviso novo | aviso que sumiu |
+|---|---|---|---|
+| identidade × posição | 3 646 | 255 | 2 |
+| **desempate × identidade** | 2 255 | **0** | **319** |
+| desempate × posição | 3 070 | 40 | 106 |
+
+Melhor que as duas, e continua **independente da ordem de exibição** — a chave só olha para o
+exercício. Ele não muda quanto o grupo recebe: é desempate dentro do mesmo grupo, entre slots do
+mesmo dia; o que muda é qual exercício carrega a série sobrando, e com ela o crédito indireto que
+essa série espalha.
+
+Novo `rampa-identidade-2026-09-17.test.ts`, 25 casos: a chave `dia/id` posta à prova (o
+automático **repete** exercício entre dias — core 2–3×/semana — e **nunca** dentro do mesmo dia),
+paridade por slot em 8 fases (rampa, foco, deload, retomada, saída da retomada, tempo curto),
+cinco voltas consecutivas sem deriva, embaralhamento do desenho em 3 sementes, redução de uma
+escolha sem levantar terceiro, troca/remoção/reordenação, e os fallbacks de desenho vazio e id
+inelegível.
+
+⚠️ Registro metodológico: as duas primeiras redações deste teste falharam comparando o plano
+AUTOMÁTICO com um `rotinaCustom` montado à mão. Os dois produtores têm pipelines legitimamente
+diferentes (o automático acrescenta o bloco do foco; o manual nunca passa por reduce-to-fit; e o
+deload lê a `referenciaDose` que o editor carrega e que uma construção manual não tem). A
+comparação passou a ser **desenho × desenho**, pelo caminho real do editor
+(`doPlano` → `paraRotinaCustom`).
+
+## ⑤ Cobertura muscular na PRÉVIA AUTENTICADA
+
+O item 3 do relato foi concluído onde ele foi relatado: no app servido, com sessão real aberta
+pelo autor. Tudo em leitura e em rascunho; encerrado com **Cancelar** e **Manter o meu**.
+
+**O SHA realmente servido**, verificado no bundle que o navegador baixou (e não só no
+`githubCommitSha` do deployment): `excecoesDeSessao` **presente** (só existe a partir de
+`e1933bd`) e `não cabe em` **ausente** (removido em `e1933bd`).
+
+| O que | O que apareceu |
+|---|---|
+| descoberta | cartão *Cobertura muscular* com moldura, chips (`14 regiões`, `2 sem exercício`, `ver detalhes`), **antes** do botão de adicionar, **aberto** quando há região sem exercício |
+| dia **vazio** | o cartão continua lá: *"Assim que você escolher exercícios a este dia, mostramos aqui quais regiões dos grupos escolhidos eles contemplam…"* (era o `return null` da 1ª volta) |
+| **adicionar** | *Prancha lateral* → `14 regiões · 2 sem exercício` vira `15 regiões · 1 sem exercício`, CORE de 4/5 para **5/5**, e *Quadrado lombar* passa a ter exercício |
+| **remover** | volta a `14 regiões · 2 sem exercício`, com as sugestões de novo |
+| participação **identificada** | ● *Reto abdominal — parede anterior — Bird dog (perdigueiro)* |
+| **inferência** | *Participação auxiliar (por inferência anatômica) — não fecha cobertura* · ◐ *Trapézio — inferior — Puxada unilateral na polia, Barra fixa supinada* |
+| **condição não declarada** | *Depende da execução; não confirmado* · ? *Eretores da coluna — região lombar — Hiperextensão lombar: quando o movimento é de estender a coluna (o tronco sobe pelas costas)* · *"Adicionar não confirma esta região: o app não registra como você executa o movimento."* |
+| **lacuna de catálogo** | ○ *Multífido lombar — Sem exercício identificado para esta região* · *"Nenhum exercício do catálogo aborda esta região diretamente. Não há o que sugerir aqui."* — e não *"não é ativada"* |
+| **sugestões elegíveis** | *Prancha lateral · Prancha lateral com rotação · Flexão lateral (oblíquo)*, com **O que muda** → `+5 min no dia · +3 séries neste dia` |
+| nada automático, nada bloqueado | nenhum exercício entrou sozinho; *"não impede salvar o seu treino"*; **Salvar meu treino** segue ativo |
+| **celular** (375 × 812) | cartão legível, chips em duas linhas, sem rolagem horizontal |
+
+A ressalva do teto por sessão **não** apareceu na proposta deste perfil — e não devia: o plano
+automático dele não tem exceção nenhuma, o que é o resultado esperado da varredura de 10 080
+combinações. O caminho de renderização é coberto pelo guard de tela
+(`treino-acoes-e-cobertura-tela.test.ts`), que exige o bloco e que ele venha **antes** do botão
+de aplicar.
+
+**② verificado ao vivo:** peito 10 e quadríceps 10 numa faixa de 10–14 aparecem com chip
+**verde**, e **nenhuma** frase de insuficiência sai por não se ter chegado a 14. Os avisos que
+ficam são os do critério certo — *"Glúteos está abaixo da faixa mínima desta semana (7.5 de 10
+séries)"* e *"o volume de posterior ficou abaixo do mínimo desta semana"*.
+
+## ⑥ Os 24 → 23 testes pulados, reconciliados nominalmente
+
+O teste que mudou é, por nome:
+
+> `src/lib/engine/deload-volume-entregue.test.ts` ::
+> `D13 · os casos nomeados pela auditoria` >
+> `o caso que D2 mediu continua onde estava, na moeda decidida (96 → 93 na S5; a S6 fica em 48)`
+
+Ele foi **reescrito e renomeado** em `d93028b` para
+`… (S5 86 · S6 ~45% menos, mesma estrutura)`, passando a medir os **dois** seletores
+(`[86, 48]` no histórico, `[80, 40]` no atual). A classificação
+(`test-support/selecao-etapa1-classificacao.json`) casa pelo **nome completo**, então a exclusão
+passou a apontar para um nome que não existe mais: virou **filtro morto**, o teste começou a
+rodar nos dois projetos e o rodapé caiu de 24 para 23 sem decisão de ninguém.
+
+**Execução provada** (`vitest run` do arquivo, sem filtro de projeto):
+
+```
+✓ |historico-seletor-etapa1| … > o caso que D2 mediu continua onde estava, na moeda decidida (S5 86 · S6 ~45% menos, mesma estrutura)
+✓ |atual:src/lib/engine/deload-volume-entregue.test.ts| … > (idem)
+```
+
+Corrigido tirando o nome da classificação — que é o que a reescrita tornou verdadeiro —, com a
+nota do porquê no próprio JSON. E como um comentário não falha em CI (o repositório **já tinha**
+um aviso escrito sobre isto em `regressao-cinco-casos.test.ts`, e o defeito aconteceu mesmo
+assim), entra `src/lib/selecao-etapa1-classificacao.test.ts`: todo nome histórico declarado tem
+de casar com um teste que existe, inclusive os gerados por `it.each` com marcadores. Verificado
+que ele **derruba a build** ao reintroduzir o nome antigo.
+
+### As 14 fotografias e os 36 contratos de `d93028b`, revistos
+
+- **Fotografias:** 14, todas em `orcamento-caracterizacao` (12 no seletor atual, 2 no histórico),
+  todas de **contagem de slots por dia** em `massa`. Nenhuma em `saude`/`emagrecimento` — o que
+  confirma, pelo próprio artefato, que a política não vazou para os outros objetivos. Nesta 2ª
+  volta **nenhuma fotografia mudou**: a troca substitui o exercício, nunca remove o slot.
+- **Contratos:** sem `.skip`, sem `.todo`, sem `expect` comentado. Saíram 95 `expect` e entraram
+  234; as igualdades exatas (`toBe`/`toEqual`) subiram de 51 para 140, contra 32 → 63 de
+  desigualdades — os contratos ficaram mais apertados, não mais frouxos. Os 26 `if (` novos são
+  guards de helper (teto nulo, filtro de grupo), contadores de anti-vacuidade, ou ramos com
+  asserção nos DOIS lados (`if entregou ⇒ segunda sessão; else ⇒ a recusa é explicada`), cada um
+  com o seu caso de anti-vacuidade ao lado.
+
+---
+
+# Primeira volta (2026-09-17) — `d93028b`
+
+O que segue é o registro do candidato anterior. **A tabela e os tetos continuam valendo
+inteiros**; o que a segunda volta substituiu está marcado como 🔺 **SUPERADO** no próprio
+ponto, com o remetimento à seção correspondente acima.
 
 ## A decisão, em três números por nível
 
@@ -120,6 +342,11 @@ série de ninguém.
 - A poda semanal age em **333** células e a poda por sessão em **108**: os dois consertos são
   exercitados de verdade, não são código morto.
 
+> 🔺 **SUPERADO pela segunda volta.** Com a troca de exercício rodando antes das podas, a
+> varredura (agora de 10 080 combinações, incluindo `casa` e `nenhum`) dá **0 planos acima do
+> teto de sessão**. A poda por sessão caiu para 10 células e a semanal, em academia/massa, para
+> zero. Ver **① Tentar antes de aceitar**.
+
 ### A exceção medida, declarada
 
 Em `avançado/massa/6–7d/45min/limitado`, o dia de posteriores nasce com 3 slots diretos já no piso
@@ -132,6 +359,12 @@ O excesso **não é silencioso**: o crítico o diz, com o número, em `acima_do_
 (*"Posterior soma 13 séries em Posteriores + complementares — acima das 12 por grupo num mesmo
 treino"*). A lista das células está fixada em `volume-hipertrofia-2026-09-17.test.ts` — uma célula
 nova derruba o teste em vez de se esconder atrás de uma tolerância.
+
+> 🔺 **SUPERADO pela segunda volta.** A leitura de que "reduzir glúteos seria cobrar de um
+> terceiro" continua certa — o que faltava era não precisar reduzir ninguém: `e57` *Ponte de
+> glúteo* (`"Glúteos, posterior de coxa"`) virou `e153` (`"Glúteos"`), mesmo grupo, mesmo padrão e
+> mesmo custo de tempo. A lista de células ficou **vazia**, e continua no teste para que uma
+> célula nova entre como falha.
 
 ## O que a tela passou a dizer
 
@@ -255,37 +488,49 @@ na semana, ainda dentro do teto"*, *"passaria do máximo deste grupo num treino 
 - `veredito-motor` (o tripwire de avisos) foi de 40 para **42** pontos de emissão: as duas famílias
   novas da poda por sessão, cada uma com perfil que a produz.
 
+> 🔺 **NÚMEROS DA SEGUNDA VOLTA:** **229 arquivos / 3 754 testes** (23 pulados, agora
+> reconciliados nominalmente — ver ⑤), tripwire em **44**, e dois arquivos novos:
+> `rampa-identidade-2026-09-17.test.ts` (25 casos) e
+> `selecao-etapa1-classificacao.test.ts` (4 casos). Nenhuma fotografia mudou nesta volta.
+
 ## Limites reais
 
 - **Nenhuma publicação.** Sem merge, sem deploy de produção.
-- **Nenhuma conta real tocada.** O QA de interface rodou sobre build de produção local com
-  `.env.local` **sem Supabase** (modo local do próprio app) e fixture em `localStorage`. Nenhum
-  `profile`, `plans` ou `plano_cas` foi lido ou escrito.
+- **Nenhuma gravação em conta nenhuma.** Na primeira volta o QA rodou sobre build de produção
+  local, sem Supabase. Na **segunda** ele rodou na **prévia autenticada**, na sessão que o autor
+  abriu: tudo em LEITURA e em rascunho do editor, encerrado com **Cancelar** e com **Manter o
+  meu**. O contador da aba do plano continuou em `21 exercícios · 76 séries na semana` antes e
+  depois — nada foi salvo, nem no perfil principal nem em qualquer outro.
 - **O servidor de desenvolvimento não renderiza** sob a CSP vigente (`script-src` sem
   `unsafe-eval`; o bundle de dev usa `eval`). A CSP **não foi relaxada** — o QA usou o build
   otimizado, como nas levas anteriores.
-- **A exceção de sessão descrita acima fica em pé.** Ela é dita pelo crítico, mas o plano
-  automático ainda a produz em 12 das células varridas. Fechá-la exigiria ou deixar a poda furar o
-  piso por exercício do nível, ou cobrar série de um terceiro — as duas coisas que a arquitetura
-  vigente proíbe por decisão anterior. Fica como decisão material para o autor (ver abaixo).
-- **O topo da faixa desejada não é alcançado** por nenhum perfil da grade: o alocador dá slot por
-  déficit e conta o crédito indireto no planejamento, então ele para antes. O motor DIZ a diferença
-  (*"alvo de 14 … planejadas 12"*). É comportamento correto sob a decisão ("máximo permitido não é
-  meta"), mas vale registrar que a faixa superior hoje é teórica para estes layouts.
+- 🔺 **A exceção de sessão do plano automático foi FECHADA** (era o 1º limite desta lista): 0 de
+  10 080 combinações. O mecanismo da exceção continua existindo e é alcançável pelo **desenho da
+  pessoa**, onde os exercícios e os dias são escolha dela — e lá ele é exercido por teste.
+- 🔺 **O topo da faixa desejada continua não sendo alcançado**, e agora **em silêncio**: a frase
+  que anunciava a diferença era insuficiência por não chegar ao topo, e foi removida (②). Um
+  intermediário fecha os grandes em 10–12 numa faixa de 10–14, **dentro dela**, com chip verde e
+  sem aviso — verificado na prévia autenticada. Se a intenção for que o topo seja atingível, isso
+  é mudança no alocador, e segue como decisão material.
 - **Telemetria** continua sem eventos novos (mesmo motivo da leva anterior: exige migration).
 
 ## Decisões materiais ainda necessárias
 
-1. **O resíduo de sessão por crédito indireto.** Quando o piso por exercício do nível já ocupa o
-   teto do dia e o excesso vem do indireto de outro grupo, hoje o excesso fica e o crítico diz.
-   As alternativas são (a) deixar a poda de sessão descer abaixo do piso por exercício, (b)
-   permitir que o grupo que gera o indireto ceda série, ou (c) manter como está.
-   *Impacto medido:* 12 de ~7 500 células varridas; sempre `posterior 13 contra 12` em
-   avançado 6–7 dias de 45 min.
-2. **A faixa superior inalcançável.** Se a intenção for que o topo (10/14/18) seja atingível, o
-   alocador precisa deixar de contar o crédito indireto **planejado** ao decidir parar de dar
-   slots. *Impacto medido:* hoje os grandes fecham em 12 num intermediário 4d/60min, contra um topo
-   desejado de 14.
+1. 🔺 **RESOLVIDA na segunda volta** — o resíduo de sessão por crédito indireto. Nenhuma das três
+   alternativas listadas era necessária: a quarta, a troca de exercício equivalente, fecha o caso
+   sem custo. 0 de 10 080 combinações.
+2. **A faixa superior inalcançável** — *segue aberta.* O alocador dá slot por déficit e conta o
+   crédito indireto **planejado**, então para antes do topo. *Impacto medido:* num intermediário
+   de 4 dias/60 min os grandes fecham em 12 contra um topo desejado de 14; na prévia autenticada,
+   peito e quadríceps fecharam em 10 numa faixa de 10–14. Hoje isso é **silencioso e correto** sob
+   a decisão ("máximo permitido não é meta"), e a faixa superior é teórica para estes layouts.
+   Mudar isso é mexer no alocador, não na tabela.
+3. **O desempate por secundários na repartição** — *nova, trazida por esta volta.* Quando a sobra
+   do round-robin não divide igual, ela passa a cair no exercício com **mais secundários grandes**
+   do mesmo grupo e do mesmo dia. Isso entrega mais estímulo pelo mesmo número de séries (319
+   avisos de grupo abaixo do mínimo a menos, 0 a mais), e é o que a ordem por posição fazia por
+   acidente antes do conserto. Se o autor preferir que a sobra caia pelo `id` (ordem neutra), o
+   custo medido é voltar a 255 células com um grupo abaixo do mínimo.
 
 ## Fragmento para o cofre
 

@@ -35,6 +35,12 @@ remoto herdado) e contém tudo o que havia na branch anterior desta sessão — 
 | Telemetria das duas ações | ⏳ **não feito, de propósito** | ver *Limites* |
 | Publicação | ⏳ não feita | — |
 | Política de volume da hipertrofia (faixa desejada × teto × teto de sessão) | 🔵 **substituída em 2026-09-17** | `docs/politica-de-volume-hipertrofia-2026-09-17.md` |
+| Teto de 12 por sessão como obrigação absoluta | 🔵 **substituído em 2026-09-17 (2ª volta)** — 12 vira o limite NORMAL de montagem; o excesso é aceito só depois de esgotadas as alternativas, e então é dito | `engine/excecao-sessao.ts` · `rotina.excecoesDeSessao` |
+| Ressalva do teto por sessão ANTES da confirmação | ✅ candidato · **novo em 2026-09-17 (2ª volta)** | `painel/PropostaTreino.tsx` |
+| Aviso "alvo de N séries para G não cabe em M exercício(s)" | 🔴 **removido em 2026-09-17 (2ª volta)** — era insuficiência por não chegar ao topo da faixa desejada, em 1 300 de 1 355 emissões | o déficit real segue no guard de cobertura (MEV, ponderado) |
+| Explicação da semana de alívio (deload) | ✅ candidato · **nova em 2026-09-17 (2ª volta)** — o contrato existia e vinha passando por acidente | `engine/treino-montador.ts` |
+| Repartição da rampa por identidade | ✅ candidato · **desempate por secundários acrescentado em 2026-09-17 (2ª volta)** | `engine/treino-montador.ts` · `rampa-identidade-2026-09-17.test.ts` |
+| Classificação histórica do seletor (nomes × testes) | ✅ **guard novo em 2026-09-17 (2ª volta)** — nome histórico que não casa com teste derruba a build | `selecao-etapa1-classificacao.test.ts` |
 
 > 🔵 **2026-09-17 — o que desta leva foi substituído.** A decisão de volume da hipertrofia separou
 > a faixa DESEJADA do TETO e criou um teto por sessão (12 ponderadas por grupo). Com isso: o
@@ -44,6 +50,15 @@ remoto herdado) e contém tudo o que havia na branch anterior desta sessão — 
 > antes do botão de adicionar e abre sozinha quando há região sem exercício identificado. Os
 > números desta página que citam `13–16`, `16` ou `MRV` descrevem o estado ANTERIOR e ficam como
 > histórico. Ver o registro novo.
+>
+> 🔵 **2026-09-17, 2ª volta.** A obrigação absoluta de 12 por sessão deixou de existir: 12 é o
+> limite normal de montagem e o excesso é aceito **depois** de o motor esgotar as alternativas —
+> trocar exercício por equivalente, mudar de dia, reduzir séries. Medido: o plano automático
+> deixou de produzir excesso em **10 080** combinações (era 12 células). O que sobrar é publicado
+> em `rotina.excecoesDeSessao` e dito **antes** da confirmação, na tela da proposta, que até aqui
+> não mostrava aviso nenhum do motor. E a **faixa desejada deixou de ser cobrada no topo**: a
+> frase de insuficiência foi removida, porque em 1 300 das 1 355 emissões o grupo estava dentro
+> da faixa.
 
 ## 1. As duas ações do treino
 
