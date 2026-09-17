@@ -34,6 +34,8 @@ import { otimizarCoberturaAnatomica } from './cobertura-anatomica';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { creditar, creditoAtual, gruposSemEspaco, MARCA_PODA_SESSAO, MARCA_PODA_TETO, podarExcessoPonderado, podarExcessoPonderadoNaSessao, seriesQueCabemNoTeto, type SlotPonderavel } from './teto-ponderado';
+import { declararExcessoDeSessao, frasesDaExcecao, tentarAlternativasDeSessao, type AlternativaExaminada, type ExcecaoDeSessao } from './excecao-sessao';
+import { secundariosDe } from './secundarios';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
 import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
@@ -385,6 +387,28 @@ export function montarRotina(
     cheio: Math.min(tetoSemanalCheio(perfil.nivelExperiencia, objetivoDoVolume), deloadAgendado ? faixaDaSemana.max : Number.POSITIVE_INFINITY),
     sessao: tetoDaSessao,
     gruposEmFoco,
+  };
+  /**
+   * 🔵 A VOZ ÚNICA DA EXCEÇÃO AO TETO POR SESSÃO (2026-09-17, 2ª volta).
+   *
+   * 🔑 Um ponto de emissão só, chamado pelos DOIS produtores de plano (o automático e o
+   * desenho da pessoa). Dois `push` separados diriam o mesmo fato em dois lugares — e um
+   * deles envelheceria sozinho, que é exatamente o que D16 e o tripwire de
+   * `veredito-motor` existem para impedir.
+   *
+   * 🔒 O que muda entre os chamadores não é a frase: é QUE alternativa existia. No
+   * automático o motor pôde trocar exercício e mudar de dia (e o registro dessas tentativas
+   * vem em `alternativas`); no desenho da pessoa não pôde nenhuma das duas, porque os
+   * exercícios e os dias são escolha dela.
+   */
+  const dizerExcecaoDeSessao = <S extends SlotPonderavel>(
+    dias: readonly { nome: string; slots: S[] }[],
+    extra?: { alternativas?: Map<string, AlternativaExaminada[]>; dosadoPelaPessoa?: (slot: S) => boolean },
+  ): ExcecaoDeSessao[] => {
+    if (tetoDaSessao == null) return [];
+    const excecoes = declararExcessoDeSessao({ dias, teto: tetoDaSessao, ...extra });
+    for (const f of frasesDaExcecao(excecoes, (g) => ROTULO_GRUPO[g] ?? g)) avisos.push(f);
+    return excecoes;
   };
   /**
    * 🔒 Declarados AQUI, antes de qualquer uso: o caminho do editor guiado chama `montarSaida`
@@ -806,6 +830,11 @@ export function montarRotina(
 
   function montarSaida(diasTreino: DiaTreino[], split: string, desenhoDaPessoa = false): RotinaSemanal {
     let blocoFoco: RotinaSemanal['blocoFoco'];
+    /**
+     * 🔵 A EXCEÇÃO AO TETO POR SESSÃO (decisão de 2026-09-17, 2ª volta) — o que SOBROU depois
+     * de esgotadas as alternativas, publicado com o plano. Vazio é o caso normal.
+     */
+    let excecoesDeSessao: ExcecaoDeSessao[] = [];
     /** Extras do foco que sobreviveram: o invariante puxar≥empurrar é do BASELINE. */
     const extrasDoFoco = new Set<SlotExercicio>();
     // Um dia: todos os grupos diretos vigentes, um exercício por grupo antes
@@ -1021,9 +1050,29 @@ export function montarRotina(
        * dia continua sendo o primeiro critério (ele é do plano, não da tela) e, dentro dele,
        * dois planos com os mesmos exercícios repartem igual, na ordem que a tela quiser
        * mostrar. Nada aqui muda QUANTO o grupo recebe — só qual slot recebe cada série.
+       *
+       * 🔵 O DESEMPATE POR SECUNDÁRIOS (2026-09-17, 2ª volta) — medido, não estético.
+       *
+       * ⚠️ Ordenar só por `id` é estável, mas arbitrário quanto ao que o slot ENTREGA: a
+       * sobra do round-robin passava a cair num exercício sem secundário grande, e o crédito
+       * indireto de um terceiro caía 0,5 junto. Varredura A/B de 22 680 combinações (3
+       * inventários × 3 objetivos × 3 níveis × 1–7 dias × 5 tempos × 2 limites × 6 semanas ×
+       * com/sem foco), comparando a ordem por posição com a ordem por identidade:
+       * **255 células ganharam um aviso de grupo abaixo do mínimo** e só 2 perderam.
+       *
+       * 🔒 Com o desempate por número de secundários GRANDES antes do `id`, a mesma varredura
+       * dá **0 avisos novos e 319 a menos** contra a ordem por identidade pura, e 40 a mais
+       * contra 106 a menos em relação à ordem por posição — melhor que as duas, e continua
+       * independente da ordem de exibição, porque a chave só olha para o exercício.
+       *
+       * 🔴 Ele NÃO muda quanto o grupo recebe: é desempate DENTRO do mesmo grupo, entre
+       * slots do mesmo dia. O que muda é qual exercício carrega a série sobrando — e, com
+       * ela, o crédito indireto que essa série espalha.
        */
+      const secGrandes = (s: SlotExercicio) => secundariosDe(s.exercicio).filter((g: GrupoPrimario) => (GRUPOS_GRANDES as readonly string[]).includes(g)).length;
       for (const arr of porGrupo.values()) {
         arr.sort((a, b) => (diaDoSlot.get(a) ?? 0) - (diaDoSlot.get(b) ?? 0)
+          || secGrandes(b) - secGrandes(a)
           || (a.exercicio.id < b.exercicio.id ? -1 : a.exercicio.id > b.exercicio.id ? 1 : 0));
       }
 
@@ -1234,11 +1283,27 @@ export function montarRotina(
         const noDia = new Map<number, number>();
         for (const s of slots) noDia.set(diaDoSlot.get(s) ?? 0, (noDia.get(diaDoSlot.get(s) ?? 0) ?? 0) + sMin);
         if (alvo > base) {
-          // Aviso honesto SÓ p/ grupo que poderia cumprir o piso da banda mas não o alvo;
-          // grupos estruturalmente sub-banda (teto < piso) ficam silenciosos, como na v1.
-          if (alvo > tetoGrupo && tetoGrupo >= banda.min) {
-            avisos.push(`Semana ${semana}: alvo de ${alvo} séries para ${grupo} não cabe em ${n} exercício(s) — planejadas ${tetoGrupo}.`);
-          }
+          /**
+           * 🔵 AVISO REMOVIDO em 2026-09-17 (2ª volta) — **a faixa desejada não é meta
+           * obrigatória no topo**.
+           *
+           * 🔑 O que a frase antiga dizia: *"Semana 3: alvo de 16 séries para posterior não
+           * cabe em 3 exercício(s) — planejadas 12."* Medida na varredura das 756 células,
+           * ela saía **1 355 vezes — e em 1 300 delas o grupo terminava DENTRO da faixa
+           * desejada** (um intermediário com 12 numa faixa de 10–14, um iniciante com 6
+           * numa de 6–10). Era insuficiência anunciada por não se ter chegado ao topo, que
+           * é exatamente o que a decisão proíbe.
+           *
+           * 🔒 E ela comparava MOEDAS DIFERENTES: `alvo` é ponderado (a rampa mira a conta
+           * canônica) e `tetoGrupo` é `slots × sMax`, série DIRETA. Posterior "12 contra 16"
+           * entregava 15 ponderadas — a diferença real era 1, não 4.
+           *
+           * 🔒 O déficit de verdade continua com voz, e com o critério pertinente: o guard
+           * de cobertura (`medirCobertura`) mede o volume PONDERADO entregue contra o MEV,
+           * separa causa de catálogo de causa de orçamento e publica o fato — uma voz por
+           * fato (D16). A distinção entre faixa desejada, meta adaptada, volume entregue e
+           * teto continua publicada em `faixaVolumeSemana` e `tetoVolumeSemana`.
+           */
           let extra = Math.min(alvo, tetoGrupo) - base;
           let i = 0;
           let travas = 0;
@@ -1484,6 +1549,34 @@ export function montarRotina(
        * 🔒 E ela é DITA. A redução de volume de um grupo é exatamente o tipo de mudança que
        * a casa não faz calada (D-01/D-02: "o custo é dito, nunca silencioso").
        */
+      /**
+       * 🔵 ANTES DE PODAR, TENTAR — decisão do autor de 2026-09-17 (2ª volta).
+       *
+       * 🔑 A ordem importa e foi medida: a TROCA de exercício não custa série a ninguém
+       * (mesmo grupo, mesmo padrão, mesma assinatura de custo), enquanto a poda custa. Rodar
+       * a tentativa primeiro entrega mais volume pelo mesmo teto — no caso medido
+       * (`avançado/6d/45 min`, posterior 13 num dia) ela devolve séries que a poda tiraria.
+       *
+       * 🔒 A busca é finita e declarada (`excecao-sessao.ts`): nenhum candidato entra sem
+       * passar pelos dois tetos, pelo piso da faixa e pelo relógio do dia — e todos os
+       * examinados ficam registrados, com o motivo, para a exceção que sobrar.
+       */
+      const tentativa = tetoDaSessao == null
+        ? { trocas: [] as { dia: number; de: string; para: string; porCausaDe: GrupoPrimario }[], alternativas: new Map<string, AlternativaExaminada[]>() }
+        : tentarAlternativasDeSessao({
+          dias: diasTreino, teto: tetoDaSessao, pool, tetoSemanal: tetoSemanalGrupo,
+          pisoSemanal: faixaDaSemana.min,
+          cabeNoTempo: (_dia, slots) => cabeNoDia({ ...diasTreino[_dia]!, slots: [...slots] }),
+        });
+      if (tentativa.trocas.length > 0) {
+        /**
+         * 🔒 A TROCA É DITA (D-01/D-02: o custo é dito, nunca silencioso). Trocar o exercício
+         * que a pessoa vai ver é mudança visível, e o motivo dela é o teto do dia.
+         */
+        const quantas = tentativa.trocas.length;
+        const gruposDitos = [...new Set(tentativa.trocas.map(t => ROTULO_GRUPO[t.porCausaDe]))].join(', ');
+        avisos.push(`Trocamos ${quantas} ${plural(quantas, 'exercício', 'exercícios')} por ${plural(quantas, 'outro equivalente', 'outros equivalentes')} do mesmo grupo e do mesmo tempo, para ${gruposDitos} ${plural(1, 'não passar', 'não passarem')} do máximo de um treino só sem perder séries. O volume de todos os grupos ficou como estava.`);
+      }
       const podaBaseline = podarExcessoPonderado(diasTreino.flatMap(d => d.slots), tetoSemanalGrupo, sMinDaSemana);
       if (podaBaseline.podados.length > 0) {
         const quantas = podaBaseline.podados.reduce((n, p) => n + p.series, 0);
@@ -1514,6 +1607,19 @@ export function montarRotina(
         const nomeados = [...new Set(podaSessao.podados.map(p => ROTULO_GRUPO[p.grupo]))].join(', ');
         avisos.push(`Ajustamos o volume de ${nomeados} ${MARCA_PODA_SESSAO} (${tetoDaSessao} séries por grupo num mesmo dia, somando diretas e indiretas): ${quantas} ${plural(quantas, 'série saiu', 'séries saíram')} ${plural(podaSessao.podados.length, 'do próprio grupo', 'dos próprios grupos')}. O volume da semana continua distribuído nos outros dias.`);
       }
+      /**
+       * 🔵 O QUE SOBROU É A EXCEÇÃO — e ela é DITA antes da confirmação (2026-09-17, 2ª volta).
+       *
+       * 🔒 A decisão substituiu a obrigação absoluta de 12 por sessão: 12 continua sendo o
+       * limite normal de montagem, e o excesso só é aceito depois que trocar exercício, mudar
+       * de dia e reduzir séries falharam — cada tentativa registrada em `alternativas`. Aqui
+       * o que resta ganha número, grupo, dia e causa, e o plano deixa de poder ser
+       * apresentado como "dentro de todos os limites".
+       *
+       * 🔒 Nenhum limite SEMANAL é flexibilizado por isto: a poda semanal já rodou acima e
+       * continua dura.
+       */
+      excecoesDeSessao = dizerExcecaoDeSessao(diasTreino, { alternativas: tentativa.alternativas });
       /**
        * 🔒 SEM frase para `irredutiveis` NESTE caminho — e isto foi MEDIDO, não suposto.
        * Na varredura das 3 888 combinações o caso não ocorre nenhuma vez: o alocador já mira
@@ -1742,6 +1848,22 @@ export function montarRotina(
     if (budgetPorDia <= 3) {
       avisos.push('Tempo por sessão curto: priorizamos os exercícios fundamentais.');
     }
+    /**
+     * 🔵 A SEMANA DE ALÍVIO SE EXPLICA (2026-09-17, 2ª volta) — e agora de verdade.
+     *
+     * ⚠️ Isto nasceu de uma passagem acidental que a limpeza do item 2 expôs: o contrato
+     * *"a redução planejada do deload é explicada"* (`editor-avisos-e-paridade`) vinha
+     * passando porque a semana 6 emitia a frase `alvo de N séries para X não cabe em M
+     * exercício(s)` — que não fala de deload nenhum e comparava moedas diferentes. Retirada
+     * a frase errada, a semana 6 ficou SEM explicação nenhuma no editor, e o contrato caiu —
+     * corretamente. A explicação que faltava é esta, e ela não depende de nenhuma outra.
+     *
+     * 🔒 Linguagem de processo, sem promessa de resultado e sem número que possa divergir da
+     * dose entregue: a faixa desta semana já vai publicada em `faixaVolumeSemana`.
+     */
+    if (deloadAgendado) {
+      avisos.push('Esta é a semana de alívio do ciclo: o volume é reduzido de propósito, e por isso os grupos aparecem abaixo do que vinham entregando. Não é um déficit do plano — é a fase. No próximo ciclo a dose cheia volta.');
+    }
 
     /**
      * 🔢 v4 — GUARD DE COBERTURA (handoff B1.5): a pergunta que o motor nunca fez — "este
@@ -1826,6 +1948,15 @@ export function montarRotina(
       ...(fatosCobertura.length > 0 ? { fatosCobertura: [...fatosCobertura] } : {}),
       ...(fatosInvariantes.length > 0 ? { fatosInvariantes: [...fatosInvariantes] } : {}),
       ...(cortesDeTempo(diasEntregues).length > 0 ? { fatosCorteTempo: cortesDeTempo(diasEntregues) } : {}),
+      /**
+       * 🔵 A EXCEÇÃO DO TETO POR SESSÃO, publicada com o plano (2026-09-17, 2ª volta).
+       *
+       * 🔒 Vai junto do plano de propósito: a mesma lista serve à prévia (antes da
+       * confirmação), ao plano salvo e ao editor. Recalcular em cada tela seria a segunda
+       * verdade de sempre — e a prévia e o plano poderiam discordar sobre o que a pessoa
+       * está aceitando.
+       */
+      ...(excecoesDeSessao.length > 0 ? { excecoesDeSessao } : {}),
       /**
        * 🔴 A FAIXA QUE VALE NESTA SEMANA, PUBLICADA (correção 2026-09-15).
        *
@@ -2280,6 +2411,17 @@ export function montarRotina(
         const nomeados = [...new Set(podaCustomSessao.podados.map((x) => ROTULO_GRUPO[x.grupo]))].join(', ');
         avisos.push(`Ajustamos o volume de ${nomeados} ${MARCA_PODA_SESSAO} (${tetoDaSessao} séries por grupo num mesmo dia, somando diretas e indiretas): ${quantas} ${plural(quantas, 'série saiu', 'séries saíram')} de ${plural(quantas, 'exercício', 'exercícios')} que o app dosou. As séries que você escolheu ficaram como estão.`);
       }
+      /**
+       * 🔵 A EXCEÇÃO AO TETO POR SESSÃO NO DESENHO DA PESSOA (2026-09-17, 2ª volta).
+       *
+       * 🔒 Aqui NÃO se troca exercício nem se muda de dia: os exercícios e os dias são
+       * escolha dela, e mexer neles seria refazer o desenho por baixo dos panos. A única
+       * alternativa disponível era reduzir a série que o APP dosou — e ela já rodou acima.
+       * O que sobra é declarado com o mesmo formato do caminho automático, para a prévia e o
+       * editor lerem de uma fonte só.
+       */
+      const excecoesCustom = dizerExcecaoDeSessao(rotinaCustomEstrutural.dias, { dosadoPelaPessoa: (s) => !dosadoPeloApp(s) });
+      if (excecoesCustom.length > 0) rotinaCustomEstrutural.excecoesDeSessao = excecoesCustom;
       /**
        * 🔒 SEM frase para `irredutiveis` — D16, uma voz por fato.
        *

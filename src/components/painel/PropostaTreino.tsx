@@ -210,6 +210,42 @@ export default function PropostaTreino({
           ))}
         </section>
 
+        {/**
+          * 🔵 A RESSALVA DO TETO POR SESSÃO, ANTES DA CONFIRMAÇÃO (decisão 2026-09-17, 2ª volta).
+          *
+          * 🔑 A decisão autoriza a proposta a passar de 12 séries ponderadas num grupo num
+          * mesmo treino **quando o motor esgota as alternativas** — e exige que isso seja dito
+          * ANTES do toque em "Usar este treino", e não só depois, no plano. Sem este bloco a
+          * pessoa confirmaria sem saber: a lista de avisos do motor é renderizada na aba do
+          * plano e no editor, nunca aqui.
+          *
+          * 🔒 A fonte é `rotina.excecoesDeSessao`, publicada pelo motor junto do plano — a
+          * mesma que o editor lê. A tela não recalcula nada, e o texto não afirma perigo nem
+          * lesão: diz o número, o dia e de onde vem o excedente.
+          */}
+        {(proposta.rotina.excecoesDeSessao ?? []).length > 0 && (
+          <section role="status" aria-label="Ressalva de volume" style={{ ...nota, margin: '0 0 14px', color: '#ffd8a8', background: 'rgba(234,179,8,.08)', border: '1px solid rgba(234,179,8,.35)', borderRadius: 12, padding: '10px 12px' }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Uma ressalva antes de você decidir</div>
+            <ul style={{ margin: 0, padding: '0 0 0 18px' }}>
+              {(proposta.rotina.excecoesDeSessao ?? []).map((e) => (
+                <li key={`${e.dia}-${e.grupo}`} style={{ marginBottom: 4 }}>
+                  <strong>{ROTULO_GRUPO[e.grupo] ?? e.grupo}</strong> fica com {e.ponderado} séries
+                  em {e.nomeDoDia} — acima das {e.teto} que o app usa como limite de um treino só,
+                  somando diretas e indiretas.
+                  {e.origensIndiretas.length > 0 && (
+                    <> {e.indireto} {e.indireto === 1 ? 'vem' : 'vêm'} do trabalho indireto de{' '}
+                      {e.origensIndiretas.map((o) => (ROTULO_GRUPO[o.grupo] ?? o.grupo).toLowerCase()).join(', ')} no mesmo dia.</>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <p style={{ margin: '6px 0 0', color: 'rgba(234,229,219,.7)' }}>
+              Procuramos outro exercício, outro dia e menos séries, e nada disso coube nas suas
+              outras escolhas. Este treino não está dentro de todos os limites do app.
+            </p>
+          </section>
+        )}
+
         {/* 🔒 O que a substituição NÃO toca — o que costuma travar a decisão. */}
         <p style={{ ...nota, margin: '0 0 16px', fontSize: '.8rem', color: 'rgba(234,229,219,.6)' }}>
           Seu histórico, os treinos registrados, o progresso das cargas e a fase do seu ciclo

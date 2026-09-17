@@ -168,6 +168,26 @@ describe('🔒 a proposta explica o que muda, e o que NÃO muda', () => {
     expect(proposta).toMatch(/seriesDoSlot\(s\)/);
   });
 
+  /**
+   * 🔵 2026-09-17 (2ª volta) — a decisão autoriza a proposta a passar das 12 séries
+   * ponderadas num grupo num mesmo treino quando o motor esgota as alternativas, E exige que
+   * a ressalva apareça ANTES da confirmação. A lista de avisos do motor é renderizada na aba
+   * do plano e no editor; nesta tela ela não existia, e sem este bloco a pessoa confirmaria
+   * sem saber.
+   */
+  it('a ressalva do teto por sessão aparece ANTES do botão de aplicar, com número e dia', () => {
+    expect(proposta, 'a tela não lê a exceção publicada pelo motor').toMatch(/proposta\.rotina\.excecoesDeSessao/);
+    expect(proposta, 'a ressalva não diz o número nem o dia').toMatch(/e\.ponderado[\s\S]{0,120}e\.nomeDoDia/);
+    expect(proposta, 'a ressalva não nomeia o limite de um treino só').toMatch(/limite de um treino s[óo]/);
+    expect(proposta, 'a tela deixaria passar como se estivesse dentro de tudo')
+      .toMatch(/não está dentro de todos os limites/);
+    // 🔒 Ela vem ANTES do botão que aplica — depois dele seria confirmação sem informação.
+    expect(proposta.indexOf('excecoesDeSessao'), 'a ressalva ficou depois do botão de aplicar')
+      .toBeLessThan(proposta.indexOf('onClick={onAplicar}'));
+    // 🔴 E não vira alerta clínico: a decisão proíbe afirmar perigo ou lesão.
+    expect(/perigo|lesão|lesao|arriscad/i.test(proposta), 'a ressalva virou alerta de saúde').toBe(false);
+  });
+
   it('quando não há montagem diferente, a tela DIZ — e não oferece aplicar', () => {
     expect(proposta).toMatch(/Sem uma montagem diferente desta/);
     // Sem mudança ⇒ nenhum dos dois botões de ação existe (nem aplicar, nem remontar).

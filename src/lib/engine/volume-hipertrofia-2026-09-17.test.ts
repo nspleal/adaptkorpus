@@ -32,6 +32,7 @@ import {
   tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao,
 } from './trilhos';
 import { MARGEM_SEM_FOCO, TETO_PONDERADO_SESSAO, TETO_SEMANAL_HIPERTROFIA } from './treino-constants';
+import { MARCA_PODA_TETO } from './teto-ponderado';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, RotinaSemanal, SemanaCiclo } from './treino-types';
@@ -166,22 +167,22 @@ describe('🔵 os exemplos numéricos da decisão', () => {
 // ── ③ A VARREDURA: o motor obedece os dois limites ao mesmo tempo ────────────
 
 /**
- * 🔴 A EXCEÇÃO MEDIDA, declarada em vez de escondida.
+ * 🔵 A LISTA ESVAZIOU em 2026-09-17 (2ª volta) — e é por isso que ela continua aqui.
  *
- * Nestas células o teto POR SESSÃO fica acima de 12 e o motor não tem como corrigir: os slots
- * diretos do grupo já estão no piso por exercício do nível, e o excesso vem do crédito
- * INDIRETO de OUTRO grupo no mesmo dia (posterior recebe 0,5 por série de cada exercício de
- * glúteos ali). Reduzir o outro grupo seria cobrar de um terceiro por um teto que não é dele —
- * o que `podarExcessoPonderado` proíbe por desenho, e por bons motivos.
+ * Até `6feab97` doze células entregavam `posterior 13 contra 12` num dia e o excesso era
+ * declarado como resíduo: os slots diretos do grupo já estavam no piso e o excedente vinha do
+ * crédito INDIRETO de glúteos no mesmo dia. A decisão do autor mandou **tentar alternativas
+ * antes de aceitar o excesso** — e a alternativa que faltava não era cortar série de ninguém,
+ * era TROCAR o exercício de glúteos por um equivalente que não credita posterior (mesmo
+ * grupo, mesmo padrão, mesma assinatura de custo). Medido depois da correção: **0 células
+ * acima do teto de sessão em 10 080 combinações** (4 inventários × 3 níveis × 1–7 dias ×
+ * 5 tempos × 2 limites × 4 semanas × 3 focos).
  *
- * 🔒 O excesso NÃO é silencioso: o crítico o diz, com o número, em `acima_do_maximo_na_sessao`
- * (verificado abaixo). Esta lista existe para que uma célula NOVA derrube o teste em vez de se
- * esconder atrás de uma tolerância.
+ * 🔒 A lista fica VAZIA, e não some: uma célula nova entra como falha, não como exceção
+ * silenciosa. E a regra geral que autoriza e comunica o que sobrar é exercida logo abaixo,
+ * no caminho onde ela é alcançável — o desenho da pessoa.
  */
-const EXCESSO_DE_SESSAO_CONHECIDO = new Set([
-  'avancado/6d/45min/limitado',
-  'avancado/7d/45min/limitado',
-]);
+const EXCESSO_DE_SESSAO_CONHECIDO = new Set<string>([]);
 
 describe('🔒 nenhum plano automático nasce acima dos limites', () => {
   const CELULAS = NIVEIS.flatMap((nivel) => ([1, 2, 3, 4, 5, 6, 7] as const).flatMap((dias) =>
@@ -230,28 +231,135 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
     expect(fora.slice(0, 10), `${fora.length} planos acima do teto de sessão fora da lista declarada`).toEqual([]);
   }, 600_000);
 
-  /** 🔒 A célula declarada existe MESMO — e o excesso dela é DITO, não engolido. */
-  it('a exceção declarada é real e o excesso que sobra é dito pelo crítico', async () => {
-    const { avaliarSemana } = await import('./critico');
+  /**
+   * 🔒 A CÉLULA QUE ERA O RESÍDUO — hoje resolvida, e resolvida pelo caminho certo.
+   *
+   * Anti-vacuidade dupla: o dia medido ainda TEM o grupo perto do teto (senão o caso
+   * degenerou e não prova nada) e a correção que o salvou é NOMEADA no plano.
+   */
+  it('a antiga célula de resíduo cabe hoje, e a troca que a resolveu é dita', () => {
     const p = perfil({
       nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: DIAS.slice(0, 6),
       tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado',
     });
     const r = plano(p, 3);
-    expect(acimaNaSessao(r).length, 'a célula deixou de exercitar o resíduo — reancorar a lista').toBeGreaterThan(0);
+    expect(acimaNaSessao(r), 'a célula voltou a estourar o teto do dia').toEqual([]);
+    expect(r.excecoesDeSessao ?? [], 'sobrou exceção onde a troca deveria ter resolvido').toEqual([]);
+    // O dia do posterior existe e continua carregado — o caso não degenerou.
+    const posteriorPorDia = r.dias.map((_d, i) => pondDoDia(r, i).get('posterior') ?? 0);
+    expect(Math.max(...posteriorPorDia), `posterior sumiu do plano: ${posteriorPorDia.join('+')}`).toBeGreaterThanOrEqual(10);
+    expect(r.avisos.some((a) => a.includes('Trocamos')),
+      `a troca não foi dita: ${r.avisos.join(' | ')}`).toBe(true);
+  });
+});
+
+// ── ③b A EXCEÇÃO: quando nada resolve, o motor autoriza E COMUNICA ───────────
+
+/**
+ * 🔵 DECISÃO DO AUTOR de 2026-09-17 (2ª volta): 12 por sessão continua sendo o limite normal
+ * de montagem, mas deixou de ser obrigação absoluta. O excesso é aceito **depois** de
+ * esgotadas as alternativas — e aí é nomeado, medido, explicado e mantido do plano ao editor.
+ *
+ * 🔒 O caminho alcançável é o DESENHO DA PESSOA: lá os exercícios, os dias e as séries são
+ * escolha dela, e o app não os troca. É a regra geral que está sob teste aqui, não uma lista.
+ */
+describe('🔵 a exceção ao teto por sessão', () => {
+  const doAcademia = (g: GrupoPrimario, n: number) =>
+    EXERCISES.filter((e) => e.grupoPrimario === g && e.equipamento === 'academia').slice(0, n);
+  const desenhoPesado = () => {
+    const peito = doAcademia('peito', 5);
+    return {
+      perfil: perfil({
+        nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: DIAS.slice(0, 3),
+        tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
+        rotinaCustom: { origem: 'usuario', dias: [
+          { nome: 'Peito', diaId: 'seg', exercicioIds: peito.map((e) => e.id),
+            seriesPorExercicio: Object.fromEntries(peito.map((e) => [e.id, 4])) },
+          { nome: 'Costas', diaId: 'ter', exercicioIds: doAcademia('costas', 3).map((e) => e.id) },
+          { nome: 'Pernas', diaId: 'qua', exercicioIds: doAcademia('quadriceps', 3).map((e) => e.id) },
+        ] },
+      }),
+      peito,
+    };
+  };
+
+  it('o excesso que sobra é publicado com grupo, dia, volume e a referência de 12', () => {
+    const r = plano(desenhoPesado().perfil, 5);
+    const ex = r.excecoesDeSessao ?? [];
+    expect(ex.length, 'a exceção não foi publicada').toBe(1);
+    expect(ex[0]!.grupo).toBe('peito');
+    expect(ex[0]!.dia).toBe(0);
+    expect(ex[0]!.nomeDoDia).toBe('Peito');
+    expect(ex[0]!.ponderado).toBe(20);
+    expect(ex[0]!.teto).toBe(TETO_PONDERADO_SESSAO);
+    expect(ex[0]!.direto).toBe(20);
+  });
+
+  it('as alternativas examinadas ficam registradas, com o motivo da recusa', () => {
+    const { perfil: p, peito } = desenhoPesado();
+    const alt = (plano(p, 5).excecoesDeSessao ?? [])[0]!.alternativas;
+    // 🔒 Uma entrada por slot do grupo, cada uma NOMEANDO o exercício e o motivo — é o que
+    // impede a exceção de ser uma conclusão sem exame.
+    expect(alt.map((a) => a.slot).sort()).toEqual(peito.map((e) => e.id).sort());
+    expect(new Set(alt.map((a) => a.motivo))).toEqual(new Set(['slot_escolhido_pela_pessoa']));
+    expect(alt.every((a) => !a.aceita)).toBe(true);
+  });
+
+  it('a ressalva é DITA no plano, sem chamar o excesso de perigo e sem dizer que tudo coube', () => {
+    const r = plano(desenhoPesado().perfil, 5);
+    const frase = r.avisos.find((a) => a.includes('limite de um treino só'));
+    expect(frase, `a exceção ficou muda: ${r.avisos.join(' | ')}`).toBeDefined();
+    expect(frase).toContain('20');
+    expect(frase).toContain(String(TETO_PONDERADO_SESSAO));
+    expect(frase).toContain('não dá para dizer que ele está dentro de todos os limites');
+    // 🔴 A decisão é explícita: não afirmar perigo nem lesão.
+    expect(/perigo|lesão|lesao|arriscad/i.test(frase!), `a frase virou alerta clínico: ${frase}`).toBe(false);
+    // 🔒 E ela não afirma um esforço que não houve: no desenho da pessoa não se troca nada.
+    expect(frase).toContain('são sua escolha');
+  });
+
+  /**
+   * 🔒 "A exceção diária NÃO flexibiliza nenhum limite semanal" (decisão, §1). O que se
+   * cobra aqui é que os TETOS publicados continuam os mesmos — 16 sem foco e 19 cheio para o
+   * intermediário — e que o excesso semanal do desenho manual continua sendo DITO em vez de
+   * virar permissão. (Que nenhum plano AUTOMÁTICO passe do teto semanal é medido na
+   * varredura acima, em 10 080 combinações.)
+   */
+  it('a exceção do DIA não afrouxa nenhum limite da SEMANA', () => {
+    const r = plano(desenhoPesado().perfil, 5);
+    expect(r.excecoesDeSessao ?? []).toHaveLength(1);
+    expect(r.tetoVolumeSemana).toMatchObject({ semFoco: 16, cheio: 19, sessao: 12, gruposEmFoco: [] });
+    // A semana dela passa de 16 porque a dose é DELA — e o motor não a corta nem a abençoa.
+    expect(acimaNaSemana(r)).toEqual(['peito 20 > 16']);
+    expect(r.avisos.some((a) => a.includes(MARCA_PODA_TETO)),
+      'o app cortou a série que a pessoa escolheu').toBe(false);
+  });
+
+  it('o crítico do editor continua dizendo o mesmo excesso, com o número', async () => {
+    const { avaliarSemana } = await import('./critico');
+    const r = plano(desenhoPesado().perfil, 5);
     const av = avaliarSemana(
       r.dias.map((d) => ({
         nome: d.nome, exercicios: d.slots.map((s) => s.exercicio),
         series: d.slots.map((s) => s.series), descansoSeg: d.slots.map((s) => s.descansoSeg),
       })),
       {
-        nivel: 'avancado', objetivo: 'massa', tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado', semana: 3,
+        nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite', semana: 5,
         ...(r.faixaVolumeSemana ? { faixaSemanal: r.faixaVolumeSemana } : {}),
         ...(r.tetoVolumeSemana ? { tetoVolumeSemana: r.tetoVolumeSemana } : {}),
       },
     );
-    expect(av.avisos.some((a) => a.codigo === 'acima_do_maximo_na_sessao'),
-      `o excesso ficou sem voz: ${av.avisos.map((a) => a.codigo).join(', ')}`).toBe(true);
+    const aviso = av.avisos.find((a) => a.codigo === 'acima_do_maximo_na_sessao');
+    expect(aviso, `o excesso ficou sem voz no editor: ${av.avisos.map((a) => a.codigo).join(', ')}`).toBeDefined();
+    expect(aviso!.fato?.escopo).toBe('sessao');
+    expect(aviso!.fato?.grupo).toBe('peito');
+  });
+
+  it('nada é bloqueado: o plano com exceção é entregue, com os exercícios que a pessoa escolheu', () => {
+    const { perfil: p, peito } = desenhoPesado();
+    const r = plano(p, 5);
+    expect(r.dias[0]!.slots.map((s) => s.exercicio.id)).toEqual(peito.map((e) => e.id));
+    expect(r.dias[0]!.slots.map((s) => s.series)).toEqual([4, 4, 4, 4, 4]);
   });
 });
 

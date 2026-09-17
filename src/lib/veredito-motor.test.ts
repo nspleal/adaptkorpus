@@ -136,7 +136,38 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['escolhas inelegíveis', /não elegíveis no perfil/, () => gerar({ rotinaCustom: SO_EMPURRAR, equipamento: 'casa', equipamentosCasa: [] })],
   ['retomada · frequência limitada', /Retomada: frequ/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: SEIS_DIAS.map(diaId => ({ nome: diaId, diaId, exercicioIds: ['e1'] })) } }, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
   ['retomada · volume reduzido', /Retomada: volume reduzido/, () => gerar({}, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
-  ['alvo do grupo não cabe nos exercícios', /alvo de \d+ s[ée]ries para/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 90 }, { semanaCiclo: { semana: 5 } })],
+  /**
+   * 🔵 FAMÍLIA RETIRADA em 2026-09-17 (2ª volta): `alvo de N séries para X não cabe em M
+   * exercício(s)`. A decisão travou que **a faixa desejada não é meta obrigatória no topo**,
+   * e a frase anunciava insuficiência por não se ter chegado lá — medida saindo 1 355 vezes
+   * na varredura, 1 300 delas com o grupo DENTRO da faixa. O déficit de verdade continua com
+   * família própria (o guard de cobertura, logo abaixo), na conta ponderada e contra o MEV.
+   */
+  ['semana de alívio (deload) explicada', /semana de al[íi]vio do ciclo/, () => gerar({}, { semanaCiclo: { semana: 6 } })],
+  /**
+   * 🔵 As DUAS famílias novas da 2ª volta: a troca que EVITA o excesso e a exceção que o
+   * DECLARA quando nem a troca resolveu.
+   */
+  ['troca de exercício para caber no teto do dia', /Trocamos \d+ exerc[íi]cios?/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' }, { semanaCiclo: { semana: 3 } })],
+  ['exceção ao teto por sessão, declarada', /acima das \d+ que o app usa como limite de um treino s[óo]/, () => {
+    /**
+     * 🔒 O caso é o DESENHO DA PESSOA, e não por conveniência: na varredura de 10 080
+     * combinações automáticas (4 inventários × 3 níveis × 1–7 dias × 5 tempos × 2 limites ×
+     * 4 semanas × 3 focos) o caminho automático não produz exceção nenhuma depois da troca —
+     * ela existe para o caso em que a dose é da pessoa e o app não pode mexer. É o mesmo
+     * ponto de emissão (`dizerExcecaoDeSessao`), chamado pelos dois produtores.
+     */
+    const peito = EXERCISES_SEED.filter((e) => e.grupoPrimario === 'peito' && e.equipamento === 'academia').slice(0, 5);
+    return gerar({
+      nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'],
+      tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
+      rotinaCustom: { origem: 'usuario', dias: [
+        { nome: 'Peito', diaId: 'seg', exercicioIds: peito.map((e) => e.id), seriesPorExercicio: Object.fromEntries(peito.map((e) => [e.id, 4])) },
+        { nome: 'Costas', diaId: 'ter', exercicioIds: EXERCISES_SEED.filter((e) => e.grupoPrimario === 'costas' && e.equipamento === 'academia').slice(0, 3).map((e) => e.id) },
+        { nome: 'Pernas', diaId: 'qua', exercicioIds: EXERCISES_SEED.filter((e) => e.grupoPrimario === 'quadriceps' && e.equipamento === 'academia').slice(0, 3).map((e) => e.id) },
+      ] },
+    }, { semanaCiclo: { semana: 5 } });
+  }],
   /**
    * 🔎 ACHADO desta rodada: as três invariantes estruturais abaixo NÃO são alcançáveis pelo
    * alocador automático — varri 1.800 perfis (5 equipamentos × 3 níveis × 4 agendas × 6
@@ -200,9 +231,15 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * dizer qual deles mordeu: "máximo desta semana" e "máximo de um treino só" são limites
    * diferentes, com números diferentes e com consertos diferentes.
    */
-  ['poda por sessão (automático)', /para não passar do máximo de um treino só/, () => gerar({ equipamento: 'casa', equipamentosCasa: [], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 45 }, { semanaCiclo: { semana: 3 } })],
+  /**
+   * 🔵 PERFIS REMEDIDOS em 2026-09-17 (2ª volta). Com a TROCA de exercício rodando antes da
+   * poda, `casa/3d/45 min` deixou de podar — a troca resolve o dia sem tirar série de
+   * ninguém. A célula que ainda poda depois de esgotadas as trocas é `avançado/6 d/45 min
+   * limitado` (10 das 1 008 células da varredura por equipamento de academia).
+   */
+  ['poda por sessão (automático)', /para não passar do máximo de um treino só/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' }, { semanaCiclo: { semana: 3 } })],
   ['poda por sessão no desenho da pessoa (só o que o app dosou)', /para não passar do máximo de um treino só[\s\S]*que o app dosou/, () => {
-    const o = { equipamento: 'casa', equipamentosCasa: [], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 45 };
+    const o = { nivelExperiencia: 'avancado' as const, diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' as const };
     const auto = gerar(o, { semanaCiclo: { semana: 3 } })!;
     const dias = auto.dias.map((d) => ({ nome: d.nome, diaId: d.diaId, exercicioIds: d.slots.map((s) => s.exercicio.id) }));
     return gerar({ ...o, rotinaCustom: { origem: 'usuario', dias } }, { semanaCiclo: { semana: 3 } });
@@ -233,7 +270,15 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // dosou). O `irredutiveis` da poda por sessão continua sem família própria pelo mesmo
     // motivo de sempre: quem diz o excesso que FICA é o crítico (`acima_do_maximo_na_sessao`),
     // e ele foi medido saindo — D16, uma voz por fato.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(42);
+    // 42 → 44 em 2026-09-17 (2ª volta), saldo de −1 e +3:
+    //  − saiu `alvo de N séries para X não cabe em M exercício(s)`: a faixa desejada deixou de
+    //    ser meta obrigatória no topo, e a frase anunciava insuficiência por não se chegar lá;
+    //  + entrou a TROCA de exercício que evita o excesso do dia sem tirar série de ninguém;
+    //  + entrou a EXCEÇÃO ao teto por sessão — UM ponto de emissão (`dizerExcecaoDeSessao`)
+    //    chamado pelos dois produtores, para o mesmo fato não ter duas vozes;
+    //  + entrou a explicação da SEMANA DE ALÍVIO, que só existia por acidente (o contrato de
+    //    `editor-avisos-e-paridade` vinha passando por causa da frase removida acima).
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(44);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

@@ -6,6 +6,7 @@ import type { ReferenciaDose } from './referencia-dose';
  */
 import type { PreferenciasTreino } from './preferencias';
 import type { FocoGrupo } from './trilhos';
+import type { ExcecaoDeSessao } from './excecao-sessao';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
@@ -541,6 +542,17 @@ export interface RotinaSemanal {
     /** Grupos que a pessoa nomeou como foco nesta semana. Vazio = ninguém. */
     gruposEmFoco: GrupoPrimario[];
   };
+  /**
+   * 🔵 A EXCEÇÃO AO TETO POR SESSÃO (decisão do autor, 2026-09-17 — 2ª volta).
+   *
+   * Grupos que ficaram acima das 12 séries ponderadas num mesmo treino DEPOIS de o motor
+   * esgotar as alternativas (trocar exercício, mudar de dia, reduzir séries). Ausente é o
+   * caso normal — e é a ausência que autoriza a tela a dizer que o plano está dentro de
+   * todos os limites.
+   *
+   * 🔒 Não flexibiliza NADA na semana: os tetos semanais continuam duros.
+   */
+  excecoesDeSessao?: ExcecaoDeSessao[];
   /** Comparação da intenção de divisão com o terminal, não com um candidato intermediário. */
   distribuicao?: { planejada: string; recortesPlanejados: number; recortesEntregues: number; limitadaPeloCalendario: boolean; adaptada: boolean; atendida: boolean };
   /**

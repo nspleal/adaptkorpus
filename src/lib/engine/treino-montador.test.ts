@@ -218,6 +218,14 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     const CENARIOS: Partial<PerfilTreino>[] = [
       { nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 },
       { nivelExperiencia: 'avancado', diasDisponiveis: 3, tempoPorSessaoMin: 75 },
+      /**
+       * 🔵 CENÁRIO ACRESCENTADO em 2026-09-17 (2ª volta). Com a troca de exercício rodando
+       * ANTES da poda, os dois cenários acima deixaram de encostar em qualquer teto — o
+       * ramo ③ virou letra morta e a anti-vacuidade abaixo caiu, como devia. Esta é a célula
+       * onde a poda por sessão AINDA morde depois de esgotadas as trocas (medida: 10 das
+       * 1 008 células da varredura, todas `avançado/6–7 d/45 min/limitado`).
+       */
+      { nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' },
     ];
     let semCorte = 0;
     let comCorte = 0;
@@ -391,10 +399,29 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     }
     // ⚠️ ANTI-VACUIDADE: sem grupos medidos o laço acima não prova nada.
     expect(medidos, 'nenhum grande no plano — o cenário degenerou').toBeGreaterThan(3);
-    // 🔒 E quando a meta fica abaixo do topo desejado, o motor DIZ — nunca reduz calado.
-    if (abaixoDoTopo > 0) {
-      expect(r5.avisos.some((a) => /alvo de \d+ séries para .+ não cabe em \d+ exercício/.test(a)),
-        `meta abaixo do topo em ${abaixoDoTopo} grupos, sem frase: ${r5.avisos.join(' | ')}`).toBe(true);
+    /**
+     * 🔵 CONTRATO SUBSTITUÍDO em 2026-09-17 (2ª volta).
+     *
+     * ANTES: *"quando a meta fica abaixo do topo desejado, o motor DIZ"* — cobrava a frase
+     * `alvo de N séries para X não cabe em M exercício(s)`.
+     * AGORA: **a faixa desejada não é meta obrigatória no topo.** Ficar em 12 numa faixa de
+     * 10–14 é estar DENTRO dela, e anunciar insuficiência ali é o defeito que a decisão
+     * fecha (medido: 1 300 das 1 355 emissões da frase antiga saíam com o grupo dentro da
+     * faixa). A frase foi removida do montador.
+     *
+     * O que fica no lugar, e é o que este teste passa a cobrar: **silêncio quando está
+     * dentro da faixa**, e voz quando o volume entregue fica abaixo do MÍNIMO — a voz é a
+     * do guard de cobertura, na conta ponderada, que é o critério pertinente.
+     */
+    expect(r5.avisos.some((a) => /alvo de \d+ séries para .+ não cabe em \d+ exercício/.test(a)),
+      `a frase de insuficiência-por-não-chegar-ao-topo voltou: ${r5.avisos.join(' | ')}`).toBe(false);
+    const abaixoDoMinimo = GRUPOS_GRANDES.filter((g) => (pond5.get(g) ?? 0) < (r5.faixaVolumeSemana?.min ?? 0));
+    // ⚠️ ANTI-VACUIDADE do ramo: o cenário precisa ter grupos abaixo do topo para a asserção
+    // de silêncio significar alguma coisa.
+    expect(abaixoDoTopo, 'nenhum grupo ficou abaixo do topo — o silêncio acima não prova nada').toBeGreaterThan(0);
+    for (const g of abaixoDoMinimo) {
+      expect(r5.avisos.some((a) => a.includes('abaixo do mínimo desta semana') || a.includes('equipamento')),
+        `${g} abaixo do mínimo e sem voz: ${r5.avisos.join(' | ')}`).toBe(true);
     }
   });
 
