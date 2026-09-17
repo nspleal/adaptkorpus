@@ -2154,6 +2154,13 @@ export function montarRotina(
               }
               return true;
             },
+            // A MESMA pergunta que o passe faz na hora de decidir, e não uma segunda régua.
+            trocaNaoEncarece: (sai, entra) => {
+              const antes = d.slots.map((x) => x.exercicio);
+              const depois = antes.map((e) => (e === sai ? entra : e));
+              return ([0, 1, 2] as const).every((deg) =>
+                custoDoDiaParaCobertura(depois, deg) <= custoDoDiaParaCobertura(antes, deg));
+            },
           },
         })).filter((d) => d.naoIdentificados.length > 0 || d.redundanciasMecanicas.length > 0);
         return pendencias.length > 0 ? { coberturaAnatomica: pendencias } : {};

@@ -984,6 +984,8 @@ export function diagnosticarDia(args: {
     slotsLivres: number;
     cabeNoTempo: (novo: Exercise) => boolean;
     cabeNoVolume: (novo: Exercise) => boolean;
+    /** Trocar `sai` por `entra` deixaria o dia MAIS CARO? (a mesma pergunta que o passe faz) */
+    trocaNaoEncarece: (sai: Exercise, entra: Exercise) => boolean;
   };
 }): DiagnosticoAnatomicoDia {
   const desejados = alvosDesejadosDoDia(args.grupos);
@@ -1056,10 +1058,18 @@ export function diagnosticarDia(args: {
     const referencia = iguais[0]!;
     const alternativas = args.elegiveis.filter((e) => e.grupoPrimario === g
       && e.padraoMovimento !== 'cardio' && !idsEscolhidos.includes(e.id) && tarefaDe(e) !== tarefa);
-    const mesmoCusto = alternativas.filter((e) => assinaturaDeCusto(e) === assinaturaDeCusto(referencia));
+    /**
+     * 🔵 Correção 2026-09-17: o custo deixou de ser um veto por PROXY, então o motivo
+     * também deixa. Quando o chamador traz a autoridade de tempo, "custaria outro tempo" só é
+     * dito se NENHUMA alternativa passar pela conta real do dia; sem ela, vale o atalho da
+     * assinatura, como antes. O diagnóstico continua contando a mesma história que a decisão.
+     */
+    const cabeNoTempo = (e: Exercise) => (args.espaco
+      ? args.espaco.trocaNaoEncarece(referencia, e)
+      : assinaturaDeCusto(e) === assinaturaDeCusto(referencia));
     const motivo: MotivoRedundancia = alternativas.length === 0
       ? 'sem_alternativa_no_catalogo_elegivel'
-      : mesmoCusto.length === 0 ? 'alternativa_custaria_outro_tempo' : 'alternativa_mudaria_credito';
+      : !alternativas.some(cabeNoTempo) ? 'alternativa_custaria_outro_tempo' : 'alternativa_mudaria_credito';
     redundanciasMecanicas.push({
       grupo: g,
       ids: iguais.map((e) => e.id),
