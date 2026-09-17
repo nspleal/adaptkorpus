@@ -24,6 +24,10 @@ import type { RotinaSemanal } from '@/lib/engine';
  * sem tom de falha (a ausência de entrega descreve o arranjo, não acusa a pessoa).
  */
 export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | null {
+  const core = rotina?.focoCoreAdicional;
+  if (core) return core.entregues > 0
+    ? `Core em foco: +${core.entregues} série(s) nesta semana nos exercícios existentes, sem cessão de outros grupos.`
+    : 'Core em foco: sem margem conjunta de séries por exercício, volume e tempo para acrescentar nesta semana.';
   const bloco = rotina?.blocoFoco;
   if (bloco) {
     const grupos = bloco.grupos.map(g => ROTULO_GRUPO[g] ?? g).join(' e ');

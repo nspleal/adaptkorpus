@@ -1,3 +1,7 @@
+> Registro histórico do candidato `1390ae25`. A exclusão geral de core e a pendência
+> de decisão de produto abaixo foram superadas pela [correção autorizada](correcao-core-posteriores-2026-09-17.md).
+> As medições originais são preservadas como histórico, não como resultado da nova rodada.
+
 # Seleção complementar na montagem automática — 2026-09-17
 
 > **Candidato, não publicado.** Branch `trabalho/cobertura-complementar`, sobre `origin/main`

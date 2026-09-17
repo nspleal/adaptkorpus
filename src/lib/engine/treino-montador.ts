@@ -1,3 +1,5 @@
+import { adicionarSeriesCore } from './foco-core-adicional';
+import { completarPosteriorDosado } from './complemento-posterior-dosado';
 import { aplicarDoseReferenciada, contextoDaDose } from './referencia-dose';
 import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
 // 🔒 Autoridade única do ajuste temporal: o montador chama a SEQUÊNCIA, nunca uma etapa
@@ -337,7 +339,7 @@ export function montarRotina(
   const focoSolicitado = focoVigente(perfil.foco) ? perfil.foco : undefined;
   const automatico = !perfil.rotinaCustom;
   // Autor14/09: o automático adiciona ao baseline, não usa a cascata de cessão.
-  const foco = focoSolicitado?.compensa && (!automatico || focoSolicitado.grupo === 'core')
+  const foco = focoSolicitado?.compensa && !automatico
     ? {...focoSolicitado,compensa:focoSolicitado.compensa} : undefined;
   const agregado = !focoSolicitado && perfil.focoAgregado && perfil.focoAgregado.semana >= 1
     && perfil.focoAgregado.semana <= FOCO_SEMANAS.max ? perfil.focoAgregado.grupo : undefined;
@@ -871,21 +873,9 @@ export function montarRotina(
         adicao: {
           /** ESTRUTURA: o orçamento de slots do dia é o mesmo do alocador, sem exceção. */
           slotsLivres: (d: number) => Math.max(0, budgetPorDia - diasAlocados[d]!.slots.length),
-          /**
-           * 🔒 A adição não entra em nenhum grupo do FOCO, e NUNCA entra em `core`.
-           *
-           * 🔴 O core é uma exclusão própria, medida: `aplicarFocoCore` distribui o boost
-           * entre os slots de core que existem, e o invariante travado é que esse boost não
-           * mexe no volume total da semana (o compensador cede exatamente o que o core
-           * absorve). Com um slot de core a mais, o core absorve MENOS do que o compensador
-           * cede e o total encolhe — 21 dos 216 cenários de `trilhos.test.ts` caíam assim,
-           * `intermediario/saude/4d` saindo de 72 para 71 séries. Acrescentar em core exige
-           * rever a matemática do foco de core, que é decisão de produto à parte.
-           *
-           * ⚠️ É o motivo de a região mais frequente de todas — o quadrado lombar, 300 das
-           * 659 lacunas medidas — continuar sendo DITA em vez de fechada.
-           */
-          gruposPreservados: [...new Set<GrupoPrimario>([...prioritarios, 'core'])],
+          // Core usa séries adicionais depois do baseline. Sua cobertura pode receber
+          // um slot dentro das margens, independentemente da escolha de foco.
+          gruposPreservados: prioritarios.filter(g => g !== 'core'),
           /**
            * ESTRUTURA DO GRUPO: os MESMOS tetos de slots por semana que `alocarSemana`
            * recebeu — `tetoSlotsSemana` para os pequenos e `CORE_MAX` para o core. Frequência
@@ -976,6 +966,7 @@ export function montarRotina(
    */
 
   function montarSaida(diasTreino: DiaTreino[], split: string, desenhoDaPessoa = false): RotinaSemanal {
+    let focoCoreAdicional: { solicitadas: number; entregues: number } | undefined;
     let blocoFoco: RotinaSemanal['blocoFoco'];
     /**
      * 🔵 A EXCEÇÃO AO TETO POR SESSÃO (decisão de 2026-09-17, 2ª volta) — o que SOBROU depois
@@ -1518,7 +1509,7 @@ export function montarRotina(
        * porque a ordem muda a duração do dia pela transição do último item).
        */
       const reordenarPeloFoco=(dias:readonly DiaTreino[])=>{
-        if(!(prioritarios.length>0&&foco?.grupo!=='core'))return;
+        if(!(prioritarios.length>0&&focoSolicitado?.grupo!=='core'))return;
         const antes=agregado!=null||prioritarios.some(g=>['biceps','triceps','ombros'].includes(g));
         for(const dia of dias){
           dia.slots=antes
@@ -1776,6 +1767,52 @@ export function montarRotina(
        * séries dela são intocáveis — e a frase existe lá, com caso. Quando o excesso fica,
        * quem diz é o crítico do editor (`acima_do_maximo`), como sempre disse.
        */
+      // Autor 17/09: só a dose já distribuída permite avaliar a compensação real.
+      // O teto do baseline não depende do foco. Deload herda a semana cheia; retomada não cresce.
+      if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
+        const complementosPosterior = completarPosteriorDosado({
+          dias: diasTreino, pool, min: sMinDaSemana, max: prescricao.seriesPorExercicio.max,
+          slotsMax: budgetPorDia,
+          tetoSemana: g => Math.min(tetoSemanalGrupo(g), maxSemanalSemFoco(perfil.nivelExperiencia, objetivoDoVolume)),
+          tetoDia: tetoDaSessao ?? 12,
+          materializar: (e, series, d) => ({
+            exercicio: e, padrao: e.padraoMovimento, series,
+            descansoSeg: descansoDoExercicio({ exercicio: e, rirAlvo, modoForca: prescricao.modoForca,
+              degradacao: degradacaoDoDia[d] ?? 0 }) ?? 0,
+            ...(repUnitDe(e.id) === 'segundos' ? { holdSeg: faixaSegundos(e.id, perfil.nivelExperiencia)?.min } : {}),
+          }),
+          cabeNoTempo: (slots) => {
+            const medida = avaliarDuracaoResistida(slots, perfil.nivelExperiencia, limiteDia);
+            return medida.estadoCalculo === 'CALCULADO' && (limiteDia === undefined
+              || (medida.duracaoMaximaEstimadaSegundos ?? Infinity) <= limiteDia);
+          },
+        });
+        for (const mudanca of complementosPosterior) {
+          const soma = (slots: readonly SlotExercicio[]) => slots.reduce((n, slot) => n + (slot.series ?? 0), 0);
+          const novos = mudanca.depois.filter(s => !mudanca.antes.some(a => a.exercicio.id === s.exercicio.id));
+          const retirados = mudanca.antes.filter(s => !mudanca.depois.some(a => a.exercicio.id === s.exercicio.id));
+          const segundos = (slots: readonly SlotExercicio[]) => avaliarDuracaoResistida(slots, perfil.nivelExperiencia).duracaoMaximaEstimadaSegundos;
+          const antes = segundos(mudanca.antes), depois = segundos(mudanca.depois);
+          const custo = antes != null && depois != null ? ` Variação estimada: ${Math.round((depois - antes) / 60)} min.` : '';
+          avisos.push(`Cobertura de posteriores em ${diasTreino[mudanca.dia]!.nome}: ${novos.map(s => s.exercicio.nomePt).join(', ')}${retirados.length ? ` substitui ${retirados.map(s => s.exercicio.nomePt).join(', ')}` : ' adicionado'}. Mais ${soma(mudanca.depois) - soma(mudanca.antes)} série(s) no próprio grupo, preservando o crédito semanal dos demais.${custo}`);
+        }
+      }
+      if (prioritarios.includes('core') && !rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
+        focoCoreAdicional = adicionarSeriesCore({
+          dias: diasTreino, solicitado: 2, tetoPorExercicio: prescricao.seriesPorExercicio.max,
+          aceita: (dias, dia) => {
+            const semana = creditoPonderadoDaSemana(dias.flatMap(d => d.slots));
+            if ([...semana].some(([g, n]) => n > tetoSemanalGrupo(g))) return false;
+            if ([...creditoPonderadoDaSemana(dias[dia]!.slots).values()].some(n => n > (tetoDaSessao ?? 12))) return false;
+            const medida = avaliarDuracaoResistida(dias[dia]!.slots, perfil.nivelExperiencia, limiteDia);
+            return medida.estadoCalculo === 'CALCULADO'
+              && (limiteDia === undefined || (medida.duracaoMaximaEstimadaSegundos ?? Infinity) <= limiteDia);
+          },
+        });
+        avisos.push(focoCoreAdicional.entregues > 0
+          ? `Foco de core: ${focoCoreAdicional.entregues} série(s) adicional(is) nos exercícios existentes, sem retirar séries de outros grupos.`
+          : 'Foco de core: não houve folga conjunta de séries por exercício, volume e tempo para somar trabalho nesta semana.');
+      }
       const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[] as GrupoPrimario[],faltantes:[] as GrupoPrimario[],solicitados:0} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
       diasTreino=bloco.dias;
       /**
@@ -2113,6 +2150,7 @@ export function montarRotina(
       dias: diasEntregues,
       ...(diasNaoAtendidos.length > 0 ? { diasNaoAtendidos } : {}),
       ...(blocoFoco ? {blocoFoco} : {}),
+      ...(focoCoreAdicional ? {focoCoreAdicional} : {}),
       // 🔒 B2: o ramo que agiu vai junto do plano — a tela não recalcula nem adivinha.
       ...(foco && decisaoFoco && diretos(foco.grupo) > 0
         ? { foco: { grupo: foco.grupo, compensa: foco.compensa, degrau: decisaoFoco.degrau, motivo: decisaoFoco.motivo, series: decisaoFoco.series } }

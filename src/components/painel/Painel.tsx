@@ -636,7 +636,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      */
     const focoAntes = perfil.foco;
     let focoDepois = novo.foco;
-    if (focoDepois && focoDepois.grupo !== focoAntes?.grupo && focoDepois.grupo === 'core' && focoDepois.compensa) {
+    if (novo.rotinaCustom && focoDepois && focoDepois.grupo !== focoAntes?.grupo && focoDepois.grupo === 'core' && focoDepois.compensa) {
       /**
        * 🔒 FOCO DE CORE (DF 2026-08-05): mecânica de SÉRIES NOS SLOTS EXISTENTES, com teto
        * de séries por exercício do nível.
@@ -701,7 +701,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       const { treino: ntSemFoco } = recomputarPlano({ ...novo, foco: undefined }, opcoesDoPlano({ pesoEfetivoKg }));
       const efeito = medirEntregaDoFoco(nt, ntSemFoco, focoDepois.grupo);
       if (efeito) {
-        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, ...(focoDepois.compensa ? {compensa: focoDepois.compensa} : {}), entrega: efeito.entrega, delta: efeito.delta });
+        registrarEvento('foco_ativado', { grupo: focoDepois.grupo, ...(novo.rotinaCustom && focoDepois.compensa ? {compensa: focoDepois.compensa} : {}), entrega: efeito.entrega, delta: efeito.delta });
         setAvisoFoco(null);
       }
     }

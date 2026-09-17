@@ -285,7 +285,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
     5,
     6,
     5,
-    4,
+    5,
   ],
   "tempo": 60,
 }
@@ -297,7 +297,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
     5,
     7,
     5,
-    4,
+    5,
   ],
   "tempo": 75,
 }
@@ -309,7 +309,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
     5,
     7,
     5,
-    4,
+    5,
   ],
   "tempo": 90,
 }
@@ -329,7 +329,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > modo força ligado 
   5,
   6,
   5,
-  4,
+  5,
 ]
 `;
 
@@ -363,7 +363,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível intermediari
     5,
     6,
     5,
-    4,
+    5,
   ],
 }
 `;
@@ -375,7 +375,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo emagrecime
     5,
     6,
     5,
-    4,
+    5,
   ],
 }
 `;
@@ -387,7 +387,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo massa, 60 
     5,
     6,
     5,
-    4,
+    5,
   ],
 }
 `;
@@ -399,7 +399,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo saude, 60 
     5,
     6,
     5,
-    4,
+    5,
   ],
 }
 `;
@@ -411,7 +411,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 1 do mesocic
     5,
     6,
     5,
-    4,
+    5,
   ],
 }
 `;

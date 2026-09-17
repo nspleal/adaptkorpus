@@ -1,3 +1,4 @@
+import * as complementoPosterior from './engine/complemento-posterior-dosado';
 import * as blocoFoco from './engine/bloco-foco-adicional';
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -90,6 +91,17 @@ describe('D1 — o canal existe e é verbatim', () => {
  * de entrar em silêncio. (`avisos.push(...avisosCustom)` é repasse, não família própria.)
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
+  ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({objetivo:'saude',nivelExperiencia:'iniciante',diasDisponiveis:3,treinoDias:undefined,foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:2}})],
+  ['core sem margem', /Foco de core: não houve folga/, () => gerar({foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:5}})],
+  ['custo do complemento de posteriores (fixture de dose elegível)', /Cobertura de posteriores.*preservando o crédito semanal/, () => {
+    // Fixture local da fronteira entre dose e passe; a compensação em si tem testes puros.
+    const original=complementoPosterior.completarPosteriorDosado;
+    const spy=vi.spyOn(complementoPosterior,'completarPosteriorDosado').mockImplementation(args=>{
+      for(const d of args.dias)for(const s of d.slots)if(s.exercicio.grupoPrimario==='posterior')s.series=2;
+      return original(args);
+    });
+    try{return gerar({tempoPorSessaoMin:90});}finally{spy.mockRestore();}
+  }],
   ['fullbody sem elegível', /Sem exercício elegível/, () => gerar({equipamento:'nenhum',treinoDias:['seg'],diasDisponiveis:1})],
   ['foco limitado por retomada', /bloco adicional do foco não foi aplicado/, () => gerar({foco:{grupo:'peito',semana:1}}, {semanaCiclo:{semana:3,retomada:{semana:1,fator:0.5,volumeReferencia:14}}})],
   ['segunda exposição adaptada', /Segunda exposição adaptada/, () => gerar({treinoDias:['seg','ter'],diasDisponiveis:2,foco:{grupo:'peito',semana:1}})],
@@ -278,7 +290,8 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     //    chamado pelos dois produtores, para o mesmo fato não ter duas vozes;
     //  + entrou a explicação da SEMANA DE ALÍVIO, que só existia por acidente (o contrato de
     //    `editor-avisos-e-paridade` vinha passando por causa da frase removida acima).
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(44);
+    // 44 → 46: foco de core com dose efetiva e custo da compensação de posteriores.
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(46);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

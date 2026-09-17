@@ -161,10 +161,13 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
      * são a mesma, exercício a exercício, e os dois adicionais do foco seguem na quinta com 2
      * séries cada.
      */
+    // Adição autorizada de cobertura: e102 soma 4 séries no último dia.
+    // Demais quatro dias continuam com os números anteriores; reabertura compara cada slot.
+    expect(r.dias[4]!.slots.find(s => s.exercicio.id === 'e102')?.series).toBe(4);
     expect(r.dias.map((d) => [d.slots.length, d.slots.reduce((n, s) => n + (s.series ?? 0), 0)]))
-      .toEqual([[7, 21], [6, 20], [7, 27], [9, 26], [5, 16]]);
-    expect(total(r)).toBe(110);
-    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(34);
+      .toEqual([[7, 21], [6, 20], [7, 27], [9, 26], [6, 20]]);
+    expect(total(r)).toBe(114);
+    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(35);
     expect(r.dias[0]!.slots.find((s) => s.exercicio.id === 'e130')?.series).toBe(3);
     // Os dois adicionais do foco moram na quinta, com 2 séries cada.
     expect(r.dias[3]!.slots.slice(0, 2).map((s) => [s.exercicio.id, s.series]))
@@ -172,6 +175,6 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
     const custom = json(paraRotinaCustom(abrir(r, PERFIL)));
     const previsto = gerar({ ...PERFIL, rotinaCustom: custom }, semana1);
     expect(dose(previsto)).toEqual(dose(r));
-    expect(total(previsto)).toBe(110);
+    expect(total(previsto)).toBe(114);
   });
 });

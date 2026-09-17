@@ -583,6 +583,8 @@ export interface RotinaSemanal {
    * esta montagem pediu; `adicionais` é o que SOBREVIVEU ao corte temporal. A tela
    * anunciava "2 exercícios adicionais" contando a intenção, inclusive quando o tempo
    * já tinha removido um deles. `adicionais.length < solicitados` ⇒ entrega parcial. */
+  /** Dose adicional de core já validada no plano automático. */
+  focoCoreAdicional?: { solicitadas: number; entregues: number };
   blocoFoco?: {
     grupos: GrupoPrimario[];
     solicitados: number;
