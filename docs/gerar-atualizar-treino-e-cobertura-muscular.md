@@ -277,6 +277,23 @@ A rota de laboratório e o teto rebaixado **foram removidos do candidato**. O ca
 **automático** (`tipo: 'gerar'`, sem desenho salvo) — distinto do excesso do desenho manual, que
 tem teste próprio.
 
+### Verificação dirigida — a recusa parcial do bloco do foco (3ª volta)
+
+Varredura de **5 184 combinações** procurando planos que afirmem "O bloco do foco não entrou"
+enquanto entregam exercício de foco.
+
+| # | conferência | resultado |
+|---|---|---|
+| 1 | células medidas | 5 184 |
+| 2 | células que emitem a frase | 153 |
+| 3 | **células contraditórias (defeito)** | **13** |
+| 4 | natureza | **copy**: `solicitados` (intenção) lido como se fosse `adicionais` (entrega) |
+| 5 | correção | só a frase; dose, alocador e regras do foco intactos |
+| 6 | número dito | passa a vir de `blocoFoco.adicionais` — exercícios **e** séries |
+| 7 | pontos de emissão de aviso | inalterados (2 `push`, agora condicionais) |
+| 8 | regressões | entrega completa · parcial (caso reproduzido) · nenhuma · invariante varrida |
+| 9 | anti-vacuidade | revertendo o motor, ① e ④ caem e ④ reproduz **exatamente 13** |
+
 ### Três defeitos encontrados no QA e corrigidos
 
 1. **"Sem mudança no volume semanal de Core"** — o placar do crítico cobre só os grupos

@@ -24,8 +24,6 @@ remoto herdado) e o contém por inteiro — por isso ela é a base.
 
 ---
 
----
-
 # Terceira volta (2026-09-17) — validação dirigida de `cec4c62`
 
 `cec4c62` foi declarado "só documentação". **Confirmado:** `git diff e1933bd cec4c62` toca dois
@@ -238,6 +236,89 @@ O QA autenticado da segunda volta foi feito em `e1933bd`. A superfície da cober
 idêntica** a `e1933bd` neste candidato — `git diff` vazio. O comportamento QA'do é conservado por
 construção, não por nova inspeção, e a suíte de cobertura segue verde.
 
+## ⓖ A recusa parcial do bloco do foco — investigada até o fim, e corrigida
+
+A 3ª volta deixou uma pendência ambígua ("o bloco do foco contra o seu próprio aviso"). Ela foi
+fechada: **havia defeito atual**, e ele era de **comunicação**, não de dose.
+
+### O mecanismo
+
+O ramo de recusa (`treino-montador.ts`) roda quando **algum** extra é recusado — `extrasRecusados`
+sai do plano e de `bloco.adicionais`. As duas frases desse ramo, porém, afirmavam recusa **total**:
+
+> "O bloco do foco não entrou: somar X aqui levaria Y acima do máximo…"
+
+Quando só **parte** é recusada, o resto continua no plano. `treino-types` já declarava a distinção
+que não chegava à copy — `solicitados` é a INTENÇÃO (quantos extras a montagem pediu),
+`adicionais` é a ENTREGA (o que sobreviveu) —, e a pessoa lia "não entrou" olhando para um
+exercício de foco que está lá, com séries.
+
+### A medição, antes de corrigir
+
+Varredura de **5 184 combinações** sobre `49dab05` (3 objetivos × 3 níveis × 4 agendas × 3
+durações × 2 limites × 4 semanas × 6 focos):
+
+| | |
+|---|---|
+| células medidas | 5 184 |
+| células que emitem a frase | 153 |
+| **células em que `adicionais` não estava vazio** | **13** |
+
+As 13, nominalmente:
+
+| célula | entregue apesar do "não entrou" |
+|---|---|
+| `massa / avançado / 6d / 45min / limitado / S1·S3·S5 / foco=glúteos` | `qui · e60 · 2 séries` (3 células) |
+| `emagrecimento / avançado / 6d / S1 / foco=peito` (45 s/l · 60 lim · 60 s/l · 75 lim · 75 s/l) | `sex · e1 · 2 séries` (5 células) |
+| `emagrecimento / avançado / 6d / S1 / foco=glúteos` (mesmas 5 combinações) | `qui · e59 · 1 série` (5 células) |
+
+### A correção
+
+Só a frase. **Dose, alocador e regras do foco não foram tocados** — o que entra continua sendo
+exatamente o que entrava, e o número dito passa a vir da entrega real (`bloco.adicionais`), nunca
+da intenção. Os dois ramos ganharam a forma parcial:
+
+> "O bloco do foco entrou só em parte — **2 exercícios, com 4 séries**. Somar mais Glúteos levaria
+> Ombros acima do máximo desta semana do seu nível (…), porque esses exercícios também trabalham
+> esse grupo de forma indireta."
+
+O número de pontos de emissão de aviso **não mudou** (dois `avisos.push`, agora condicionais), e o
+tripwire de `veredito-motor` segue no mesmo número.
+
+### As regressões
+
+`foco-entrega-parcial-2026-09-17.test.ts`, com os três estados exigidos e anti-vacuidade em cada
+um — o caso degenerado é recusado explicitamente antes da asserção:
+
+1. **entrega parcial** (o caso reproduzido, `massa/avançado/6d/45min/limitado/S1/foco=glúteos`):
+   a frase não pode dizer "não entrou", tem de dizer "entrou só em parte", e os números ditos têm
+   de bater com `blocoFoco.adicionais`;
+2. **nenhuma entrega**: a frase de recusa total continua idêntica, e não pode falar em parcial;
+3. **entrega completa**: nada é dito sobre recusa nem sobre parcialidade;
+4. **a invariante, varrida**: nenhuma célula pode dizer "o bloco do foco não entrou" enquanto
+   entrega exercício de foco.
+
+**Anti-vacuidade verificada**: revertendo o motor ao estado de `49dab05`, os casos ① e ④ caem — e
+④ reproduz **exatamente 13** células, o mesmo número da varredura de 5 184.
+
+### O que isso resolve nas cinco células de emagrecimento
+
+As 5 células `emagrecimento / avançado / 6d / S3 / foco=peito` da seção ⓓ entregam 2 séries a
+menos sob a ordenação vigente. Agora dá para ser categórico sobre elas:
+
+- **Não há defeito nessas 5 células no candidato.** Sob a ordenação vigente elas caem em recusa
+  **total** (`adicionais = []`), e a frase de recusa total é correta: o baseline já leva ombros ao
+  máximo da semana (16), então qualquer extra de peito — que credita ombros de forma indireta —
+  passaria do teto. Recusar é o que as decisões vigentes mandam ("não cobrar de terceiros",
+  "respeitar o MRV inclusive nos extras do foco").
+- **O que havia de errado era a ordenação ANTIGA**, não a vigente: lá o baseline deixava ombros em
+  15, os 2 extras cabiam exatamente em 16 e **entravam** — e era aí que a frase mentia, dizendo
+  que o bloco não entrara. Esse é o mesmo defeito que as 13 células acima expõem, e que esta volta
+  corrigiu.
+- Portanto as 2 séries a menos são **consequência correta** da nova distribuição do baseline, não
+  perda por bug. A pendência deixa de ser ambígua: **não é defeito aberto**; é diferença de
+  comportamento explicada, com a comunicação agora correta nos dois lados.
+
 ## Limites reais desta volta
 
 - **A exceção automática continua sintética.** Com o teto real de 12 ela não ocorre em nenhuma das
@@ -259,11 +340,13 @@ construção, não por nova inspeção, e a suíte de cobertura segue verde.
 1. 🔺 **RESOLVIDA (2ª volta)** — o resíduo de sessão por crédito indireto.
 2. **A faixa superior inalcançável** — *segue aberta*, inalterada por esta volta.
 3. **O desempate por secundários** — *segue aberta*, e esta volta **quantificou-a também fora da
-   hipertrofia*: 42 células de emagrecimento e 12 de saúde mudam de distribuição, com 14 avisos de
+   hipertrofia**: 42 células de emagrecimento e 12 de saúde mudam de distribuição, com 14 avisos de
    grupo abaixo do mínimo a menos e nenhum a mais.
-4. **NOVA — o bloco do foco contra o seu próprio aviso.** Nas 5 células de emagrecimento acima, a
-   ordem antiga entregava 2 extras enquanto o plano dizia que o bloco não entrara. A ordem vigente
-   faz os dois concordarem, entregando 0. Qual das duas é a intenção é decisão do autor.
+4. ~~O bloco do foco contra o seu próprio aviso.~~ **RESOLVIDA nesta volta, e não era decisão:
+   era defeito de copy.** Medido em 13 de 5 184 células, corrigido só na frase (dose, alocador e
+   regras do foco intactos) e travado por quatro regressões com anti-vacuidade. Ver ⓖ. Nas 5
+   células de emagrecimento da seção ⓓ **não há defeito**: elas caem em recusa total, onde a
+   frase sempre esteve certa, e as 2 séries a menos são consequência correta do baseline novo.
 
 ---
 

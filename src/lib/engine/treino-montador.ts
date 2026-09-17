@@ -1729,12 +1729,39 @@ export function montarRotina(
           : !barrouSemana&&barrouSessao
             ? {em:`no máximo de um treino só`,de:`do máximo de um treino só`,n:`(${tetoDaSessao} séries por grupo num mesmo dia, somando diretas e indiretas)`}
             : {em:`nos limites desta semana`,de:`dos limites desta semana`,n:`(${tetoSemanalGrupo(g)} na semana e ${tetoDaSessao} num mesmo dia, somando diretas e indiretas)`};
+        /**
+         * 🔴 ENTREGA PARCIAL NÃO É RECUSA TOTAL (2026-09-17, 3ª volta).
+         *
+         * ⚠️ O defeito: este ramo roda quando ALGUM extra foi recusado, e as duas frases
+         * afirmavam que o bloco do foco NÃO ENTROU. Quando só parte dele é recusada, o que
+         * sobrou continua no plano e em `bloco.adicionais` — e a pessoa lia "não entrou"
+         * olhando para um exercício de foco que está lá.
+         *
+         * 🔒 MEDIDO, não suposto: varredura de 5 184 combinações (3 objetivos × 3 níveis ×
+         * 4 agendas × 3 durações × 2 limites × 4 semanas × 6 focos) no candidato `49dab05`.
+         * A frase sai em 153 células; em **13** delas `adicionais` não estava vazio —
+         * `massa/avançado/6d/45min/limitado` com foco em glúteos (S1, S3, S5) e
+         * `emagrecimento/avançado/6d/S1` com foco em peito e em glúteos, nas quatro
+         * combinações de tempo e limite.
+         *
+         * 🔒 A correção é de COMUNICAÇÃO. Dose, alocador e regras do foco não são tocados: o
+         * que entrou continua exatamente o que entrava. Muda o que se diz sobre isso, e o
+         * número dito vem da entrega real (`bloco.adicionais`), não da intenção
+         * (`solicitados`) — a distinção que `treino-types` já declara.
+         */
+        const entregues=[...bloco.adicionais];
+        const seriesEntregues=entregues.reduce((n,s)=>n+(s.series??0),0);
+        const quantoEntrou=`${entregues.length} ${plural(entregues.length,'exercício','exercícios')}, com ${seriesEntregues} ${plural(seriesEntregues,'série','séries')}`;
         if(terceiros.length===0){
           const q=qual(recusados[0]!);
-          avisos.push(`O volume de ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} já está ${q.em} do seu nível ${q.n}. Nesta semana o foco entra na ORDEM dos exercícios, não em séries a mais.`);
+          avisos.push(entregues.length>0
+            ? `O bloco do foco entrou só em parte — ${quantoEntrou}. O resto não coube: o volume de ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} já está ${q.em} do seu nível ${q.n}.`
+            : `O volume de ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} já está ${q.em} do seu nível ${q.n}. Nesta semana o foco entra na ORDEM dos exercícios, não em séries a mais.`);
         } else {
           const q=qual(terceiros[0]!);
-          avisos.push(`O bloco do foco não entrou: somar ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} aqui levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima ${q.de} do seu nível ${q.n}, porque esses exercícios também trabalham esse grupo de forma indireta. Nesta semana o foco entra na ORDEM dos exercícios.`);
+          avisos.push(entregues.length>0
+            ? `O bloco do foco entrou só em parte — ${quantoEntrou}. Somar mais ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima ${q.de} do seu nível ${q.n}, porque esses exercícios também trabalham esse grupo de forma indireta.`
+            : `O bloco do foco não entrou: somar ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} aqui levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima ${q.de} do seu nível ${q.n}, porque esses exercícios também trabalham esse grupo de forma indireta. Nesta semana o foco entra na ORDEM dos exercícios.`);
         }
       }
       if(extrasAparados>0)avisos.push('O bloco do foco entrou com menos séries do que o previsto para não passar dos limites de volume desta semana — nem o da semana, nem o de um treino só.');
