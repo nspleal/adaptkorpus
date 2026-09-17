@@ -299,9 +299,52 @@ describe('🦴 a cobertura muscular: o que a tela pode afirmar', () => {
     for (const h of botoes) expect(h).toBeGreaterThanOrEqual(44);
   });
 
-  it('fica fechada por padrão — resumo legível, detalhe sob demanda', () => {
-    expect(cobertura).toMatch(/<details style=\{\{ marginTop: 10/);
-    expect(/<details[^>]*\bopen\b/.test(cobertura), 'a cobertura passou a abrir sozinha').toBe(false);
+  /**
+   * 🔵 SUBSTITUI «fica fechada por padrão» (correção 2026-09-17, do relato "a cobertura não
+   * apareceu").
+   *
+   * ⛔️ O que a redação anterior travava: `<details>` SEM `open`, sempre. Medido no relato: a
+   * leitura só aparecia para quem já sabia que ela existia — sumário de baixo contraste, logo
+   * abaixo do botão verde de largura cheia que fecha visualmente o cartão do dia.
+   *
+   * ✅ O que passa a valer: ela abre quando há o que FAZER (região sem exercício
+   * identificado) e continua fechada quando não há — aí é confirmação, não tarefa. E abrir
+   * continua não sendo agir: nada entra no desenho sem um toque da pessoa (o guard de
+   * `onAdicionar` e o de `useEffect` seguem logo acima).
+   */
+  it('abre quando há região sem exercício, e fica fechada quando não há', () => {
+    expect(cobertura).toMatch(/<details open=\{cobertura\.semExercicio > 0\}/);
+    // 🔒 Nada de `open` incondicional: a abertura é DERIVADA do conteúdo, não um default novo.
+    expect(/<details\s+open(\s|>)/.test(cobertura), 'a cobertura passou a abrir sempre').toBe(false);
+  });
+
+  /**
+   * 🔴 O BLOCO NÃO SOME (mesma correção). Ausência é indistinguível de quebrado: com o dia
+   * vazio — que é como a pessoa abre o editor pela primeira vez — ele devolvia `null`.
+   */
+  it('o dia VAZIO ainda mostra o bloco, dizendo o que vai aparecer', () => {
+    expect(cobertura).toMatch(/Assim que você adicionar exercícios a este dia/);
+    expect(/if \(escolhidos\.length === 0 \|\| cobertura\.grupos\.length === 0\) return null;/.test(cobertura),
+      'o bloco voltou a sumir com o dia vazio').toBe(false);
+  });
+
+  /** 🔵 E ela mora ANTES do botão de adicionar, colada na lista que descreve. */
+  it('a cobertura vem antes do botão "+ Adicionar exercícios" no cartão do dia', () => {
+    const iCobertura = editor.indexOf('<CoberturaMuscular');
+    const iBotao = editor.indexOf('+ Adicionar exercícios');
+    expect(iCobertura, 'a cobertura não é montada no editor').toBeGreaterThan(-1);
+    expect(iBotao, 'o botão de adicionar sumiu do editor').toBeGreaterThan(-1);
+    expect(iCobertura, 'a cobertura voltou para depois do botão').toBeLessThan(iBotao);
+  });
+
+  /** 🔵 E a consequência de aceitar uma sugestão diz os LIMITES, não só tempo e séries. */
+  it('o efeito de adicionar nomeia os dois tetos, sem confundi-los', () => {
+    expect(cobertura).toMatch(/passaria do teto de volume da semana deste grupo/);
+    expect(cobertura).toMatch(/ficaria acima do que o app monta sozinho na semana, ainda dentro do teto/);
+    expect(cobertura).toMatch(/passaria do máximo deste grupo num treino só/);
+    // 🔒 Os números vêm do crítico, não de uma conta da tela.
+    expect(editor).toMatch(/acima_do_maximo_na_sessao/);
+    expect(editor).toMatch(/linhaDepois\.status === 'acima_mrv'/);
   });
 });
 

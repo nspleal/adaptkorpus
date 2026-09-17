@@ -28,12 +28,22 @@ remoto herdado) e contém tudo o que havia na branch anterior desta sessão — 
 | "Gerar novo treino" com prévia e confirmação | ✅ candidato | `lib/proposta-treino.ts` · `painel/PropostaTreino.tsx` |
 | "Atualizar treino" preservando o compatível | ✅ candidato | `lib/proposta-treino.ts` (`atualizarDesenho`) |
 | Variedade só entre alternativas válidas | ✅ candidato | `engine/alocador.ts` (`variacao`) · `perfil.variacaoTreino` |
-| Cobertura muscular por dia e por grupo no editor | ✅ candidato | `engine/cobertura-editor.ts` · `painel/CoberturaMuscular.tsx` |
+| Cobertura muscular por dia e por grupo no editor | ✅ candidato · **defeitos de descoberta corrigidos em 2026-09-17** | `engine/cobertura-editor.ts` · `painel/CoberturaMuscular.tsx` |
 | Sugestões com consequência pelo cálculo existente | ✅ candidato | `EditorTreino · efeitoDeAdicionar` |
 | Recusa de proposta desatualizada | ✅ candidato | `proposta-treino.ts` (`assinaturaDasEntradas`) · `Painel · aplicarProposta` |
 | Condicional: "Depende da execução; não confirmado" | ✅ candidato | `lib/condicao-execucao-copy.ts` |
 | Telemetria das duas ações | ⏳ **não feito, de propósito** | ver *Limites* |
 | Publicação | ⏳ não feita | — |
+| Política de volume da hipertrofia (faixa desejada × teto × teto de sessão) | 🔵 **substituída em 2026-09-17** | `docs/politica-de-volume-hipertrofia-2026-09-17.md` |
+
+> 🔵 **2026-09-17 — o que desta leva foi substituído.** A decisão de volume da hipertrofia separou
+> a faixa DESEJADA do TETO e criou um teto por sessão (12 ponderadas por grupo). Com isso: o
+> volume entregue caiu (≈ um exercício a menos por dia nas células de massa), o bloco do foco
+> passou a ter efeito real (antes ele era recusado por já estar no teto), e a cobertura muscular
+> do editor ganhou três correções de descoberta — ela não some mais com o dia vazio, subiu para
+> antes do botão de adicionar e abre sozinha quando há região sem exercício identificado. Os
+> números desta página que citam `13–16`, `16` ou `MRV` descrevem o estado ANTERIOR e ficam como
+> histórico. Ver o registro novo.
 
 ## 1. As duas ações do treino
 

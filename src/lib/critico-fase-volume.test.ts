@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { recomputarPlano } from './plano';
 import { avaliarSemana, type DiaDoEditor } from './engine/critico';
-import { mev, mrv } from './engine/trilhos';
+import { faixaSemanal, maxSemanalSemFoco, mev, mrv } from './engine/trilhos';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { RotinaSemanal } from './engine/treino-types';
 
@@ -42,23 +42,61 @@ const deficits = (a: ReturnType<typeof criticar>) => a.recomendacoes.filter((i) 
 const deficitsDoMotor = (r: RotinaSemanal) => r.avisos.filter((a) => a.includes('abaixo do mínimo'));
 
 describe('o motor PUBLICA a faixa da semana', () => {
-  it('semana normal: a faixa é a do nível/objetivo, e a fase é `normal`', () => {
+  /**
+   * 🔵 SUBSTITUIÇÃO EXPLÍCITA (2026-09-17). Antes: `faixaVolumeSemana = {mev, mrv}`. A
+   * decisão separou os papéis — a faixa publicada é a DESEJADA (o alvo da rampa) e os TETOS
+   * viajam em `tetoVolumeSemana`. Cobrar `max === mrv` aqui reintroduziria a leitura que a
+   * decisão remove.
+   */
+  it('semana normal: a faixa é a DESEJADA do nível/objetivo, e a fase é `normal`', () => {
     const r = plano(perfil(), { semanaCiclo: { semana: 3 } });
     expect(r.faseVolume).toBe('normal');
-    expect(r.faixaVolumeSemana).toEqual({ min: mev('intermediario', 'massa'), max: mrv('intermediario', 'massa') });
+    expect(r.faixaVolumeSemana).toEqual(faixaSemanal('intermediario', 'massa'));
+    expect(r.faixaVolumeSemana).toEqual({ min: mev('intermediario', 'massa'), max: 14 });
+    // 🔵 E os TETOS vêm ao lado, já com foco e fase resolvidos.
+    expect(r.tetoVolumeSemana).toEqual({
+      semFoco: maxSemanalSemFoco('intermediario', 'massa'),
+      cheio: mrv('intermediario', 'massa'),
+      sessao: 12,
+      gruposEmFoco: [],
+    });
+  });
+
+  /** 🔵 Com foco, o grupo nomeado — e só ele — alcança o teto cheio. */
+  it('com foco: `gruposEmFoco` traz quem a pessoa nomeou, e os tetos continuam os do nível', () => {
+    const r = plano(perfil({ foco: { grupo: 'peito', compensa: 'ombros', semana: 2 } }), { semanaCiclo: { semana: 3 } });
+    expect(r.tetoVolumeSemana?.gruposEmFoco).toEqual(['peito']);
+    expect(r.tetoVolumeSemana?.cheio).toBe(19);
+    expect(r.tetoVolumeSemana?.semFoco).toBe(16);
   });
 
   it('🔴 deload: a faixa é a REDUZIDA de `aplicarDeload`, não a terminal', () => {
     const r = plano(perfil(), { semanaCiclo: { semana: 6 } });
     expect(r.faseVolume).toBe('deload');
     expect(r.faixaVolumeSemana!.min, 'a faixa do deload continua sendo a terminal').toBeLessThan(mev('intermediario', 'massa'));
-    expect(r.faixaVolumeSemana!.max).toBeLessThan(mrv('intermediario', 'massa'));
+    expect(r.faixaVolumeSemana!.max).toBeLessThan(14);
+    /**
+     * 🔵 O TETO DA FASE MANDA, e a margem de 3 NÃO é subtraída de novo (2026-09-17).
+     * A dose já reduzida é o teto; `semFoco` e `cheio` colapsam nela porque o menor vence.
+     */
+    const reduzido = r.faixaVolumeSemana!.max;
+    expect(r.tetoVolumeSemana!.semFoco).toBe(reduzido);
+    expect(r.tetoVolumeSemana!.cheio).toBe(reduzido);
+    expect(r.tetoVolumeSemana!.semFoco, 'nada de 2ª subtração de 3').not.toBe(reduzido - 3);
   });
 
-  it('🔴 retomada: o piso é o alvo de `volumeDaRetomada`; o TETO não se mexe', () => {
+  it('🔴 retomada: o piso é o alvo de `volumeDaRetomada`; a faixa desejada não se mexe', () => {
     const r = plano(perfil(), { semanaCiclo: { semana: 1, retomada: { semana: 1, fator: 0.5, volumeReferencia: 16 } } });
     expect(r.faseVolume).toBe('retomada');
-    expect(r.faixaVolumeSemana).toEqual({ min: 8, max: mrv('intermediario', 'massa') });
+    expect(r.faixaVolumeSemana).toEqual({ min: 8, max: faixaSemanal('intermediario', 'massa').max });
+    /**
+     * 🔵 A retomada não aplica o bloco do foco, então ninguém alcança o teto cheio nela —
+     * `gruposEmFoco` sai vazio mesmo com foco no perfil. Os guarda-corpos próprios da fase
+     * (frequência, IRV, alvo do grupo) continuam mandando por cima.
+     */
+    const comFoco = plano(perfil({ foco: { grupo: 'peito', compensa: 'ombros', semana: 2 } }),
+      { semanaCiclo: { semana: 1, retomada: { semana: 1, fator: 0.5, volumeReferencia: 16 } } });
+    expect(comFoco.tetoVolumeSemana?.gruposEmFoco).toEqual([]);
   });
 });
 

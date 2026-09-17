@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
-import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao } from '@/lib/engine/treino-types';
+import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao, RotinaSemanal } from '@/lib/engine/treino-types';
 import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
@@ -83,6 +83,8 @@ export interface PrevisaoEditor {
   fatosInvariantes?: FatoInvariantePadrao[];
   /** A faixa REALMENTE aplicável nesta semana (deload/retomada mudam a régua). */
   faixaVolumeSemana?: Faixa;
+  /** 🔵 Os três tetos desta semana, como o motor os publicou (decisão 2026-09-17). */
+  tetoVolumeSemana?: RotinaSemanal['tetoVolumeSemana'];
   faseVolume?: FaseVolume;
   /**
    * 🔒 O TEMPO de cada dia, na ordem dos dias com exercício, como o MOTOR o certificou.
@@ -254,6 +256,7 @@ export default function EditorTreino({
       // acusações de "faixa mínima desta semana" usando o piso terminal do mesociclo.
       ...(semana != null ? { semana } : {}),
       ...(p.faixaVolumeSemana ? { faixaSemanal: p.faixaVolumeSemana } : {}),
+      ...(p.tetoVolumeSemana ? { tetoVolumeSemana: p.tetoVolumeSemana } : {}),
       ...(p.faseVolume ? { faseVolume: p.faseVolume } : {}),
       diasDaSemanaIdx: comExercicio.slice(0, p.dias.length).map((d) => d.weekdayIdx),
     });
@@ -267,6 +270,7 @@ export default function EditorTreino({
       nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino,
       ...(semana != null ? { semana } : {}),
       ...(previsao.faixaVolumeSemana ? { faixaSemanal: previsao.faixaVolumeSemana } : {}),
+      ...(previsao.tetoVolumeSemana ? { tetoVolumeSemana: previsao.tetoVolumeSemana } : {}),
       ...(previsao.faseVolume ? { faseVolume: previsao.faseVolume } : {}),
       diasDaSemanaIdx: dias.filter((d) => d.exercicios.length > 0).slice(0, previsto.length).map((d) => d.weekdayIdx),
     }),
@@ -308,12 +312,29 @@ export default function EditorTreino({
     };
     const antesSeries = seriesDoDia(previsao);
     const depoisSeries = seriesDoDia(depois.previsao);
+    /**
+     * 🔵 OS LIMITES DEPOIS DE ADICIONAR (2026-09-17) — pelo MESMO crítico, nunca por conta
+     * própria. `passaDoSemanal` sai do status do placar (que já distingue "acima do que o app
+     * monta sozinho" de "acima do teto") e `passaDoTetoDaSessao` do aviso por sessão, casado
+     * pelo fato (grupo + dia), não pelo texto.
+     */
+    const passaDoSemanal = linhaDepois == null
+      ? null
+      : linhaDepois.status === 'acima_mrv'
+        ? 'teto' as const
+        : linhaDepois.status === 'acima_do_automatico'
+          ? 'automatico' as const
+          : 'nao' as const;
+    const passaDoTetoDaSessao = depois.avaliacao.avisos.some((a) => a.codigo === 'acima_do_maximo_na_sessao'
+      && a.fato?.grupo === grupo && a.fato?.dia === posicao);
     return {
       deltaSegundos: antesSeg == null || depoisSeg == null ? null : depoisSeg - antesSeg,
       deltaSeriesNoDia: antesSeries == null || depoisSeries == null ? null : depoisSeries - antesSeries,
       deltaSeriesDoGrupo: semanal,
       grupo: linhaDepois?.rotulo ?? linhaAntes?.rotulo ?? ROTULO_GRUPO[grupo ?? ''] ?? (grupo ?? 'grupo'),
       excedeOTempo: depois.previsao.excedeTempoPorDia?.[posicao] === true,
+      passaDoSemanal,
+      passaDoTetoDaSessao,
     };
   }, [dias, avaliarDesenho, previsao, avaliacao]);
 
@@ -400,11 +421,15 @@ export default function EditorTreino({
                 </>
               )}
             </OrdemExercicios>
-            <button onClick={() => setAbrindoEm(i)} style={{ ...btnGhost, width: '100%', background: '#BDFF00', color: '#0D2818', minHeight: 48 }}>+ Adicionar exercícios</button>
             {/* 🦴 A cobertura muscular DESTE dia, ao vivo. Diagnóstico: não trava o salvamento,
                 não adiciona nada sozinha e não repete o crítico (ela fala de REGIÕES, não de
                 volume, tempo ou fase). O que entra, entra por um toque da pessoa — e pelo
-                mesmo `adicionarSemDuplicar` do seletor. */}
+                mesmo `adicionarSemDuplicar` do seletor.
+
+                🔵 2026-09-17 — ela subiu para ANTES do botão de adicionar. Depois dele, no
+                celular, o botão verde de largura cheia fechava visualmente o cartão do dia e
+                a cobertura virava rodapé: é o defeito de descoberta do relato "não apareceu".
+                Aqui ela fica colada na lista que descreve, e o botão continua logo abaixo. */}
             <CoberturaMuscular
               nomeDoDia={d.nome}
               escolhidos={d.exercicios}
@@ -412,6 +437,7 @@ export default function EditorTreino({
               onAdicionar={(ex) => mut(i, (dia) => ({ ...dia, exercicios: adicionarSemDuplicar(dia.exercicios, [ex]).lista }))}
               efeitoDe={(ex) => efeitoDeAdicionar(i, ex)}
             />
+            <button onClick={() => setAbrindoEm(i)} style={{ ...btnGhost, width: '100%', marginTop: 10, background: '#BDFF00', color: '#0D2818', minHeight: 48 }}>+ Adicionar exercícios</button>
           </div>
         ))}
 
@@ -506,7 +532,7 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
           <div style={{ fontSize: '.76rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 9 }}>Sua semana</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: visiveis.length || avisos.length ? 13 : 0 }}>
             {placar.map((l) => (
-              <span key={l.grupo} title={`${l.ponderado} de ${l.mev}–${l.mrv} séries`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.8rem', fontWeight: 600, border: `1px solid ${corDoStatus(l.status).borda}`, color: corDoStatus(l.status).texto, borderRadius: 999, padding: '5px 10px' }}>
+              <span key={l.grupo} title={`${l.ponderado} séries · faixa ${l.mev}–${l.maxAutomatico} · teto ${l.mrv}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.8rem', fontWeight: 600, border: `1px solid ${corDoStatus(l.status).borda}`, color: corDoStatus(l.status).texto, borderRadius: 999, padding: '5px 10px' }}>
                 {corDoStatus(l.status).marca} {l.rotulo} <span style={{ opacity: 0.7, fontWeight: 500 }}>{l.ponderado}</span>
               </span>
             ))}
@@ -619,6 +645,9 @@ function Linha({ item }: { item: ItemCritico }) {
 const corDoStatus = (s: string) =>
   s === 'na_banda' ? { marca: '🟢', borda: 'rgba(22,163,74,.45)', texto: 'rgba(234,229,219,.9)' }
   : s === 'acima_mrv' ? { marca: '🔴', borda: 'rgba(229,72,77,.45)', texto: '#E5484D' }
+  // 🔵 Acima do que o app monta sozinho e ainda dentro do teto — âmbar, não vermelho: é
+  // escolha da pessoa, não limite ultrapassado.
+  : s === 'acima_do_automatico' ? { marca: '🟡', borda: 'rgba(234,179,8,.45)', texto: '#EAB308' }
   : { marca: '⚪', borda: 'rgba(234,229,219,.2)', texto: 'rgba(234,229,219,.62)' };
 
 const btnGhost: CSSProperties = {

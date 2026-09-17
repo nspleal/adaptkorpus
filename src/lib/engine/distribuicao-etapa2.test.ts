@@ -9,6 +9,11 @@ const base:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAma
 const agendas:Record<number,Weekday[]>={1:['seg'],2:['seg','qui'],3:['seg','qua','sex'],4:['seg','ter','qui','sex'],5:['seg','ter','qua','sex','sab'],6:['seg','ter','qua','qui','sex','sab'],7:[...ORDEM_SEMANA]};
 function run(n:number,f?:'bracos'|'pernas'|'peito'|'costas'|'antebraco',over:Partial<PerfilTreino>={}){return gerarTreino({...base,diasDisponiveis:n,treinoDias:agendas[n],...(f==='bracos'||f==='pernas'?{focoAgregado:{grupo:f,semana:1}}:f?{foco:{grupo:f,compensa:f==='peito'?'costas':'peito',semana:1}}:{}),...over},{exercises:EXERCISES,semanaCiclo:{semana:1}}).rotina!;}
 const grupos=(r:ReturnType<typeof run>)=>r.dias.map(d=>d.slots.map(s=>s.exercicio.grupoPrimario));
+/**
+ * 🔵 2026-09-17 — a recusa do bloco do foco passou a NOMEAR a restrição (teto da semana,
+ * teto de um treino só, ou os dois). A regex acompanha as três formas.
+ */
+const RECUSA_EXPLICADA=/acima d[oa]s? (m[áa]ximo|limites)|j[áa] est[áa] n[oa]s? (m[áa]ximo|limites)/;
 describe('etapa2: possibilidades na saída final',()=>{
  it('3 sem foco: peito/tríceps, costas/bíceps e pernas com ombros',()=>{
   const gs=grupos(run(3));expect(gs.filter(g=>g.includes('quadriceps')||g.includes('posterior'))).toHaveLength(1);
@@ -34,7 +39,7 @@ describe('etapa2: possibilidades na saída final',()=>{
    const gs=grupos(r);
    const entregues=(r.blocoFoco?.adicionais??[]).length;
    if(entregues>0)expect(gs.filter(g=>g.includes(rot)),`${n}d/${foco}: bloco entregue sem segunda sessão`).toHaveLength(2);
-   else expect(r.avisos.some(a=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),`${n}d/${foco}: sem segunda sessão e sem explicação`).toBe(true);
+   else expect(r.avisos.some(a=>RECUSA_EXPLICADA.test(a)),`${n}d/${foco}: sem segunda sessão e sem explicação: ${r.avisos.join(' | ')}`).toBe(true);
   }
   const p=grupos(run(n,'peito')),c=grupos(run(n,'costas'));
   expect(p).not.toEqual(c);
@@ -90,7 +95,15 @@ describe('etapa2: contratos no seletor atual, sem fixture histórica',()=>{
  });
  it('7 dias conserva teto de força e oferece recuperação',()=>{
   const r=run(7,'peito');expect(r.dias.length).toBeLessThanOrEqual(6);expect(r.diasCardioRecuperacao).toBeGreaterThanOrEqual(1);
-  expect(grupos(r).filter(g=>g.includes('peito'))).toHaveLength(2);
+  /**
+   * 🔵 2026-09-17 — a segunda sessão do foco depende de o bloco ENTRAR, e com os dois tetos
+   * valendo ao mesmo tempo ele pode ser recusado. A propriedade é a mesma do caso acima:
+   * entregou ⇒ duas sessões; não entregou ⇒ a tela DIZ por quê. Antes o teste afirmava as
+   * duas sessões sem condição, o que hoje seria cobrar uma entrega que a política recusa.
+   */
+  const entregues=(r.blocoFoco?.adicionais??[]).length;
+  if(entregues>0)expect(grupos(r).filter(g=>g.includes('peito'))).toHaveLength(2);
+  else expect(r.avisos.some(a=>RECUSA_EXPLICADA.test(a)),`sem segunda sessão e sem explicação: ${r.avisos.join(' | ')}`).toBe(true);
  });
  it('focos individuais, restrições e equipamento: presença real ou limite dito',()=>{
   for(const grupo of ['ombros','biceps','triceps','quadriceps','posterior','gluteos','panturrilha','core','antebraco'] as const)
@@ -141,7 +154,10 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
   expect(y.get('peito')).toBe(x.get('peito')!+entregue);
   expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0)+entregue);
   expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito']);
-  // e o teto duro fechou a conta: o focado nunca passa da banda, na régua canônica.
-  expect(creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')).toBeLessThanOrEqual(b.faixaVolumeSemana!.max);
+  // 🔵 2026-09-17 — o teto do FOCADO é o CHEIO, não o topo da faixa desejada: é exatamente a
+  // margem que a decisão deu a ele. `faixaVolumeSemana.max` virou o alvo, e não serve de limite.
+  const t=b.tetoVolumeSemana!;
+  expect(t.gruposEmFoco).toContain('peito');
+  expect(creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')).toBeLessThanOrEqual(t.cheio);
  });
 });

@@ -36,6 +36,22 @@ export interface SlotPonderavel {
 const ehGrande = (g: GrupoPrimario | null | undefined): g is GrupoPrimario =>
   g != null && (GRUPOS_GRANDES as readonly string[]).includes(g);
 
+/**
+ * 🔵 O TETO É POR GRUPO (decisão 2026-09-17) — um número só deixou de bastar.
+ *
+ * Com a margem de 3, o grupo EM FOCO tem teto cheio (13/19/21) e os demais param no máximo
+ * automático (10/16/18) NA MESMA semana. Um teto escalar obrigaria quem chama a rodar a poda
+ * duas vezes, com dois conjuntos de slots — e o crédito ponderado é do plano INTEIRO, então
+ * o total de cada passada seria falso. Quem decide o teto de cada grupo é `tetoSemanalDoGrupo`
+ * (em `trilhos.ts`); aqui só se lê o que ele devolve.
+ *
+ * O número simples continua aceito: é o mesmo teto para todos os grupos.
+ */
+export type TetoPorGrupo = number | ((grupo: GrupoPrimario) => number);
+
+const tetoDe = (teto: TetoPorGrupo, grupo: GrupoPrimario): number =>
+  (typeof teto === 'number' ? teto : teto(grupo));
+
 /** O crédito ponderado atual, na conta canônica. Reexportado para o chamador não duplicar import. */
 export function creditoAtual(slots: readonly SlotPonderavel[]): Map<GrupoPrimario, number> {
   return creditoPonderadoDaSemana(slots);
@@ -47,10 +63,10 @@ export function creditoAtual(slots: readonly SlotPonderavel[]): Map<GrupoPrimari
  */
 export function folgaAteOTeto(
   credito: ReadonlyMap<GrupoPrimario, number>,
-  teto: number,
+  teto: TetoPorGrupo,
 ): Map<GrupoPrimario, number> {
   const folga = new Map<GrupoPrimario, number>();
-  for (const g of GRUPOS_GRANDES) folga.set(g, teto - (credito.get(g) ?? 0));
+  for (const g of GRUPOS_GRANDES) folga.set(g, tetoDe(teto, g) - (credito.get(g) ?? 0));
   return folga;
 }
 
@@ -65,13 +81,13 @@ export function seriesQueCabemNoTeto(
   exercicio: Exercise,
   desejadas: number,
   credito: ReadonlyMap<GrupoPrimario, number>,
-  teto: number,
+  teto: TetoPorGrupo,
 ): number {
   const primario = exercicio.grupoPrimario;
   const secundarios = secundariosDe(exercicio).filter(ehGrande);
   for (let n = Math.max(0, Math.trunc(desejadas)); n > 0; n -= 1) {
-    const cabePrimario = !ehGrande(primario) || (credito.get(primario) ?? 0) + n <= teto;
-    const cabeIndireto = secundarios.every((g) => (credito.get(g) ?? 0) + n * PESO_SECUNDARIO <= teto);
+    const cabePrimario = !ehGrande(primario) || (credito.get(primario) ?? 0) + n <= tetoDe(teto, primario);
+    const cabeIndireto = secundarios.every((g) => (credito.get(g) ?? 0) + n * PESO_SECUNDARIO <= tetoDe(teto, g));
     if (cabePrimario && cabeIndireto) return n;
   }
   return 0;
@@ -88,13 +104,13 @@ export function seriesQueCabemNoTeto(
 export function gruposSemEspaco(
   exercicio: Exercise,
   credito: ReadonlyMap<GrupoPrimario, number>,
-  teto: number,
+  teto: TetoPorGrupo,
 ): GrupoPrimario[] {
   const primario = exercicio.grupoPrimario;
   const sem: GrupoPrimario[] = [];
-  if (ehGrande(primario) && (credito.get(primario) ?? 0) + 1 > teto) sem.push(primario);
+  if (ehGrande(primario) && (credito.get(primario) ?? 0) + 1 > tetoDe(teto, primario)) sem.push(primario);
   for (const g of secundariosDe(exercicio)) {
-    if (ehGrande(g) && (credito.get(g) ?? 0) + PESO_SECUNDARIO > teto && !sem.includes(g)) sem.push(g);
+    if (ehGrande(g) && (credito.get(g) ?? 0) + PESO_SECUNDARIO > tetoDe(teto, g) && !sem.includes(g)) sem.push(g);
   }
   return sem;
 }
@@ -146,7 +162,7 @@ export interface PodaPonderada {
  */
 export function podarExcessoPonderado(
   slots: readonly SlotPonderavel[],
-  teto: number,
+  teto: TetoPorGrupo,
   seriesMinimas: number,
   /**
    * 🔒 Quem PODE ceder série. Recebe TODOS os slots (o crédito ponderado é do plano
@@ -171,7 +187,7 @@ export function podarExcessoPonderado(
   for (let volta = 0; volta < maxVoltas; volta += 1) {
     const credito = creditoPonderadoDaSemana(slots);
     const excedido = GRUPOS_GRANDES.find(
-      (g) => (credito.get(g) ?? 0) > teto && !irredutiveis.includes(g),
+      (g) => (credito.get(g) ?? 0) > tetoDe(teto, g) && !irredutiveis.includes(g),
     );
     if (!excedido) break;
     const candidatos = slots.filter(
@@ -189,4 +205,49 @@ export function podarExcessoPonderado(
     podados: [...podados].map(([grupo, series]) => ({ grupo, series })),
     irredutiveis,
   };
+}
+
+/**
+ * 🔒 A MARCA da frase da poda POR SESSÃO — irmã de `MARCA_PODA_TETO`, e separada de
+ * propósito: os dois limites valem ao mesmo tempo e a pessoa precisa saber QUAL mordeu.
+ */
+export const MARCA_PODA_SESSAO = 'para não passar do máximo de um treino só';
+
+export interface PodaPorSessao {
+  /** Grupos podados, com o índice do dia em que o excesso estava. */
+  podados: { grupo: GrupoPrimario; series: number; dia: number }[];
+  /** Grupos que continuaram acima do teto do dia (todos os slots no piso ou protegidos). */
+  irredutiveis: { grupo: GrupoPrimario; dia: number }[];
+}
+
+/**
+ * 🔵 O TETO POR SESSÃO — 12 séries ponderadas por grupo em UM dia (decisão 2026-09-17).
+ *
+ * 🔑 É a MESMA poda do teto semanal, aplicada ao recorte do DIA: o crédito ponderado de um
+ * dia é o do plano inteiro restrito àquele dia, então basta rodar `podarExcessoPonderado`
+ * sobre os slots de cada dia. Uma segunda implementação aqui seria a segunda verdade que
+ * este arquivo existe para não criar.
+ *
+ * 🔒 Os dois limites valem SIMULTANEAMENTE: um plano pode estar dentro do semanal e estourar
+ * o diário (iniciante com 11 num dia respeita o teto do dia e viola o máximo semanal de 10;
+ * intermediário em foco com 13 num dia respeita o semanal de 19 e viola o do dia). Por isso
+ * as duas passadas existem, e nenhuma substitui a outra.
+ *
+ * 🔴 Não há margem de 3 aqui — a margem é só do teto SEMANAL dos grupos sem foco. E o teto
+ * do dia é o mesmo para quem está em foco e para quem não está.
+ */
+export function podarExcessoPonderadoNaSessao(
+  dias: readonly (readonly SlotPonderavel[])[],
+  teto: TetoPorGrupo,
+  seriesMinimas: number,
+  podavel: (slot: SlotPonderavel) => boolean = () => true,
+): PodaPorSessao {
+  const podados: PodaPorSessao['podados'] = [];
+  const irredutiveis: PodaPorSessao['irredutiveis'] = [];
+  dias.forEach((slots, dia) => {
+    const r = podarExcessoPonderado(slots, teto, seriesMinimas, podavel);
+    for (const p of r.podados) podados.push({ ...p, dia });
+    for (const g of r.irredutiveis) irredutiveis.push({ grupo: g, dia });
+  });
+  return { podados, irredutiveis };
 }

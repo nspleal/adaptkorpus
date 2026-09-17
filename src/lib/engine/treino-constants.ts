@@ -43,10 +43,18 @@ export const FITT_OBJETIVO: Record<Objetivo, BaseObjetivo> = {
   },
 };
 
-/** 1.2 — Volume e frequência por nível (volume/grupo modulado pelo objetivo). */
+/**
+ * 1.2 — Volume e frequência por nível.
+ *
+ * 🔵 `volumePorGrupoSemana` é a **FAIXA SEMANAL DESEJADA** — o alvo que a rampa persegue —,
+ * e desde a decisão de 2026-09-17 ela deixou de ser também o teto. Em HIPERTROFIA quem
+ * limita é `TETO_SEMANAL_HIPERTROFIA` (teto cheio) e a margem de `MARGEM_SEM_FOCO`
+ * (máximo automático dos grupos sem foco). Ver `trilhos.ts` — a leitura mora lá, uma vez só.
+ */
 export interface VolumeNivel {
   sessoesForca: Faixa;
   seriesPorExercicio: Faixa;
+  /** FAIXA DESEJADA por grupo/semana, em séries PONDERADAS (direta 1,0 · indireta 0,5). */
   volumePorGrupoSemana: Record<Objetivo, Faixa>;
 }
 
@@ -56,7 +64,7 @@ export const VOLUME_NIVEL: Record<NivelExperiencia, VolumeNivel> = {
     seriesPorExercicio: { min: 1, max: 3 },
     volumePorGrupoSemana: {
       saude: { min: 6, max: 10 },
-      massa: { min: 10, max: 12 },
+      massa: { min: 6, max: 10 },
       emagrecimento: { min: 8, max: 10 },
     },
   },
@@ -65,7 +73,7 @@ export const VOLUME_NIVEL: Record<NivelExperiencia, VolumeNivel> = {
     seriesPorExercicio: { min: 2, max: 4 },
     volumePorGrupoSemana: {
       saude: { min: 8, max: 12 },
-      massa: { min: 13, max: 16 },
+      massa: { min: 10, max: 14 },
       emagrecimento: { min: 10, max: 14 },
     },
   },
@@ -74,11 +82,52 @@ export const VOLUME_NIVEL: Record<NivelExperiencia, VolumeNivel> = {
     seriesPorExercicio: { min: 3, max: 4 },
     volumePorGrupoSemana: {
       saude: { min: 10, max: 12 },
-      massa: { min: 16, max: 20 },
+      massa: { min: 12, max: 18 },
       emagrecimento: { min: 12, max: 16 },
     },
   },
 };
+
+/**
+ * 🔵 POLÍTICA DE VOLUME DA HIPERTROFIA — decisão do autor 2026-09-17.
+ *
+ * Substitui o desenho anterior, em que `volumePorGrupoSemana.massa` era ao mesmo tempo o
+ * alvo da rampa e o teto duro (iniciante 10–12 · intermediário 13–16 · avançado 16–20).
+ * Agora são TRÊS números distintos por nível, na MESMA conta ponderada (direta 1,0 ·
+ * indireta 0,5 — `PESO_SECUNDARIO`, a autoridade canônica que já existia):
+ *
+ * | Nível         | Faixa desejada | Teto semanal | Máximo automático SEM foco |
+ * |---------------|----------------|--------------|----------------------------|
+ * | Iniciante     | 6–10           | 13           | 10                         |
+ * | Intermediário | 10–14          | 19           | 16                         |
+ * | Avançado      | 12–18          | 21           | 18                         |
+ *
+ * 🔒 A margem de 3 vale SÓ no teto semanal dos grupos SEM foco. O grupo em foco pode chegar
+ * ao teto cheio (13/19/21) — e a exceção é do GRUPO: um extra de peito não libera ombros
+ * nem tríceps a usarem os tetos cheios deles.
+ *
+ * 🔴 São política do aplicativo — não um MRV individual medido, não um limite biológico
+ * universal e não um limiar automático de lesão. E máximo permitido NÃO é meta: a rampa
+ * mira a faixa desejada, nunca o teto.
+ */
+export const TETO_SEMANAL_HIPERTROFIA: Readonly<Record<NivelExperiencia, number>> = {
+  iniciante: 13,
+  intermediario: 19,
+  avancado: 21,
+};
+
+/** Margem entre o teto semanal cheio e o máximo automático dos grupos SEM foco. */
+export const MARGEM_SEM_FOCO = 3;
+
+/**
+ * 🔒 TETO POR SESSÃO — 12 séries PONDERADAS por grupo muscular, para TODOS os níveis, COM ou
+ * SEM foco. Não existe margem de 3 aqui, e ele vale SIMULTANEAMENTE com o teto semanal.
+ *
+ * ⚠️ Aquecimento não é série de trabalho e não entra nesta conta; e não se multiplica série
+ * por cabeça ou região anatômica — cobertura regional e orçamento de volume são medidas
+ * distintas (`cobertura-editor.ts` mede uma, este número limita a outra).
+ */
+export const TETO_PONDERADO_SESSAO = 12;
 
 /** 1.3 — Trilhos de segurança (conservadores = legais). */
 export const PISO_REPS_COM_CARGA = 6; // faixas começam em 6

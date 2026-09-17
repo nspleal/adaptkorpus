@@ -15,7 +15,13 @@
 import type { GrupoPrimario } from '../data/types';
 import type { NivelExperiencia, Faixa } from './treino-types';
 import type { Objetivo } from './types';
-import { VOLUME_NIVEL, FREQ_POR_GRUPO_MIN } from './treino-constants';
+import {
+  FREQ_POR_GRUPO_MIN,
+  MARGEM_SEM_FOCO,
+  TETO_PONDERADO_SESSAO,
+  TETO_SEMANAL_HIPERTROFIA,
+  VOLUME_NIVEL,
+} from './treino-constants';
 
 /** 🏷️ Procedência × versão — o rótulo que o §16 exige em cada trilho. */
 export interface Rotulo {
@@ -44,18 +50,61 @@ export function tetoSeriesPorExercicio(nivel: NivelExperiencia): number {
   return VOLUME_NIVEL[nivel].seriesPorExercicio.max;
 }
 
-/** A faixa semanal por grupo do nível+objetivo. `max` = MRV · `min` = MEV. */
+/**
+ * A FAIXA SEMANAL DESEJADA por grupo do nível+objetivo. `min` = MEV.
+ *
+ * 🔴 `max` NÃO é mais o teto (decisão 2026-09-17). Em hipertrofia ele é o topo do que a
+ * rampa MIRA; quem limita é `tetoSemanalCheio` / `maxSemanalSemFoco`. Ler `max` como teto
+ * é o defeito que esta decisão fecha — e é por isso que `mrv` deixou de apontar para cá.
+ */
 export function faixaSemanal(nivel: NivelExperiencia, objetivo: Objetivo): Faixa {
   return VOLUME_NIVEL[nivel].volumePorGrupoSemana[objetivo];
 }
 
 /**
- * 🔴 **MRV — teto DURO.** É o topo da faixa do nível, e nada o eleva: nem o foco, nem o
- * editor. *(A alternativa — elevar o teto durante a fase de foco — foi recusada: transformaria
- * o único guarda-corpo de volume em algo negociável.)*
+ * 🔵 O objetivo cuja política de volume é a tabela de HIPERTROFIA.
+ *
+ * 🔒 `saude` e `emagrecimento` têm política PRÓPRIA e não herdam esta tabela — nem os tetos,
+ * nem a margem de 3, nem o teto de 12 por sessão. Onde já usavam o topo da faixa como teto,
+ * continuam usando: para eles nada mudou.
+ */
+export function ehHipertrofia(objetivo: Objetivo): boolean {
+  return objetivo === 'massa';
+}
+
+/**
+ * 🔴 **TETO SEMANAL CHEIO** — o limite que NADA ultrapassa, em séries ponderadas.
+ *
+ * Em hipertrofia: 13 · 19 · 21 (`TETO_SEMANAL_HIPERTROFIA`). Só o grupo EM FOCO chega até
+ * aqui; os demais param no `maxSemanalSemFoco`. Fora da hipertrofia continua sendo o topo
+ * da faixa do nível, que é o que esses objetivos sempre usaram.
+ */
+export function tetoSemanalCheio(nivel: NivelExperiencia, objetivo: Objetivo): number {
+  return ehHipertrofia(objetivo) ? TETO_SEMANAL_HIPERTROFIA[nivel] : faixaSemanal(nivel, objetivo).max;
+}
+
+/**
+ * 🔴 **MÁXIMO AUTOMÁTICO SEM FOCO** — teto cheio menos a margem de 3 (10 · 16 · 18).
+ *
+ * 🔒 A margem existe SÓ aqui: não há margem no teto por sessão, e ela não se aplica ao
+ * grupo em foco. Subtrair 3 de novo (de uma dose já reduzida por fase, por exemplo) seria
+ * aplicar a mesma margem duas vezes.
+ */
+export function maxSemanalSemFoco(nivel: NivelExperiencia, objetivo: Objetivo): number {
+  return ehHipertrofia(objetivo)
+    ? tetoSemanalCheio(nivel, objetivo) - MARGEM_SEM_FOCO
+    : faixaSemanal(nivel, objetivo).max;
+}
+
+/**
+ * 🔴 **MRV — teto DURO**, hoje o `tetoSemanalCheio`.
+ *
+ * Nada o eleva: nem o foco, nem o editor. O que o foco faz é deixar o grupo focado CHEGAR
+ * até ele, enquanto os demais param 3 séries antes. *(Elevar o teto durante a fase de foco
+ * segue recusado — seria transformar o guarda-corpo em algo negociável.)*
  */
 export function mrv(nivel: NivelExperiencia, objetivo: Objetivo): number {
-  return faixaSemanal(nivel, objetivo).max;
+  return tetoSemanalCheio(nivel, objetivo);
 }
 
 /** **MEV — piso de AVISO, nunca bloqueio.** Ficar abaixo dele avisa; não impede. */
@@ -63,9 +112,63 @@ export function mev(nivel: NivelExperiencia, objetivo: Objetivo): number {
   return faixaSemanal(nivel, objetivo).min;
 }
 
-/** Teto de séries do grupo NA SESSÃO: volume semanal ÷ frequência (massa/interm.: 16÷2 = 8). */
+/**
+ * Teto de séries do grupo NA SESSÃO.
+ *
+ * 🔵 Hipertrofia (2026-09-17): **12 séries PONDERADAS**, para todos os níveis, com ou sem
+ * foco — número fixo, que não depende da frequência. `freqPorGrupo` fica sem efeito aqui de
+ * propósito: a divisão `semanal ÷ frequência` era a régua ANTIGA e voltar a ela seria a
+ * segunda conta que esta decisão remove.
+ *
+ * 🔒 Fora da hipertrofia nada muda: segue `teto semanal ÷ frequência real`.
+ */
 export function tetoSeriesGrupoNaSessao(nivel: NivelExperiencia, objetivo: Objetivo, freqPorGrupo = FREQ_POR_GRUPO_MIN): number {
+  if (ehHipertrofia(objetivo)) return TETO_PONDERADO_SESSAO;
   return Math.ceil(mrv(nivel, objetivo) / Math.max(1, freqPorGrupo));
+}
+
+/**
+ * 🔵 O teto PONDERADO por sessão — `null` quando o objetivo não declara um.
+ *
+ * 🔴 Por que `null` e não o número de `tetoSeriesGrupoNaSessao`: em hipertrofia o 12 é um
+ * teto PONDERADO (direta 1,0 + indireta 0,5), cobrado sobre o plano inteiro do dia; fora
+ * dela o número é `semanal ÷ frequência` e sempre foi cobrado como teto DIRETO dentro da
+ * repartição da rampa, com a frequência REAL do grupo. Aplicar a régua ponderada a
+ * `saude`/`emagrecimento` inventaria para eles um limite que a política deles não tem —
+ * e foi exatamente o que a varredura mediu quando esta função ainda não existia
+ * (`avancado/saude/S6`: peito 8 contra um teto de 6 que ninguém declarou).
+ */
+export function tetoPonderadoNaSessao(nivel: NivelExperiencia, objetivo: Objetivo): number | null {
+  return ehHipertrofia(objetivo) ? tetoSeriesGrupoNaSessao(nivel, objetivo) : null;
+}
+
+/**
+ * 🔒 O TETO SEMANAL **POR GRUPO** desta semana — a leitura única de quem poda e de quem
+ * critica.
+ *
+ * Três camadas, nesta ordem:
+ *  ① o grupo está em foco? ⇒ teto cheio; senão ⇒ máximo automático sem foco;
+ *  ② a FASE impõe um limite menor (deload)? ⇒ vale o menor dos dois;
+ *  ③ nada mais. A margem de 3 já foi aplicada em ①, e aplicá-la de novo sobre ② seria a
+ *    redução dupla que a decisão proíbe.
+ *
+ * 🔴 A exceção do foco é do GRUPO: `emFoco` lista só quem a pessoa nomeou. O crédito
+ * indireto que um extra de peito deposita em ombros continua medido contra o teto SEM foco
+ * de ombros.
+ */
+export function tetoSemanalDoGrupo(args: {
+  nivel: NivelExperiencia;
+  objetivo: Objetivo;
+  /** Grupos EM FOCO nesta semana. Vazio/ausente ⇒ ninguém alcança o teto cheio. */
+  emFoco?: readonly GrupoPrimario[];
+  /** Teto MENOR imposto pela fase (deload). Ausente ⇒ a fase não limita. */
+  tetoDaFase?: number;
+}): (grupo: GrupoPrimario) => number {
+  const cheio = tetoSemanalCheio(args.nivel, args.objetivo);
+  const semFoco = maxSemanalSemFoco(args.nivel, args.objetivo);
+  const focados = new Set<GrupoPrimario>(args.emFoco ?? []);
+  const fase = args.tetoDaFase ?? Number.POSITIVE_INFINITY;
+  return (grupo: GrupoPrimario) => Math.min(focados.has(grupo) ? cheio : semFoco, fase);
 }
 
 /** 🆕 Intervalo mínimo entre sessões do MESMO grupo — política declarada. */

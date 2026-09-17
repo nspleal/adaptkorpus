@@ -24,7 +24,9 @@ describe('prescrição FITT', () => {
     expect(p.repsComposto).toEqual({ min: 6, max: 12 });
     expect(p.rir).toEqual({ min: 1, max: 3 });
     expect(p.descansoCompostoSeg).toEqual({ min: 90, max: 120 });
-    expect(p.volumePorGrupoSemana).toEqual({ min: 13, max: 16 });
+    // 🔵 2026-09-17: a faixa DESEJADA de massa/intermediário passou de {13,16} para {10,14};
+    // o teto (19) e o máximo automático (16) viraram números próprios, em `trilhos`.
+    expect(p.volumePorGrupoSemana).toEqual({ min: 10, max: 14 });
     expect(p.sessoesForcaSemana).toEqual({ min: 3, max: 4 });
     expect(p.cardio).toEqual({ tipo: 'sessoes_moderadas', min: 1, max: 2 });
     expect(p.semFalhaIniciante).toBe(false);
@@ -179,11 +181,11 @@ describe('deload', () => {
   });
 
   it('aplicar deload reduz ~45% do volume', () => {
-    const p = prescrever({ objetivo: 'massa', nivelExperiencia: 'avancado' }); // volume 16-20
+    const p = prescrever({ objetivo: 'massa', nivelExperiencia: 'avancado' }); // 🔵 faixa desejada 12–18
     const d = aplicarDeload(p);
     expect(d.deload).toBe(true);
     expect(d.volumePorGrupoSemana.max).toBeLessThan(p.volumePorGrupoSemana.max);
-    expect(d.volumePorGrupoSemana.max).toBe(Math.round(20 * 0.55));
+    expect(d.volumePorGrupoSemana.max).toBe(Math.round(18 * 0.55));
   });
 });
 

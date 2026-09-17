@@ -63,11 +63,14 @@ describe('fatores NÃO compostos, sobre o volume de referência', () => {
 
 describe('🔴 volume ABAIXO do piso da banda (o estado que o motor não tinha)', () => {
   it('massa/intermediário: a rampa entrega MENOS que a semana 1 do mesociclo', () => {
-    const banda = VOLUME_NIVEL.intermediario.volumePorGrupoSemana.massa; // {13, 16}
-    const piso = banda.min; // 13 — o que "recuar para a semana 1" entregaria (−19%)
-    const rampa = volumeDaRetomada(banda.max, 0.5); // 8
+    // 🔵 2026-09-17: a faixa desejada de massa/intermediário passou de {13,16} para {10,14}.
+    // A propriedade — a rampa da retomada entrega MENOS que o piso da banda — não mudou.
+    const banda = VOLUME_NIVEL.intermediario.volumePorGrupoSemana.massa; // {10, 14}
+    expect(banda).toEqual({ min: 10, max: 14 });
+    const piso = banda.min; // 10 — o que "recuar para a semana 1" entregaria
+    const rampa = volumeDaRetomada(banda.max, 0.5); // 7
     expect(rampa).toBeLessThan(piso); // se isto falhar, entregamos ~40% da redução devida
-    expect(rampa).toBe(8);
+    expect(rampa).toBe(7);
   });
 
   it('arredonda para BAIXO — erro sempre para o lado seguro (3→1, 5→2, 7→3)', () => {

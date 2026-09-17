@@ -49,6 +49,13 @@ const assinatura = (r: ReturnType<typeof rotina>) => r.dias.map((d) => d.slots.m
  * seis dias — continuam exigidas, e exatas.
  */
 const entregue = (r: ReturnType<typeof rotina>) => (r.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
+/**
+ * 🔵 2026-09-17 — a frase da recusa passou a NOMEAR a restrição: os dois tetos (semana e
+ * treino só) valem ao mesmo tempo e têm números diferentes. Neste perfil quem barra hoje é
+ * o teto da SESSÃO (ombros chegaria a 12,5 num dia), não mais o semanal — que ganhou a
+ * margem de 3. A propriedade guardada é a mesma: recusa não pode ser silenciosa.
+ */
+const RECUSA_EXPLICADA = /acima d[oa]s? (m[áa]ximo|limites)|j[áa] est[áa] n[oa]s? (m[áa]ximo|limites)/;
 
 describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
   const sem = rotina(perfil({limiteTempoTreino:'sem_limite'}));
@@ -84,7 +91,7 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
     // Entrega ≤ intenção: aqui o teto barra, e a tela precisa poder dizer isso.
     expect((com.blocoFoco?.adicionais ?? []).length).toBeLessThanOrEqual(2);
     if ((com.blocoFoco?.adicionais ?? []).length < 2) {
-      expect(com.avisos.some((x) => /m[áa]ximo do seu n[íi]vel/.test(x)), 'entrega parcial sem explicação').toBe(true);
+      expect(com.avisos.some((x) => RECUSA_EXPLICADA.test(x)), 'entrega parcial sem explicação').toBe(true);
     }
   });
 
@@ -127,7 +134,7 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
       expect(entregue, 'este perfil deixou de bater no teto — reancorar o caso').toBe(0);
       const mexidos = [...new Set([...x.keys(), ...y.keys()])].filter((g) => (x.get(g) ?? 0) !== (y.get(g) ?? 0));
       expect(mexidos, `alguém pagou por um bloco que nem entrou: ${mexidos.join(', ')}`).toEqual([]);
-      expect(comL.avisos.some((a) => /m[áa]ximo do seu n[íi]vel/.test(a)), 'recusa sem explicação').toBe(true);
+      expect(comL.avisos.some((a) => RECUSA_EXPLICADA.test(a)), 'recusa sem explicação').toBe(true);
     });
     it('o ganho do peito é exatamente o que o bloco declara', () => {
       expect((y.get('peito') ?? 0) - (x.get('peito') ?? 0)).toBe(entregue);
@@ -176,7 +183,7 @@ describe('🟠 D4 — "Nenhum" volta ao plano base', () => {
     expect(seriesPorGrupo(com).get('peito')).toBeGreaterThan(seriesPorGrupo(base).get('peito') ?? 0);
     // e no perfil NO TETO o foco não muda volume — o que ele muda ali é dito na tela
     const noTeto = rotina(perfil({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } as never }));
-    expect(noTeto.avisos.some((a) => /m[áa]ximo do seu n[íi]vel/.test(a)), 'recusa no teto sem explicação').toBe(true);
+    expect(noTeto.avisos.some((a) => RECUSA_EXPLICADA.test(a)), 'recusa no teto sem explicação').toBe(true);
   });
 });
 

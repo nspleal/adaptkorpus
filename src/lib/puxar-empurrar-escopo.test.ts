@@ -55,7 +55,7 @@ const avaliar = (r: RotinaSemanal, over: Record<string, unknown> = {}) => avalia
   tempoPorSessaoMin: (over.tempoPorSessaoMin as number) ?? 75,
   limiteTempoTreino: (over.limiteTempoTreino as string) ?? 'sem_limite',
   treinoDias: (over.treinoDias as string[]) ?? DIAS.slice(0, 3), semana: 5,
-  faixaSemanal: r.faixaVolumeSemana, faseVolume: r.faseVolume,
+  faixaSemanal: r.faixaVolumeSemana, tetoVolumeSemana: r.tetoVolumeSemana, faseVolume: r.faseVolume,
 } as never);
 
 const acusaCritico = (r: RotinaSemanal, over: Record<string, unknown> = {}) =>
@@ -75,8 +75,10 @@ describe('🔴 o caso medido: baseline equilibrado, extras do foco desequilibram
 
   it('anti-vacuidade: o plano ENTREGUE tem mesmo 7 empurrar × 5 puxar, e os extras são do foco', () => {
     const p = r();
-    expect(conta(p, 'empurrar', false), 'o cenário deixou de reproduzir o caso').toBe(7);
-    expect(conta(p, 'puxar', false)).toBe(5);
+    // 🔵 6 × 4 desde 2026-09-17 (era 7 × 5): com a faixa desejada menor o alocador dá menos
+    // slots. O que o caso mede — plano desequilibrado, baseline equilibrado — é o mesmo.
+    expect(conta(p, 'empurrar', false), 'o cenário deixou de reproduzir o caso').toBe(6);
+    expect(conta(p, 'puxar', false)).toBe(4);
     const extras = p.dias.flatMap((d) => d.slots.filter((s) => s.extraDoFoco));
     expect(extras.length, 'sem extras marcados o caso não prova nada').toBeGreaterThan(0);
     // 🔒 A marca vem do bloco, não do grupo: os extras têm de estar no `blocoFoco` publicado.
@@ -86,8 +88,8 @@ describe('🔴 o caso medido: baseline equilibrado, extras do foco desequilibram
 
   it('o BASELINE está equilibrado — e é ele que o invariante mede', () => {
     const p = r();
-    expect(conta(p, 'puxar', true)).toBe(5);
-    expect(conta(p, 'empurrar', true)).toBe(5);
+    expect(conta(p, 'puxar', true)).toBe(4);
+    expect(conta(p, 'empurrar', true)).toBe(4);
   });
 
   it('🔑 nenhum alerta indevido: nem o motor nem o crítico acusam', () => {
@@ -155,8 +157,11 @@ describe('🔒 a isenção vale SÓ para esta comparação', () => {
   it('os extras continuam dentro do MRV ponderado', () => {
     const p = rotina(perfil(FOCO), OPC);
     const pond = creditoPonderadoDaSemana(p.dias.flatMap((d) => d.slots));
-    const teto = p.faixaVolumeSemana!.max;
-    expect(GRUPOS_GRANDES.filter((g) => (pond.get(g) ?? 0) > teto)).toEqual([]);
+    // 🔵 O teto é POR GRUPO desde 2026-09-17: cheio para quem está em foco, máximo automático
+    // para os demais. `faixaVolumeSemana.max` virou o ALVO desejado e não serve de limite.
+    const t = p.tetoVolumeSemana!;
+    const teto = (g: string) => (t.gruposEmFoco.includes(g as never) ? t.cheio : t.semFoco);
+    expect(GRUPOS_GRANDES.filter((g) => (pond.get(g) ?? 0) > teto(g))).toEqual([]);
   });
 
   it('os extras continuam respeitando o equipamento do perfil', () => {
@@ -187,7 +192,7 @@ describe('🔒 desenho manual sem procedência: tudo conta, como antes', () => {
       .filter((s) => s.exercicio.grupoPrimario === 'peito' && !s.extraDoFoco);
     // ⚠️ ANTI-VACUIDADE: o plano focado precisa MESMO ter peitoral de baseline.
     expect(peitoraisBaseline.length, 'sem peitoral de baseline o caso não prova nada').toBeGreaterThan(0);
-    expect(conta(p, 'empurrar', true), 'o baseline perdeu empurrar por causa do grupo focado').toBe(5);
+    expect(conta(p, 'empurrar', true), 'o baseline perdeu empurrar por causa do grupo focado').toBe(4);
   });
 
   it('o desenho da pessoa não recebe marca nenhuma', () => {
@@ -233,7 +238,7 @@ describe('🔴 abrir "Montar meu treino" não muda o veredito da mesma semana', 
 
   it('o crítico do editor mede o BASELINE e não acusa', () => {
     const { avaliacao } = abrirNoEditor();
-    expect(avaliacao.medidas.puxarEmpurrar).toEqual({ escopo: 'baseline', puxar: 5, empurrar: 5 });
+    expect(avaliacao.medidas.puxarEmpurrar).toEqual({ escopo: 'baseline', puxar: 4, empurrar: 4 });
     expect(avaliacao.avisos.some((a) => a.codigo === 'puxar_menor_que_empurrar')).toBe(false);
   });
 

@@ -14,6 +14,7 @@ import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
 import { EXERCISES } from '../data/exercises';
 
 const byId = (id: string) => EXERCISES.find((e) => e.id === id)!;
+const ex = byId;
 const CTX: ContextoCritico = { nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 60, seriesPadrao: 4 };
 
 /** Um dia com N exercícios de um grupo (pelo pool real da biblioteca). */
@@ -119,12 +120,52 @@ describe('🔴 avisos — risco explicado que NÃO trava (DF①)', () => {
     expect(avisos(dias, placarDaSemana(dias, CTX), CTX).some((a) => a.codigo === 'dias_consecutivos')).toBe(false);
   });
 
-  it('acima do MRV avisa, com o número medido', () => {
+  /**
+   * 🔵 2026-09-17 — o número do aviso passou de 16 para 19: `acima_do_maximo` é medido contra
+   * o TETO CHEIO, não contra o topo da faixa desejada. A redação anterior cobrava
+   * «contra 16 séries», que hoje é o máximo AUTOMÁTICO e tem aviso próprio.
+   */
+  it('acima do TETO CHEIO avisa, com o número medido', () => {
     const dias = [diaDe('A', ['e1', 'e10', 'e11', 'e14', 'e15'])];
     const itens = avisos(dias, placarDaSemana(dias, CTX), CTX);
     const acima = itens.find((a) => a.codigo === 'acima_do_maximo');
     expect(acima).toBeDefined();
-    expect(acima!.texto).toMatch(/contra 16 séries/);
+    expect(acima!.texto).toMatch(/contra 19 séries/);
+    expect(acima!.severidade).toBe('risco');
+  });
+
+  /**
+   * 🔵 A ZONA INTERMEDIÁRIA (decisão 2026-09-17) — e a frase que ela NÃO pode dizer.
+   *
+   * ⚠️ ANTI-VACUIDADE: o cenário é construído para cair ENTRE 16 e 19. Se algum dia as duas
+   * linhas voltarem a coincidir, o `toBeDefined` abaixo cai junto.
+   */
+  it('entre o máximo automático (16) e o teto cheio (19): orienta, e NÃO diz que passou do teto', () => {
+    const dias = [{ nome: 'A', exercicios: [ex('e1'), ex('e10'), ex('e11')], series: [6, 6, 5] }];
+    const placar = placarDaSemana(dias, CTX);
+    const peito = placar.find((l) => l.grupo === 'peito')!;
+    expect(peito.ponderado, 'o cenário precisa cair na zona intermediária').toBeGreaterThan(peito.maxAutomatico);
+    expect(peito.ponderado).toBeLessThanOrEqual(peito.mrv);
+    expect(peito.status).toBe('acima_do_automatico');
+    const itens = avisos(dias, placar, CTX);
+    const orienta = itens.find((a) => a.codigo === 'acima_do_maximo_automatico');
+    expect(orienta).toBeDefined();
+    expect(orienta!.severidade, 'é orientação, não risco — nada aqui trava').toBe('recomendacao');
+    expect(orienta!.texto).toMatch(/16/);
+    expect(orienta!.texto).toMatch(/19/);
+    expect(itens.some((a) => a.codigo === 'acima_do_maximo'), 'não ultrapassou o teto — não pode dizer que ultrapassou').toBe(false);
+  });
+
+  /** 🔵 O teto POR SESSÃO vale ao mesmo tempo que o semanal e tem aviso próprio. */
+  it('12 ponderadas de um grupo num único dia disparam o aviso da SESSÃO', () => {
+    const dias = [{ nome: 'Seg', exercicios: [ex('e1'), ex('e10'), ex('e11')], series: [5, 5, 5] }];
+    const placar = placarDaSemana(dias, CTX);
+    const itens = avisos(dias, placar, CTX);
+    const sessao = itens.find((a) => a.codigo === 'acima_do_maximo_na_sessao');
+    expect(sessao, `avisos: ${itens.map((i) => i.codigo).join(', ')}`).toBeDefined();
+    expect(sessao!.fato?.escopo).toBe('sessao');
+    expect(sessao!.fato?.dia).toBe(0);
+    expect(sessao!.texto).toMatch(/Seg/);
   });
 
   it('sessão estourando o tempo do perfil avisa com a estimativa (fórmula canônica C1)', () => {

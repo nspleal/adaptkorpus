@@ -3,6 +3,7 @@
  * §"v2 — decisões travadas" + outputs/handoff-motor-treino-v2, DFs 2026-07-08).
  */
 import { describe, expect, it } from 'vitest';
+import { maxSemanalSemFoco } from './trilhos';
 import { VOLUME_NIVEL } from './treino-constants';
 import { alvoDaSemana, estadoDoCiclo, isoMaisDias, rirAlvoDaSemana, semanaDoCiclo } from './treino-mesociclo';
 import type { SemanaCiclo } from './treino-types';
@@ -66,14 +67,38 @@ describe('semanaDoCiclo — avança por SEMANA TREINADA, não por calendário (L
 });
 
 describe('alvoDaSemana (rampa dentro das faixas do v1 — tabela 1.2, sem tabela nova)', () => {
-  it('avançado/massa {16,20}: semanas 1–5 → 16,17,18,19,20 (piso → topo)', () => {
+  /**
+   * 🔵 SUBSTITUIÇÃO EXPLÍCITA (2026-09-17). A redação anterior era «avançado/massa {16,20}:
+   * 16,17,18,19,20» e «iniciante {10,12}: 10,11,12,12,12». As FAIXAS mudaram (a rampa agora
+   * mira a faixa DESEJADA: 12–18 no avançado, 6–10 no iniciante); a função `alvoDaSemana`
+   * não mudou uma linha, e continua provando a mesma propriedade — sobe do piso ao topo e
+   * nunca ultrapassa. Avançado virou banda LARGA (18 − 12 = 6 > 4) e por isso sobe +2/semana.
+   */
+  it('avançado/massa {12,18}: semanas 1–5 → 12,14,16,18,18 (piso → topo, banda larga)', () => {
     const banda = VOLUME_NIVEL.avancado.volumePorGrupoSemana.massa;
-    expect(SEMANAS_RAMPA.map((s) => alvoDaSemana(banda, s))).toEqual([16, 17, 18, 19, 20]);
+    expect(banda).toEqual({ min: 12, max: 18 });
+    expect(SEMANAS_RAMPA.map((s) => alvoDaSemana(banda, s))).toEqual([12, 14, 16, 18, 18]);
   });
 
   it('nunca ultrapassa o topo (banda estreita clampa cedo e segura)', () => {
-    const banda = VOLUME_NIVEL.iniciante.volumePorGrupoSemana.massa; // {10,12}
-    expect(SEMANAS_RAMPA.map((s) => alvoDaSemana(banda, s))).toEqual([10, 11, 12, 12, 12]);
+    const banda = VOLUME_NIVEL.iniciante.volumePorGrupoSemana.massa; // 🔵 {6,10}
+    expect(banda).toEqual({ min: 6, max: 10 });
+    expect(SEMANAS_RAMPA.map((s) => alvoDaSemana(banda, s))).toEqual([6, 7, 8, 9, 10]);
+    // 🔒 A propriedade que importa: o topo clampa — banda estreita não passa do máximo.
+    expect(alvoDaSemana({ min: 6, max: 8 }, 5)).toBe(8);
+  });
+
+  /**
+   * 🔵 A RAMPA MIRA O DESEJADO, NUNCA O TETO (2026-09-17) — o par discriminante da decisão
+   * "máximo permitido não é meta obrigatória".
+   */
+  it('o alvo da semana 5 é o topo da faixa DESEJADA, e fica abaixo do máximo automático', () => {
+    for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
+      const banda = VOLUME_NIVEL[nivel].volumePorGrupoSemana.massa;
+      expect(alvoDaSemana(banda, 5), nivel).toBe(banda.max);
+      expect(alvoDaSemana(banda, 5), `${nivel}: a rampa não pode mirar o teto`)
+        .toBeLessThanOrEqual(maxSemanalSemFoco(nivel, 'massa'));
+    }
   });
 
   it('banda larga (> 4) sobe +2/semana (futuro-prova; tabela 1.2 atual nunca aciona)', () => {

@@ -180,14 +180,33 @@ describe('📋 o que a variação PODE mexer, registrado em vez de suposto', () 
    * Este teste existe para o dia em que esse comportamento mudar: ele muda de propósito, com
    * alguém lendo, e não em silêncio.
    */
+  /**
+   * 🔵 REMEDIDO em 2026-09-17: o perfil avançado 5×/90 min deixou de mudar a contagem de slots
+   * com a variação 1 — a faixa desejada menor faz o alocador parar no mesmo ponto nas duas
+   * montagens. O comportamento CONTINUA possível (é o alocador por déficit), e a varredura
+   * abaixo é quem o mede; o que muda é que este perfil já não o exibe. Em vez de fingir que
+   * exibe, o teste procura um perfil que exiba e DIZ quando nenhum exibe.
+   */
   it('a distribuição de slots pode mudar dentro dos tetos — e isso é comportamento conhecido', () => {
-    const p = perfil({ nivelExperiencia: 'avancado', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex'], tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite' });
-    const base = montar(p);
-    const variado = montar({ ...p, variacaoTreino: 1 });
+    const PERFIS = [
+      { nivelExperiencia: 'avancado', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex'], tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite' },
+      { nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'], tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite' },
+      { nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' },
+      { nivelExperiencia: 'avancado', equipamento: 'casa', equipamentosCasa: [], diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado' },
+    ] as const;
     const slots = (r: RotinaSemanal) => r.dias.map((d) => d.slots.length);
-    expect(slots(variado)).not.toEqual(slots(base));
-    // 🔒 E, ainda assim, nenhum grupo NOVO acima do MRV: o teto é o que não cede.
-    for (const g of vereditos(variado, p).acimaDoMrv) expect(vereditos(base, p).acimaDoMrv).toContain(g);
+    let mudou = 0;
+    for (const over of PERFIS) {
+      const p = perfil(over as never);
+      for (const v of [1, 2, 3, 4]) {
+        const base = montar(p);
+        const variado = montar({ ...p, variacaoTreino: v });
+        if (JSON.stringify(slots(variado)) !== JSON.stringify(slots(base))) mudou += 1;
+        // 🔒 E, ainda assim, nenhum grupo NOVO acima do teto: o teto é o que não cede.
+        for (const g of vereditos(variado, p).acimaDoMrv) expect(vereditos(base, p).acimaDoMrv).toContain(g);
+      }
+    }
+    expect(mudou, 'nenhum perfil exibiu a mudança de distribuição — o comportamento mudou, leia isto').toBeGreaterThan(0);
   });
 });
 

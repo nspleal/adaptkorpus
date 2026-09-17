@@ -101,19 +101,19 @@ exports[`📸 etapa3 — composição seletor atual > o cap inicial não depende
 [
   {
     "compostos": 0,
-    "slots": 5,
+    "slots": 4,
   },
   {
     "compostos": 4,
     "slots": 5,
   },
   {
-    "compostos": 4,
+    "compostos": 3,
     "slots": 5,
   },
   {
-    "compostos": 5,
-    "slots": 5,
+    "compostos": 4,
+    "slots": 4,
   },
 ]
 `;
@@ -270,10 +270,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 45 min por sessão 1`] = `
 {
   "slots": [
+    4,
     5,
     5,
-    5,
-    5,
+    4,
   ],
   "tempo": 45,
 }
@@ -282,10 +282,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 60 min por sessão 1`] = `
 {
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
   "tempo": 60,
 }
@@ -294,10 +294,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 75 min por sessão 1`] = `
 {
   "slots": [
-    6,
-    7,
-    6,
     5,
+    7,
+    5,
+    4,
   ],
   "tempo": 75,
 }
@@ -306,10 +306,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 90 min por sessão 1`] = `
 {
   "slots": [
-    6,
-    7,
-    6,
     5,
+    7,
+    5,
+    4,
   ],
   "tempo": 90,
 }
@@ -340,7 +340,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível avancado, 60
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -360,10 +360,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível intermediari
 {
   "nivel": "intermediario",
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -384,10 +384,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo massa, 60 
 {
   "objetivo": "massa",
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -408,10 +408,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 1 do mesocic
 {
   "semana": 1,
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -420,10 +420,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 3 do mesocic
 {
   "semana": 3,
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -432,10 +432,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 5 do mesocic
 {
   "semana": 5,
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -444,10 +444,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 6 do mesocic
 {
   "semana": 6,
   "slots": [
-    6,
-    6,
+    5,
     6,
     5,
+    4,
   ],
 }
 `;
@@ -461,4 +461,3 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > sessão de 30 min, 
   3,
 ]
 `;
-
