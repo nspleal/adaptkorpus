@@ -1,5 +1,24 @@
 # Política de volume da hipertrofia + cobertura muscular no editor
 
+## Retificação final do autor — 17/09/2026
+
+O autor autorizou corrigir este relatório e publicar o candidato de código
+`9d3bb83e4c831581b840ebc1afdf287e98ea5235`, após a validação concluída.
+Esta retificação prevalece sobre os rótulos de decisão aberta nas rodadas abaixo:
+
+- **Topo da faixa: resolvido.** Não é obrigatório atingir 14/18 séries. Entregar dentro
+  da faixa desejada é suficiente; não há mudança do alocador a decidir por esse motivo.
+- **Desempate por secundários: comportamento mantido nesta publicação autorizada.**
+  As diferenças medidas e os testes permanecem documentados; não há alteração adicional
+  solicitada. Contagens de créditos/avisos não comprovam maior estímulo fisiológico.
+- **Cinco células de emagrecimento: encerradas.** O resultado atual recusa integralmente
+  os extras por orçamento semanal; a mensagem de recusa parcial foi corrigida nos 13
+  casos em que ainda estava errada. Não é decisão pendente.
+
+Nenhum código, teste, limite de volume ou pesquisa foi alterado por esta retificação.
+O registro de publicação com SHA do merge, gate e deployment será mantido externamente,
+para distinguir a autorização de publicar da confirmação efetiva em produção.
+
 2026-09-17. **Candidato, sem publicação.** Nenhum merge, nenhum deploy de produção, nenhuma
 alteração do cofre. Nenhuma gravação em conta real.
 
