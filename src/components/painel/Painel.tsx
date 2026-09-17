@@ -1025,7 +1025,21 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * `rotinaCustom` fora da entrada. Com ele na entrada, o montador respeitaria o desenho (a
    * DF② do editor) e o botão não geraria nada — e o desenho seria apagado antes da prévia.
    */
-  const [proposta, setProposta] = useState<Proposta | null>(null);
+  const [proposta, setPropostaEstado] = useState<Proposta | null>(null);
+  /**
+   * 🔴 A PROPOSTA TAMBÉM VIVE NUM REF (correção da validação, 2026-09-16).
+   *
+   * ⚠️ O defeito medido na prévia: dois cliques no MESMO tique aplicavam duas vezes. O
+   * segundo lia `proposta` da closure do render anterior — ainda preenchida, porque
+   * `setProposta(null)` só vale no próximo render — e o `finally` já havia devolvido
+   * `aplicandoPropostaRef` a `false`. Resultado: DOIS PUT, o segundo com a revisão velha, o
+   * que o CAS recusa com 409 e a tela mostra como "atualizado em outro dispositivo" — um
+   * conflito falso, criado pelo próprio duplo clique.
+   *
+   * O ref é limpo SINCRONAMENTE no início de aplicar; o segundo clique morre ali.
+   */
+  const propostaRef = useRef<Proposta | null>(null);
+  const setProposta = (p: Proposta | null) => { propostaRef.current = p; setPropostaEstado(p); };
   const [calculandoProposta, setCalculandoProposta] = useState<TipoDeProposta | null>(null);
   const [erroProposta, setErroProposta] = useState<string | null>(null);
   const aplicandoPropostaRef = useRef(false);
@@ -1039,8 +1053,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     [perfil],
   );
 
-  function pedirProposta(tipo: TipoDeProposta) {
-    if (calculandoProposta || proposta || aplicandoPropostaRef.current) return;
+  /**
+   * 🔴 O GUARD DE CLIQUE REPETIDO MORA NUM REF (correção da validação, 2026-09-16).
+   *
+   * ⚠️ Ele era `if (calculandoProposta || proposta || …) return`, lido do ESTADO. "Montar de
+   * novo" limpa a proposta e recalcula no mesmo tique — e a função agendada carrega a closure
+   * do render ANTIGO, onde `proposta` ainda existe. O resultado, medido na prévia: o modal
+   * fechava e nada era remontado, sem erro e sem explicação. O ref não tem versão velha.
+   */
+  const pedindoPropostaRef = useRef(false);
+
+  /** O cálculo em si. Sem o guard de "já existe proposta na tela" — quem o aplica é quem chama. */
+  function calcularProposta(tipo: TipoDeProposta) {
+    if (pedindoPropostaRef.current || aplicandoPropostaRef.current) return;
+    pedindoPropostaRef.current = true;
     setErroProposta(null);
     setCalculandoProposta(tipo);
     /**
@@ -1076,8 +1102,15 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         setErroProposta('Não foi possível montar uma proposta agora. Seu treino atual continua como está.');
       } finally {
         setCalculandoProposta(null);
+        pedindoPropostaRef.current = false;
       }
     }, 0);
+  }
+
+  /** A porta dos botões: não empilha uma proposta sobre outra já na tela. */
+  function pedirProposta(tipo: TipoDeProposta) {
+    if (propostaRef.current) return;
+    calcularProposta(tipo);
   }
 
   /**
@@ -1097,17 +1130,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    *    que mudou no meio do caminho, em silêncio.
    */
   function aplicarProposta() {
-    if (!proposta || aplicandoPropostaRef.current) return;
+    const aplicada = propostaRef.current;
+    if (!aplicada || aplicandoPropostaRef.current) return;
     const atual = perfilRef.current;
-    if (proposta.assinaturaDasEntradas
-      && proposta.assinaturaDasEntradas !== assinaturaDasEntradas(atual, entradaDoPlano(atual))) {
+    if (aplicada.assinaturaDasEntradas
+      && aplicada.assinaturaDasEntradas !== assinaturaDasEntradas(atual, entradaDoPlano(atual))) {
       setPropostaDesatualizada(true);
       return;
     }
+    // 🔒 SÍNCRONO, antes de qualquer await/estado: é isto que mata o 2º clique do mesmo tique.
+    propostaRef.current = null;
     aplicandoPropostaRef.current = true;
     setAplicandoProposta(true);
     try {
-      const novoPerfil = aplicarPropostaSobre(atual, proposta);
+      const novoPerfil = aplicarPropostaSobre(atual, aplicada);
       setPerfil(novoPerfil);
       notificarPerfil(novoPerfil);
       const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
@@ -1130,14 +1166,19 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setPropostaDesatualizada(false);
   }
 
-  /** "Montar de novo": descarta a proposta velha e refaz com as preferências de agora. */
+  /**
+   * "Montar de novo": descarta a proposta velha e refaz com as preferências de AGORA.
+   *
+   * 🔒 Chama `calcularProposta`, não `pedirProposta`: aqui existir uma proposta na tela é a
+   * premissa, não o impedimento. O cálculo roda na closure DESTE render, então lê as entradas
+   * já atualizadas — que é justamente o que tornou a anterior obsoleta.
+   */
   function remontarProposta() {
-    if (!proposta || aplicandoPropostaRef.current) return;
-    const tipo = proposta.tipo;
+    if (!propostaRef.current || aplicandoPropostaRef.current) return;
+    const tipo = propostaRef.current.tipo;
     setProposta(null);
     setPropostaDesatualizada(false);
-    // Fora do tique: `pedirProposta` recusa enquanto ainda houver proposta no estado.
-    window.setTimeout(() => pedirProposta(tipo), 0);
+    calcularProposta(tipo);
   }
 
   /** Séries semanais JÁ planejadas para um grupo — a base sobre a qual o foco decide. */

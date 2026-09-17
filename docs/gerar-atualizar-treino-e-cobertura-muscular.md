@@ -9,7 +9,14 @@ cofre. Nenhuma gravação em conta real.
 |---|---|
 | Base | `origin/main` = `2d951b4b64c05f1448a76995ea2b55898f5c1f99` (16/09, PR #14) |
 | Branch | `trabalho/gerar-atualizar-treino-cobertura` |
+| SHA do candidato | `3384d7b71bc881ba28782ffa64ed61ae008f6ada` |
 | Worktree | `adaptkorpus-treino-cobertura` (isolada; nenhuma outra worktree foi tocada) |
+| Prévia remota | `evokorpus-git-trabalho-gerar-atualizar-f23c54-nspleals-projects.vercel.app` — deployment `dpl_4Fbe1v8oRKVYA9q32azC5hPnhGPM`, target `null` (**preview**, não produção) |
+| Produção | intacta em `2d951b4` (`adaptkorpus.com`). Nenhum merge, nenhum deploy de produção. |
+
+**Identidade do que é servido, conferida nas duas pontas:** `git ls-remote` da branch devolve
+`3384d7b7…`, igual ao `HEAD` local; o deployment que responde pelo alias da branch reporta
+`githubCommitSha = 3384d7b7…`. São artefatos distintos apontando para o mesmo commit.
 
 `origin/main` está 150 commits à frente de `origin/claude/evokorpus-app-dev-9in0hs` (o `HEAD`
 remoto herdado) e contém tudo o que havia na branch anterior desta sessão — por isso ela é a base.
@@ -23,6 +30,8 @@ remoto herdado) e contém tudo o que havia na branch anterior desta sessão — 
 | Variedade só entre alternativas válidas | ✅ candidato | `engine/alocador.ts` (`variacao`) · `perfil.variacaoTreino` |
 | Cobertura muscular por dia e por grupo no editor | ✅ candidato | `engine/cobertura-editor.ts` · `painel/CoberturaMuscular.tsx` |
 | Sugestões com consequência pelo cálculo existente | ✅ candidato | `EditorTreino · efeitoDeAdicionar` |
+| Recusa de proposta desatualizada | ✅ candidato | `proposta-treino.ts` (`assinaturaDasEntradas`) · `Painel · aplicarProposta` |
+| Condicional: "Depende da execução; não confirmado" | ✅ candidato | `lib/condicao-execucao-copy.ts` |
 | Telemetria das duas ações | ⏳ **não feito, de propósito** | ver *Limites* |
 | Publicação | ⏳ não feita | — |
 
@@ -112,16 +121,62 @@ Nada é adicionado sozinho: "Adicionar" é um toque da pessoa e passa pela mesma
 ordena por "quanto pega" e fala de REGIÕES — não de volume, tempo ou fase, que são do crítico e
 dos avisos do motor.
 
-## 3. Verificação
+## 3. A rodada de VALIDAÇÃO (16/09, sobre `a6853ec` → `3384d7b`)
 
-- **Suíte completa**, `CI=true npx vitest run` (sem filtrar projeto): **226 arquivos, 3670
+### Decisão do autor aplicada: condição de execução
+
+Nesta entrega **não** existe superfície para declarar execução. Onde a cobertura depende de uma
+condição não informada, a tela diz **"Depende da execução; não confirmado"**, com a condição em
+português — o gesto, não só o termo do pacote — e com o aviso *"Adicionar não confirma esta
+região: o app não registra como você executa o movimento"*. O alvo condicional **não** entra na
+contagem de identificadas (conferido na tela: `LOMBAR · 0/2 identificadas` com a hiperextensão
+no dia). A frase da condição saiu de duas cópias para uma fonte só
+(`lib/condicao-execucao-copy`), lida pelo detalhe do exercício e pela cobertura do editor.
+
+### Dois defeitos encontrados na validação e corrigidos
+
+1. **Proposta velha gravava por cima do que mudou depois.** A proposta guardava o perfil
+   INTEIRO e o gravava na confirmação. Entre montar e aplicar, o perfil pode andar — banimento
+   feito noutra aba, âncora de mesociclo que o próprio app move, peso resolvido que chega de
+   uma resposta assíncrona. Aplicar devolvia tudo ao estado antigo, em silêncio.
+   **Correção:** a proposta carimba a assinatura das ENTRADAS que a geraram (o mesmo
+   `canonicalInputHash` do CAS, com `rotinaCustom`/`variacaoTreino` de fora — são a saída, não a
+   entrada). Assinatura diferente ⇒ nada é gravado, a tela explica e oferece "Montar de novo".
+   E aplicar virou **rebase** sobre `perfilRef.current`: a proposta contribui só com os dois
+   campos que decide.
+2. **Condicional lido como resolvível pela adição.** A copy anterior descrevia a condição sem
+   dizer que escolher o mesmo exercício não fecha a pendência. Corrigido acima.
+
+### Verificação automática
+
+- **Suíte completa**, `CI=true npx vitest run` (sem filtrar projeto): **226 arquivos, 3680
   aprovados, 24 históricos pulados, zero falhas**. Base medida antes das mudanças:
   222 / 3565 / 24 / zero.
 - **Typecheck** e **build**: RC 0. **Lint**: os mesmos 5 warnings preexistentes da base.
-- **104 testes novos** em 4 arquivos: `engine/cobertura-editor.test.ts` (27),
-  `engine/variacao-montagem.test.ts` (21), `proposta-treino.test.ts` (28),
-  `treino-acoes-e-cobertura-tela.test.ts` (28) — mais 2 guards reescritos em
+- **114 testes novos** em 4 arquivos: `engine/cobertura-editor.test.ts` (27),
+  `engine/variacao-montagem.test.ts` (21), `proposta-treino.test.ts` (34),
+  `treino-acoes-e-cobertura-tela.test.ts` (32) — mais guards reescritos em
   `editor-guiado.test.ts` (16, um a mais que os 15 da base).
+
+### QA de interface — deload e retomada (dados descartáveis, build otimizado local)
+
+| Fase | Plano na tela | Proposta | Depois de aplicar | Fase / histórico |
+|---|---|---|---|---|
+| **Deload** (semana 6 por `deloadAte`) | 46 séries | **46** | 46 | `deloadAte` e `mesocicloInicio` intactos; avisos continuam "Semana 6: …" |
+| **Retomada** (pausa de 30 dias, 6 sessões) | 56 séries | **56** | 56 | `evk_treinos` byte a byte idêntico; "Retomada: volume reduzido" permanece |
+
+Nenhuma redução aplicada duas vezes (a proposta nasce na mesma fase, não sobre o volume cheio
+nem sobre o já reduzido), nenhuma fase reiniciada, e o total do editor bate com o do plano e com
+o da proposta. No deload o crítico não acusa "abaixo do mínimo": quem fala é o aviso do motor,
+que sabe a causa — sem as duas vozes contraditórias sobre o mesmo placar.
+
+### QA de interface — cobertura muscular
+
+Adicionar, remover e trocar recalculam na hora. Num único grupo aparecem os quatro graus, e eles
+não se colapsam — medido em OMBROS depois de trocar a elevação lateral pela puxada para o rosto:
+deltoide posterior **identificado**, deltoide anterior em **participação auxiliar (inferência)**,
+deltoide lateral **sem exercício identificado** com sugestões elegíveis. Multífido lombar
+aparece como **lacuna do catálogo**, sem sugestão inventada.
 - **QA no build otimizado**, perfil fictício em `localStorage`, sem Supabase configurado:
   gerar a partir de plano automático e de desenho manual; cancelar sem tocar perfil/treino;
   confirmar, recarregar e reabrir com exatamente a proposta aceita (`variacaoTreino` persistido);

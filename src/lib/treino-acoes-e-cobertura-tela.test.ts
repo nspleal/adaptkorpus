@@ -53,10 +53,30 @@ describe('🔁 as DUAS ações existem e são distinguíveis', () => {
 });
 
 describe('🔒 carregamento, falha e clique repetido', () => {
-  it('o pedido é ignorado enquanto há cálculo em curso ou proposta na tela', () => {
-    const i = painel.indexOf('function pedirProposta');
+  /**
+   * 🔴 DEFEITO MEDIDO NA PRÉVIA (16/09): o guard lia o ESTADO. "Montar de novo" limpa a
+   * proposta e recalcula no mesmo tique, e a função agendada carregava a closure do render
+   * ANTIGO — onde `proposta` ainda existia. O modal fechava e nada era remontado, sem erro.
+   * O guard passou para um REF, que não tem versão velha.
+   */
+  it('o cálculo é fechado por REF, não por estado (closure velha não bloqueia o remonte)', () => {
+    const i = painel.indexOf('function calcularProposta');
+    expect(i, 'o cálculo deixou de ter porta própria').toBeGreaterThan(-1);
     const corpo = painel.slice(i, i + 400);
-    expect(corpo).toMatch(/if \(calculandoProposta \|\| proposta \|\| aplicandoPropostaRef\.current\) return;/);
+    expect(corpo).toMatch(/if \(pedindoPropostaRef\.current \|\| aplicandoPropostaRef\.current\) return;/);
+    expect(corpo).toMatch(/pedindoPropostaRef\.current = true;/);
+    expect(/proposta[^;]*\) return;/.test(corpo), 'o guard do cálculo voltou a ler o estado').toBe(false);
+  });
+
+  it('o botão não empilha proposta sobre proposta, e o remonte não passa por esse guard', () => {
+    const i = painel.indexOf('function pedirProposta');
+    const corpo = painel.slice(i, i + 200);
+    expect(corpo).toMatch(/if \(propostaRef\.current\) return;/);
+    expect(corpo).toMatch(/calcularProposta\(tipo\);/);
+    const j = painel.indexOf('function remontarProposta');
+    const remonte = painel.slice(j, j + 400);
+    expect(remonte, 'o remonte voltaria a cair no guard da proposta velha').toMatch(/calcularProposta\(tipo\);/);
+    expect(/pedirProposta\(/.test(remonte), 'o remonte voltou a passar pela porta dos botões').toBe(false);
   });
 
   it('o estado de carregamento chega aos botões e os desabilita', () => {
@@ -64,11 +84,31 @@ describe('🔒 carregamento, falha e clique repetido', () => {
     expect(painel).toMatch(/Montando…|Conferindo…/);
   });
 
-  it('aplicar é fechado por ref — clique repetido não grava duas vezes', () => {
+  /**
+   * 🔴 DEFEITO MEDIDO NA PRÉVIA (16/09): dois cliques no MESMO tique aplicavam duas vezes.
+   * O segundo lia `proposta` da closure do render anterior (ainda preenchida, porque
+   * `setProposta(null)` só vale no próximo render) e o `finally` já havia liberado o ref.
+   * Saíam DOIS PUT, o segundo com a revisão velha ⇒ 409 do CAS ⇒ "atualizado em outro
+   * dispositivo": um conflito falso, criado pelo próprio duplo clique.
+   */
+  it('aplicar é fechado por REF e limpo SINCRONAMENTE — duplo clique não grava duas vezes', () => {
     const i = painel.indexOf('function aplicarProposta');
     const corpo = painel.slice(i, painel.indexOf('function cancelarProposta'));
-    expect(corpo).toMatch(/if \(!proposta \|\| aplicandoPropostaRef\.current\) return;/);
+    expect(corpo).toMatch(/const aplicada = propostaRef\.current;/);
+    expect(corpo).toMatch(/if \(!aplicada \|\| aplicandoPropostaRef\.current\) return;/);
+    expect(corpo, 'o ref não é limpo antes de qualquer efeito').toMatch(/propostaRef\.current = null;/);
     expect(corpo).toMatch(/aplicandoPropostaRef\.current = true;/);
+    // A ordem importa: limpar o ref TEM de vir antes de mexer em estado.
+    expect(corpo.indexOf('propostaRef.current = null;')).toBeLessThan(corpo.indexOf('setAplicandoProposta(true)'));
+    // E nada do corpo pode voltar a ler o ESTADO da proposta.
+    expect(/proposta\.(tipo|perfilProposto|mudancas|assinatura)/.test(corpo), 'a aplicação voltou a ler o estado').toBe(false);
+  });
+
+  it('o ref da proposta acompanha o estado por uma porta só', () => {
+    expect(painel).toMatch(/const \[proposta, setPropostaEstado\] = useState<Proposta \| null>\(null\);/);
+    expect(painel).toMatch(/const setProposta = \(p: Proposta \| null\) => \{ propostaRef\.current = p; setPropostaEstado\(p\); \};/);
+    const semAPorta = painel.split(/\r?\n/).filter((l) => !l.includes('const setProposta = (p: Proposta')).join(' ');
+    expect(/setPropostaEstado\(/.test(semAPorta), 'alguém passou por fora da porta').toBe(false);
   });
 
   it('falha de cálculo é DITA, e diz que nada mudou', () => {
@@ -87,9 +127,9 @@ describe('🔒 carregamento, falha e clique repetido', () => {
     const i = painel.indexOf('function aplicarProposta');
     const corpo = painel.slice(i, painel.indexOf('function cancelarProposta'));
     expect(corpo, 'a base da gravação deixou de ser o perfil corrente').toMatch(/const atual = perfilRef\.current;/);
-    expect(corpo, 'a assinatura das entradas não é conferida').toMatch(/proposta\.assinaturaDasEntradas !== assinaturaDasEntradas\(atual, entradaDoPlano\(atual\)\)/);
+    expect(corpo, 'a assinatura das entradas não é conferida').toMatch(/aplicada\.assinaturaDasEntradas !== assinaturaDasEntradas\(atual, entradaDoPlano\(atual\)\)/);
     expect(corpo.replace(/\s+/g, ' ')).toMatch(/setPropostaDesatualizada\(true\); return;/);
-    expect(corpo, 'voltou a gravar a fotografia inteira').toMatch(/aplicarPropostaSobre\(atual, proposta\)/);
+    expect(corpo, 'voltou a gravar a fotografia inteira').toMatch(/aplicarPropostaSobre\(atual, aplicada\)/);
     expect(/novoPerfil = proposta\.perfilProposto/.test(corpo), 'a gravação voltou a substituir o perfil').toBe(false);
     // A recusa tem saída: montar de novo com o que vale agora.
     expect(painel).toMatch(/function remontarProposta/);
