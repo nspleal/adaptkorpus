@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { esforcoDaExcecao } from './engine/excecao-sessao';
 
 const fonte = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 /** Sem comentários: o que se mede é o que a pessoa vê, não o que o código explica. */
@@ -19,6 +20,7 @@ const painel = semComentarios('src/components/painel/Painel.tsx');
 const editor = semComentarios('src/components/painel/EditorTreino.tsx');
 const proposta = semComentarios('src/components/painel/PropostaTreino.tsx');
 const cobertura = semComentarios('src/components/painel/CoberturaMuscular.tsx');
+const excecao = semComentarios('src/lib/engine/excecao-sessao.ts');
 
 describe('🔁 as DUAS ações existem e são distinguíveis', () => {
   it('a aba Treino oferece "Gerar novo treino" E "Atualizar treino"', () => {
@@ -186,6 +188,54 @@ describe('🔒 a proposta explica o que muda, e o que NÃO muda', () => {
       .toBeLessThan(proposta.indexOf('onClick={onAplicar}'));
     // 🔴 E não vira alerta clínico: a decisão proíbe afirmar perigo ou lesão.
     expect(/perigo|lesão|lesao|arriscad/i.test(proposta), 'a ressalva virou alerta de saúde').toBe(false);
+  });
+
+  /**
+   * 🔴 2026-09-17 (3ª volta) — O ESFORÇO DITO TEM DE SER O ESFORÇO FEITO.
+   *
+   * A tela trazia a fórmula fixa "Procuramos outro exercício, outro dia e menos séries".
+   * Ela afirmava TRÊS tentativas sempre — inclusive no desenho manual, onde o app não mexe
+   * em exercício, dia nem série e portanto não tentou NENHUMA. Era um esforço inventado, e
+   * a decisão proíbe exatamente isso: a mensagem reflete o que foi efetivamente tentado.
+   *
+   * A frase passa a vir de `esforcoDaExcecao`, a mesma autoridade que monta o aviso do
+   * motor — uma redação só, derivada de `alternativas`, que é o registro nominal.
+   */
+  it('o esforço dito vem do registro do que foi tentado, não de uma fórmula fixa', () => {
+    expect(proposta, 'a tela redigiu o esforço por conta própria')
+      .toMatch(/esforcoDaExcecao\(e\)/);
+    expect(proposta).toMatch(/import \{ esforcoDaExcecao \} from '@\/lib\/engine\/excecao-sessao'/);
+    // 🔒 A fórmula fixa não pode voltar: ela mentia no caso mais comum.
+    expect(/Procuramos outro exerc[íi]cio/i.test(proposta), 'a fórmula fixa do esforço voltou').toBe(false);
+    // 🔒 Nem aqui nem no motor a busca pode ser vendida como exaustiva.
+    expect(/todas as possibilidades|todas as alternativas|esgotamos tudo/i.test(proposta + excecao),
+      'a busca delimitada foi descrita como exaustiva').toBe(false);
+  });
+
+  /** 🔒 A autoridade única existe, e trata o caso "nada foi tentado". */
+  it('esforcoDaExcecao distingue "nada foi tentado" de "tentamos e não coube"', () => {
+    const base = {
+      grupo: 'peito' as const, dia: 0, nomeDoDia: 'Treino A', ponderado: 13, teto: 12,
+      direto: 12, indireto: 1, origensIndiretas: [],
+    };
+    const soDaPessoa = esforcoDaExcecao({
+      ...base,
+      alternativas: [{ tipo: 'reducao_de_series', slot: 'e1', aceita: false, motivo: 'slot_escolhido_pela_pessoa' }],
+    });
+    expect(soDaPessoa, 'inventou um esforço no desenho da pessoa').not.toMatch(/[Tt]entamos/);
+    expect(soDaPessoa).toMatch(/sua escolha/);
+
+    const tentou = esforcoDaExcecao({
+      ...base,
+      alternativas: [
+        { tipo: 'troca_de_exercicio', slot: 'e1', candidato: 'e2', aceita: false, motivo: 'candidato_com_outro_custo_de_tempo' },
+        { tipo: 'mudanca_de_dia', slot: 'e1', candidato: 'dia 2', aceita: false, motivo: 'dia_de_destino_sem_tempo' },
+      ],
+    });
+    expect(tentou).toMatch(/trocar o exercício por um equivalente/);
+    expect(tentou).toMatch(/passar o exercício para outro dia/);
+    // 🔒 Só o que foi tentado: reduzir séries não entrou na lista, logo não é dito.
+    expect(tentou, 'disse ter reduzido séries sem ter tentado').not.toMatch(/reduzir as séries/);
   });
 
   it('quando não há montagem diferente, a tela DIZ — e não oferece aplicar', () => {

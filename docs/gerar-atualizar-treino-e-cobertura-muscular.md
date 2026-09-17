@@ -252,6 +252,31 @@ aparece como **lacuna do catálogo**, sem sugestão inventada.
   exercício, lacuna de catálogo e sugestões; cliques repetidos.
 - **375 px**: sem overflow horizontal em nenhuma das duas superfícies; alvos de toque ≥ 44 px.
 
+### QA de interface — a ressalva do teto por sessão (3ª volta, fixture sintética)
+
+Exercitada na interface real, no build otimizado local, sem conta e sem gravação de espécie
+alguma. **A exceção é sintética e isto é declarado**: varridas **8 064** combinações automáticas
+com o teto real de **12**, nenhuma produz exceção; para percorrer o caminho de produção o teto foi
+rebaixado a 6 durante o laboratório, e só isso — componente, `proporTreino`, motor e catálogo são
+os de produção.
+
+| # | ação | resultado |
+|---|---|---|
+| 1 | abrir a proposta | `<section role="status" aria-label="Ressalva de volume">` presente |
+| 2 | posição da ressalva | **precede** o botão de aplicar no DOM e na tela (y 674 × 951) |
+| 3 | conteúdo | grupo **Glúteos** · dia **Full-body** · ponderado **7** · referência **6** · causa "**4** vêm do trabalho indireto de posterior, quadríceps no mesmo dia" |
+| 4 | esforço declarado | as três alternativas, porque as três foram de fato tentadas (**19** examinadas) |
+| 5 | veredito | "Este treino **não está dentro de todos os limites** do app" |
+| 6 | tom | sem "perigo", "lesão" ou "arriscado" — não é alerta clínico |
+| 7 | **Manter o meu** | proposta fecha; **nada gravado** |
+| 8 | **Usar este treino** → plano/editor | a frase permanece, completa, com o mesmo esforço |
+| 9 | **375 px** | legível, sem overflow horizontal, acima dos dois botões |
+| 10 | desktop | legível, acima dos dois botões |
+
+A rota de laboratório e o teto rebaixado **foram removidos do candidato**. O caminho exercido é o
+**automático** (`tipo: 'gerar'`, sem desenho salvo) — distinto do excesso do desenho manual, que
+tem teste próprio.
+
 ### Três defeitos encontrados no QA e corrigidos
 
 1. **"Sem mudança no volume semanal de Core"** — o placar do crítico cobre só os grupos

@@ -39,9 +39,23 @@ const perfil = (over: Partial<PerfilResumo> = {}): PerfilResumo => ({
 const rotina = (p: PerfilResumo, semana: number) =>
   recomputarPlano(p, { semanaCiclo: { semana } } as never).treino.rotina!;
 
-/** A conta CANÔNICA — a mesma do crítico e do alocador v4. Nada de régua paralela aqui. */
-const ponderado = (r: ReturnType<typeof rotina>) =>
-  creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
+/**
+ * A conta CANÔNICA — a mesma do crítico e do alocador v4. Nada de régua paralela aqui.
+ *
+ * 🔵 MEMOIZADA POR ROTINA (2026-09-17, 3ª volta). A conta é pura e a rotina é imutável, então
+ * o resultado só depende do objeto — mas os chamadores abaixo a invocam DENTRO de um laço por
+ * grupo, o que recomputava a semana inteira uma vez por grupo. Isto não afrouxa asserção
+ * nenhuma: o valor devolvido é o mesmo, só não é recalculado. Ver o cache do laço no fim do
+ * arquivo, que é a outra metade do estouro de tempo no gate.
+ */
+const CACHE_PONDERADO = new WeakMap<object, Map<GrupoPrimario, number>>();
+const ponderado = (r: ReturnType<typeof rotina>) => {
+  const emCache = CACHE_PONDERADO.get(r);
+  if (emCache) return emCache;
+  const conta = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
+  CACHE_PONDERADO.set(r, conta);
+  return conta;
+};
 
 /**
  * 🔵 O TETO É POR GRUPO (decisão 2026-09-17). Um número só deixou de bastar: o grupo EM FOCO
@@ -298,12 +312,21 @@ describe('🔒 varredura — nenhum plano AUTOMÁTICO nasce acima do teto', () =
             for (const limite of ['limitado', 'sem_limite'] as const)
               for (const semana of [1, 5, 6] as const)
                 for (const foco of [undefined, { grupo: 'peito', compensa: 'ombros' }] as const) {
+                  /**
+                   * 🔵 A CÉLULA SEM FOCO NÃO É MEDIDA AQUI — e por isso não é MONTADA aqui
+                   * (2026-09-17, 3ª volta). O excesso do baseline é a pendência declarada
+                   * acima; esta varredura mede o DELTA do foco. Montar o plano sem foco para
+                   * descartá-lo na linha seguinte custava 216 montagens por execução e foi
+                   * o que estourou os 240 s no gate remoto (244 096 ms em `cec4c62`). O plano
+                   * sem foco que a comparação precisa é o `semFoco` logo abaixo, e esse
+                   * continua sendo montado.
+                   */
+                  if (!foco) continue;
                   const p = perfil({ nivelExperiencia: nivel, objetivo, diasDisponiveis: dias,
                     treinoDias: DIAS.slice(0, dias) as never, tempoPorSessaoMin: tempo, limiteTempoTreino: limite,
-                    ...(foco ? { foco: { ...foco, semana } } : {}) } as never);
+                    foco: { ...foco, semana } } as never);
                   let r;
                   try { r = rotina(p, semana); } catch { continue; }
-                  if (!foco) continue; // o excesso do baseline é a pendência declarada acima
                   medidos += 1;
                   // 🔵 O teto é POR GRUPO e já vem com fase e foco resolvidos pelo motor.
                   /**

@@ -24,6 +24,249 @@ remoto herdado) e o contém por inteiro — por isso ela é a base.
 
 ---
 
+---
+
+# Terceira volta (2026-09-17) — validação dirigida de `cec4c62`
+
+`cec4c62` foi declarado "só documentação". **Confirmado:** `git diff e1933bd cec4c62` toca dois
+arquivos, ambos em `docs/` (284 inserções, 24 remoções). Nenhum byte de `src/`.
+
+Esta volta fecha as lacunas que a entrega anterior deixou nomeadas, e encontrou **dois defeitos
+reais** — um de copy e um de tempo no gate remoto.
+
+## ⓐ O esforço DITO virou o esforço FEITO — defeito corrigido
+
+`PropostaTreino.tsx` trazia uma **fórmula fixa** no rodapé da ressalva:
+
+> "Procuramos outro exercício, outro dia e menos séries, e nada disso coube nas suas outras
+> escolhas."
+
+Ela afirmava **três tentativas, sempre**. No desenho da pessoa o app não mexe em exercício, dia
+nem série — nenhuma das três acontece —, e a frase inventava um esforço que não houve. É
+exatamente o que a decisão proíbe: a mensagem tem de refletir o que foi efetivamente tentado.
+
+O motor já fazia certo (`frasesDaExcecao` lia `alternativas`, o registro nominal). O conserto
+extraiu essa lógica para **`esforcoDaExcecao`**, agora a autoridade única lida pelos dois — motor
+e tela. Não há segunda redação.
+
+Aproveitou-se para tirar a última pretensão de exaustividade: a frase passou a ser **"Entre as
+alternativas que o app examina, tentamos …"**. A busca é um conjunto **delimitado e enumerado por
+regra** (os slots do dia que alimentam o grupo e, para cada um, os exercícios de mesmo grupo,
+mesmo padrão e mesma assinatura de custo), não uma varredura do espaço de planos — e o texto
+agora diz isso.
+
+Guards novos em `treino-acoes-e-cobertura-tela.test.ts`: a tela usa `esforcoDaExcecao`, a fórmula
+fixa não pode voltar, nem tela nem motor podem chamar a busca de exaustiva, e
+`esforcoDaExcecao` distingue "nada foi tentado" de "tentamos e não coube". **Anti-vacuidade
+verificada**: reintroduzindo a frase antiga, o guard cai com "a fórmula fixa do esforço voltou".
+
+## ⓑ A ressalva, exercida VISUALMENTE — com fixture sintética declarada
+
+A entrega anterior tinha só guard estático de tela. Faltava ver.
+
+**Primeiro, medir se o caso real existe.** Varredura de **8 064 combinações automáticas**
+(3 níveis × 1–7 dias × 6 durações × 2 limites × 2 equipamentos × 4 focos × 4 semanas) com o teto
+**real de 12**: **zero exceções**. O caminho automático **não alcança** a exceção com o catálogo
+real — confirmando o que a segunda volta já dizia. Baixando o teto para 8: ainda zero. Para 6:
+**84 células** produzem exceção genuína.
+
+Logo a fixture **é sintética, e isso é declarado**: `TETO_PONDERADO_SESSAO` rebaixado para 6
+durante o laboratório. **Só isso.** O componente, o `proporTreino`, o motor e o catálogo são os de
+produção; nada foi mockado.
+
+Percurso pela interface real (build otimizado, não o servidor de dev — ver Limites):
+
+| conferência | resultado |
+|---|---|
+| ressalva existe | `<section role="status" aria-label="Ressalva de volume">` |
+| **antes** do botão | `compareDocumentPosition` = precede; y 674 contra 951 |
+| grupo | **Glúteos** |
+| dia | **Full-body** (segunda-feira) |
+| volume ponderado | **7** |
+| referência | "acima das **6** que o app usa como limite de um treino só" |
+| causa | "**4** vêm do trabalho indireto de **posterior, quadríceps** no mesmo dia" |
+| esforço | as três alternativas, porque as três foram tentadas (19 examinadas) |
+| veredito | "Este treino **não está dentro de todos os limites** do app." |
+| não é alerta clínico | sem "perigo", "lesão", "arriscado" |
+| **Cancelar** | proposta fecha; nada gravado |
+| **Confirmar** → plano/editor | a frase permanece, completa, com o mesmo esforço |
+| celular (375 px) | legível, sem transbordo horizontal, acima dos dois botões |
+| desktop | legível, acima dos dois botões |
+
+A **distinção pedida foi respeitada**: este é o caminho **automático** (`tipo: 'gerar'`, sem
+desenho salvo), não o excesso já existente no desenho manual — que continua coberto por teste
+próprio em `volume-hipertrofia-2026-09-17.test.ts`.
+
+A rota de laboratório e o teto rebaixado **foram removidos**; o candidato final não os contém.
+
+## ⓒ O gate remoto de `cec4c62` CAIU — e o motivo não era asserção
+
+Fato que a entrega anterior não podia ter reportado (a execução ainda estava em curso):
+
+| SHA | gate remoto | onde |
+|---|---|---|
+| `e1933bd` | ✅ success | [run 35193824135](https://github.com/nspleal/adaptkorpus/actions/runs/35193824135) |
+| `cec4c62` | ❌ **failure** | [run 35195011713](https://github.com/nspleal/adaptkorpus/actions/runs/35195011713) |
+
+Typecheck e lint passaram; caiu em **testes**, e por **tempo**, não por propriedade:
+
+```
+FAIL  atual  src/lib/foco-teto-mrv.test.ts > 🔒 varredura — nenhum plano AUTOMÁTICO nasce acima
+      do teto > com e sem foco, na grade onde o teto morde
+Error: Test timed out in 240000ms.      (o caso levou 244 096 ms)
+Tests  1 failed | 3753 passed | 23 skipped (3777)
+```
+
+Margem de **4 segundos** sobre 240 — por isso `e1933bd`, com código idêntico, passou. O teste e o
+seu limite de 240 s já existiam na base `8b41ec9`; o que cresceu foi o custo da varredura.
+
+**O conserto não afrouxou nada** — nenhum limite foi elevado, nenhuma asserção mudou. Duas
+economias, ambas puras:
+
+1. **216 montagens jogadas fora.** O laço montava o plano *sem* foco e o descartava na linha
+   seguinte (`if (!foco) continue`), porque esta varredura mede o **delta** do foco. O `continue`
+   subiu para antes da montagem. O plano sem foco de que a comparação precisa (`semFoco`)
+   continua sendo montado.
+2. **A conta ponderada da semana, memoizada por rotina** (`WeakMap`). Ela é pura e a rotina é
+   imutável, mas era invocada dentro de um laço por grupo — recomputando a semana inteira uma vez
+   por grupo.
+
+Medido no mesmo worktree, com o teto real de 12: **121,75 s → 84,06 s (−31 %)**, os mesmos 15
+testes passando.
+
+## ⓓ A rampa fora da hipertrofia — medida, não presumida
+
+A correção da rampa mora num trecho **que não é da hipertrofia**: o laço que reparte o volume por
+grupo roda para todo plano com `semanaCiclo`, qualquer que seja o objetivo. A matriz da segunda
+volta, porém, era **toda de `objetivo: 'massa'`**. Emagrecimento e saúde passavam pelo mesmo
+desempate sem cobertura. Essa era a lacuna.
+
+**A/B com 1 728 células** (3 objetivos × 3 níveis × 4 agendas × 3 durações × 2 limites × 4 semanas
+× com/sem foco), comparando a ordem por **posição** (a de antes do conserto) com a ordem por
+**identidade + secundários grandes** (a vigente):
+
+| objetivo | células | distribuição por slot mudou | crédito ponderado por grupo mudou | total de séries mudou | avisos | "abaixo do mínimo" | dias acima do tempo |
+|---|---|---|---|---|---|---|---|
+| emagrecimento | 576 | 42 | 42 | **5** | 0 a mais / 4 a menos | 0 a mais / **4 a menos** | **0 a mais** |
+| saúde | 576 | 12 | 12 | 0 | 0 a mais / 6 a menos | 0 a mais / **6 a menos** | **0 a mais** |
+| massa | 576 | 8 | 8 | 0 | 0 a mais / 4 a menos | 0 a mais / **4 a menos** | **0 a mais** |
+
+**A mudança não é neutra fora da hipertrofia** — 42 células de emagrecimento e 12 de saúde
+trocaram qual slot carrega a sobra, e com ela o crédito indireto que essa série espalha. O saldo
+é positivo e unilateral: **14 células perderam um aviso de grupo abaixo do mínimo, nenhuma
+ganhou**, e **nenhuma** passou a ter dia acima do tempo.
+
+### A diferença remanescente, nomeada
+
+**5 células** — todas `emagrecimento / avançado / 6 dias / S3 / foco=peito`, nas cinco combinações
+de tempo — entregam **2 séries a menos** (112 → 110; 108 → 106). Rastreada até a causa, sem
+suposição:
+
+| | ordem antiga | ordem vigente |
+|---|---|---|
+| `blocoFoco.adicionais` | `[{sex, e1, 2 séries}]` | `[]` |
+| peito (ponderado) | 16 | 14 |
+| ombros (ponderado) | 16 | 16 |
+| teto publicado | `semFoco 16 · cheio 16 · sessao null` | idem |
+| aviso emitido | "O bloco do foco **não entrou**: somar Peito aqui levaria Ombros acima do máximo desta semana…" | **a mesma frase** |
+
+As duas ordens emitem **o mesmo aviso**. Sob a ordem antiga esse aviso **contradizia** o próprio
+plano: dizia que o bloco não entrou e `adicionais` trazia 2 séries. Sob a ordem vigente os dois
+concordam. As 2 séries "perdidas" são extras que o plano **já declarava recusados**.
+
+Nenhum teto é violado em nenhuma das duas (peito ≤ 16, ombros ≤ 16), e o baseline é preservado
+nas duas. Registra-se como **diferença remanescente**, não como neutralidade: o volume de foco
+entregue nessas 5 células caiu de 2 para 0. Decidir qual das duas leituras é a certa — o aviso ou
+os extras — é mexer no bloco do foco, e está fora do escopo desta tarefa.
+
+### O que passou a ser testado
+
+`rampa-identidade-2026-09-17.test.ts` ganhou **15 casos** (25 → 40), todos fora da hipertrofia:
+
+- ① cinco voltas abrir/salvar/reabrir sem mover um slot — 2 objetivos × 4 fases (rampa S3,
+  deload S6, retomada, saída da retomada);
+- ② o teto publicado é o do **próprio objetivo** (`cheio = semFoco = topo da faixa`,
+  `sessao = null`), com anti-vacuidade contra `massa` no mesmo nível (13/19/21, margem 3, 12 por
+  sessão);
+- ③ a marca do teto por sessão **não vaza** para objetivo que não tem esse teto;
+- ④ o foco não tira série de terceiro;
+- ⑤ baixar UMA série não levanta nenhuma outra;
+- ⑥ **a retomada supersede o mesociclo**: S6 com retomada é idêntico, slot a slot, a S1 com
+  retomada — sem corte duplo —, com anti-vacuidade de que a S6 **sozinha** corta mesmo;
+- ⑦ nenhum dia passa do limite de tempo declarado;
+- ⑧ ocorrência repetida em dias distintos não colide na chave `dia/id`.
+
+> ⚠️ O caso ⑦ nasceu **vazio**: comparava contra `'ACIMA_DO_LIMITE'`, valor que `EstadoLimite`
+> não possui — a comparação nunca casava e o teste era verde por construção. Quem pegou foi o
+> **typecheck** (`TS2367`). Corrigido para `'ACIMA_DO_LIMITE_OPERACIONAL'` e reforçado com
+> anti-vacuidade que exige dias efetivamente **comparados** ao limite.
+
+## ⓔ Os 23 testes pulados, reconciliados nominalmente
+
+`test-support/selecao-etapa1-classificacao.json` declara **exatamente 23** nomes históricos, em 8
+arquivos — e a suíte reporta **23 skipped**. Um a um:
+
+| arquivo | nomes |
+|---|---|
+| `engine/alocador.test.ts` | 2 |
+| `c1-caminho-publico.test.ts` | 4 |
+| `engine/dia-nao-atendido.test.ts` | 2 |
+| `engine/foco-equilibrio-puxar-empurrar.test.ts` | 1 |
+| `engine/grade-cobertura.test.ts` | 2 |
+| `engine/orcamento-caracterizacao.test.ts` | 3 |
+| `engine/regressao-cinco-casos.test.ts` | 8 |
+| `engine/treino-montador.test.ts` | 1 |
+| **total** | **23** |
+
+O 24º saiu em `d93028b`: `deload-volume-entregue.test.ts` teve o teste reescrito e renomeado, a
+exclusão passou a apontar para um nome inexistente e virou **filtro morto** — o arquivo listava 24
+e só 23 eram de fato filtrados. Hoje esse teste **roda e passa nos dois projetos**, e o arquivo
+segue listado para continuar rodando também no projeto histórico. O `nota` no JSON registra isso.
+
+O guard contra filtro sem correspondência (`selecao-etapa1-classificacao.test.ts`) continua de pé
+e foi conferido: todo nome histórico casa com um teste existente, todo arquivo classificado
+existe, e o total é 23.
+
+**Todos os projetos do Vitest rodaram** — `atual`, um `atual:<arquivo>` por arquivo classificado
+e `historico-seletor-etapa1`. Nada foi filtrado por `--project`.
+
+## ⓕ Cobertura muscular — preservada por construção
+
+O QA autenticado da segunda volta foi feito em `e1933bd`. A superfície da cobertura muscular
+(`CoberturaMuscular.tsx`, `cobertura-anatomica.ts`, `cobertura-editor.ts`, `cobertura-teto.ts`,
+`EditorTreino.tsx`, `condicao-execucao-copy.ts`, `alvos-anatomicos-dados.ts`) está **byte a byte
+idêntica** a `e1933bd` neste candidato — `git diff` vazio. O comportamento QA'do é conservado por
+construção, não por nova inspeção, e a suíte de cobertura segue verde.
+
+## Limites reais desta volta
+
+- **A exceção automática continua sintética.** Com o teto real de 12 ela não ocorre em nenhuma das
+  8 064 combinações medidas. A validação visual usou teto 6. O que foi exercido de verdade é o
+  **caminho de produção** e o **render**; o número 12 na tela não foi visto num caso real, porque
+  não existe caso real.
+- **O servidor de desenvolvimento não renderiza** sob a CSP vigente (`script-src` sem
+  `unsafe-eval`; o bundle de dev usa `eval` e o React não hidrata — os cliques não chegam aos
+  handlers). A CSP **não foi relaxada**: o QA usou `next build` + `next start`.
+- **Não houve novo QA autenticado.** Ele não era necessário: a superfície da cobertura é idêntica
+  à do SHA já validado. As telas exercidas aqui rodaram em ambiente local descartável, sem conta,
+  sem Supabase e sem gravação de nenhuma espécie.
+- **As 5 células de emagrecimento** acima seguem como diferença aberta (ⓓ).
+- **O topo da faixa desejada continua inalcançável** para vários layouts, em silêncio e
+  corretamente sob a decisão vigente. Segue como decisão material.
+
+## Decisões materiais
+
+1. 🔺 **RESOLVIDA (2ª volta)** — o resíduo de sessão por crédito indireto.
+2. **A faixa superior inalcançável** — *segue aberta*, inalterada por esta volta.
+3. **O desempate por secundários** — *segue aberta*, e esta volta **quantificou-a também fora da
+   hipertrofia*: 42 células de emagrecimento e 12 de saúde mudam de distribuição, com 14 avisos de
+   grupo abaixo do mínimo a menos e nenhum a mais.
+4. **NOVA — o bloco do foco contra o seu próprio aviso.** Nas 5 células de emagrecimento acima, a
+   ordem antiga entregava 2 extras enquanto o plano dizia que o bloco não entrara. A ordem vigente
+   faz os dois concordarem, entregando 0. Qual das duas é a intenção é decisão do autor.
+
+---
+
 # Segunda volta (2026-09-17) — `e1933bd`
 
 A decisão do autor **substituiu a obrigação absoluta de 12 por sessão**: 12 continua sendo o

@@ -348,29 +348,45 @@ export function declararExcessoDeSessao<S extends SlotPonderavel>(args: {
  */
 export const MARCA_EXCECAO_SESSAO = 'que o app usa como limite de um treino só';
 
+const NOME_DA_ALTERNATIVA: Record<TipoAlternativa, string> = {
+  troca_de_exercicio: 'trocar o exercício por um equivalente',
+  mudanca_de_dia: 'passar o exercício para outro dia',
+  reducao_de_series: 'reduzir as séries que o app dosou',
+};
+
+/**
+ * 🔴 O ESFORÇO DITO É O ESFORÇO FEITO — e por isso mora aqui, numa autoridade só.
+ *
+ * A frase se monta a partir de `e.alternativas`, que é o registro nominal do que foi
+ * examinado. Ela nunca diz "procuramos tudo": a busca deste módulo é um conjunto
+ * DELIMITADO e enumerado por regra (os slots daquele dia que alimentam o grupo, e para
+ * cada um os exercícios de mesmo grupo, mesmo padrão e mesma assinatura de custo), não
+ * uma varredura do espaço de planos possíveis.
+ *
+ * 🔒 No desenho da pessoa nada é tentado — exercícios, dias e séries são escolha dela —, e
+ * afirmar que se procurou seria inventar um esforço que não houve. Uma fórmula fixa na
+ * tela ("procuramos outro exercício, outro dia e menos séries") mentiria justamente nesse
+ * caso, que é o mais comum. Tela e motor leem esta função; não há segunda redação.
+ */
+export function esforcoDaExcecao(e: ExcecaoDeSessao): string {
+  const tentado = [...new Set(e.alternativas.filter((a) => a.motivo !== 'slot_escolhido_pela_pessoa').map((a) => a.tipo))];
+  if (tentado.length === 0) {
+    return 'Os exercícios, os dias e as séries deste treino são sua escolha, e o app não mexe neles por conta própria.';
+  }
+  return 'Entre as alternativas que o app examina, tentamos '
+    + tentado.map((t) => NOME_DA_ALTERNATIVA[t]).join(', ')
+    + ' — nada disso coube nas suas outras escolhas.';
+}
+
 export function frasesDaExcecao(excecoes: readonly ExcecaoDeSessao[], rotulo: (g: GrupoPrimario) => string): string[] {
   return excecoes.map((e) => {
     const origem = e.origensIndiretas.length > 0
       ? ' ' + e.indireto + ' ' + (e.indireto === 1 ? 'vem' : 'vêm') + ' do trabalho indireto de '
         + e.origensIndiretas.map((o) => rotulo(o.grupo).toLowerCase()).join(', ') + ' no mesmo dia.'
       : '';
-    /**
-     * 🔒 A frase diz o que REALMENTE foi tentado, não uma fórmula fixa. No desenho da pessoa
-     * não se procura outro exercício nem outro dia — eles são escolha dela —, e afirmar que
-     * se procurou seria inventar um esforço que não houve.
-     */
-    const tentado = [...new Set(e.alternativas.filter((a) => a.motivo !== 'slot_escolhido_pela_pessoa').map((a) => a.tipo))];
-    const NOME: Record<TipoAlternativa, string> = {
-      troca_de_exercicio: 'trocar o exercício por um equivalente',
-      mudanca_de_dia: 'passar o exercício para outro dia',
-      reducao_de_series: 'reduzir as séries que o app dosou',
-    };
-    const esforco = tentado.length === 0
-      ? ' Os exercícios, os dias e as séries deste treino são sua escolha, e o app não mexe neles por conta própria.'
-      : ' Tentamos ' + tentado.map((t) => NOME[t]).join(', ') + ' — nada disso coube nas suas outras escolhas.';
     return 'Neste plano, ' + rotulo(e.grupo).toLowerCase() + ' fica com ' + e.ponderado
       + ' séries em ' + e.nomeDoDia + ' — acima das ' + e.teto + ' ' + MARCA_EXCECAO_SESSAO
-      + ', somando diretas e indiretas.' + origem + esforco
+      + ', somando diretas e indiretas.' + origem + ' ' + esforcoDaExcecao(e)
       + ' O plano vai assim, e por isso não dá para dizer que ele está dentro de todos os limites.';
   });
 }
