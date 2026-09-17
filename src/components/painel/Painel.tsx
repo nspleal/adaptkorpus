@@ -3,6 +3,7 @@ import PlanejarCardio from './PlanejarCardio';
 
 import { seriesDoSlot } from '@/lib/series-treino';
 import ResumoSeries from './ResumoSeries';
+import CoberturaPendente from './CoberturaPendente';
 import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRef } from 'react';
@@ -2311,6 +2312,14 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
         <div key={`${dia.nome}-${d}`} style={{ marginBottom: 22 }}>
           <h3 style={{ margin: '0 0 16px' }}>{dia.slots.reduce((n, s) => n + series(s), 0)} séries planejadas neste dia</h3>
           <ResumoSeries slots={dia.slots.map((slot) => ({ exercicio: slot.exercicio, series: series(slot) }))} />
+          {/**
+            * 🔵 A REGIÃO PENDENTE, NO PLANO (item 6 do pedido de 2026-09-17).
+            *
+            * Mesma lista e mesma frase da prévia: o que a pessoa leu antes de confirmar
+            * continua escrito aqui, e o editor diz a mesma coisa porque os três leem
+            * `rotina.coberturaAnatomica`, publicada pelo motor.
+            */}
+          <CoberturaPendente dia={(rotina?.coberturaAnatomica ?? []).find((c) => c.dia === dia.nome)} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
             <div style={kicker}>{dia.nome} · RIR {prescricao.rir.min}–{prescricao.rir.max}</div>
             <button onClick={() => onIniciar(d)} className="hov-btn" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.85rem', padding: '8px 16px', border: 'none', borderRadius: 10, cursor: 'pointer' }}><svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill="currentColor" /></svg>Iniciar treino</button>

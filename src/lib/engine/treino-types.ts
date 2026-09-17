@@ -6,6 +6,7 @@ import type { ReferenciaDose } from './referencia-dose';
  */
 import type { PreferenciasTreino } from './preferencias';
 import type { FocoGrupo } from './trilhos';
+import type { DiagnosticoAnatomicoDia } from './cobertura-anatomica';
 import type { ExcecaoDeSessao } from './excecao-sessao';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
@@ -492,6 +493,16 @@ export interface RotinaSemanal {
   fatosCobertura?: FatoCoberturaGrupo[];
   /** 🔒 Fatos dos invariantes de padrão emitidos nesta rotina (hoje: puxar ≥ empurrar). */
   fatosInvariantes?: FatoInvariantePadrao[];
+  /**
+   * 🔵 COBERTURA ANATÔMICA POR DIA — as regiões dos grupos do dia que ficaram sem exercício
+   * identificado, com o MOTIVO concreto, e as tarefas mecânicas que ficaram repetidas
+   * (item 6 do pedido de 2026-09-17). Ausente quando não há nada pendente.
+   *
+   * 🔴 DIAGNÓSTICO, não veredito: não bloqueia salvamento, não é aviso e não afirma que a
+   * região não é ativada — diz que não há exercício com ação DIRETA identificada para ela
+   * naquele dia, e por quê.
+   */
+  coberturaAnatomica?: DiagnosticoAnatomicoDia[];
   /**
    * 🔒 Os cortes por TEMPO que o app fez neste plano, por exercício. O editor usa isto
    * para explicar a dose que exibe sem atribuir à pessoa um corte automático. Ausente =

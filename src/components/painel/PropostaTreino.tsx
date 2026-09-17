@@ -5,6 +5,7 @@ import type { Proposta } from '@/lib/proposta-treino';
 import { seriesDoSlot } from '@/lib/series-treino';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { esforcoDaExcecao } from '@/lib/engine/excecao-sessao';
+import CoberturaPendente from './CoberturaPendente';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
 
 /**
@@ -207,6 +208,18 @@ export default function PropostaTreino({
                   </li>
                 ))}
               </ul>
+              {/**
+                * 🔵 A REGIÃO PENDENTE, ANTES DA CONFIRMAÇÃO (item 6, 2026-09-17).
+                *
+                * 🔑 Mesma razão da ressalva do teto por sessão: se a lacuna só aparecesse no
+                * plano salvo, a pessoa confirmaria sem saber o que o app tentou e o que não
+                * coube. A fonte é `rotina.coberturaAnatomica`, publicada pelo motor, e a frase
+                * é a mesma que o plano usa — a tela não recalcula nem reescreve nada.
+                */}
+              <CoberturaPendente
+                dia={(proposta.rotina.coberturaAnatomica ?? []).find((c) => c.dia === dia.nome)}
+                compacto
+              />
             </details>
           ))}
         </section>

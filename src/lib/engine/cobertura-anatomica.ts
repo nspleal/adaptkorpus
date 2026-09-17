@@ -6,9 +6,21 @@
  * dia, favorece o que aborda alvos diretos ainda não abordados naquele dia, e evita repetir a
  * mesma ação classificada quando existe alternativa compatível.
  *
+ * ── A ORDEM DE ATUAÇÃO (decisão do autor, 2026-09-17) ───────────────────────────────────
+ *  ① TROCAR o exercício de um slot por outro do mesmo grupo que abra uma região descoberta;
+ *  ② quando a troca sozinha custaria crédito indireto de alguém, procurar um PAR — uma
+ *     segunda troca, no MESMO grupo e no MESMO dia, que devolva exatamente o que a primeira
+ *     tirou. A regra de volume não é flexibilizada: o par só vale se a semana terminar com o
+ *     mesmo crédito ponderado, grupo por grupo;
+ *  ③ ACRESCENTAR um exercício, só quando ① e ② não resolvem e existe margem válida em
+ *     estrutura, tempo e volume — todas perguntadas ao chamador, nunca decididas aqui;
+ *  ④ o que sobrar vira DIAGNÓSTICO com o motivo concreto (`diagnosticarDia`).
+ *
  * 🔒 O que ele NÃO faz, e é a razão de ele caber aqui sem reabrir nenhuma regra aprovada:
- *  · não cria slot, série, tempo, descanso, foco, teto nem frequência — entra DEPOIS de o
- *    alocador decidir que um slot existe e a qual grupo ele pertence;
+ *  · não cria série, tempo, descanso, foco, teto nem frequência — entra DEPOIS de o alocador
+ *    decidir os slots, e só o `limites.adicao` (injetado, e ausente por padrão) lhe permite
+ *    ACRESCENTAR um slot, sempre dentro do orçamento e dos tetos que o alocador já usou;
+ *  · não reduz, remove nem redistribui nada para abrir espaço: se não couber, não entra;
  *  · não muda quem é elegível — equipamento, nível, pool do grupo, trava `puxar ≥ empurrar`,
  *    reserva de core/pequenos/puxar e preferências brandas já existentes continuam decidindo
  *    ANTES; este módulo só desempata entre os que sobreviveram a tudo isso;
@@ -223,15 +235,22 @@ export interface DiaParaCobertura {
   slots: SlotParaCobertura[];
 }
 
-/** Por que uma troca aconteceu. Não é peso: é o motivo, dito. */
-export type MotivoDaTroca = 'alvo_novo' | 'complementaridade_mecanica';
+/**
+ * Por que uma troca aconteceu. Não é peso: é o motivo, dito.
+ *
+ * 🔵 `compensacao` (2026-09-17) marca a SEGUNDA metade de um par: ela não ganha alvo nem traço
+ * — existe para devolver, no mesmo dia, o crédito indireto que a primeira metade tirou. Só
+ * aparece acompanhada da troca que a motivou.
+ */
+export type MotivoDaTroca = 'alvo_novo' | 'complementaridade_mecanica' | 'compensacao' | 'adicao_complementar';
 
 /** Uma troca efetivamente feita — matéria-prima do diagnóstico e dos testes. */
 export interface TrocaAnatomica {
   dia: number;
   slot: number;
   grupo: GrupoPrimario;
-  de: string;
+  /** 🔵 `null` numa ADIÇÃO: nada saiu do plano, um slot novo entrou. */
+  de: string | null;
   para: string;
   motivo: MotivoDaTroca;
   alvosGanhos: readonly AlvoId[];
@@ -259,16 +278,63 @@ export interface LimitesDeCredito {
    * por conta do bloco do foco, e o passe não a acrescenta.
    */
   gruposPreservados?: readonly GrupoPrimario[];
-}
-
-/** Crédito ponderado (1,0 direto + 0,5 secundário) de uma lista de exercícios. */
-function creditoDe(exercicios: readonly Exercise[], series: number): Map<GrupoPrimario, number> {
-  const m = new Map<GrupoPrimario, number>();
-  for (const e of exercicios) {
-    if (e.grupoPrimario) m.set(e.grupoPrimario, (m.get(e.grupoPrimario) ?? 0) + series);
-    for (const sec of secundariosDe(e)) m.set(sec, (m.get(sec) ?? 0) + series * PESO_SECUNDARIO);
-  }
-  return m;
+  /**
+   * 🔵 A AUTORIDADE REAL DO TEMPO, injetada pelo chamador (correção 2026-09-17).
+   *
+   * Recebe o dia e a lista de exercícios que ele teria DEPOIS da troca, e responde se o dia
+   * não ficou mais caro. Quem sabe responder isso é o montador — ele tem o orçamento diário,
+   * o RIR da semana, o modo força, a rampa e a fórmula canônica de duração. Injetar em vez
+   * de importar é o que impede a cobertura de virar uma segunda autoridade de tempo e o que
+   * mantém este módulo puro.
+   *
+   * 🔒 Ausente ⇒ vale o padrão conservador: só troca de ASSINATURA DE CUSTO idêntica. É o que
+   * preserva o comportamento para quem chama o passe sem orçamento (testes de unidade).
+   */
+  custoDoDiaNaoAumenta?: (dia: number, exerciciosDepois: readonly Exercise[]) => boolean;
+  /**
+   * 🔵 ADIÇÃO CONTROLADA (decisão do autor, 2026-09-17) — o passe pode ACRESCENTAR um
+   * exercício quando a troca não resolve e há margem válida.
+   *
+   * 🔴 Quando a troca não resolve, e por quê: o dia com UM slot de core cobre 5 dos 6 alvos
+   * com o bird dog e 3 com a prancha lateral; trocar não fecha o quadrado lombar, apenas
+   * MOVE a lacuna para o eretor e o transverso. Medido: 300 das 659 regiões descobertas são
+   * desse tipo. A única saída correta é um segundo exercício — ou dizer que não cabe.
+   *
+   * 🔒 Ausente ⇒ o passe NÃO acrescenta nada, e o contrato antigo ("não cria slot") continua
+   * valendo inteiro para quem chama sem esta injeção.
+   *
+   * 🔒 Os três limites são perguntados ao chamador, que é quem tem as autoridades: estrutura
+   * (orçamento de slots do dia), tempo (a fórmula de duração, sem descer degrau de descanso)
+   * e volume ponderado (teto da semana e teto da sessão, contando crédito indireto). Nenhum
+   * deles é recalculado aqui — a cobertura não vira segunda autoridade de nada.
+   */
+  adicao?: {
+    /** Quantos slots o dia ainda comporta pela ESTRUTURA. 0 ⇒ nada é acrescentado. */
+    slotsLivres: (dia: number) => number;
+    /**
+     * O GRUPO ainda comporta mais um slot na semana, pelos MESMOS tetos que o alocador usou?
+     *
+     * 🔴 Medido: sem esta pergunta o passe punha um segundo exercício de core num dia que já
+     * tinha um, e o avançado 6d saía com quatro slots de core contra o invariante travado de
+     * 2–3 por semana. Frequência e teto de slots por grupo são decisão do alocador.
+     */
+    cabeNoTetoDeSlots: (novo: Exercise) => boolean;
+    /** O dia ainda cabe no tempo com este exercício a mais, sem encurtar o descanso de ninguém? */
+    cabeNoTempo: (dia: number, exerciciosDepois: readonly Exercise[]) => boolean;
+    /** O crédito ponderado deste exercício cabe nos limites da SEMANA e da SESSÃO? */
+    cabeNoVolume: (dia: number, novo: Exercise) => boolean;
+    /**
+     * 🔒 Grupos que a ADIÇÃO não toca — os do FOCO, INCLUSIVE `core`.
+     *
+     * 🔴 Por que `core` entra aqui e não entra em `gruposPreservados`: para a TROCA, o foco de
+     * core é inócuo (ele sobe séries nos slots que já existem). Para a ADIÇÃO, não: um slot de
+     * core a mais muda entre quantos exercícios o boost do foco se reparte. Medido — com o foco
+     * em core, o total semanal do plano caía de 80 para 78 séries em
+     * `intermediario/saude/4d`, e o invariante "o foco de core não muda o volume total" é
+     * exatamente o que proíbe isso.
+     */
+    gruposPreservados?: readonly GrupoPrimario[];
+  };
 }
 
 const GRANDES: ReadonlySet<string> = new Set(['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros']);
@@ -292,12 +358,56 @@ const PADROES_CONTADOS: readonly string[] = ['puxar', 'empurrar', 'agachar', 'do
  *
  * ⚠️ Fora dos grandes a trava não existe, de propósito: bíceps, tríceps, antebraço, lombar,
  * panturrilha e core não são lidos por nenhum dos dois consumidores, e travá-los ali bloquearia
- * complementaridade legítima sem proteger nada. O que os protege é `creditoPreservado`, que não
+ * complementaridade legítima sem proteger nada. O que os protege é `nenhumGrupoPerde`, que não
  * deixa nenhum grupo ZERAR.
  */
-function creditoGrandeNaoAcrescenta(atual: Exercise, candidato: Exercise): boolean {
-  const antes = new Set<string>(secundariosDe(atual));
-  return secundariosDe(candidato).every((g) => antes.has(g) || !GRANDES.has(g));
+function creditoGrandeNaoAcrescenta(delta: ReadonlyMap<GrupoPrimario, number>): boolean {
+  for (const [g, n] of delta) if (GRANDES.has(g) && n > 0) return false;
+  return true;
+}
+
+/**
+ * 🔵 O DELTA DE CRÉDITO PONDERADO de um conjunto de trocas (2026-09-17) — a forma que torna
+ * a COMPENSAÇÃO possível sem tocar em nenhuma regra de volume.
+ *
+ * 🔑 Crédito é aditivo, então o efeito de uma troca sobre a semana inteira é exatamente
+ * `credito(para) − credito(de)`; somar os deltas de duas trocas dá o efeito do par. Sobre o
+ * delta, as duas travas de volume são a MESMA coisa que eram sobre os totais:
+ *  · `nenhum grupo perde` ⇔ todo delta ≥ 0;
+ *  · `grande não ganha`  ⇔ todo delta de grupo grande ≤ 0.
+ * Nada foi afrouxado: o que muda é que um par pode zerar o que uma troca sozinha tirava, e
+ * aí a semana termina com exatamente o mesmo crédito de antes, grupo por grupo.
+ */
+function deltaDaTroca(de: Exercise, para: Exercise, series: number): Map<GrupoPrimario, number> {
+  const m = new Map<GrupoPrimario, number>();
+  const somar = (g: GrupoPrimario | null | undefined, n: number) => {
+    if (!g) return;
+    const v = (m.get(g) ?? 0) + n;
+    if (v === 0) m.delete(g); else m.set(g, v);
+  };
+  somar(de.grupoPrimario, -series);
+  for (const s of secundariosDe(de)) somar(s, -series * PESO_SECUNDARIO);
+  somar(para.grupoPrimario, series);
+  for (const s of secundariosDe(para)) somar(s, series * PESO_SECUNDARIO);
+  return m;
+}
+
+function somarDeltas(
+  a: ReadonlyMap<GrupoPrimario, number>,
+  b: ReadonlyMap<GrupoPrimario, number>,
+): Map<GrupoPrimario, number> {
+  const m = new Map(a);
+  for (const [g, n] of b) {
+    const v = (m.get(g) ?? 0) + n;
+    if (v === 0) m.delete(g); else m.set(g, v);
+  }
+  return m;
+}
+
+/** Nenhum grupo perde crédito ponderado (a decisão de 2026-09-15), lida sobre o delta. */
+function nenhumGrupoPerde(delta: ReadonlyMap<GrupoPrimario, number>): boolean {
+  for (const n of delta.values()) if (n < 0) return false;
+  return true;
 }
 
 /**
@@ -319,17 +429,16 @@ function creditoGrandeNaoAcrescenta(atual: Exercise, candidato: Exercise): boole
  * Consequência aceita e declarada: onde a única alternativa que traria alvo ou traço novo
  * custa crédito de alguém, o exercício anterior fica — a redundância permanece e é o
  * diagnóstico que a explica.
+ *
+ * 🔵 MEDIDO NA CORREÇÃO DE 2026-09-17, e deixado de pé: esta trava é hoje o maior bloqueio
+ * isolado à complementaridade. Das 659 regiões sem exercício identificado em 144 perfis, 148
+ * fecharam corrigindo os proxies de CUSTO e de PADRÃO; outras 120 dependiam só desta régua.
+ * Ela NÃO foi afrouxada: `credito-nao-regride.test.ts` a trava como invariante global sobre a
+ * grade real, e trocá-la por "só perde quem ainda tem trabalho direto" reprovava naquele
+ * arquivo inteiro — inclusive no caso do tríceps que deu origem à decisão. Afrouxar isto é
+ * decisão de produto do autor, não da cobertura; o que o passe faz é DIZER a lacuna que
+ * sobra, com o motivo `alternativa_mudaria_credito`.
  */
-function creditoPreservado(
-  antes: ReadonlyMap<GrupoPrimario, number>,
-  depois: ReadonlyMap<GrupoPrimario, number>,
-): boolean {
-  for (const g of new Set<GrupoPrimario>([...antes.keys(), ...depois.keys()])) {
-    if ((depois.get(g) ?? 0) < (antes.get(g) ?? 0)) return false;
-  }
-  return true;
-}
-
 /**
  * 🔒 As invariantes de PADRÃO da semana continuam valendo depois da troca?
  *
@@ -346,15 +455,120 @@ function padroesPreservados(antes: readonly Exercise[], depois: readonly Exercis
   const a = conta(antes);
   const d = conta(depois);
   /**
-   * 🔒 O balanço `puxar − empurrar` não pode PIORAR. Absoluto seria errado: quem já estava em
-   * dia continua em dia (o balanço não cai abaixo de zero se estava em zero ou acima), e um
-   * conjunto que nem tem `puxar` — um dia só de peito, por exemplo — não fica refém de uma
-   * invariante que já não valia antes da troca e que a troca não tem como consertar.
+   * 🔒 A INVARIANTE É `puxar ≥ empurrar`, e é ela que se verifica — não "o balanço não cai".
+   *
+   * 🔵 Correção 2026-09-17: exigir que o balanço NUNCA caísse era o terceiro proxy do passe, e
+   * ele reprovava por um número que a invariante não pede. Uma semana com 8 puxar e 4 empurrar
+   * continua em dia com 7 puxar — e era exatamente essa troca que o encolhimento (isolado) ao
+   * lado de quatro remadas (puxar) precisava fazer para abrir o trapézio superior. Medido: 148
+   * das 659 regiões descobertas fechavam com as duas primeiras travas corrigidas e mais 120
+   * ficavam presas só aqui.
+   *
+   * 🔴 O que continua sendo verdade, e é o que a saúde do ombro exige: depois da troca a semana
+   * tem de estar EM DIA (`puxar ≥ empurrar`). Quem já estava fora — um dia só de peito, por
+   * exemplo — não fica refém de uma invariante que já não valia; nesse caso só se exige que a
+   * troca não piore o que encontrou.
    */
   const balanco = (m: Map<string, number>) => (m.get('puxar') ?? 0) - (m.get('empurrar') ?? 0);
-  if (balanco(d) < balanco(a)) return false;
+  if (balanco(d) < 0 && balanco(d) < balanco(a)) return false;
   for (const p of PADROES_CONTADOS) if ((a.get(p) ?? 0) > 0 && (d.get(p) ?? 0) === 0) return false;
   return true;
+}
+
+/** A segunda metade de um par: o slot que devolve o crédito que a primeira troca tirou. */
+interface Compensacao {
+  slot: number;
+  de: Exercise;
+  para: Exercise;
+}
+
+/**
+ * 🔵 A BUSCA DA COMPENSAÇÃO (2026-09-17) — a segunda troca do par.
+ *
+ * Procura, no MESMO dia, um outro slot cuja troca devolva o crédito que a primeira tirou, de
+ * modo que o delta somado não deixe nenhum grupo para trás. A compensação não precisa ganhar
+ * alvo nem traço — o ganho é da primeira metade —, mas está sujeita a TODO o resto:
+ *  · não pode sair de um grupo preservado (foco) nem mexer no slot da primeira troca;
+ *  · não pode perder cobertura: os alvos que só ela abordava no dia continuam abordados;
+ *  · não pode custar mais tempo (mesma pergunta à autoridade de duração, já com a primeira
+ *    troca aplicada — o dia é avaliado como ele vai ficar, e não em duas metades);
+ *  · não pode repetir id que já está no dia.
+ *
+ * 🔒 Determinístico: slots em ordem, candidatos na ordem do pool, e o PRIMEIRO par válido
+ * vence. Não há otimização de "melhor compensação" — isso criaria um critério novo, e a
+ * compensação não é um ganho, é uma devolução.
+ */
+function procurarCompensacao(args: {
+  dia: DiaParaCobertura;
+  d: number;
+  indice: number;
+  candidato: Exercise;
+  delta: ReadonlyMap<GrupoPrimario, number>;
+  desejados: ReadonlySet<AlvoId>;
+  noDia: ReadonlySet<string>;
+  limites: LimitesDeCredito;
+  poolPorGrupo: (g: GrupoPrimario, favorito: boolean) => readonly Exercise[];
+}): Compensacao | null {
+  const { dia, d, indice, candidato, delta, desejados, noDia, limites, poolPorGrupo } = args;
+  /** O dia como ele fica com a PRIMEIRA troca já aplicada — a base de toda conta daqui. */
+  const comPrimeira = dia.slots.map((s, k) => (k === indice ? candidato : s.exercicio));
+
+  /**
+   * 🔒 A COMPENSAÇÃO É DENTRO DO PRÓPRIO GRUPO, e isso não é uma otimização — é a regra.
+   *
+   * Pagar a cobertura de um grupo com um slot de OUTRO grupo seria cobrar de terceiro, que é
+   * exatamente o que o motor recusa em todos os outros lugares (foco, deload, tempo). Além
+   * disso, medido: com a compensação livre entre grupos, uma troca em ombros liberava uma
+   * troca em peito pela conta global de padrões, e o BASELINE passava a depender de haver ou
+   * não foco — a regressão que D-01/D-02 existem para impedir. Dentro do grupo, o par é o que
+   * ele diz ser: uma REARRUMAÇÃO dos slots daquele grupo naquele dia.
+   */
+  const grupoDaPrimeira = dia.slots[indice]!.grupo;
+  /** Os grupos que ficaram devendo — só um candidato que os CREDITE pode compensar. */
+  const devendo = new Set<GrupoPrimario>();
+  for (const [g, n] of delta) if (n < 0) devendo.add(g);
+  for (let j = 0; j < dia.slots.length; j += 1) {
+    if (j === indice) continue;
+    const alvo = dia.slots[j]!;
+    if (alvo.grupo !== grupoDaPrimeira) continue;
+    if (limites.gruposPreservados?.includes(alvo.grupo)) continue;
+    const saiu = alvo.exercicio;
+    /** O que os OUTROS slots já abordam, na configuração com a primeira troca aplicada. */
+    const porOutros = abordadosNoDia(comPrimeira.filter((_, k) => k !== j).map((e) => e.id), desejados);
+    const ganhoDoQueSai = complementoAnatomico(saiu.id, desejados, porOutros);
+
+    const jaCreditados = new Set<string>(secundariosDe(saiu));
+    for (const c2 of poolPorGrupo(alvo.grupo, alvo.favorito)) {
+      if (c2.id === saiu.id || c2.id === candidato.id || noDia.has(c2.id)) continue;
+      // 🔒 Filtro barato antes das contas caras: quem não credita nenhum dos grupos devendo
+      //    (que `saiu` já não creditasse) não tem como compensar coisa alguma.
+      if (!secundariosDe(c2).some((g) => devendo.has(g) && !jaCreditados.has(g))) continue;
+      const total = somarDeltas(delta, deltaDaTroca(saiu, c2, limites.seriesPlanejamento));
+      if (!nenhumGrupoPerde(total) || !creditoGrandeNaoAcrescenta(total)) continue;
+      // 🔒 A compensação não pode abrir buraco: o que só o que sai cobria tem de continuar.
+      if (complementoAnatomico(c2.id, desejados, porOutros) < ganhoDoQueSai) continue;
+      /**
+       * 🔒 A COMPENSAÇÃO NÃO MEXE NO CUSTO DO SEU SLOT — assinatura idêntica, sem exceção.
+       *
+       * 🔴 Medido: com a compensação livre para custar outro tempo, ela entrava com um
+       * `UNILATERAL_DOIS_LADOS` no lugar de um unilateral; o dia ficava mais apertado, a
+       * redução por tempo cortava uma série JUSTO do slot que devolvia o crédito, e a semana
+       * terminava 0,5 abaixo no bíceps em 12 de 36 perfis. O par tem de ser neutro no
+       * resultado, não só na intenção — e a única forma de garantir isso antes de a rampa
+       * distribuir as séries é a compensação não mover o tempo do slot dela.
+       *
+       * ⚠️ A troca que GANHA cobertura continua podendo mudar de classe: é ela que precisa da
+       * liberdade, e o dia inteiro é recalculado para ela.
+       */
+      if (assinaturaDeCusto(c2) !== assinaturaDeCusto(saiu)) continue;
+      if (limites.custoDoDiaNaoAumenta) {
+        const exsDepois = comPrimeira.map((e, k) => (k === j ? c2 : e));
+        if (!limites.custoDoDiaNaoAumenta(d, exsDepois)) continue;
+      }
+      return { slot: j, de: saiu, para: c2 };
+    }
+  }
+  return null;
 }
 
 /**
@@ -442,10 +656,39 @@ export function otimizarCoberturaAnatomica(
         let melhor = atual;
         let melhorGanho = ganhoAtual;
         let melhorTraco = false;
+        let melhorPar: Compensacao | null = null;
 
+        /**
+         * 🔒 UMA TROCA VENCE UM PAR. A primeira volta só aceita candidatos que não custam
+         * crédito nenhum; a segunda é que admite compensação. Sem esta ordem, um candidato que
+         * precisa de par e vem antes no pool ganhava de um equivalente que não precisa de nada,
+         * e o dia mexia em dois slots para conseguir o que um resolvia.
+         */
+        for (const permitirPar of [false, true] as const) {
+        if (melhor.id !== atual.id) break;
         for (const candidato of poolPorGrupo(slot.grupo, slot.favorito)) {
           if (candidato.id === atual.id || noDia.has(candidato.id)) continue;
-          if (assinaturaDeCusto(candidato) !== custo) continue;
+          /**
+           * 🔵 O TEMPO É RECALCULADO, NÃO PRESUMIDO (correção 2026-09-17).
+           *
+           * A assinatura de custo continua valendo como atalho — quando ela é idêntica, o dia
+           * comprovadamente não se move e não há o que recalcular. Quando ela difere, a
+           * pergunta passa a ser a REAL ("o dia ficou mais caro?"), feita à autoridade de
+           * duração do montador, em vez de reprovada por proxy.
+           *
+           * 🔴 O defeito que isto conserta, medido: de 659 regiões sem exercício identificado
+           * em 144 perfis, 585 eram reprovadas AQUI, antes de qualquer conta de cobertura — e
+           * a alternativa complementar é quase sempre de outra classe (flexora ao lado da
+           * dobradiça, encolhimento ao lado da remada, abdução ao lado da extensão de
+           * quadril), que por construção descansa outro tanto. A trava não protegia o dia:
+           * ela proibia justamente a classe que fecha a lacuna, inclusive quando a troca sai
+           * MAIS BARATA.
+           */
+          if (assinaturaDeCusto(candidato) !== custo) {
+            if (!limites.custoDoDiaNaoAumenta) continue;
+            const exsDepois = dia.slots.map((s, k) => (k === i ? candidato : s.exercicio));
+            if (!limites.custoDoDiaNaoAumenta(d, exsDepois)) continue;
+          }
           const ganho = ganhoDe(candidato.id);
           if (ganho < ganhoAtual) continue;
           const traco = atualRedundante && trazTracoNovo(candidato.id);
@@ -454,18 +697,45 @@ export function otimizarCoberturaAnatomica(
           if (ganho < melhorGanho) continue;
           if (ganho === melhorGanho && melhor !== atual && !(traco && !melhorTraco)) continue;
 
-          if (!creditoGrandeNaoAcrescenta(atual, candidato)) continue;
+          const delta = deltaDaTroca(atual, candidato, limites.seriesPlanejamento);
+          /**
+           * 🔵 O PAR COMPENSADO (decisão do autor, 2026-09-17) — quando a única coisa que
+           * impede a cobertura é o crédito indireto de um vizinho, o passe procura uma SEGUNDA
+           * troca, no mesmo dia, que devolva exatamente o que a primeira tirou.
+           *
+           * 🔒 A regra de volume NÃO é flexibilizada: o par só é aceito se o delta SOMADO
+           * deixar todo grupo em ≥ 0 e nenhum grande em > 0 — isto é, a semana termina com o
+           * mesmo crédito ponderado de antes, grupo por grupo. É a mesma invariante que
+           * `credito-nao-regride.test.ts` trava; o que muda é que ela passa a ser lida sobre o
+           * conjunto final do dia, e não sobre uma troca isolada.
+           *
+           * 🔴 O caso medido: num dia "Costas + Bíceps" com quatro remadas, o encolhimento
+           * abre o trapézio superior mas não credita bíceps como a remada que sai. Sozinha, a
+           * troca tirava 0,5 × séries de bíceps e era recusada. Em par com a troca de uma remada
+           * sem secundário por outra COM bíceps, o bíceps termina igual — e o trapézio superior
+           * deixa de ficar sem exercício identificado.
+           */
+          let par: Compensacao | null = null;
+          if (!nenhumGrupoPerde(delta) || !creditoGrandeNaoAcrescenta(delta)) {
+            if (!permitirPar) continue;
+            par = procurarCompensacao({
+              dia, d, indice: i, candidato, delta, desejados, noDia, limites, poolPorGrupo,
+            });
+            if (!par) continue;
+          }
           const antesLista = todosOsExercicios();
-          const depoisLista = antesLista.map((e) => (e === atual ? candidato : e));
+          const depoisLista = antesLista.map((e) => {
+            if (e === atual) return candidato;
+            if (par && e === par.de) return par.para;
+            return e;
+          });
           if (!padroesPreservados(antesLista, depoisLista)) continue;
-          if (!creditoPreservado(
-            creditoDe(antesLista, limites.seriesPlanejamento),
-            creditoDe(depoisLista, limites.seriesPlanejamento),
-          )) continue;
 
           melhor = candidato;
           melhorGanho = ganho;
           melhorTraco = traco;
+          melhorPar = par;
+        }
         }
 
         if (melhor.id === atual.id) continue;
@@ -486,10 +756,127 @@ export function otimizarCoberturaAnatomica(
         noDia.delete(atual.id);
         noDia.add(melhor.id);
         slot.exercicio = melhor;
+        if (melhorPar) {
+          const alvoDoPar = dia.slots[melhorPar.slot]!;
+          /**
+           * 🔒 A ATRIBUIÇÃO QUE ZERA O PAR EM QUALQUER DOSE (correção medida, 2026-09-17).
+           *
+           * 🔴 O defeito: o par preservava o crédito na moeda de PLANEJAMENTO (todas as séries
+           * no máximo), mas a rampa distribui séries DIFERENTES entre slots do mesmo grupo. Com
+           * 4 séries no slot que perdia e 3 no que devolvia, a semana terminava 0,5 abaixo —
+           * medido em 12 de 36 perfis, todos iniciantes, sempre no bíceps (8 → 7,5).
+           *
+           * 🔑 O conserto não é uma tolerância: é colocar cada exercício no slot cujo antigo
+           * tinha o MESMO perfil de secundários. Aí o delta de cada slot é zero por si, e o
+           * crédito fica idêntico com qualquer distribuição de séries. O CONJUNTO do dia é o
+           * mesmo nas duas arrumações — a cobertura ganha o mesmo, e o tempo não se move.
+           *
+           * ⚠️ Só quando os dois slots têm o mesmo estado de FAVORITO: os pools de favorito e
+           * não-favorito são distintos (DF #12), e trocar as pontas misturaria os dois.
+           */
+          const mesmasSec = (a: Exercise, b: Exercise) => {
+            const x = new Set(secundariosDe(a)); const y = secundariosDe(b);
+            return x.size === y.length && y.every((g) => x.has(g));
+          };
+          const espelhar = slot.favorito === alvoDoPar.favorito
+            && mesmasSec(melhorPar.para, atual) && mesmasSec(melhor, melhorPar.de);
+          const paraOSlot = espelhar ? melhorPar.para : melhor;
+          const paraOPar = espelhar ? melhor : melhorPar.para;
+          slot.exercicio = paraOSlot;
+          trocas[trocas.length - 1] = { ...trocas[trocas.length - 1]!, para: paraOSlot.id };
+          trocas.push({
+            dia: d,
+            slot: melhorPar.slot,
+            grupo: alvoDoPar.grupo,
+            de: melhorPar.de.id,
+            para: paraOPar.id,
+            motivo: 'compensacao',
+            alvosGanhos: [],
+            tracosGanhos: [],
+          });
+          noDia.delete(melhorPar.de.id);
+          noDia.add(melhorPar.para.id);
+          alvoDoPar.exercicio = paraOPar;
+        }
         mudou = true;
       }
     }
     if (!mudou) break;
+  }
+
+  /**
+   * 🔵 FASE 2 — A ADIÇÃO CONTROLADA (decisão do autor, 2026-09-17).
+   *
+   * Roda DEPOIS do ponto fixo das trocas, e só onde a troca não resolveu: é a ordem de atuação
+   * que o autor pediu — combinação primeiro, troca depois, acrescentar por último.
+   *
+   * 🔒 Nada aqui decide limite: estrutura, tempo e volume são três perguntas ao chamador,
+   * respondidas pelas autoridades que já existem. Sem `limites.adicao` o passe não acrescenta
+   * nada, e o contrato antigo continua valendo inteiro.
+   *
+   * 🔴 Não reduz ninguém para caber: se não couber, o exercício não entra e a região fica
+   * pendente — e é o diagnóstico que a explica.
+   */
+  if (limites.adicao) {
+    for (let d = 0; d < dias.length; d += 1) {
+      const dia = dias[d]!;
+      const desejados = alvosDesejadosDoDia(dia.grupos);
+      if (desejados.size === 0) continue;
+      let livres = limites.adicao.slotsLivres(d);
+      const noDia = new Set(dia.slots.map((s) => s.exercicio.id));
+      while (livres > 0) {
+        const abordados = abordadosNoDia([...noDia], desejados);
+        if (abordados.size === desejados.size) break;
+        let escolhido: Exercise | null = null;
+        let ganhoEscolhido = 0;
+        /**
+         * 🔒 SÓ GRUPO QUE JÁ TREINA NESTE DIA. O template do dia lista grupos-ALVO, e o
+         * alocador pode não ter dado slot a todos — acrescentar num grupo ausente criaria uma
+         * SESSÃO nova daquele grupo, e frequência, recuperação e dias consecutivos são decisão
+         * do alocador, não da cobertura.
+         *
+         * 🔴 Medido: sem esta trava o passe punha core num quarto dia e o avançado 6d saía com
+         * `core 4×`, contra o invariante travado de 2–3×/semana. Acrescentar DENTRO de um
+         * grupo que já treina naquele dia não move frequência nenhuma.
+         */
+        const gruposDoDia = new Set(dia.slots.map((s) => s.grupo));
+        for (const g of dia.grupos) {
+          if (!gruposDoDia.has(g)) continue;
+          if (limites.gruposPreservados?.includes(g)) continue;
+          if (limites.adicao.gruposPreservados?.includes(g)) continue;
+          // 🔒 Adição nunca é favorito: favorito é escolha declarada da pessoa (DF #12), e o
+          //    passe não promove ninguém a favorito para fechar cobertura.
+          for (const candidato of poolPorGrupo(g, false)) {
+            if (noDia.has(candidato.id)) continue;
+            const ganho = complementoAnatomico(candidato.id, desejados, abordados);
+            if (ganho <= ganhoEscolhido) continue;
+            if (!limites.adicao.cabeNoTetoDeSlots(candidato)) continue;
+            const exsDepois = [...dia.slots.map((s) => s.exercicio), candidato];
+            if (!limites.adicao.cabeNoTempo(d, exsDepois)) continue;
+            if (!limites.adicao.cabeNoVolume(d, candidato)) continue;
+            if (!padroesPreservados(dia.slots.map((s) => s.exercicio), exsDepois)) continue;
+            escolhido = candidato;
+            ganhoEscolhido = ganho;
+          }
+        }
+        if (!escolhido) break;
+        const ganhos = [...diretosDoExercicio(escolhido.id)]
+          .filter((a) => desejados.has(a) && !abordados.has(a)).sort();
+        dia.slots.push({ grupo: escolhido.grupoPrimario!, exercicio: escolhido, favorito: false });
+        trocas.push({
+          dia: d,
+          slot: dia.slots.length - 1,
+          grupo: escolhido.grupoPrimario!,
+          de: null,
+          para: escolhido.id,
+          motivo: 'adicao_complementar',
+          alvosGanhos: ganhos,
+          tracosGanhos: [],
+        });
+        noDia.add(escolhido.id);
+        livres -= 1;
+      }
+    }
   }
   return trocas;
 }
@@ -506,7 +893,18 @@ export type MotivoSemCobertura =
   /** Só candidato CONDICIONAL elegível, e a execução não foi declarada. Não se presume. */
   | 'condicao_de_execucao_nao_declarada'
   /** Havia candidato elegível, e os slots do dia acabaram antes. */
-  | 'slots_do_dia_esgotados';
+  | 'slots_do_dia_esgotados'
+  /** 🔵 Havia candidato elegível; o dia já está no seu orçamento de exercícios. */
+  | 'sem_espaco_na_estrutura'
+  /** 🔵 Havia candidato elegível; acrescentá-lo passaria do tempo escolhido para a sessão. */
+  | 'sem_espaco_no_tempo'
+  /** 🔵 Havia candidato elegível; acrescentá-lo passaria dos limites de volume da semana/dia. */
+  | 'sem_espaco_no_volume'
+  /**
+   * 🔵 Havia candidato elegível e caberia; trocar por ele deixaria OUTRA região descoberta ou
+   * tiraria volume indireto de outro grupo, e não houve par que devolvesse.
+   */
+  | 'trocar_custaria_outra_regiao';
 
 export interface AlvoNaoIdentificado {
   alvo: AlvoId;
@@ -576,6 +974,17 @@ export function diagnosticarDia(args: {
   /** Pool elegível do dia, já filtrado por equipamento/nível/etc. pelo chamador. */
   elegiveis: readonly Exercise[];
   slotsDisponiveis: number;
+  /**
+   * 🔵 AS MARGENS REAIS do dia (2026-09-17), quando o chamador as conhece. Sem elas o motivo
+   * continua sendo o de antes; com elas, "havia candidato elegível e mesmo assim não entrou"
+   * deixa de ser um motivo vago e passa a nomear QUAL limite agiu — que é o que o item 6 do
+   * pedido exige e o que o editor precisa para não contar outra história.
+   */
+  espaco?: {
+    slotsLivres: number;
+    cabeNoTempo: (novo: Exercise) => boolean;
+    cabeNoVolume: (novo: Exercise) => boolean;
+  };
 }): DiagnosticoAnatomicoDia {
   const desejados = alvosDesejadosDoDia(args.grupos);
   const idsEscolhidos = args.escolhidos.map((e) => e.id);
@@ -596,11 +1005,25 @@ export function diagnosticarDia(args: {
     const { diretos, condicionais } = candidatosParaAlvo(alvo);
     const diretosElegiveis = diretos.filter((id) => elegiveis.has(id));
     const condicionaisElegiveis = condicionais.filter((id) => elegiveis.has(id));
+    /**
+     * 🔵 Por que o candidato elegível não entrou — nomeando o limite que de fato agiu, e na
+     * ORDEM em que o passe os aplica: estrutura, tempo, volume e, por último, o custo em
+     * cobertura ou crédito de trocar alguém por ele.
+     */
+    const porQueNaoEntrou = (): MotivoSemCobertura => {
+      if (!args.espaco) return sobraSlot ? 'sem_candidato_elegivel' : 'slots_do_dia_esgotados';
+      const candidatos = diretosElegiveis.map((id) => args.elegiveis.find((e) => e.id === id)!);
+      if (args.espaco.slotsLivres <= 0) return 'sem_espaco_na_estrutura';
+      const noTempo = candidatos.filter((e) => args.espaco!.cabeNoTempo(e));
+      if (noTempo.length === 0) return 'sem_espaco_no_tempo';
+      if (!noTempo.some((e) => args.espaco!.cabeNoVolume(e))) return 'sem_espaco_no_volume';
+      return 'trocar_custaria_outra_regiao';
+    };
     const motivo: MotivoSemCobertura =
       diretos.length === 0 && condicionais.length === 0 ? 'sem_candidato_no_catalogo'
         : diretosElegiveis.length === 0 && condicionaisElegiveis.length === 0 ? 'sem_candidato_elegivel'
           : diretosElegiveis.length === 0 ? 'condicao_de_execucao_nao_declarada'
-            : sobraSlot ? 'sem_candidato_elegivel' : 'slots_do_dia_esgotados';
+            : porQueNaoEntrou();
     const ficha = ALVOS_ANATOMICOS[alvo]!;
     naoIdentificados.push({
       alvo,
