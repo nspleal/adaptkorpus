@@ -23,9 +23,13 @@ const SPEC_FITT: Record<
   emagrecimento: { repsComp: [8, 12], repsIsol: [10, 15], rir: [1, 3], descComp: [60, 90], descIsol: [60, 90] },
 };
 const SPEC_VOL: Record<NivelExperiencia, { sessoes: [number, number]; vol: Record<Objetivo, [number, number]> }> = {
-  iniciante: { sessoes: [2, 3], vol: { saude: [6, 10], massa: [10, 12], emagrecimento: [8, 10] } },
-  intermediario: { sessoes: [3, 4], vol: { saude: [8, 12], massa: [13, 16], emagrecimento: [10, 14] } },
-  avancado: { sessoes: [4, 6], vol: { saude: [10, 12], massa: [16, 20], emagrecimento: [12, 16] } },
+  // 🔵 2026-09-17 — as FAIXAS DESEJADAS de hipertrofia mudaram (10–12/13–16/16–20 →
+  // 6–10/10–14/12–18). Os tetos passaram a ser tabela própria (13/19/21, e teto − 3 sem foco)
+  // e são verificados em `volume-hipertrofia-2026-09-17.test.ts`. `saude` e `emagrecimento`
+  // não foram tocados: a política deles é própria.
+  iniciante: { sessoes: [2, 3], vol: { saude: [6, 10], massa: [6, 10], emagrecimento: [8, 10] } },
+  intermediario: { sessoes: [3, 4], vol: { saude: [8, 12], massa: [10, 14], emagrecimento: [10, 14] } },
+  avancado: { sessoes: [4, 6], vol: { saude: [10, 12], massa: [12, 18], emagrecimento: [12, 16] } },
 };
 
 const OBJ: Objetivo[] = ['saude', 'massa', 'emagrecimento'];

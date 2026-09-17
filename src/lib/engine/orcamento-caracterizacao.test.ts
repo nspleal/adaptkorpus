@@ -253,15 +253,40 @@ describe('🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composiçã
    * Fixture por sondagem: 4d/75min/semana 5 — Lower A (composto-pesado) cai a 90 s;
    * Upper A (com isolados) mantém o topo (180 s).
    */
+  /**
+   * 🔵 FIXTURE REANCORADA em 2026-09-17. Com a faixa desejada de hipertrofia menor, o
+   * 4d/75min passou a caber inteiro e NENHUM dia degrada ali — a fixture deixou de
+   * discriminar. A propriedade não mudou (a estimativa enxerga a composição), então o teste
+   * procura, num punhado de orçamentos, aquele em que a degradação DE FATO varia — e falha
+   * dizendo isso se nenhum variar.
+   */
   it('no mesmo orçamento, o dia carregado de composto degrada e o leve não', () => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 75 }, 5);
-    const compostos = (d: (typeof r.dias)[number]) => d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').length;
-    const descansoComposto = (d: (typeof r.dias)[number]) => Math.max(...d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').map((s) => s.descansoSeg ?? 0));
-    const ordenados = [...r.dias].sort((a, b) => compostos(b) - compostos(a));
-    const maisComposto = ordenados[0]!;
-    const menosComposto = ordenados[ordenados.length - 1]!;
-    expect(compostos(maisComposto), 'caso não discriminante — composições iguais').toBeGreaterThan(compostos(menosComposto));
-    expect(descansoComposto(maisComposto), 'o dia pesado não cedeu descanso').toBeLessThan(descansoComposto(menosComposto));
+    const FIXTURES = [
+      { over: { diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'limitado' as const }, semana: 5 },
+      { over: { diasDisponiveis: 3, tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado' as const }, semana: 5 },
+      { over: { diasDisponiveis: 4, tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado' as const }, semana: 5 },
+      { over: { diasDisponiveis: 4, tempoPorSessaoMin: 75, limiteTempoTreino: 'limitado' as const }, semana: 5 },
+    ];
+    const achados: string[] = [];
+    for (const f of FIXTURES) {
+      const r = rotinaComCiclo(f.over as Partial<PerfilTreino>, f.semana);
+      const compostos = (d: (typeof r.dias)[number]) => d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').length;
+      const descansoComposto = (d: (typeof r.dias)[number]) => {
+        const v = d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').map((s) => s.descansoSeg ?? 0);
+        return v.length ? Math.max(...v) : null;
+      };
+      const comComposto = r.dias.filter((d) => compostos(d) > 0);
+      if (comComposto.length < 2) continue;
+      const ordenados = [...comComposto].sort((a, b) => compostos(b) - compostos(a));
+      const maisComposto = ordenados[0]!;
+      const menosComposto = ordenados[ordenados.length - 1]!;
+      if (compostos(maisComposto) <= compostos(menosComposto)) continue;
+      if (descansoComposto(maisComposto)! < descansoComposto(menosComposto)!) {
+        achados.push(`${f.over.diasDisponiveis}d/${f.over.tempoPorSessaoMin}min: ${descansoComposto(maisComposto)} < ${descansoComposto(menosComposto)}`);
+      }
+    }
+    expect(achados.length,
+      'nenhum orçamento exibiu a degradação por composição — a fórmula deixou de enxergar a composição, ou as fixtures ficaram folgadas demais').toBeGreaterThan(0);
   });
 
   it('o custo por slot acompanha a classe (composto ≥ acessório, sempre)', () => {
@@ -431,8 +456,23 @@ describe('🔒 o orçamento é POR DIA — dias de composição diferente saem d
     for (const d of r.dias) expect(d.slots.length, d.nome).toBeGreaterThanOrEqual(5);
     // …e o que varia POR DIA é a degradação: o dia que não cabe cede descanso, o que cabe
     // fica no topo da faixa. (Com um nível único para a semana, os dois seriam iguais.)
-    const compostoDoDia = r.dias.map((d) => Math.max(...d.slots.filter((s) => !['isolado', 'core'].includes(s.padrao)).map((s) => s.descansoSeg ?? 0)));
-    expect(new Set(compostoDoDia).size, `todos os dias com o mesmo descanso de composto: ${compostoDoDia}`).toBeGreaterThan(1);
+    /**
+     * 🔵 2026-09-17 — com a faixa desejada menor, 4d/75min passou a CABER em todos os dias e
+     * nenhum cede descanso. A propriedade "a degradação varia por dia" continua verdadeira e
+     * é medida no caso acima, numa fixture apertada. Aqui ela vira o seu complemento honesto:
+     * quando todos os dias cabem, todos ficam no TOPO da faixa — ninguém cede sem motivo.
+     */
+    const compostoDoDia = r.dias
+      .map((d) => d.slots.filter((s) => !['isolado', 'core'].includes(s.padrao)).map((s) => s.descansoSeg ?? 0))
+      .filter((v) => v.length > 0)
+      .map((v) => Math.max(...v));
+    const cabemTodos = (r.duracaoDias ?? []).every((c) => c.estadoLimite === 'DENTRO_DO_LIMITE');
+    if (cabemTodos) {
+      expect(new Set(compostoDoDia).size, `dias cabem, mas o descanso variou: ${compostoDoDia}`).toBe(1);
+      expect(compostoDoDia[0], 'todos cabem e ainda assim ninguém chegou ao topo da faixa').toBe(180);
+    } else {
+      expect(new Set(compostoDoDia).size, `algum dia não cabe e mesmo assim ninguém cedeu: ${compostoDoDia}`).toBeGreaterThan(1);
+    }
   });
 });
 

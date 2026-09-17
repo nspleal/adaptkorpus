@@ -10,6 +10,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia, GRUPOS_PEQUENOS_PISO, PEQUENOS_PISO_DIRETO } from './alocador';
+import { faixaSemanal, maxSemanalSemFoco, mev } from './trilhos';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, SemanaCiclo } from './treino-types';
@@ -42,18 +43,34 @@ describe('🔴 aceite B — int/massa/4d/60min (o perfil da medição de 2026-08
   const slots = r.dias.flatMap((d) => d.slots);
   const ponderado = creditoPonderadoDaSemana(slots);
 
-  it('~6 exercícios/sessão · 24 ± 2 slots/semana (antes: 14)', () => {
+  /**
+   * 🔵 REMEDIDO em 2026-09-17. A redação anterior era «24 ± 2 slots/semana · ≥ 5 por dia»,
+   * ancorada na faixa desejada de 13–16. Com a faixa nova (10–14) o alocador para antes: ele
+   * dá slot a quem tem DÉFICIT e nunca preenche o dia só para ocupar tempo — é a regra
+   * "máximo permitido não é meta". Medido: 20 slots, com um dia de 4.
+   *
+   * ⚠️ O par discriminante do aceite B continua de pé: o alocador VELHO emitia 14 slots fixos
+   * e 7 de 12 grupos com zero. 20 > 14, e a asserção abaixo falharia contra ele.
+   */
+  it('~5–6 exercícios/sessão · 18–26 slots/semana (antes: 14 fixos)', () => {
+    // 🔵 A faixa abraça os DOIS seletores que este arquivo roda: 20 no atual, 24 no histórico.
     const total = slots.length;
-    expect(total).toBeGreaterThanOrEqual(22);
+    expect(total).toBeGreaterThanOrEqual(18);
     expect(total).toBeLessThanOrEqual(26);
-    for (const d of r.dias) expect(d.slots.length, d.nome).toBeGreaterThanOrEqual(5);
+    for (const d of r.dias) expect(d.slots.length, d.nome).toBeGreaterThanOrEqual(4);
   });
 
-  it('peito E costas na banda 13–16 em contagem ponderada (semana 5)', () => {
+  it('peito E costas na faixa DESEJADA do nível, em contagem ponderada (semana 5)', () => {
+    /**
+     * 🔵 A faixa é lida da autoridade, não transcrita: ela mudou de 13–16 para 10–14 em
+     * 2026-09-17 e o teto operacional (16) passou a ser outro número. O que o aceite mede é
+     * o mesmo: a semana de pico entrega volume DENTRO da faixa, sem estourar o operacional.
+     */
+    const faixa = faixaSemanal('intermediario', 'massa');
     for (const g of ['peito', 'costas'] as const) {
       const v = ponderado.get(g) ?? 0;
-      expect(v, `${g} ponderado ${v}`).toBeGreaterThanOrEqual(13);
-      expect(v, `${g} ponderado ${v}`).toBeLessThanOrEqual(16);
+      expect(v, `${g} ponderado ${v}`).toBeGreaterThanOrEqual(faixa.min);
+      expect(v, `${g} ponderado ${v}`).toBeLessThanOrEqual(maxSemanalSemFoco('intermediario', 'massa'));
     }
   });
 
@@ -72,8 +89,21 @@ describe('🔴 aceite B — int/massa/4d/60min (o perfil da medição de 2026-08
 
   it('tempo estimado da sessão cabe nos 60 min (séries × execução + descanso do slot)', () => {
     for (const d of r.dias) {
-      const seg = d.slots.reduce((a, s) => a + (s.series ?? 0) * (40 + (s.descansoSeg ?? 0)), 0);
+      /**
+       * 🔵 O ÚLTIMO DESCANSO DO DIA NÃO É TEMPO DE TREINO (correção da conta, 2026-09-17):
+       * ninguém espera o intervalo depois da última série para ir embora, e a fórmula
+       * canônica do motor (`avaliarDuracaoSessao`) nunca o cobrou. Com a composição nova —
+       * dias que passaram a caber e por isso mantêm o descanso de composto em 180 s — essa
+       * cobrança a mais sozinha estourava o orçamento em 40 s, num dia que o motor certifica
+       * como DENTRO_DO_LIMITE. O erro era da conta deste teste, não do plano.
+       */
+      const ultimo = d.slots[d.slots.length - 1]?.descansoSeg ?? 0;
+      const seg = d.slots.reduce((a, s) => a + (s.series ?? 0) * (40 + (s.descansoSeg ?? 0)), 0) - ultimo;
       expect(seg, `${d.nome}: ${Math.round(seg / 60)} min`).toBeLessThanOrEqual(60 * 60);
+    }
+    // 🔒 …e a régua CANÔNICA do motor — a que a tela exibe — concorda, dia a dia.
+    for (const [i, cert] of (r.duracaoDias ?? []).entries()) {
+      expect(cert.estadoLimite, `dia ${i}: ${JSON.stringify(cert)}`).toBe('DENTRO_DO_LIMITE');
     }
   });
 });
@@ -82,7 +112,8 @@ describe('🔴 aceite B — av/massa/4d (o perfil do autor na medição)', () =>
   it('peito chega a 16+ ponderado, sem truncamento silencioso (aviso quando o alvo não cabe)', () => {
     const r = plano(perfil({ nivelExperiencia: 'avancado' }));
     const ponderado = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-    expect(ponderado.get('peito') ?? 0).toBeGreaterThanOrEqual(16);
+    // 🔵 «16+» era o piso da faixa antiga do avançado (16–20). Hoje o piso é 12 (faixa 12–18).
+    expect(ponderado.get('peito') ?? 0).toBeGreaterThanOrEqual(faixaSemanal('avancado', 'massa').min);
   });
 
   /**
@@ -131,7 +162,7 @@ describe('🔒 guard de cobertura — a pergunta que o motor nunca fez agora tem
     const r = plano(perfil());
     const ponderado = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
     for (const g of ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'] as const) {
-      const abaixo = (ponderado.get(g) ?? 0) < 13; // MEV int/massa
+      const abaixo = (ponderado.get(g) ?? 0) < mev('intermediario', 'massa'); // 🔵 lido da autoridade
       if (abaixo) expect(r.avisos.some((a) => a.includes(g)), `${g} sub-MEV sem aviso`).toBe(true);
     }
   });

@@ -219,6 +219,25 @@ export interface ArgsAlocacao {
   seriesPlanejamento: number;
   /** Teto de slots DIRETOS do grupo na semana (pequenos: DF②; demais: sem teto). */
   tetoSlotsSemana: (g: GrupoPrimario) => number;
+  /**
+   * 🔵 O TETO PONDERADO POR SESSÃO, COBRADO NA COMPOSIÇÃO (decisão 2026-09-17). Ausente ⇒
+   * nenhum teto de sessão, que é o comportamento de sempre (e o de todo objetivo que não
+   * declara um).
+   *
+   * 🔑 Por que ele mora AQUI e não só na dose: o teto de 12 ponderadas por grupo num dia é
+   * cobrado sobre as séries, e cada slot tem PISO de dose (`seriesPorExercicio.min`). Se o dia
+   * receber slots demais do mesmo grupo, ele NASCE acima do teto e nenhuma poda o conserta sem
+   * furar o piso por exercício. Medido em avançado 6d/90min: 5 slots de peito no mesmo dia
+   * (15 no piso, contra 12), e depois 4 slots (12 diretas + 2 indiretas = 14).
+   *
+   * 🔒 A conta é o PISO do dia: cada slot já colocado vale `seriesPiso` direto e
+   * `seriesPiso × 0,5` em cada secundário. Se acrescentar este exercício levasse algum grupo
+   * acima do teto JÁ NO PISO, o dia seria indosável — e o slot não entra.
+   *
+   * 🔒 É COMPOSIÇÃO, não dose: nada aqui muda quantas séries um slot recebe. A dose continua
+   * sendo decidida pela rampa, e o excesso que sobra (acima do piso) segue sendo podado lá.
+   */
+  tetoPonderadoDia?: { teto: number; seriesPiso: number };
   /** Invariante própria do core (2–3 slots/semana — travada). */
   coreMin: number;
   coreMax: number;
@@ -363,10 +382,43 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     return deficit(g) > 0;
   };
 
+  /** Crédito PONDERADO do dia calculado no PISO da dose — o menor que o dia pode ter. */
+  const pisoPorDia: Map<GrupoPrimario, number>[] = templates.map(() => new Map<GrupoPrimario, number>());
+  const pisoDoDia = (diaIdx: number) => pisoPorDia[diaIdx]!;
+  /** Acrescentar `e` neste dia manteria todos os grupos dentro do teto ponderado da sessão? */
+  function cabeNoPisoDoDia(diaIdx: number, e: Exercise): boolean {
+    if (!args.tetoPonderadoDia) return true;
+    const { teto, seriesPiso } = args.tetoPonderadoDia;
+    const piso = pisoDoDia(diaIdx);
+    const primario = e.grupoPrimario;
+    if (primario && (piso.get(primario) ?? 0) + seriesPiso > teto) return false;
+    for (const sec of secundariosDe(e)) {
+      if ((piso.get(sec) ?? 0) + seriesPiso * PESO_SECUNDARIO > teto) return false;
+    }
+    return true;
+  }
+  function descreditarPiso(diaIdx: number, e: Exercise): void {
+    if (!args.tetoPonderadoDia) return;
+    const { seriesPiso } = args.tetoPonderadoDia;
+    const piso = pisoDoDia(diaIdx);
+    const primario = e.grupoPrimario;
+    if (primario) piso.set(primario, Math.max(0, (piso.get(primario) ?? 0) - seriesPiso));
+    for (const sec of secundariosDe(e)) piso.set(sec, Math.max(0, (piso.get(sec) ?? 0) - seriesPiso * PESO_SECUNDARIO));
+  }
+  function creditarPiso(diaIdx: number, e: Exercise): void {
+    if (!args.tetoPonderadoDia) return;
+    const { seriesPiso } = args.tetoPonderadoDia;
+    const piso = pisoDoDia(diaIdx);
+    const primario = e.grupoPrimario;
+    if (primario) piso.set(primario, (piso.get(primario) ?? 0) + seriesPiso);
+    for (const sec of secundariosDe(e)) piso.set(sec, (piso.get(sec) ?? 0) + seriesPiso * PESO_SECUNDARIO);
+  }
+
   function registrar(diaIdx: number, g: GrupoPrimario, e: Exercise, usadosDia: Set<string>): void {
     dias[diaIdx]!.slots.push({ grupo: g, exercicio: e, favorito: favoritos.has(e.id) });
     usadosDia.add(e.id);
     creditar(e);
+    creditarPiso(diaIdx, e);
     slotsDiretos.set(g, (slotsDiretos.get(g) ?? 0) + 1);
     contaPadrao.set(e.padraoMovimento, (contaPadrao.get(e.padraoMovimento) ?? 0) + 1);
   }
@@ -387,6 +439,13 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     // O teto de slots diretos vale por QUALQUER porta (rodadas, reservas, preenchimento):
     // sem esta checagem aqui, a reserva do piso furava o teto dos pequenos.
     if ((slotsDiretos.get(g) ?? 0) >= args.tetoSlotsSemana(g)) return false;
+    // 🔵 …e o teto PONDERADO do dia, pela mesma porta e pelo mesmo motivo (ver `tetoPonderadoDia`).
+    // A checagem final (com o exercício já escolhido) fica em `registrar`; aqui só se descarta
+    // o grupo cujo piso no dia já está no teto — o caso barato e mais comum.
+    if (args.tetoPonderadoDia) {
+      const { teto, seriesPiso } = args.tetoPonderadoDia;
+      if ((pisoDoDia(diaIdx).get(g) ?? 0) + seriesPiso > teto) return false;
+    }
     // Garantia da cadeia posterior: enquanto a semana não tem dobradiça, os grupos que ela
     // serve preferem um exercício de dobradiça (a invariante vinha de graça no alocador
     // velho, que montava por padrão; aqui ela vira preferência explícita).
@@ -413,6 +472,9 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     const e = escolher(g, usadosDia, {
       prefira,
       proiba: travaEmpurrar ? (x) => x.padraoMovimento === 'empurrar' : undefined,
+      // 🔵 Teto ponderado da sessão: DURO, inclusive para favorito (um favorito nunca fura
+      // invariante — a mesma leitura da DF #12 que já vale para `puxar ≥ empurrar`).
+      exigir: (x) => cabeNoPisoDoDia(diaIdx, x),
     });
     if (!e) return false;
     // Cobertura antes de redundância: não gastar todos os empurrares permitidos
@@ -442,7 +504,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       if (dias[d]!.slots.length >= budgetPorDia) continue;
       for (const g of templates[d]!.grupos) {
         if (g === 'core' || !temPool(g)) continue;
-        const e = escolher(g, usadosPorDia[d]!, { exigir: (x) => correspondeCobertura(padrao, x) });
+        const e = escolher(g, usadosPorDia[d]!, { exigir: (x) => correspondeCobertura(padrao, x) && cabeNoPisoDoDia(d, x) });
         if (!e) continue;
         registrar(d, g, e, usadosPorDia[d]!);
         break reservar;
@@ -526,7 +588,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   for (const d of reservaPuxar) {
     const grupoPuxar = templates[d]!.grupos.find((g) => g !== 'core' && temPuxar(g) && podeReceber(g));
     if (!grupoPuxar) continue;
-    const e = escolher(grupoPuxar, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'puxar' });
+    const e = escolher(grupoPuxar, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'puxar', exigir: (x) => cabeNoPisoDoDia(d, x) });
     if (!e || e.padraoMovimento !== 'puxar') continue;
     registrar(d, grupoPuxar, e, usadosPorDia[d]!);
   }
@@ -660,6 +722,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
         const e = escolher(gDob, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'dobradica_quadril' });
         if (!e || e.padraoMovimento !== 'dobradica_quadril') continue;
         if (dias[d]!.slots.length < budgetPorDia) {
+          if (!cabeNoPisoDoDia(d, e)) continue;
           registrar(d, gDob, e, usadosPorDia[d]!);
           break busca;
         }
@@ -672,6 +735,12 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
         slotsDiretos.set(sai.grupo, (slotsDiretos.get(sai.grupo) ?? 1) - 1);
         contaPadrao.set(sai.exercicio.padraoMovimento, (contaPadrao.get(sai.exercicio.padraoMovimento) ?? 1) - 1);
         dias[d]!.slots.splice(idx, 1);
+        // 🔵 O piso do dia acompanha a troca: sem isto o slot que SAIU seguiria ocupando teto.
+        descreditarPiso(d, sai.exercicio);
+        if (!cabeNoPisoDoDia(d, e)) { creditarPiso(d, sai.exercicio); dias[d]!.slots.splice(idx, 0, sai);
+          slotsDiretos.set(sai.grupo, (slotsDiretos.get(sai.grupo) ?? 0) + 1);
+          contaPadrao.set(sai.exercicio.padraoMovimento, (contaPadrao.get(sai.exercicio.padraoMovimento) ?? 0) + 1);
+          continue; }
         registrar(d, gDob, e, usadosPorDia[d]!);
         break busca;
       }

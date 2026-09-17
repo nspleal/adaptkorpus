@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   FOCO_DELTA, FOCO_SEMANAS, INTERVALO_MIN_HORAS_MESMO_GRUPO, TRILHOS,
-  aplicarFoco, faixaSemanal, focoVigente, mev, mrv, ordenarComFoco,
-  tetoSeriesGrupoNaSessao, tetoSeriesPorExercicio,
+  aplicarFoco, faixaSemanal, focoVigente, maxSemanalSemFoco, mev, mrv, ordenarComFoco,
+  tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao, tetoSeriesPorExercicio,
   FOCO_CORE, aplicarFocoCore, folgaDeCore,
 } from './trilhos';
 import { montarRotina } from './treino-montador';
@@ -56,11 +56,26 @@ describe('🔒 os 7 trilhos carregam procedência e versão', () => {
     expect(tetoSeriesPorExercicio('iniciante')).toBe(3);
     expect(tetoSeriesPorExercicio('intermediario')).toBe(4);
     expect(tetoSeriesPorExercicio('avancado')).toBe(4);
-    // MRV de massa: 12 / 16 / 20 (iniciante / intermediário / avançado).
-    expect([mrv('iniciante', 'massa'), mrv('intermediario', 'massa'), mrv('avancado', 'massa')]).toEqual([12, 16, 20]);
-    expect(mev('intermediario', 'massa')).toBe(13);
-    // Séries do grupo na SESSÃO: 16 ÷ 2× ≈ 8.
-    expect(tetoSeriesGrupoNaSessao('intermediario', 'massa', 2)).toBe(8);
+    /**
+     * 🔵 SUBSTITUIÇÃO EXPLÍCITA (decisão do autor 2026-09-17). A redação anterior era:
+     *   «MRV de massa: 12 / 16 / 20» · «mev intermediário = 13» · «16 ÷ 2× ≈ 8».
+     * Ela lia `volumePorGrupoSemana.max` como teto — e a decisão separou os dois papéis:
+     * a faixa passou a ser o ALVO desejado (6–10 · 10–14 · 12–18) e o teto virou tabela
+     * própria (13 · 19 · 21), com máximo automático de teto − 3 para quem não está em foco.
+     */
+    expect([mrv('iniciante', 'massa'), mrv('intermediario', 'massa'), mrv('avancado', 'massa')]).toEqual([13, 19, 21]);
+    expect([maxSemanalSemFoco('iniciante', 'massa'), maxSemanalSemFoco('intermediario', 'massa'), maxSemanalSemFoco('avancado', 'massa')]).toEqual([10, 16, 18]);
+    expect(mev('intermediario', 'massa')).toBe(10);
+    expect([faixaSemanal('iniciante', 'massa'), faixaSemanal('intermediario', 'massa'), faixaSemanal('avancado', 'massa')])
+      .toEqual([{ min: 6, max: 10 }, { min: 10, max: 14 }, { min: 12, max: 18 }]);
+    // 🔵 Séries do grupo na SESSÃO, em hipertrofia: 12 PONDERADAS, fixo — a frequência não divide.
+    expect(tetoSeriesGrupoNaSessao('intermediario', 'massa', 2)).toBe(12);
+    expect(tetoSeriesGrupoNaSessao('iniciante', 'massa', 3)).toBe(12);
+    expect(tetoSeriesGrupoNaSessao('avancado', 'massa', 4)).toBe(12);
+    // 🔒 Fora da hipertrofia nada mudou: teto semanal ÷ frequência, na banda de sempre.
+    expect(mrv('intermediario', 'saude')).toBe(12);
+    expect(maxSemanalSemFoco('intermediario', 'saude')).toBe(12);
+    expect(tetoSeriesGrupoNaSessao('intermediario', 'saude', 2)).toBe(6);
     expect(INTERVALO_MIN_HORAS_MESMO_GRUPO).toBe(48);
     expect(FOCO_DELTA).toEqual({ min: 2, max: 4 });
     expect(FOCO_SEMANAS).toEqual({ min: 4, max: 6 });
@@ -77,7 +92,7 @@ describe('🔒 os 7 trilhos carregam procedência e versão', () => {
  */
 describe('🔒 MRV × foco — a contradição, como regressão', () => {
   it('🔴 grupo JÁ NO TOPO: volume inalterado, delta zero, entrega = ordem', () => {
-    const teto = mrv('intermediario', 'massa'); // 16
+    const teto = mrv('intermediario', 'massa'); // 🔵 19 desde 2026-09-17 (era 16)
     const efeito = aplicarFoco({ alvoBase: teto, alvoCompensaBase: teto, nivel: 'intermediario', objetivo: 'massa' });
     expect(efeito.alvoFocado, 'o foco furou o teto duro').toBe(teto);
     expect(efeito.deltaAplicado).toBe(0);
@@ -96,30 +111,70 @@ describe('🔒 MRV × foco — a contradição, como regressão', () => {
   });
 
   it('a folga até o MRV limita o delta — sobe só o que cabe', () => {
-    const efeito = aplicarFoco({ alvoBase: 15, alvoCompensaBase: 16, nivel: 'intermediario', objetivo: 'massa', delta: 4 });
-    expect(efeito.alvoFocado).toBe(16);   // 15 + 4 = 19 → cortado no teto
+    // 🔵 A base subiu junto com o teto (19): 18 + 4 = 22 → cortado em 19. Antes era 15 + 4 → 16.
+    const efeito = aplicarFoco({ alvoBase: 18, alvoCompensaBase: 19, nivel: 'intermediario', objetivo: 'massa', delta: 4 });
+    expect(efeito.alvoFocado).toBe(19);
     expect(efeito.deltaAplicado).toBe(1);
-    expect(efeito.alvoCompensado).toBe(15);
+    expect(efeito.alvoCompensado).toBe(18);
   });
 
   it('o MEV do compensador também limita — não se desce abaixo do piso para focar', () => {
-    const piso = mev('intermediario', 'massa'); // 13
+    const piso = mev('intermediario', 'massa'); // 🔵 10 desde 2026-09-17 (era 13)
     const efeito = aplicarFoco({ alvoBase: 13, alvoCompensaBase: piso, nivel: 'intermediario', objetivo: 'massa' });
     expect(efeito.deltaAplicado, 'o foco tirou volume de quem já estava no piso').toBe(0);
     expect(efeito.entrega).toBe('ordem');
   });
 
-  it('nenhum nível/objetivo consegue passar do MRV, varrendo a tabela inteira', () => {
+  it('nenhum nível/objetivo consegue passar do TETO CHEIO, varrendo a tabela inteira', () => {
+    /**
+     * 🔵 O limite da varredura passou a ser `mrv` (o teto cheio), não `faixa.max` (o alvo
+     * desejado). É o que a decisão de 2026-09-17 separou: o grupo EM FOCO pode subir acima do
+     * alvo — é para isso que a margem existe — mas nunca acima do teto.
+     */
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
       for (const objetivo of ['saude', 'massa', 'emagrecimento'] as const)
         for (const delta of [2, 3, 4]) {
           const faixa = faixaSemanal(nivel, objetivo);
-          for (const base of [faixa.min, faixa.max - 1, faixa.max]) {
-            const e = aplicarFoco({ alvoBase: base, alvoCompensaBase: faixa.max, nivel, objetivo, delta });
-            expect(e.alvoFocado, `${nivel}/${objetivo} base ${base} +${delta}`).toBeLessThanOrEqual(faixa.max);
+          const teto = mrv(nivel, objetivo);
+          for (const base of [faixa.min, faixa.max - 1, faixa.max, teto - 1, teto]) {
+            const e = aplicarFoco({ alvoBase: base, alvoCompensaBase: teto, nivel, objetivo, delta });
+            expect(e.alvoFocado, `${nivel}/${objetivo} base ${base} +${delta}`).toBeLessThanOrEqual(teto);
             expect(e.alvoCompensado, `${nivel}/${objetivo} compensador abaixo do MEV`).toBeGreaterThanOrEqual(faixa.min);
           }
         }
+  });
+
+  /**
+   * 🔵 A MARGEM DE 3 É DO GRUPO EM FOCO — regressão da decisão de 2026-09-17.
+   *
+   * ⚠️ ANTI-VACUIDADE: sem esta asserção, trocar `maxSemanalSemFoco` por `mrv` passaria em
+   * todo o resto do arquivo. É ela que prova que os dois números são DIFERENTES em
+   * hipertrofia e IGUAIS fora dela.
+   */
+  it('máximo automático = teto − 3 em hipertrofia, e = teto nos demais objetivos', () => {
+    for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
+      expect(mrv(nivel, 'massa') - maxSemanalSemFoco(nivel, 'massa'), `${nivel}/massa`).toBe(3);
+      for (const objetivo of ['saude', 'emagrecimento'] as const) {
+        expect(maxSemanalSemFoco(nivel, objetivo), `${nivel}/${objetivo}`).toBe(mrv(nivel, objetivo));
+      }
+    }
+  });
+
+  /** 🔵 A exceção é do GRUPO: quem não foi nomeado para no máximo automático. */
+  it('tetoSemanalDoGrupo dá o teto cheio só a quem está em foco', () => {
+    const teto = tetoSemanalDoGrupo({ nivel: 'intermediario', objetivo: 'massa', emFoco: ['peito'] });
+    expect(teto('peito')).toBe(19);
+    expect(teto('ombros'), 'um extra de peito não libera ombros').toBe(16);
+    expect(teto('triceps'), 'nem triceps').toBe(16);
+  });
+
+  /** 🔵 A fase impõe o MENOR limite — e a margem não é subtraída de novo da dose reduzida. */
+  it('o teto da fase corta por cima, sem segunda subtração de 3', () => {
+    const teto = tetoSemanalDoGrupo({ nivel: 'intermediario', objetivo: 'massa', emFoco: ['peito'], tetoDaFase: 8 });
+    expect(teto('peito')).toBe(8);
+    expect(teto('ombros')).toBe(8);
+    // 🔴 8, não 5: subtrair 3 da dose já reduzida seria aplicar a margem duas vezes.
+    expect(teto('ombros')).not.toBe(5);
   });
 });
 

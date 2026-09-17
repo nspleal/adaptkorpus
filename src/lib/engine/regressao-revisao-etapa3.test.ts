@@ -150,18 +150,23 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
   });
 
   it('🔴 grupo no teto: o bloco é recusado e o plano fica IDÊNTICO ao neutro', () => {
-    // anti-vacuidade: costas está mesmo no topo (senão este caso não é sobre o teto)
-    const teto = focoNoTeto.faixaVolumeSemana!.max;
+    /**
+     * 🔵 2026-09-17 — a âncora passou de `faixaVolumeSemana.max` (hoje o ALVO desejado) para o
+     * teto que realmente vale: o CHEIO, porque costas é o grupo em foco aqui. O caso continua
+     * sendo sobre o teto; mudou só de onde o número é lido.
+     */
+    const t = focoNoTeto.tetoVolumeSemana!;
+    expect(t.gruposEmFoco, 'o grupo focado precisa estar declarado').toEqual(['costas']);
     const ponderado = creditoPonderadoDaSemana(focoNoTeto.dias.flatMap((d) => d.slots)).get('costas') ?? 0;
-    expect(ponderado, 'costas não está no topo — o caso deixou de ser sobre o teto').toBeGreaterThan(teto - 1);
-    expect(ponderado).toBeLessThanOrEqual(teto);
+    expect(ponderado, 'costas não está no topo — o caso deixou de ser sobre o teto').toBeGreaterThan(t.cheio - 1);
+    expect(ponderado).toBeLessThanOrEqual(t.cheio);
     expect(focoNoTeto.blocoFoco?.adicionais).toEqual([]);
     // recusar não pode custar nada a ninguém: o plano INTEIRO é o neutro, costas incluído
     const planoInteiro = (r: RotinaSemanal) => r.dias.map((d) => ({
       dia: d.diaId, slots: d.slots.map((s) => `${s.exercicio.id}:${s.series}:${s.descansoSeg}`).sort(),
     }));
     expect(planoInteiro(focoNoTeto)).toEqual(planoInteiro(neutro));
-    expect(focoNoTeto.avisos.some((a) => /(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),
+    expect(focoNoTeto.avisos.some((a) => /(j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/.test(a)),
       'recusa sem explicação na tela').toBe(true);
   });
 });

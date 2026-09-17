@@ -80,7 +80,8 @@ function telaMontarMeuTreino(p: PerfilResumo = PERFIL) {
   const avaliacao = avaliarSemana(dias, {
     nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite',
     treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex'], semana: 1,
-    faixaSemanal: previa.faixaVolumeSemana, faseVolume: previa.faseVolume,
+    faixaSemanal: previa.faixaVolumeSemana, tetoVolumeSemana: previa.tetoVolumeSemana,
+    faseVolume: previa.faseVolume,
   } as never);
   return { plano, previa, avaliacao };
 }
@@ -93,16 +94,39 @@ describe('🔴 o caso relatado — os seis números da captura', () => {
     expect(placarDe(telaMontarMeuTreino().avaliacao)).toMatchObject(CAPTURA);
   });
 
-  it('as seis linhas do crítico saem com o mesmo texto e a mesma ordem', () => {
+  /**
+   * 🔵 ESTE CASO É O EXEMPLO LITERAL DA DECISÃO DE 2026-09-17.
+   *
+   * ⛔️ O que a tela dizia: *"Peito está acima do volume máximo do seu nível (17 contra 16
+   * séries)"*. Com a tabela nova, 17 está acima do MÁXIMO AUTOMÁTICO (16) e ABAIXO do teto
+   * cheio (19) — e a decisão é explícita: *"não afirmar que ultrapassou o teto"*. A linha
+   * passa a ser orientação, com os dois números, e some do bloco de risco.
+   *
+   * 🔵 Duas linhas NOVAS aparecem, do teto por sessão (12 ponderadas por grupo num dia), que
+   * não existia antes: peito e ombros somam 13 cada um em um único treino do desenho.
+   *
+   * 🔵 E `Costas 12` saiu dos déficits: o piso da faixa desejada caiu de 13 para 10.
+   */
+  it('as linhas do crítico saem com o texto e a ordem da decisão de 2026-09-17', () => {
     const { avaliacao } = telaMontarMeuTreino();
     expect([...avaliacao.avisos, ...avaliacao.recomendacoes].map((x) => x.texto)).toEqual([
-      'Peito está acima do volume máximo do seu nível (17 contra 16 séries). Volume acima do que você recupera tende a atrapalhar, não somar.',
+      'Peito está com 17 séries nesta semana: acima das 16 que o app usa quando monta sozinho, e ainda dentro do teto de 19. Se a escolha foi sua, ela vale — só acompanhe como você recupera.',
+      'Peito soma 13 séries em Peito + Tríceps — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
+      'Ombros soma 13 séries em Ombros + Braços — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
       'Tente trocar 1 exercício de peito por 1 de posterior — assim a semana fica mais equilibrada entre os grupos.',
-      'Posterior está abaixo da faixa mínima desta semana (4 de 13 séries).',
-      'Glúteos está abaixo da faixa mínima desta semana (4 de 13 séries).',
-      'Quadríceps está abaixo da faixa mínima desta semana (8 de 13 séries).',
-      'Costas está abaixo da faixa mínima desta semana (12 de 13 séries).',
+      'Posterior está abaixo da faixa mínima desta semana (4 de 10 séries).',
+      'Glúteos está abaixo da faixa mínima desta semana (4 de 10 séries).',
+      'Quadríceps está abaixo da faixa mínima desta semana (8 de 10 séries).',
     ]);
+  });
+
+  /** 🔒 A frase que o app NÃO pode dizer neste caso — a metade negativa da decisão. */
+  it('nenhuma linha afirma que a pessoa ultrapassou o TETO: 17 está abaixo de 19', () => {
+    const { avaliacao } = telaMontarMeuTreino();
+    expect(avaliacao.avisos.some((a) => a.codigo === 'acima_do_maximo'), 'disse que passou do teto').toBe(false);
+    const peito = avaliacao.placar.find((l) => l.grupo === 'peito')!;
+    expect(peito.status).toBe('acima_do_automatico');
+    expect([peito.maxAutomatico, peito.mrv]).toEqual([16, 19]);
   });
 });
 
@@ -143,9 +167,19 @@ describe('🔒 o candidato NÃO mexe no desenho salvo para esconder o excesso', 
     expect(previa.avisos.some((a) => a.includes('para não passar do máximo desta semana'))).toBe(false);
   });
 
-  it('e o excesso continua DITO, pelo crítico, com o número', () => {
+  it('e o excesso continua DITO, pelo crítico, com os DOIS números', () => {
     const { avaliacao } = telaMontarMeuTreino();
-    expect(avaliacao.avisos.some((a) => a.codigo === 'acima_do_maximo' && a.texto.includes('17 contra 16'))).toBe(true);
+    // 🔵 Agora como orientação (`acima_do_maximo_automatico`), com 16 e 19 na mesma frase.
+    // 🔒 Ela vive em `avisos` (é fato sobre um limite, como `acima_do_maximo`), mas com
+    // severidade de RECOMENDAÇÃO — a tela a pinta de âmbar, não de vermelho.
+    const linha = avaliacao.avisos.find((a) => a.codigo === 'acima_do_maximo_automatico');
+    expect(linha, `avisos: ${avaliacao.avisos.map((r) => r.codigo).join(', ')}`).toBeDefined();
+    expect(linha!.texto).toContain('17 séries');
+    expect(linha!.texto).toContain('16');
+    expect(linha!.texto).toContain('19');
+    expect(linha!.severidade, 'orientação, não risco — e nada trava').toBe('recomendacao');
+    // 🔒 E o teto por SESSÃO, que o desenho fura em dois dias, continua sendo risco.
+    expect(avaliacao.avisos.filter((a) => a.codigo === 'acima_do_maximo_na_sessao')).toHaveLength(2);
   });
 });
 
@@ -155,10 +189,13 @@ describe('🔒 nenhuma mensagem duplicada nesta tela', () => {
     const u = unificarAvisos(previa, avaliacao);
     expect(u.avisosMotor.some((a) => a.includes('ficou abaixo do mínimo desta semana')), 'déficit dito duas vezes').toBe(false);
     // ⚠️ ANTI-VACUIDADE: o motor precisa MESMO ter emitido, senão nada foi deduplicado.
-    expect(u.suprimidos.length, 'nada foi suprimido — o caso deixou de exercitar a conciliação').toBeGreaterThanOrEqual(4);
-    // 🔵 `costas` só entra na lista porque a cobertura passou a ser remedida com a dose
-    // entregue (12), e não com a da rampa (13) — antes de `f035d6c` ela nem era medida aqui.
-    expect(u.suprimidos.map((s) => s.aviso).join(' ')).toMatch(/costas/);
+    /**
+     * 🔵 3 e não 4 desde 2026-09-17: `costas` (12 ponderadas) deixou de ser déficit porque o
+     * piso da faixa desejada caiu de 13 para 10. Os três que sobram — posterior, glúteos e
+     * quadríceps — continuam sendo ditos uma vez só, que é o que este caso protege.
+     */
+    expect(u.suprimidos.length, 'nada foi suprimido — o caso deixou de exercitar a conciliação').toBeGreaterThanOrEqual(3);
+    expect(u.suprimidos.map((s) => s.aviso).join(' ')).toMatch(/posterior/);
   });
 
   it('não sobra fala do motor sobre puxar ≥ empurrar: o desenho está equilibrado', () => {

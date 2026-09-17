@@ -28,12 +28,37 @@ remoto herdado) e contém tudo o que havia na branch anterior desta sessão — 
 | "Gerar novo treino" com prévia e confirmação | ✅ candidato | `lib/proposta-treino.ts` · `painel/PropostaTreino.tsx` |
 | "Atualizar treino" preservando o compatível | ✅ candidato | `lib/proposta-treino.ts` (`atualizarDesenho`) |
 | Variedade só entre alternativas válidas | ✅ candidato | `engine/alocador.ts` (`variacao`) · `perfil.variacaoTreino` |
-| Cobertura muscular por dia e por grupo no editor | ✅ candidato | `engine/cobertura-editor.ts` · `painel/CoberturaMuscular.tsx` |
+| Cobertura muscular por dia e por grupo no editor | ✅ candidato · **defeitos de descoberta corrigidos em 2026-09-17** | `engine/cobertura-editor.ts` · `painel/CoberturaMuscular.tsx` |
 | Sugestões com consequência pelo cálculo existente | ✅ candidato | `EditorTreino · efeitoDeAdicionar` |
 | Recusa de proposta desatualizada | ✅ candidato | `proposta-treino.ts` (`assinaturaDasEntradas`) · `Painel · aplicarProposta` |
 | Condicional: "Depende da execução; não confirmado" | ✅ candidato | `lib/condicao-execucao-copy.ts` |
 | Telemetria das duas ações | ⏳ **não feito, de propósito** | ver *Limites* |
 | Publicação | ⏳ não feita | — |
+| Política de volume da hipertrofia (faixa desejada × teto × teto de sessão) | 🔵 **substituída em 2026-09-17** | `docs/politica-de-volume-hipertrofia-2026-09-17.md` |
+| Teto de 12 por sessão como obrigação absoluta | 🔵 **substituído em 2026-09-17 (2ª volta)** — 12 vira o limite NORMAL de montagem; o excesso é aceito só depois de esgotadas as alternativas, e então é dito | `engine/excecao-sessao.ts` · `rotina.excecoesDeSessao` |
+| Ressalva do teto por sessão ANTES da confirmação | ✅ candidato · **novo em 2026-09-17 (2ª volta)** | `painel/PropostaTreino.tsx` |
+| Aviso "alvo de N séries para G não cabe em M exercício(s)" | 🔴 **removido em 2026-09-17 (2ª volta)** — era insuficiência por não chegar ao topo da faixa desejada, em 1 300 de 1 355 emissões | o déficit real segue no guard de cobertura (MEV, ponderado) |
+| Explicação da semana de alívio (deload) | ✅ candidato · **nova em 2026-09-17 (2ª volta)** — o contrato existia e vinha passando por acidente | `engine/treino-montador.ts` |
+| Repartição da rampa por identidade | ✅ candidato · **desempate por secundários acrescentado em 2026-09-17 (2ª volta)** | `engine/treino-montador.ts` · `rampa-identidade-2026-09-17.test.ts` |
+| Classificação histórica do seletor (nomes × testes) | ✅ **guard novo em 2026-09-17 (2ª volta)** — nome histórico que não casa com teste derruba a build | `selecao-etapa1-classificacao.test.ts` |
+
+> 🔵 **2026-09-17 — o que desta leva foi substituído.** A decisão de volume da hipertrofia separou
+> a faixa DESEJADA do TETO e criou um teto por sessão (12 ponderadas por grupo). Com isso: o
+> volume entregue caiu (≈ um exercício a menos por dia nas células de massa), o bloco do foco
+> passou a ter efeito real (antes ele era recusado por já estar no teto), e a cobertura muscular
+> do editor ganhou três correções de descoberta — ela não some mais com o dia vazio, subiu para
+> antes do botão de adicionar e abre sozinha quando há região sem exercício identificado. Os
+> números desta página que citam `13–16`, `16` ou `MRV` descrevem o estado ANTERIOR e ficam como
+> histórico. Ver o registro novo.
+>
+> 🔵 **2026-09-17, 2ª volta.** A obrigação absoluta de 12 por sessão deixou de existir: 12 é o
+> limite normal de montagem e o excesso é aceito **depois** de o motor esgotar as alternativas —
+> trocar exercício por equivalente, mudar de dia, reduzir séries. Medido: o plano automático
+> deixou de produzir excesso em **10 080** combinações (era 12 células). O que sobrar é publicado
+> em `rotina.excecoesDeSessao` e dito **antes** da confirmação, na tela da proposta, que até aqui
+> não mostrava aviso nenhum do motor. E a **faixa desejada deixou de ser cobrada no topo**: a
+> frase de insuficiência foi removida, porque em 1 300 das 1 355 emissões o grupo estava dentro
+> da faixa.
 
 ## 1. As duas ações do treino
 
@@ -226,6 +251,48 @@ aparece como **lacuna do catálogo**, sem sugestão inventada.
   atualizar após banimento; cobertura reagindo a adição e remoção, com múltiplas partes por
   exercício, lacuna de catálogo e sugestões; cliques repetidos.
 - **375 px**: sem overflow horizontal em nenhuma das duas superfícies; alvos de toque ≥ 44 px.
+
+### QA de interface — a ressalva do teto por sessão (3ª volta, fixture sintética)
+
+Exercitada na interface real, no build otimizado local, sem conta e sem gravação de espécie
+alguma. **A exceção é sintética e isto é declarado**: varridas **8 064** combinações automáticas
+com o teto real de **12**, nenhuma produz exceção; para percorrer o caminho de produção o teto foi
+rebaixado a 6 durante o laboratório, e só isso — componente, `proporTreino`, motor e catálogo são
+os de produção.
+
+| # | ação | resultado |
+|---|---|---|
+| 1 | abrir a proposta | `<section role="status" aria-label="Ressalva de volume">` presente |
+| 2 | posição da ressalva | **precede** o botão de aplicar no DOM e na tela (y 674 × 951) |
+| 3 | conteúdo | grupo **Glúteos** · dia **Full-body** · ponderado **7** · referência **6** · causa "**4** vêm do trabalho indireto de posterior, quadríceps no mesmo dia" |
+| 4 | esforço declarado | as três alternativas, porque as três foram de fato tentadas (**19** examinadas) |
+| 5 | veredito | "Este treino **não está dentro de todos os limites** do app" |
+| 6 | tom | sem "perigo", "lesão" ou "arriscado" — não é alerta clínico |
+| 7 | **Manter o meu** | proposta fecha; **nada gravado** |
+| 8 | **Usar este treino** → plano/editor | a frase permanece, completa, com o mesmo esforço |
+| 9 | **375 px** | legível, sem overflow horizontal, acima dos dois botões |
+| 10 | desktop | legível, acima dos dois botões |
+
+A rota de laboratório e o teto rebaixado **foram removidos do candidato**. O caminho exercido é o
+**automático** (`tipo: 'gerar'`, sem desenho salvo) — distinto do excesso do desenho manual, que
+tem teste próprio.
+
+### Verificação dirigida — a recusa parcial do bloco do foco (3ª volta)
+
+Varredura de **5 184 combinações** procurando planos que afirmem "O bloco do foco não entrou"
+enquanto entregam exercício de foco.
+
+| # | conferência | resultado |
+|---|---|---|
+| 1 | células medidas | 5 184 |
+| 2 | células que emitem a frase | 153 |
+| 3 | **células contraditórias (defeito)** | **13** |
+| 4 | natureza | **copy**: `solicitados` (intenção) lido como se fosse `adicionais` (entrega) |
+| 5 | correção | só a frase; dose, alocador e regras do foco intactos |
+| 6 | número dito | passa a vir de `blocoFoco.adicionais` — exercícios **e** séries |
+| 7 | pontos de emissão de aviso | inalterados (2 `push`, agora condicionais) |
+| 8 | regressões | entrega completa · parcial (caso reproduzido) · nenhuma · invariante varrida |
+| 9 | anti-vacuidade | revertendo o motor, ① e ④ caem e ④ reproduz **exatamente 13** |
 
 ### Três defeitos encontrados no QA e corrigidos
 

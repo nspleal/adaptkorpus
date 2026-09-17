@@ -106,10 +106,30 @@ describe('D13 · os casos nomeados pela auditoria', () => {
    * teto na conta que vale e saíram: 96 → 93. Nenhuma delas veio da semana 6, e o 48 fica
    * onde estava — a relação que D2 nomeou continua intacta e continua verificada abaixo.
    */
-  it('o caso que D2 mediu continua onde estava, na moeda decidida (96 → 93 na S5; a S6 fica em 48)', () => {
+  /**
+   * 🔵 REMEDIDO SOB A TABELA NOVA (2026-09-17). A redação anterior cobrava `93` na S5 e `48`
+   * na S6 (e antes dela, `96`/`48`). O 93 vinha da faixa desejada de 13–16; com a faixa nova
+   * (10–14) a rampa mira menos e a semana 5 entrega 86. A RELAÇÃO que D2 nomeou — a semana de
+   * deload não recompra em exercícios o que cortou em séries — é a propriedade protegida, e
+   * ela continua verificada aqui, agora também como razão, não só como par de números.
+   */
+  it('o caso que D2 mediu continua onde estava, na moeda decidida (S5 86 · S6 ~45% menos, mesma estrutura)', () => {
     const p = perfil('intermediario', 'massa', 'academia', 60, 4);
-    expect(medir(p, 5).series, 'S5 mudou além das 3 séries que o teto ponderado cortou').toBe(93);
-    expect(medir(p, 6).series, 'o 48 de D2 não pode ter se movido: a poda é da semana cheia').toBe(48);
+    const a = medir(p, 5);
+    const b = medir(p, 6);
+    /**
+     * 🔒 Os dois seletores entregam composições diferentes (é para isso que os dois projetos
+     * do Vitest existem), então o par de números é POR SELETOR — exato nos dois, nunca uma
+     * faixa frouxa que caberia em qualquer motor.
+     */
+    const [s5, s6] = process.env.ADAPT_TEST_SELETOR_ATUAL === '0' ? [86, 48] : [80, 40];
+    expect(a.series, 'a S5 mudou além do que a faixa desejada nova explica').toBe(s5);
+    expect(b.series, 'a S6 mudou além do corte de deload').toBe(s6);
+    // 🔒 A relação de D2: MESMA estrutura, volume reduzido — a S6 não recompra em exercícios.
+    expect(b.slots, 'a semana de deload deixou de espelhar a estrutura da rampa').toBe(a.slots);
+    const corte = 1 - b.series / a.series;
+    expect(corte, `corte agregado ${Math.round(corte * 100)}% fora da banda −40–50%`).toBeGreaterThanOrEqual(0.4);
+    expect(corte).toBeLessThanOrEqual(0.5);
   });
 });
 

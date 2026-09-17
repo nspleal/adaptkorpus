@@ -6,6 +6,7 @@ import type { ReferenciaDose } from './referencia-dose';
  */
 import type { PreferenciasTreino } from './preferencias';
 import type { FocoGrupo } from './trilhos';
+import type { ExcecaoDeSessao } from './excecao-sessao';
 import type { ModalidadeCardio } from './cardio';
 import type { FlagsSaude, Objetivo } from './types';
 import type { ResultadoDuracao } from './duracao-sessao';
@@ -510,7 +511,48 @@ export interface RotinaSemanal {
    * junto — só para o aviso de MÍNIMO. O máximo continua valendo em todas as fases.
    */
   faseVolume?: FaseVolume;
+  /**
+   * 🔵 A FAIXA DESEJADA desta semana — o que a rampa MIRA, não o teto (decisão 2026-09-17).
+   * `min` continua sendo o piso de aviso; `max` deixou de ser limite.
+   */
   faixaVolumeSemana?: Faixa;
+  /**
+   * 🔵 OS TETOS que valem nesta semana, em séries PONDERADAS (decisão 2026-09-17).
+   *
+   * Publicados porque agora são TRÊS números distintos e o editor precisa dos três para não
+   * confundir "acima do que o app monta sozinho" com "acima do teto": um intermediário que
+   * escolheu 17 séries está acima do máximo automático (16) e ABAIXO do teto cheio (19) —
+   * dizer que ele ultrapassou o teto seria falso.
+   *
+   * 🔒 Já vêm com a fase aplicada (no deload são os limites reduzidos) e com o foco
+   * resolvido: `gruposEmFoco` é a lista de quem alcança `cheio`; todo o resto para em
+   * `semFoco`. Quem consome LÊ daqui — recalcular seria a segunda verdade de sempre.
+   */
+  tetoVolumeSemana?: {
+    /** Máximo automático dos grupos SEM foco (teto cheio − 3, em hipertrofia). */
+    semFoco: number;
+    /** Teto semanal cheio — só os `gruposEmFoco` chegam nele. */
+    cheio: number;
+    /**
+     * Teto PONDERADO por SESSÃO, por grupo. Vale com ou sem foco e não tem margem.
+     * 🔴 `null` quando o objetivo não declara um (só a hipertrofia declara) — e aí a tela
+     * não afirma limite de sessão nenhum, em vez de inventar um.
+     */
+    sessao: number | null;
+    /** Grupos que a pessoa nomeou como foco nesta semana. Vazio = ninguém. */
+    gruposEmFoco: GrupoPrimario[];
+  };
+  /**
+   * 🔵 A EXCEÇÃO AO TETO POR SESSÃO (decisão do autor, 2026-09-17 — 2ª volta).
+   *
+   * Grupos que ficaram acima das 12 séries ponderadas num mesmo treino DEPOIS de o motor
+   * esgotar as alternativas (trocar exercício, mudar de dia, reduzir séries). Ausente é o
+   * caso normal — e é a ausência que autoriza a tela a dizer que o plano está dentro de
+   * todos os limites.
+   *
+   * 🔒 Não flexibiliza NADA na semana: os tetos semanais continuam duros.
+   */
+  excecoesDeSessao?: ExcecaoDeSessao[];
   /** Comparação da intenção de divisão com o terminal, não com um candidato intermediário. */
   distribuicao?: { planejada: string; recortesPlanejados: number; recortesEntregues: number; limitadaPeloCalendario: boolean; adaptada: boolean; atendida: boolean };
   /**

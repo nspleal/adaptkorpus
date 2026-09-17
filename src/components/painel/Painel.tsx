@@ -1004,6 +1004,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       ...(nt.rotina?.fatosCobertura ? { fatosCobertura: nt.rotina.fatosCobertura } : {}),
       ...(nt.rotina?.fatosInvariantes ? { fatosInvariantes: nt.rotina.fatosInvariantes } : {}),
       ...(nt.rotina?.faixaVolumeSemana ? { faixaVolumeSemana: nt.rotina.faixaVolumeSemana } : {}),
+      ...(nt.rotina?.tetoVolumeSemana ? { tetoVolumeSemana: nt.rotina.tetoVolumeSemana } : {}),
       ...(nt.rotina?.faseVolume ? { faseVolume: nt.rotina.faseVolume } : {}),
     };
   }
@@ -1593,6 +1594,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       // 🔴 A régua da FASE vem do motor (mesma correção do editor): no deload/retomada o piso
       // terminal do mesociclo não é "a faixa mínima desta semana".
       ...(treino.rotina?.faixaVolumeSemana ? { faixaSemanal: treino.rotina.faixaVolumeSemana } : {}),
+      ...(treino.rotina?.tetoVolumeSemana ? { tetoVolumeSemana: treino.rotina.tetoVolumeSemana } : {}),
       ...(treino.rotina?.faseVolume ? { faseVolume: treino.rotina.faseVolume } : {}),
     };
     const atual = avaliarSemana(

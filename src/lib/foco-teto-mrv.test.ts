@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import { recomputarPlano } from './plano';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './engine/alocador';
-import { mrv } from './engine/trilhos';
+import { maxSemanalSemFoco, mrv } from './engine/trilhos';
 import type { PerfilResumo } from '@/components/painel/Painel';
 import type { GrupoPrimario } from './data/types';
 
@@ -39,13 +39,55 @@ const perfil = (over: Partial<PerfilResumo> = {}): PerfilResumo => ({
 const rotina = (p: PerfilResumo, semana: number) =>
   recomputarPlano(p, { semanaCiclo: { semana } } as never).treino.rotina!;
 
-/** A conta CANÔNICA — a mesma do crítico e do alocador v4. Nada de régua paralela aqui. */
-const ponderado = (r: ReturnType<typeof rotina>) =>
-  creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
+/**
+ * A conta CANÔNICA — a mesma do crítico e do alocador v4. Nada de régua paralela aqui.
+ *
+ * 🔵 MEMOIZADA POR ROTINA (2026-09-17, 3ª volta). A conta é pura e a rotina é imutável, então
+ * o resultado só depende do objeto — mas os chamadores abaixo a invocam DENTRO de um laço por
+ * grupo, o que recomputava a semana inteira uma vez por grupo. Isto não afrouxa asserção
+ * nenhuma: o valor devolvido é o mesmo, só não é recalculado. Ver o cache do laço no fim do
+ * arquivo, que é a outra metade do estouro de tempo no gate.
+ */
+const CACHE_PONDERADO = new WeakMap<object, Map<GrupoPrimario, number>>();
+const ponderado = (r: ReturnType<typeof rotina>) => {
+  const emCache = CACHE_PONDERADO.get(r);
+  if (emCache) return emCache;
+  const conta = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
+  CACHE_PONDERADO.set(r, conta);
+  return conta;
+};
 
-const acimaDoTeto = (r: ReturnType<typeof rotina>, teto: number) =>
-  GRUPOS_GRANDES.filter((g) => (ponderado(r).get(g) ?? 0) > teto)
-    .map((g) => `${g} ${ponderado(r).get(g)} > ${teto}`);
+/**
+ * 🔵 O TETO É POR GRUPO (decisão 2026-09-17). Um número só deixou de bastar: o grupo EM FOCO
+ * responde pelo teto cheio (13 · 19 · 21) e todos os outros pelo máximo automático (teto − 3).
+ * Quem decide é o motor, e ele PUBLICA em `tetoVolumeSemana` — ler daqui evita a segunda
+ * conta. A leitura anterior (`faixaVolumeSemana.max`) virou o ALVO desejado e não serve mais
+ * como limite.
+ */
+const tetoDoGrupo = (r: ReturnType<typeof rotina>, g: GrupoPrimario) => {
+  const t = r.tetoVolumeSemana;
+  if (!t) return Number.POSITIVE_INFINITY;
+  return t.gruposEmFoco.includes(g) ? t.cheio : t.semFoco;
+};
+
+const acimaDoTeto = (r: ReturnType<typeof rotina>) =>
+  GRUPOS_GRANDES.filter((g) => (ponderado(r).get(g) ?? 0) > tetoDoGrupo(r, g))
+    .map((g) => `${g} ${ponderado(r).get(g)} > ${tetoDoGrupo(r, g)}`);
+
+/** O teto por SESSÃO, medido dia a dia — ele vale ao mesmo tempo que o semanal. */
+const acimaDoTetoNaSessao = (r: ReturnType<typeof rotina>) => {
+  const teto = r.tetoVolumeSemana?.sessao;
+  if (teto == null) return [];
+  const fora: string[] = [];
+  r.dias.forEach((d, i) => {
+    const noDia = creditoPonderadoDaSemana(d.slots);
+    for (const g of GRUPOS_GRANDES) {
+      const v = noDia.get(g) ?? 0;
+      if (v > teto) fora.push(`dia${i} ${g} ${v} > ${teto}`);
+    }
+  });
+  return fora;
+};
 
 const seriesPorGrupo = (r: ReturnType<typeof rotina>) => {
   const m = new Map<GrupoPrimario, number>();
@@ -72,10 +114,11 @@ describe('🔴 relato 2026-09-15 — o bloco do foco não passa do MRV', () => {
       const base = perfil({ diasDisponiveis: c.dias, treinoDias: DIAS.slice(0, c.dias) as never, tempoPorSessaoMin: c.tempo, limiteTempoTreino: c.limite } as never);
       const comFoco = { ...base, foco: { grupo: 'peito', compensa: 'ombros', semana: c.semana } } as never;
       const r = rotina(comFoco, c.semana);
-      const teto = mrv('intermediario', 'massa');
       // anti-vacuidade: o plano existe e tem volume de peito de verdade
       expect(ponderado(r).get('peito') ?? 0, 'plano vazio não prova teto').toBeGreaterThan(0);
-      expect(acimaDoTeto(r, teto), 'grupo acima do MRV no plano que o motor montou').toEqual([]);
+      expect(acimaDoTeto(r), 'grupo acima do teto no plano que o motor montou').toEqual([]);
+      // 🔵 E o teto por SESSÃO, que vale junto com o semanal desde 2026-09-17.
+      expect(acimaDoTetoNaSessao(r), 'grupo acima do teto de um treino só').toEqual([]);
     });
   }
 
@@ -83,8 +126,12 @@ describe('🔴 relato 2026-09-15 — o bloco do foco não passa do MRV', () => {
     const base = perfil({ tempoPorSessaoMin: 75, limiteTempoTreino: 'limitado' } as never);
     const comFoco = { ...base, foco: { grupo: 'peito', compensa: 'ombros', semana: 4 } } as never;
     const r = rotina(comFoco, 4);
-    // ombros não tem slot novo nenhum — só recebe 0,5 por série dos peitorais extras
-    expect(ponderado(r).get('ombros') ?? 0).toBeLessThanOrEqual(mrv('intermediario', 'massa'));
+    /**
+     * 🔵 O terceiro responde pelo MÁXIMO AUTOMÁTICO, não pelo teto cheio: a exceção de foco é
+     * do GRUPO. Um extra de peito não libera ombros a usar as 19 dele.
+     */
+    expect(r.tetoVolumeSemana?.gruposEmFoco, 'só o focado está em foco').toEqual(['peito']);
+    expect(ponderado(r).get('ombros') ?? 0).toBeLessThanOrEqual(maxSemanalSemFoco('intermediario', 'massa'));
   });
 });
 
@@ -110,28 +157,44 @@ describe('🔴 relato 2026-09-15 — o bloco do foco não passa do MRV', () => {
  * garantia original do arquivo (o foco não acrescenta excesso) continua valendo por cima.
  */
 describe('🟢 o excesso do BASELINE foi corrigido nas células em que foi medido', () => {
+  /**
+   * 🔵 CÉLULAS REANCORADAS (2026-09-17), como o próprio aviso de anti-vacuidade deste teste
+   * mandava fazer quando deixassem de ser apertadas.
+   *
+   * As duas anteriores (`avancado/massa/3d/60min/sem_limite/S5` e
+   * `avancado/saude/3d/60min/limitado/S3`) foram medidas de novo sob a tabela nova: a de
+   * MASSA deixou de encostar no teto — a faixa desejada caiu para 12–18 e o máximo
+   * automático subiu para 18, então sobram 5 séries de folga e ela não prova mais nada. A de
+   * SAÚDE continua apertada, porque a política de `saude` não mudou.
+   *
+   * No lugar entram células onde a poda AGE hoje, medidas na varredura desta correção:
+   *  · `avancado/saude/...` — a mesma de antes, preservada;
+   *  · `iniciante/massa/4d/60min/sem_limite/S6` — teto de fase (deload) com foco, onde o
+   *    máximo automático de 10 e a redução do deload se encontram.
+   */
   const CASOS = [
-    { nivel: 'avancado', objetivo: 'massa', dias: 3, tempo: 60, limite: 'sem_limite', semana: 5 },
     { nivel: 'avancado', objetivo: 'saude', dias: 3, tempo: 60, limite: 'limitado', semana: 3 },
+    { nivel: 'iniciante', objetivo: 'massa', dias: 4, tempo: 60, limite: 'sem_limite', semana: 6 },
   ] as const;
 
   for (const c of CASOS) {
     it(`${c.nivel}/${c.objetivo}/${c.dias}d/${c.tempo}min/${c.limite}/S${c.semana}: o baseline volta para dentro do teto`, () => {
       const p = perfil({ nivelExperiencia: c.nivel, objetivo: c.objetivo, diasDisponiveis: c.dias,
         treinoDias: DIAS.slice(0, c.dias) as never, tempoPorSessaoMin: c.tempo, limiteTempoTreino: c.limite } as never);
-      const teto = mrv(c.nivel, c.objetivo);
       const semFoco = rotina(p, c.semana);
       const comFoco = rotina({ ...p, foco: { grupo: 'peito', compensa: 'ombros', semana: c.semana } } as never, c.semana);
       // 🔑 O que era a pendência: esta lista NÃO era vazia. Agora é, e o foco não a reabre.
-      expect(acimaDoTeto(semFoco, teto), 'o baseline voltou a estourar o teto').toEqual([]);
-      expect(acimaDoTeto(comFoco, teto), 'o foco criou excesso que o baseline não tinha').toEqual([]);
+      expect(acimaDoTeto(semFoco), 'o baseline voltou a estourar o teto').toEqual([]);
+      expect(acimaDoTeto(comFoco), 'o foco criou excesso que o baseline não tinha').toEqual([]);
       /**
        * ⚠️ ANTI-VACUIDADE — sem isto, as duas listas vazias passariam também num plano vazio
-       * ou num recorte que nunca chegou perto do teto. A célula só serve como regressão se
-       * ela AINDA é apertada: algum grande tem de terminar a menos de uma série do teto.
+       * ou num recorte que nunca chegou perto do teto. A âncora passou de "folga < 1" para "a
+       * PODA agiu": ela é mais forte (prova que o teto mordeu de fato nesta célula) e não
+       * depende de quão perto o resultado final ficou depois de já ter sido corrigido.
        */
-      const folgaMinima = Math.min(...GRUPOS_GRANDES.map((g) => teto - (ponderado(semFoco).get(g) ?? 0)));
-      expect(folgaMinima, 'a célula deixou de ser apertada — reancorar o caso').toBeLessThan(1);
+      const podou = (r: ReturnType<typeof rotina>) =>
+        r.avisos.some((x) => x.includes('para não passar do máximo desta semana'));
+      expect(podou(semFoco) || podou(comFoco), 'a célula deixou de exercitar a poda — reancorar o caso').toBe(true);
     });
   }
 
@@ -140,8 +203,10 @@ describe('🟢 o excesso do BASELINE foi corrigido nas células em que foi medid
       const p = perfil({ nivelExperiencia: 'avancado', objetivo: 'massa', diasDisponiveis: 3,
         treinoDias: ['seg', 'qua', 'sex'] as never, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' } as never);
       const com = rotina({ ...p, foco: { grupo: 'peito', compensa: 'ombros', semana } } as never, semana);
+      // 🔵 O focado responde pelo teto CHEIO — é a única exceção da margem de 3.
       expect(ponderado(com).get('peito') ?? 0, `S${semana}: o bloco levou o focado acima do teto`)
-        .toBeLessThanOrEqual(mrv('avancado', 'massa'));
+        .toBeLessThanOrEqual(tetoDoGrupo(com, 'peito'));
+      expect(tetoDoGrupo(com, 'peito'), 'o focado tem o teto cheio').toBe(mrv('avancado', 'massa'));
     }
   });
 });
@@ -247,15 +312,23 @@ describe('🔒 varredura — nenhum plano AUTOMÁTICO nasce acima do teto', () =
             for (const limite of ['limitado', 'sem_limite'] as const)
               for (const semana of [1, 5, 6] as const)
                 for (const foco of [undefined, { grupo: 'peito', compensa: 'ombros' }] as const) {
+                  /**
+                   * 🔵 A CÉLULA SEM FOCO NÃO É MEDIDA AQUI — e por isso não é MONTADA aqui
+                   * (2026-09-17, 3ª volta). O excesso do baseline é a pendência declarada
+                   * acima; esta varredura mede o DELTA do foco. Montar o plano sem foco para
+                   * descartá-lo na linha seguinte custava 216 montagens por execução e foi
+                   * o que estourou os 240 s no gate remoto (244 096 ms em `cec4c62`). O plano
+                   * sem foco que a comparação precisa é o `semFoco` logo abaixo, e esse
+                   * continua sendo montado.
+                   */
+                  if (!foco) continue;
                   const p = perfil({ nivelExperiencia: nivel, objetivo, diasDisponiveis: dias,
                     treinoDias: DIAS.slice(0, dias) as never, tempoPorSessaoMin: tempo, limiteTempoTreino: limite,
-                    ...(foco ? { foco: { ...foco, semana } } : {}) } as never);
+                    foco: { ...foco, semana } } as never);
                   let r;
                   try { r = rotina(p, semana); } catch { continue; }
-                  if (!foco) continue; // o excesso do baseline é a pendência declarada acima
                   medidos += 1;
-                  // Na semana 6 a faixa é a de `aplicarDeload` — a MESMA autoridade que a rampa usa.
-                  const teto = r.faixaVolumeSemana?.max ?? mrv(nivel, objetivo);
+                  // 🔵 O teto é POR GRUPO e já vem com fase e foco resolvidos pelo motor.
                   /**
                    * 🔑 A varredura mede o DELTA do foco, não o excesso absoluto: o que esta
                    * entrega promete é que o bloco não cria nem agrava excesso. O excesso que
@@ -266,6 +339,7 @@ describe('🔒 varredura — nenhum plano AUTOMÁTICO nasce acima do teto', () =
                   const antes = new Map(GRUPOS_GRANDES.map((g) => [g, ponderado(semFoco).get(g) ?? 0]));
                   for (const g of GRUPOS_GRANDES) {
                     const depois = ponderado(r).get(g) ?? 0;
+                    const teto = tetoDoGrupo(r, g);
                     if (depois > teto && depois > (antes.get(g) ?? 0)) {
                       falhas.push(`${nivel}/${objetivo}/${dias}d/${tempo}min/${limite}/S${semana}: ${g} ${antes.get(g)} → ${depois} > ${teto}`);
                     }

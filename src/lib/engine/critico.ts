@@ -21,7 +21,7 @@ import type { Exercise, GrupoPrimario } from '../data/types';
 import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './treino-types';
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
-import { INTERVALO_MIN_HORAS_MESMO_GRUPO, mev, mrv } from './trilhos';
+import { INTERVALO_MIN_HORAS_MESMO_GRUPO, maxSemanalSemFoco, mev, mrv, tetoPonderadoNaSessao } from './trilhos';
 import { avaliarDuracaoFinalDoDia } from './duracao-plano';
 import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
 import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
@@ -58,7 +58,14 @@ export interface DiaDoEditor {
   extraDoFoco?: readonly (boolean | undefined)[];
 }
 
-export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_mrv' | 'sem_estimulo';
+/**
+ * 🔵 QUATRO estados, não três (decisão 2026-09-17). A margem de 3 criou uma zona que não
+ * existia: acima do que o app monta sozinho e AINDA ABAIXO do teto. Colapsá-la em
+ * `acima_mrv` faria a tela afirmar que a pessoa ultrapassou um teto que ela não
+ * ultrapassou — exatamente o caso do desenho manual com 17 séries num intermediário
+ * (máximo automático 16, teto cheio 19).
+ */
+export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_do_automatico' | 'acima_mrv' | 'sem_estimulo';
 
 export interface LinhaPlacar {
   grupo: GrupoPrimario;
@@ -66,9 +73,19 @@ export interface LinhaPlacar {
   /** Séries PONDERADAS da semana (direto 1,0 + secundário 0,5) — a conta do alocador v4. */
   ponderado: number;
   status: StatusGrupo;
-  /** A banda do nível/objetivo, para a tela mostrar o alvo sem recalcular. */
+  /** Piso de aviso (MEV) — o mínimo da faixa DESEJADA desta semana. */
   mev: number;
+  /**
+   * Teto semanal CHEIO deste grupo. 🔴 `acima_mrv` é medido contra ELE — é o limite de
+   * verdade. O grupo em foco já vem com o teto cheio; os demais também o carregam aqui, para
+   * a tela poder dizer o quanto ainda falta até o limite real.
+   */
   mrv: number;
+  /**
+   * 🔵 Máximo que o app usa SOZINHO neste grupo (teto cheio − 3, salvo foco). Passar daqui
+   * não é passar do teto: é sair do que a montagem automática faria.
+   */
+  maxAutomatico: number;
 }
 
 export type SeveridadeAviso = 'recomendacao' | 'risco';
@@ -80,6 +97,10 @@ export interface ItemCritico {
     | 'grupo_abaixo_do_minimo'
     | 'dias_consecutivos'
     | 'acima_do_maximo'
+    /** 🔵 Acima do máximo AUTOMÁTICO e abaixo do teto cheio — orientação, não risco. */
+    | 'acima_do_maximo_automatico'
+    /** 🔵 Um grupo passou do teto de séries ponderadas num ÚNICO dia. */
+    | 'acima_do_maximo_na_sessao'
     | 'sessao_longa'
     | 'puxar_menor_que_empurrar';
   severidade: SeveridadeAviso;
@@ -96,10 +117,12 @@ export interface ItemCritico {
     semana?: number;
     valor?: number;
     grupo: GrupoPrimario;
-    escopo: 'semana';
+    escopo: 'semana' | 'sessao';
     metrica: 'series_ponderadas';
-    limiar: 'mev' | 'mrv';
+    limiar: 'mev' | 'mrv' | 'max_automatico' | 'teto_sessao';
     alvo: number;
+    /** Só no escopo `sessao`: índice do dia avaliado, na ordem recebida. */
+    dia?: number;
   };
   /**
    * 🔴 O fato de um INVARIANTE de padrão (2026-09-16). `fato` acima descreve volume por
@@ -174,6 +197,22 @@ export interface ContextoCritico {
    */
   faixaSemanal?: Faixa;
   /**
+   * 🔵 OS TETOS desta semana, publicados pelo motor em `RotinaSemanal.tetoVolumeSemana`
+   * (decisão 2026-09-17). Ausente ⇒ derivados do nível/objetivo, que é o mesmo número.
+   *
+   * 🔴 São TRÊS e não se colapsam: `semFoco` é o máximo que a montagem automática usa,
+   * `cheio` é o limite de verdade (só os `gruposEmFoco` chegam nele) e `sessao` é o teto
+   * ponderado de um grupo num único dia. Recalcular a margem de 3 aqui seria a segunda
+   * verdade que este arquivo existe para não criar.
+   */
+  tetoVolumeSemana?: {
+    semFoco: number;
+    cheio: number;
+    /** `null` quando o objetivo não declara teto ponderado por sessão — a tela então cala. */
+    sessao: number | null;
+    gruposEmFoco: readonly GrupoPrimario[];
+  };
+  /**
    * 🔒 A FASE. Em `deload` e `retomada` o volume baixo é a FEATURE e o guard de cobertura do
    * montador (`treino-montador.ts`, `semana !== 6 && !retomada`) já não fala — o crítico passa
    * a respeitar o mesmo contrato, em vez de acusar 6 déficits na semana de alívio.
@@ -220,12 +259,44 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
   // A faixa da SEMANA quando o motor a publicou; a do nível quando não há fase a considerar.
   // Nas semanas normais as duas são a mesma — por isso a rampa não muda de comportamento.
   const piso = ctx.faixaSemanal?.min ?? mev(ctx.nivel, ctx.objetivo);
-  const teto = ctx.faixaSemanal?.max ?? mrv(ctx.nivel, ctx.objetivo);
+  const tetos = tetosDoContexto(ctx);
+  const emFoco = new Set<GrupoPrimario>(tetos.gruposEmFoco);
   return GRUPOS_GRANDES.map((g) => {
     const v = Math.round((ponderado.get(g) ?? 0) * 10) / 10;
-    const status: StatusGrupo = v <= 0 ? 'sem_estimulo' : v < piso ? 'abaixo_mev' : v > teto ? 'acima_mrv' : 'na_banda';
-    return { grupo: g, rotulo: rotulo(g), ponderado: v, status, mev: piso, mrv: teto };
+    /**
+     * 🔵 O máximo AUTOMÁTICO deste grupo: quem está em foco já pode usar o teto cheio, e para
+     * ele as duas linhas coincidem — não existe zona intermediária num grupo focado.
+     */
+    const maxAutomatico = emFoco.has(g) ? tetos.cheio : tetos.semFoco;
+    const status: StatusGrupo = v <= 0
+      ? 'sem_estimulo'
+      : v < piso
+        ? 'abaixo_mev'
+        : v > tetos.cheio
+          ? 'acima_mrv'
+          : v > maxAutomatico
+            ? 'acima_do_automatico'
+            : 'na_banda';
+    return { grupo: g, rotulo: rotulo(g), ponderado: v, status, mev: piso, mrv: tetos.cheio, maxAutomatico };
   });
+}
+
+/**
+ * 🔒 Os tetos que valem nesta avaliação — publicados pelo motor, ou derivados do nível.
+ *
+ * ⚠️ `faixaSemanal` NÃO entra aqui (2026-09-17). Ela é a faixa DESEJADA; ler o `max` dela
+ * como teto é exatamente o defeito que a decisão fecha. Quando o motor tem um teto menor a
+ * declarar (deload), ele o publica em `tetoVolumeSemana` — que já vem com a fase aplicada.
+ */
+function tetosDoContexto(ctx: ContextoCritico): {
+  semFoco: number; cheio: number; sessao: number | null; gruposEmFoco: readonly GrupoPrimario[];
+} {
+  return ctx.tetoVolumeSemana ?? {
+    semFoco: maxSemanalSemFoco(ctx.nivel, ctx.objetivo),
+    cheio: mrv(ctx.nivel, ctx.objetivo),
+    sessao: tetoPonderadoNaSessao(ctx.nivel, ctx.objetivo),
+    gruposEmFoco: [],
+  };
 }
 
 /**
@@ -236,7 +307,14 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
  */
 export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number, fase: FaseVolume = 'normal'): ItemCritico[] {
   const itens: ItemCritico[] = [];
-  const acima = [...placar].filter((l) => l.status === 'acima_mrv').sort((a, b) => b.ponderado - a.ponderado);
+  /**
+   * 🔵 A sugestão de TROCA nasce do desequilíbrio, não do teto: um grupo acima do que o app
+   * usa sozinho ao lado de outro abaixo do piso é o caso literal do autor ("um de peito a
+   * mais e um de ombro a menos"), e ele não precisa esperar o teto cheio estourar.
+   */
+  const acima = [...placar]
+    .filter((l) => l.status === 'acima_mrv' || l.status === 'acima_do_automatico')
+    .sort((a, b) => b.ponderado - a.ponderado);
   /**
    * 🔒 Em `deload` e `retomada` o volume reduzido é a PRESCRIÇÃO, não um déficit — é o mesmo
    * contrato que faz o montador pular o guard de cobertura nessas fases. Sem isto, a semana de
@@ -307,12 +385,61 @@ export function avisos(
     }
   }
 
-  // ② Grupo acima do MRV do nível (conta ponderada — a mesma do placar).
+  // ② Grupo acima do TETO SEMANAL CHEIO (conta ponderada — a mesma do placar).
   for (const l of placar.filter((x) => x.status === 'acima_mrv')) {
     itens.push({
       codigo: 'acima_do_maximo',
       severidade: 'risco',
       texto: `${l.rotulo} está acima do volume máximo do seu nível (${l.ponderado} contra ${l.mrv} séries). Volume acima do que você recupera tende a atrapalhar, não somar.`,
+      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mrv', alvo: l.mrv },
+    });
+  }
+
+  /**
+   * ②b 🔵 ACIMA DO MÁXIMO AUTOMÁTICO, ABAIXO DO TETO (decisão 2026-09-17).
+   *
+   * 🔴 A frase que esta seção existe para NÃO dizer: "você ultrapassou o teto". Um
+   * intermediário com 17 séries está acima das 16 que a montagem automática usa e abaixo das
+   * 19 do teto cheio — afirmar que ele passou do teto seria falso. Por isso é
+   * `recomendacao`, não `risco`: o crítico orienta, e nada aqui trava o salvamento.
+   */
+  for (const l of placar.filter((x) => x.status === 'acima_do_automatico')) {
+    itens.push({
+      codigo: 'acima_do_maximo_automatico',
+      severidade: 'recomendacao',
+      texto: `${l.rotulo} está com ${l.ponderado} séries nesta semana: acima das ${l.maxAutomatico} que o app usa quando monta sozinho, e ainda dentro do teto de ${l.mrv}. Se a escolha foi sua, ela vale — só acompanhe como você recupera.`,
+      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'max_automatico', alvo: l.maxAutomatico },
+    });
+  }
+
+  /**
+   * ②c 🔵 O TETO POR SESSÃO — os dois limites valem AO MESMO TEMPO (decisão 2026-09-17).
+   *
+   * 🔒 Um desenho pode estar impecável na semana e concentrar demais num dia: 11 séries de
+   * peito num dia cabem no teto diário e estouram o máximo semanal do iniciante (10); 13 num
+   * dia estouram o diário mesmo com a semana dentro do teto cheio. O aviso semanal não
+   * enxerga esse segundo caso, e é por isso que este existe.
+   */
+  {
+    const tetoSessao = tetosDoContexto(ctx).sessao;
+    /**
+     * 🔴 Sem teto de sessão DECLARADO (tudo que não é hipertrofia) a tela não afirma nenhum.
+     * `saude` e `emagrecimento` limitam a sessão por `semanal ÷ frequência real`, dentro da
+     * repartição do motor — cobrar aqui uma régua ponderada inventaria um limite deles.
+     */
+    if (tetoSessao != null) dias.forEach((d, i) => {
+      const slots = d.exercicios.map((e, k) => ({ exercicio: e, series: d.series?.[k] ?? ctx.seriesPadrao ?? 1 }));
+      const noDia = creditoPonderadoDaSemana(slots);
+      for (const g of GRUPOS_GRANDES) {
+        const v = Math.round((noDia.get(g) ?? 0) * 10) / 10;
+        if (v <= tetoSessao) continue;
+        itens.push({
+          codigo: 'acima_do_maximo_na_sessao',
+          severidade: 'risco',
+          texto: `${rotulo(g)} soma ${v} séries em ${d.nome || `Dia ${i + 1}`} — acima das ${tetoSessao} por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.`,
+          fato: { grupo: g, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: v, escopo: 'sessao', metrica: 'series_ponderadas', limiar: 'teto_sessao', alvo: tetoSessao, dia: i },
+        });
+      }
     });
   }
 

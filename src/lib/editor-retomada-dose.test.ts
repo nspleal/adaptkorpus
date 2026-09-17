@@ -146,17 +146,22 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
   const semana1: OpcoesSemana = { semana: 1 };
   it('plano automático e editor entregam a mesma dose, exercício a exercício', () => {
     const r = gerar(PERFIL, semana1);
+    /**
+     * 🔵 NÚMEROS REMEDIDOS em 2026-09-17 — a faixa desejada de hipertrofia mudou
+     * (avançado: 16–20 → 12–18), então o plano de referência tem outra composição. A
+     * propriedade guardada é a mesma, e continua presa por número.
+     */
     expect(r.dias.map((d) => [d.slots.length, d.slots.reduce((n, s) => n + (s.series ?? 0), 0)]))
-      .toEqual([[7, 24], [7, 24], [6, 24], [9, 28], [6, 20]]);
-    expect(total(r)).toBe(120);
-    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(35);
-    expect(r.dias[0]!.slots.find((s) => s.exercicio.id === 'e130')?.series).toBe(4);
+      .toEqual([[7, 21], [6, 20], [7, 27], [9, 26], [5, 16]]);
+    expect(total(r)).toBe(110);
+    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(34);
+    expect(r.dias[0]!.slots.find((s) => s.exercicio.id === 'e130')?.series).toBe(3);
     // Os dois adicionais do foco moram na quinta, com 2 séries cada.
     expect(r.dias[3]!.slots.slice(0, 2).map((s) => [s.exercicio.id, s.series]))
       .toEqual([['e156', 2], ['e130', 2]]);
     const custom = json(paraRotinaCustom(abrir(r, PERFIL)));
     const previsto = gerar({ ...PERFIL, rotinaCustom: custom }, semana1);
     expect(dose(previsto)).toEqual(dose(r));
-    expect(total(previsto)).toBe(120);
+    expect(total(previsto)).toBe(110);
   });
 });

@@ -9,6 +9,8 @@ const base:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAma
 const agendas:Weekday[][]=[['seg'],['dom','seg'],['seg','qui'],['seg','qua','sex'],['seg','ter','qui','sex'],['seg','ter','qua','sex','sab'],['seg','ter','qua','qui','sex','sab'],[...ORDEM_SEMANA]];
 const run=(agenda:Weekday[],over:Partial<PerfilTreino>={},semana:1|5|6=1)=>gerarTreino({...base,...over,treinoDias:agenda,diasDisponiveis:agenda.length},{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
 const slots=(r:RotinaSemanal)=>r.dias.flatMap(d=>d.slots);
+/** 🔵 As frases de recusa/aparo do bloco do foco, nas duas restrições (semana e sessão). */
+const RECUSA_OU_APARO=/(j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/;
 describe('etapa3: plano concreto',()=>{
  it('um dia cobre cada grupo direto uma vez; foco tem dois exercícios no total',()=>{
   for(const foco of [undefined,{grupo:'peito' as const,compensa:'triceps' as const,semana:1}]){
@@ -103,11 +105,22 @@ describe('etapa3: plano concreto',()=>{
    expect(b.blocoFoco?.solicitados,'a INTENÇÃO do bloco continua sendo 2').toBe(2);
    if(entregues.length===2)comDois+=1;
    else{
-    // recusa parcial só é aceitável com o componente no teto — e com a frase na tela
-    const teto=b.faixaVolumeSemana!.max;
+    /**
+     * 🔵 2026-09-17 — o teto deixou de ser um número só. A recusa parcial é aceitável quando
+     * um componente encosta no teto SEMANAL do porte dele (cheio para quem está em foco) OU no
+     * teto da SESSÃO, que vale ao mesmo tempo. A redação anterior lia `faixaVolumeSemana.max`,
+     * que hoje é o ALVO desejado — não um limite.
+     */
+    const t=b.tetoVolumeSemana!;
+    const emFoco=(g:string)=>t.gruposEmFoco.includes(g as never);
     const c=creditoPonderadoDaSemana(slots(b));
-    expect(['quadriceps','posterior'].some(g=>(c.get(g as never)??0)>=teto),`${agenda.join('-')}: bloco encolheu sem ninguém no teto`).toBe(true);
-    expect(b.avisos.some(x=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(x)),`${agenda.join('-')}: recusa sem explicação`).toBe(true);
+    const noTetoSemanal=['quadriceps','posterior'].some(g=>(c.get(g as never)??0)>=(emFoco(g)?t.cheio:t.semFoco));
+    const noTetoSessao=t.sessao!=null&&b.dias.some(d=>{
+      const nd=creditoPonderadoDaSemana(d.slots);
+      return ['quadriceps','posterior'].some(g=>(nd.get(g as never)??0)>=t.sessao!);
+    });
+    expect(noTetoSemanal||noTetoSessao,`${agenda.join('-')}: bloco encolheu sem ninguém no teto`).toBe(true);
+    expect(b.avisos.some(x=>RECUSA_OU_APARO.test(x)),`${agenda.join('-')}: recusa sem explicação`).toBe(true);
    }
   }
   expect(comDois,'nenhuma agenda entregou o bloco inteiro — o caso deixou de discriminar').toBeGreaterThan(0);
@@ -133,19 +146,60 @@ describe('etapa3: plano concreto',()=>{
   * 🔒 O que NÃO mudou: o foco continua ADIÇÃO, sem compensação. Nenhum terceiro cede série
   * para o bloco entrar; o que muda é só que o bloco para no teto.
   */
- it('extras param no MRV — teto duro, sem compensação (reverte a decisão de 14/09)',()=>{
-  const a=run(['seg','ter','qui','sex'],{nivelExperiencia:'intermediario'},5);
-  const b=run(['seg','ter','qui','sex'],{nivelExperiencia:'intermediario',foco:{grupo:'peito',compensa:'triceps',semana:1}},5);
-  const n=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario==='peito').reduce((n,s)=>n+s.series!,0);
-  const teto=b.faixaVolumeSemana!.max;
-  // anti-vacuidade: o baseline desta semana chega ao topo — é o caso que o claim --004 nomeia
-  expect(n(a),'o baseline não está no topo: o caso deixou de discriminar').toBe(teto);
-  // o foco NÃO passa do teto, na conta canônica (direto 1,0 + indireto 0,5)
-  expect(creditoPonderadoDaSemana(slots(b)).get('peito')).toBeLessThanOrEqual(teto);
-  // e não custa série de ninguém: quem está no topo recebe ORDEM, e a tela DIZ isso
-  const outros=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario!=='peito').map(s=>`${s.exercicio.id}:${s.series}`).sort();
+ /**
+  * 🔵 CÉLULA REANCORADA (2026-09-17). A anterior — intermediário 4d/75min/S5 com foco em
+  * peito — deixou de discriminar: com a margem de 3, o baseline fica em 12 contra um teto de
+  * 19, sobra folga e o bloco ENTRA. Afirmar ali "o extra para no teto" seria cobrar um
+  * comportamento que aquela célula não exercita mais.
+  *
+  * A célula nova foi medida na varredura desta correção: INICIANTE 3d/60min/S5 com foco em
+  * costas, onde o teto de 13 é atingido pelo baseline e o bloco é recusado por inteiro.
+  */
+ it('a MARGEM é do grupo em foco: o extra sobe de 9 até o teto cheio, e para ali',()=>{
+  const over={nivelExperiencia:'iniciante' as const,tempoPorSessaoMin:60,limiteTempoTreino:'limitado' as const};
+  const a=run(['seg','qua','sex'],over,5);
+  const b=run(['seg','qua','sex'],{...over,foco:{grupo:'costas',compensa:'biceps',semana:1}},5);
+  const t=b.tetoVolumeSemana!;
+  const pond=(r:RotinaSemanal,g='costas')=>creditoPonderadoDaSemana(slots(r)).get(g as never)??0;
+  expect(t.gruposEmFoco,'o grupo focado precisa estar declarado').toEqual(['costas']);
+  // 🔵 Sem foco o grupo para no MÁXIMO AUTOMÁTICO; com foco ele usa a margem e chega ao CHEIO.
+  expect(pond(a),'sem foco, costas não pode passar do máximo automático').toBeLessThanOrEqual(t.semFoco);
+  expect(pond(b),'com foco, costas usa a margem e para no teto cheio').toBe(t.cheio);
+  expect(t.cheio-t.semFoco,'a margem é de 3 séries').toBe(3);
+  // 🔒 E a exceção é DO GRUPO: ninguém mais passa do máximo automático por tabela.
+  for(const g of GRUPOS_GRANDES){
+   if(g==='costas')continue;
+   expect(pond(b,g),`${g} não está em foco e não pode usar o teto cheio`).toBeLessThanOrEqual(t.semFoco);
+  }
+  // 🔒 E o teto por sessão vale ao mesmo tempo: nenhum dia passa das 12 ponderadas.
+  for(const d of b.dias){
+   const nd=creditoPonderadoDaSemana(d.slots);
+   for(const g of GRUPOS_GRANDES)expect(nd.get(g)??0,`${d.diaId}/${g}`).toBeLessThanOrEqual(t.sessao!);
+  }
+  // e não custa série de ninguém: o baseline dos outros grupos sai idêntico
+  const outros=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario!=='costas').map(s=>`${s.exercicio.id}:${s.series}`).sort();
   expect(outros(b)).toEqual(outros(a));
-  expect(b.avisos.some(x=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(x)),'recusa sem explicação na tela').toBe(true);
+ });
+
+ /**
+  * 🔵 O DEGRAU DA RECUSA, na célula onde ele ainda acontece (medida na varredura de
+  * 2026-09-17): iniciante 3d/60min seg-ter-qua, foco em costas na semana 5. Ali o bloco não
+  * cabe e a tela DIZ por quê — é a outra metade do contrato de 14/09→15/09.
+  */
+ it('extras param no TETO — quando não cabe, o bloco é recusado e a tela explica',()=>{
+  const over={nivelExperiencia:'iniciante' as const,tempoPorSessaoMin:60,limiteTempoTreino:'limitado' as const};
+  const a=run(['seg','ter','qua'],over,5);
+  const b=run(['seg','ter','qua'],{...over,foco:{grupo:'costas',compensa:'biceps',semana:5}},5);
+  const t=b.tetoVolumeSemana!;
+  const pond=(r:RotinaSemanal)=>creditoPonderadoDaSemana(slots(r)).get('costas')??0;
+  expect(pond(b),'o foco não pode passar do teto cheio').toBeLessThanOrEqual(t.cheio);
+  // anti-vacuidade: o bloco NÃO entregou o nominal inteiro — é disso que o caso trata
+  const entregue=(b.blocoFoco?.adicionais??[]).reduce((n,x)=>n+x.series,0);
+  expect(entregue,'o bloco entregou tudo — a célula deixou de exercitar a recusa').toBeLessThan(4);
+  expect(b.avisos.some(x=>RECUSA_OU_APARO.test(x)),`recusa sem explicação na tela: ${b.avisos.join(' | ')}`).toBe(true);
+  // e o baseline dos outros grupos segue intacto
+  const outros=(r:RotinaSemanal)=>slots(r).filter(s=>s.exercicio.grupoPrimario!=='costas').map(s=>`${s.exercicio.id}:${s.series}`).sort();
+  expect(outros(b)).toEqual(outros(a));
  });
  /**
   * 🔴 Revisão 15/09 (D-03) — o equilíbrio puxar/empurrar é do BASELINE.

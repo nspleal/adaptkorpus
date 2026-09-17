@@ -166,20 +166,26 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       }
     });
 
-    it('segundo caso medido: reduzir qui/e70 de 2 para 1 não levanta qui/e71 nem qui/e133', () => {
+    /**
+     * 🔵 SLOT REANCORADO em 2026-09-17: com a repartição agora ordenada por IDENTIDADE (dia,
+     * id) em vez de posição, o slot de tríceps que fica acima do piso neste plano é `e113`,
+     * não `e70`. O par medido — um slot com folga ao lado de um pedido recusado — é o mesmo.
+     */
+    it('segundo caso medido: reduzir qui/e113 de 2 para 1 não levanta qui/e70, qui/e71 nem qui/e133', () => {
       const mapa = mapaDe(gerar(P_SAUDE, { semana: 1 }));
       const auto = gerar(P_SAUDE, RAMPA_A);
       const antes = porSlot(gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A));
       // anti-vacuidade: o grupo tríceps é repartido desigualmente e há pedido recusado
-      expect(antes.get('qui/e70')).toBe(2);
+      expect(antes.get('qui/e113')).toBe(2);
       expect(antes.get('qui/e71')).toBe(1);
       expect(mapa.qui!.e71).toBe(2);
-      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'qui', 'e70', 1))), RAMPA_A));
-      expect(depois.get('qui/e70')).toBe(1);
+      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'qui', 'e113', 1))), RAMPA_A));
+      expect(depois.get('qui/e113')).toBe(1);
       expect(depois.get('qui/e71')).toBe(1);
+      expect(depois.get('qui/e70')).toBe(antes.get('qui/e70'));
       expect(depois.get('qui/e133')).toBe(antes.get('qui/e133'));
       for (const [k, v] of antes) {
-        if (k === 'qui/e70') continue;
+        if (k === 'qui/e113') continue;
         expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
       }
     });

@@ -25,8 +25,14 @@ const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({
   pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'massa',
   nivelExperiencia: 'intermediario', equipamento: 'casa', equipamentosCasa: [], diasDisponiveis: 6, tempoPorSessaoMin: 180, ...over,
 });
-const classif = (nivel: NivelExperiencia, grupo: GrupoPrimario, casa: EquipamentoCasa[] = []) =>
-  classificarCoberturaCatalogo(EXERCISES, grupo, nivel, 'massa', 'casa', casa);
+/**
+ * 🔵 O OBJETIVO VIROU PARÂMETRO (2026-09-17). Ele já era um eixo da classificação (o MEV vem
+ * de nível × objetivo); estava fixo em `massa` só porque as células medidas na época eram
+ * todas de massa. Com a faixa desejada de hipertrofia mais baixa, o conjunto de grupos
+ * catálogo-limitados mudou, e as células abaixo foram REMEDIDAS — ver a nota de cada uma.
+ */
+const classif = (nivel: NivelExperiencia, grupo: GrupoPrimario, casa: EquipamentoCasa[] = [], objetivo: 'massa' | 'saude' | 'emagrecimento' = 'massa') =>
+  classificarCoberturaCatalogo(EXERCISES, grupo, nivel, objetivo, 'casa', casa);
 
 describe('🔒 cobertura no teto — a instância medida (não a premissa)', () => {
   it('AVANÇADO casa-vazio: ombros e posterior ALCANÇAM o MEV no teto (não é catálogo)', () => {
@@ -36,20 +42,34 @@ describe('🔒 cobertura no teto — a instância medida (não a premissa)', () 
     expect(classif('avancado', 'posterior')).toBeNull();
   });
 
-  it('INTERMEDIÁRIO casa-vazio: ombros e posterior são catálogo-limitados, fechados por elástico', () => {
-    for (const g of ['ombros', 'posterior'] as const) {
-      const c = classif('intermediario', g);
-      expect(c, `${g} deveria ser catálogo-limitado`).not.toBeNull();
-      expect(c!.equipamento).toBe('elastico');
-      expect(c!.exercicios.length, 'a frase precisa nomear ao menos 1 exercício que entra').toBeGreaterThan(0);
-    }
+  /**
+   * 🔵 CÉLULA REMEDIDA (2026-09-17). A redação anterior era «INTERMEDIÁRIO casa-vazio: ombros
+   * e posterior são catálogo-limitados». Com o MEV de hipertrofia caindo de 13 para 10 no
+   * intermediário, os dois passaram a ALCANÇAR o mínimo em casa-vazio — deixaram de ser
+   * limite de catálogo, e afirmar que ainda são seria falso. A célula que segue limitada e
+   * fechada por elástico é `iniciante/massa/posterior`.
+   */
+  it('INICIANTE casa-vazio: posterior é catálogo-limitado, fechado por elástico', () => {
+    const c = classif('iniciante', 'posterior');
+    expect(c, 'posterior deveria ser catálogo-limitado').not.toBeNull();
+    expect(c!.equipamento).toBe('elastico');
+    expect(c!.exercicios.length, 'a frase precisa nomear ao menos 1 exercício que entra').toBeGreaterThan(0);
+    // 🔒 E o INTERMEDIÁRIO, na mesma configuração, agora alcança — a mudança é dita, não escondida.
+    expect(classif('intermediario', 'posterior'), 'com MEV 10 o intermediário alcança em casa-vazio').toBeNull();
   });
 
-  it('🔴 INICIANTE casa-vazio ombros: o mínimo é HALTERES, não elástico (o caso que a string fixa erraria)', () => {
-    const c = classif('iniciante', 'ombros');
-    expect(c, 'iniciante-ombros é catálogo-limitado').not.toBeNull();
-    expect(c!.equipamento, 'elástico NÃO fecha ombro no iniciante; só halteres').toBe('halteres');
-    // e posterior no iniciante fecha com elástico — a prova de que o mínimo é DERIVADO, não global
+  /**
+   * 🔵 O MÍNIMO É DERIVADO, NÃO UMA STRING FIXA — a propriedade que o caso anterior
+   * («iniciante-ombros só fecha com halteres») protegia. Aquela célula desapareceu com o MEV
+   * novo; esta foi medida no lugar e é ainda mais forte: o mínimo não é sequer o primeiro da
+   * ordem, e o grupo já tem elástico e halteres marcados.
+   */
+  it('🔴 o equipamento mínimo é MEDIDO: iniciante/emagrecimento/peito com elástico+halteres pede BANCO', () => {
+    const c = classif('iniciante', 'peito', ['elastico', 'halteres'], 'emagrecimento');
+    expect(c, 'a célula precisa continuar limitada — senão o caso não prova nada').not.toBeNull();
+    expect(c!.equipamento, 'não é o primeiro da ordem de minimalidade').toBe('banco');
+    expect(c!.exercicios.length).toBeGreaterThan(0);
+    // …e no mesmo nível, outro grupo fecha com elástico: o mínimo é por (grupo × nível × objetivo).
     expect(classif('iniciante', 'posterior')!.equipamento).toBe('elastico');
   });
 });
@@ -57,29 +77,39 @@ describe('🔒 cobertura no teto — a instância medida (não a premissa)', () 
 describe('🔒 mutação eixo (a) — o equipamento nomeado REALMENTE fecha o grupo no teto', () => {
   // Se a implementação nomear um equipamento que não fecha (ex.: hardcode 'elastico' no
   // iniciante-ombros), esta invariante quebra. Vale para todo caso classificado.
-  const casos: [NivelExperiencia, GrupoPrimario][] = [
-    ['iniciante', 'ombros'], ['iniciante', 'posterior'],
-    ['intermediario', 'ombros'], ['intermediario', 'posterior'],
+  /** 🔵 Células REMEDIDAS em 2026-09-17 — ver a nota do bloco acima. */
+  const casos: [NivelExperiencia, GrupoPrimario, 'massa' | 'saude' | 'emagrecimento'][] = [
+    ['iniciante', 'posterior', 'massa'],
+    ['iniciante', 'ombros', 'emagrecimento'],
+    ['avancado', 'ombros', 'saude'],
   ];
-  for (const [nivel, g] of casos) {
-    it(`${nivel}/${g}: o teto COM o equipamento nomeado ≥ MEV; sem ele, < MEV`, () => {
-      const c = classif(nivel, g)!;
+  for (const [nivel, g, obj] of casos) {
+    it(`${nivel}/${obj}/${g}: o teto COM o equipamento nomeado ≥ MEV; sem ele, < MEV`, () => {
+      const c = classif(nivel, g, [], obj)!;
       expect(c).not.toBeNull();
-      const piso = mev(nivel, 'massa');
-      expect(tetoPonderado(EXERCISES, nivel, 'massa', 'casa', []).get(g) ?? 0, 'sem equipamento devia estar abaixo').toBeLessThan(piso);
-      expect(tetoPonderado(EXERCISES, nivel, 'massa', 'casa', [c.equipamento]).get(g) ?? 0, `${c.equipamento} devia fechar`).toBeGreaterThanOrEqual(piso);
+      const piso = mev(nivel, obj);
+      expect(tetoPonderado(EXERCISES, nivel, obj, 'casa', []).get(g) ?? 0, 'sem equipamento devia estar abaixo').toBeLessThan(piso);
+      expect(tetoPonderado(EXERCISES, nivel, obj, 'casa', [c.equipamento]).get(g) ?? 0, `${c.equipamento} devia fechar`).toBeGreaterThanOrEqual(piso);
     });
   }
 
   it('minimalidade: nenhum equipamento MENOR (na ordem) que o nomeado fecha o grupo', () => {
     const ORDEM = ['elastico', 'halteres', 'kettlebell', 'barra_fixa', 'banco', 'corda_pular', 'roda_abdominal'] as const;
-    const c = classif('iniciante', 'ombros')!; // halteres; elástico vem antes e NÃO fecha
-    const piso = mev('iniciante', 'massa');
+    // 🔵 A célula em que o mínimo NÃO é o primeiro da ordem — a que torna o teste discriminante.
+    const jaMarcados: EquipamentoCasa[] = ['elastico', 'halteres'];
+    const c = classif('iniciante', 'peito', jaMarcados, 'emagrecimento')!;
+    expect(c.equipamento).toBe('banco');
+    const piso = mev('iniciante', 'emagrecimento');
+    let testados = 0;
     for (const eqp of ORDEM) {
       if (eqp === c.equipamento) break;
-      expect(tetoPonderado(EXERCISES, 'iniciante', 'massa', 'casa', [eqp]).get('ombros') ?? 0,
+      if (jaMarcados.includes(eqp)) continue; // já está no perfil; não é candidato
+      expect(tetoPonderado(EXERCISES, 'iniciante', 'emagrecimento', 'casa', [...jaMarcados, eqp]).get('peito') ?? 0,
         `${eqp} vem antes de ${c.equipamento} e NÃO pode fechar (senão ele era o mínimo)`).toBeLessThan(piso);
+      testados += 1;
     }
+    // ⚠️ ANTI-VACUIDADE: sem candidatos ANTES do nomeado, o laço acima não prova minimalidade.
+    expect(testados, 'a célula precisa ter equipamentos menores para descartar').toBeGreaterThan(0);
   });
 });
 
@@ -96,17 +126,17 @@ describe('🔒 mutação eixo (b) — grupo certo recebe/não recebe a mensagem'
   });
 
   it('marcar o equipamento que fecha REMOVE a classificação (a saída funciona)', () => {
-    expect(classif('intermediario', 'ombros')).not.toBeNull();
-    expect(classif('intermediario', 'ombros', ['elastico']), 'com elástico marcado, ombros deixa de ser limitado').toBeNull();
+    expect(classif('iniciante', 'posterior')).not.toBeNull();
+    expect(classif('iniciante', 'posterior', ['elastico']), 'com elástico marcado, posterior deixa de ser limitado').toBeNull();
   });
 });
 
 describe('🔒 a mensagem — honesta, ancorada no checklist, sem venda', () => {
   it('nomeia grupo, equipamento e exercícios; sem "compre"/link/acusação', () => {
-    const c = classif('intermediario', 'ombros')!;
+    const c = classif('iniciante', 'posterior')!;
     const msg = mensagemCoberturaCatalogo(c);
     expect(msg).toContain('Elástico');
-    expect(msg).toContain('ombros');
+    expect(msg).toContain('posterior');
     expect(msg).toContain(c.exercicios[0]!);
     expect(msg).not.toMatch(/compre|comprar|http|R\$|você (não|deveria|falhou)/i);
   });
@@ -118,9 +148,9 @@ describe('🔒 integração — o aviso certo sai do montador, na causa certa', 
     return montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana: 3 as never }).avisos;
   };
 
-  it('casa-vazio intermediário: sai "Chegamos ao limite de ombros" nomeando Elástico', () => {
-    const av = avisosDe({ nivelExperiencia: 'intermediario', equipamento: 'casa', equipamentosCasa: [] });
-    const msg = av.find((a) => a.includes('limite de ombros'));
+  it('casa-vazio iniciante: sai "Chegamos ao limite de posterior" nomeando Elástico', () => {
+    const av = avisosDe({ nivelExperiencia: 'iniciante', equipamento: 'casa', equipamentosCasa: [] });
+    const msg = av.find((a) => a.includes('limite de posterior'));
     expect(msg, `avisos: ${av.join(' | ')}`).toBeTruthy();
     expect(msg).toContain('Elástico');
   });

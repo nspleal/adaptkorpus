@@ -40,6 +40,19 @@ const rotulo: CSSProperties = {
 };
 const nota: CSSProperties = { fontSize: '.79rem', lineHeight: 1.55, color: 'rgba(234,229,219,.62)' };
 const item: CSSProperties = { fontSize: '.85rem', lineHeight: 1.5, color: 'rgba(234,229,219,.85)' };
+/**
+ * 🔵 O bloco virou CARTÃO (2026-09-17): antes era uma linha de texto solta abaixo do botão
+ * verde de adicionar, e no celular o botão funcionava como fim do cartão do dia — o que vinha
+ * depois lia-se como rodapé. Agora ele tem moldura própria e mora ANTES do botão, junto do
+ * conteúdo que descreve.
+ */
+const caixa: CSSProperties = {
+  background: 'rgba(189,255,0,.04)', border: '1px solid rgba(189,255,0,.22)',
+  borderRadius: 12, padding: '10px 12px',
+};
+const cabecalho: CSSProperties = {
+  fontSize: '.85rem', fontWeight: 700, color: '#EAE5DB', letterSpacing: '-.01em',
+};
 
 const MARCA: Record<EstadoDaParte, { marca: string; cor: string }> = {
   identificada: { marca: '●', cor: '#BDFF00' },
@@ -69,6 +82,14 @@ export interface EfeitoDaSugestao {
   grupo: string;
   /** O dia passa a exceder o tempo por sessão, segundo o próprio motor. */
   excedeOTempo: boolean;
+  /**
+   * 🔵 Onde o volume SEMANAL do grupo passa a cair, pelo placar do crítico (2026-09-17).
+   * `automatico` = acima do que o app monta sozinho e ainda dentro do teto; `teto` = acima do
+   * teto cheio. `null` quando o placar não acompanha o grupo — onde não há conta, a tela cala.
+   */
+  passaDoSemanal: 'nao' | 'automatico' | 'teto' | null;
+  /** O grupo passa do teto de séries ponderadas NESTE dia, pelo mesmo crítico. */
+  passaDoTetoDaSessao: boolean;
 }
 
 export default function CoberturaMuscular({
@@ -96,16 +117,51 @@ export default function CoberturaMuscular({
   const porId = useMemo(() => new Map(elegiveis.map((e) => [e.id, e])), [elegiveis]);
   const nomeNoDia = useMemo(() => new Map(escolhidos.map((e) => [e.id, e.nomePt])), [escolhidos]);
 
-  if (escolhidos.length === 0 || cobertura.grupos.length === 0) return null;
+  /**
+   * 🔴 O BLOCO NÃO SOME MAIS (correção 2026-09-17, do relato "a cobertura não apareceu").
+   *
+   * Antes ele devolvia `null` com o dia vazio — e é justamente com o dia vazio que a pessoa
+   * abre o editor pela primeira vez. Ausência é indistinguível de quebrado: quem não viu
+   * nada não tem como saber se a funcionalidade existe. Agora o dia vazio DIZ que a leitura
+   * aparece assim que houver exercício.
+   *
+   * O outro caminho de ausência é real e continua: um dia só de cardio não tem grupo
+   * muscular, e inventar regiões para ele seria afirmar o que o dado não sustenta.
+   */
+  const vazio = escolhidos.length === 0;
+  const semGrupos = !vazio && cobertura.grupos.length === 0;
+  if (vazio || semGrupos) {
+    return (
+      <div style={{ ...caixa, marginTop: 10 }}>
+        <div style={cabecalho}>Cobertura muscular</div>
+        <p style={{ ...nota, margin: '4px 0 0' }}>
+          {vazio
+            ? 'Assim que você adicionar exercícios a este dia, mostramos aqui quais regiões dos grupos escolhidos eles contemplam e quais ficam sem exercício identificado.'
+            : 'Os itens deste dia não têm grupo muscular na base (cardio, por exemplo), então não há regiões a listar.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <details style={{ marginTop: 10, borderTop: '1px solid rgba(234,229,219,.1)', paddingTop: 8 }}>
-      <summary style={{ cursor: 'pointer', padding: '8px 0', fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.9)' }}>
-        Cobertura muscular
-        <span style={{ fontWeight: 500, color: 'rgba(234,229,219,.6)' }}>
-          {' '}— {cobertura.identificadas} {cobertura.identificadas === 1 ? 'região identificada' : 'regiões identificadas'}
-          {cobertura.semExercicio > 0 ? `, ${cobertura.semExercicio} sem exercício identificado` : ''}
+    /**
+     * 🔵 ABERTO quando há o que fazer (2026-09-17). Fechado por padrão, a leitura só
+     * aparecia para quem já sabia que ela existia — e o relato é exatamente de quem não
+     * sabia. Com região sem exercício identificado, o bloco abre; sem pendência nenhuma ele
+     * fica fechado, porque aí é confirmação, não tarefa.
+     */
+    <details open={cobertura.semExercicio > 0} style={{ ...caixa, marginTop: 10 }}>
+      <summary style={{ cursor: 'pointer', padding: '2px 0', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={cabecalho}>Cobertura muscular</span>
+        <span style={{ fontSize: '.76rem', fontWeight: 700, color: '#BDFF00', border: '1px solid rgba(189,255,0,.35)', borderRadius: 999, padding: '2px 8px' }}>
+          {cobertura.identificadas} {cobertura.identificadas === 1 ? 'região' : 'regiões'}
         </span>
+        {cobertura.semExercicio > 0 && (
+          <span style={{ fontSize: '.76rem', fontWeight: 700, color: 'rgba(234,229,219,.75)', border: '1px solid rgba(234,229,219,.25)', borderRadius: 999, padding: '2px 8px' }}>
+            {cobertura.semExercicio} sem exercício
+          </span>
+        )}
+        <span aria-hidden style={{ marginLeft: 'auto', fontSize: '.78rem', color: 'rgba(234,229,219,.55)' }}>ver detalhes</span>
       </summary>
 
       <p style={{ ...nota, margin: '2px 0 12px' }}>
@@ -358,6 +414,17 @@ function EfeitoLinha({ efeito }: { efeito: EfeitoDaSugestao | null }) {
         ? `sem mudança no volume semanal de ${efeito.grupo}`
         : `${sinal(efeito.deltaSeriesDoGrupo)}${modulo(efeito.deltaSeriesDoGrupo)} séries na semana de ${efeito.grupo}`,
     efeito.excedeOTempo ? 'passaria do seu tempo por sessão' : null,
+    /**
+     * 🔵 A CONSEQUÊNCIA NOS LIMITES (2026-09-17) — e cada frase diz o limite CERTO.
+     * "acima do que o app monta sozinho" não é "acima do teto", e trocar as duas afirmaria
+     * um estouro que não houve. `null` ⇒ o placar não acompanha o grupo ⇒ a tela cala.
+     */
+    efeito.passaDoSemanal === 'teto'
+      ? 'passaria do teto de volume da semana deste grupo'
+      : efeito.passaDoSemanal === 'automatico'
+        ? 'ficaria acima do que o app monta sozinho na semana, ainda dentro do teto'
+        : null,
+    efeito.passaDoTetoDaSessao ? 'passaria do máximo deste grupo num treino só' : null,
   ].filter(Boolean);
   return <div style={nota}>{partes.join(' · ')}</div>;
 }

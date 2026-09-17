@@ -26,7 +26,7 @@ import {
 } from './alocador';
 import { dificuldadesLiberadas, prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
-import { mev } from './trilhos';
+import { mev, tetoSemanalCheio } from './trilhos';
 import { exercicioDisponivel, EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA } from './equipamento';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario } from '../data/types';
@@ -95,8 +95,17 @@ function computarTeto(
     .filter((e) => exercicioDisponivel(e, equipamento, equipamentosCasa) && liberadas.has(e.nivel))
     .slice()
     .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  /**
+   * 🔵 O PICO MIRA O TETO CHEIO (decisão 2026-09-17), não o topo da faixa desejada.
+   *
+   * Esta função responde "o grupo alcança o MEV no orçamento MÁXIMO?". Depois que a faixa
+   * desejada e o teto viraram números diferentes, mirar a faixa aqui mediria o pico do que o
+   * app PRESCREVE, não o do que ele PODE — e classificaria como limite de catálogo o que é,
+   * na verdade, escolha de dose. O teto cheio é o maior alvo que qualquer caminho do motor
+   * pode pedir (o do grupo em foco), e por isso é o pico honesto.
+   */
   const alvoPonderado = new Map<GrupoPrimario, number>();
-  for (const g of [...GRUPOS_GRANDES, ...GRUPOS_PEQUENOS_PISO, 'core' as GrupoPrimario]) alvoPonderado.set(g, presc.volumePorGrupoSemana.max);
+  for (const g of [...GRUPOS_GRANDES, ...GRUPOS_PEQUENOS_PISO, 'core' as GrupoPrimario]) alvoPonderado.set(g, tetoSemanalCheio(nivel, objetivo));
   const sPlan = presc.seriesPorExercicio.max;
   const dias = alocarSemana({
     templates, budgetPorDia, pool, favoritos: new Set(), alvoPonderado,
