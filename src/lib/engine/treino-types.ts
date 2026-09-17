@@ -149,6 +149,22 @@ export interface PerfilTreino {
    * campo faltava). Ausente = `MODALIDADE_PADRAO_DIA` (caminhada), o default de sempre.
    */
   cardioFavorito?: ModalidadeCardio;
+  /**
+   * 🔁 VARIAÇÃO DA MONTAGEM AUTOMÁTICA — qual das montagens válidas o plano usa.
+   *
+   * Existe para "Gerar novo treino" poder oferecer uma semana DIFERENTE sem afrouxar nada: o
+   * número desloca o início da rotação de cada grupo dentro do pool que já passou por
+   * equipamento, nível, banidos/preteridos e todas as invariantes. Um exercício que a regra
+   * recusa continua recusado; o que muda é só qual dos APROVADOS ocupa o slot.
+   *
+   * 🔒 É ENTRADA, e por isso o determinismo continua inteiro: mesmo perfil + mesma variação
+   * ⇒ mesmo plano, byte a byte. É também por isso que ela é PERSISTIDA — sem guardá-la, a
+   * proposta que a pessoa aceitou não sobreviveria ao próximo recompute.
+   *
+   * Ausente ou 0 ⇒ a montagem canônica de sempre. Ignorada quando há `rotinaCustom` (lá quem
+   * escolhe os exercícios é a pessoa).
+   */
+  variacaoTreino?: number;
 }
 
 // --- Mesociclo (v2 — DF 2026-07-08) -----------------------------------------

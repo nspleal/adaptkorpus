@@ -65,6 +65,8 @@ export interface PreferenciasPerfil {
   divisaoPreferida?: PerfilResumo['divisaoPreferida'];
   /** 🧭 Editor guiado: só o DESENHO (ids por dia) — ~380 bytes, 171× abaixo do teto de 64 KB. */
   rotinaCustom?: PerfilResumo['rotinaCustom'];
+  /** 🔁 Índice da montagem automática aceita em "Gerar novo treino" (um inteiro). */
+  variacaoTreino?: PerfilResumo['variacaoTreino'];
 }
 
 /** Subconjunto de colunas de `public.profile` derivado do `PerfilResumo`. */
@@ -128,6 +130,7 @@ export function perfilParaLinha(p: PerfilResumo): ProfileRow {
       ...(p.orcamento != null ? { orcamento: p.orcamento } : {}),
       ...(p.divisaoPreferida != null ? { divisaoPreferida: p.divisaoPreferida } : {}),
       ...(p.rotinaCustom != null ? { rotinaCustom: p.rotinaCustom } : {}),
+      ...(p.variacaoTreino != null ? { variacaoTreino: p.variacaoTreino } : {}),
     },
   };
 }
@@ -204,6 +207,7 @@ export function linhaParaPerfil(row: ProfileRow): PerfilResumo {
     ...(pref.orcamento != null ? { orcamento: pref.orcamento } : {}),
     ...(pref.divisaoPreferida != null ? { divisaoPreferida: pref.divisaoPreferida } : {}),
     ...(pref.rotinaCustom != null ? { rotinaCustom: pref.rotinaCustom } : {}),
+    ...(pref.variacaoTreino != null ? { variacaoTreino: pref.variacaoTreino } : {}),
     flagsSaude: {
       gestacaoAmamentacao: row.gestacao_amamentacao,
       renal: row.renal,

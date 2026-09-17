@@ -118,9 +118,42 @@ describe('🔒 DF② — edição manual de séries; reps e RIR permanecem autom
     expect(editor, 'o componente do crítico deixou de ser compartilhado').toMatch(/export function PainelCritico/);
   });
 
-  it('"Voltar ao recomendado" apaga só o campo e confirma antes', () => {
-    expect(painel).toMatch(/rotinaCustom: undefined/);
-    expect(editor, 'a confirmação sumiu').toMatch(/Substituir pelo novo treino\?/);
+  /**
+   * 🔵 2026-09-16 — "Voltar ao recomendado" VIROU "Gerar novo treino", COM PRÉVIA.
+   *
+   * O guard anterior fixava o comportamento antigo: o botão do editor chamava
+   * `onVoltarAoRecomendado`, que apagava `rotinaCustom` e recomputava, e a confirmação era um
+   * diálogo sem prévia dentro do próprio editor. Ele fica mais FORTE aqui, não mais fraco: o
+   * que se exige agora é que a substituição passe por uma proposta calculada, mostrada e só
+   * então aplicada — e que o desenho salvo não seja tocado antes disso.
+   */
+  it('substituir o treino exige PRÉVIA e confirmação, e só então grava', () => {
+    // A porta do editor abre a proposta; ela não apaga nada por conta própria.
+    expect(editor, 'a porta "Gerar novo treino" sumiu do editor').toMatch(/onClick=\{onGerarNovo\}/);
+    const corpoDoEditor = editor.slice(0, editor.indexOf('function CampoSeries'));
+    expect(/rotinaCustom:\s*undefined/.test(corpoDoEditor), 'o editor voltou a apagar o desenho direto').toBe(false);
+    // O Painel calcula a proposta e SÓ o "aplicar" escreve no perfil.
+    expect(painel).toMatch(/function pedirProposta/);
+    expect(painel).toMatch(/function aplicarProposta/);
+    const pedir = painel.slice(painel.indexOf('function pedirProposta'), painel.indexOf('function aplicarProposta'));
+    expect(/setPerfil\(|notificarPerfil\(/.test(pedir), 'calcular a proposta já gravava o perfil').toBe(false);
+    // Cancelar não escreve.
+    const cancelar = painel.slice(painel.indexOf('function cancelarProposta'));
+    const corpoCancelar = cancelar.slice(0, cancelar.indexOf('  }'));
+    // 🔑 A âncora tem de ter pegado o corpo certo — senão o guard passaria por fatia vazia.
+    expect(corpoCancelar, 'a âncora de `cancelarProposta` não pegou o corpo').toMatch(/setProposta\(null\)/);
+    expect(/setPerfil\(|notificarPerfil\(|recomputarPlano\(/.test(corpoCancelar), 'cancelar passou a gravar').toBe(false);
+    // E a confirmação continua existindo, agora com a prévia do plano proposto.
+    const proposta = fonte('src/components/painel/PropostaTreino.tsx');
+    expect(proposta, 'a confirmação sumiu').toMatch(/Manter o meu/);
+    expect(proposta, 'a prévia do plano proposto sumiu').toMatch(/proposta\.rotina\.dias/);
+  });
+
+  /** 🔒 O desenho manual continua sendo da pessoa: a troca de origem é DITA. */
+  it('substituir um desenho manual por um plano automático é declarado na tela', () => {
+    const proposta = fonte('src/components/painel/PropostaTreino.tsx');
+    expect(proposta).toMatch(/origemAntes === 'manual' && .*origemDepois === 'automatico'/);
+    expect(proposta).toMatch(/montado pelo app/);
   });
 });
 

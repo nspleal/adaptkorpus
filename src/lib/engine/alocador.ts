@@ -235,6 +235,19 @@ export interface ArgsAlocacao {
    * estes padrões ocupam os primeiros slots disponíveis antes das reservas acessórias.
    */
   coberturaTemporalObrigatoria?: readonly ('puxar' | 'empurrar' | 'agachar')[];
+  /**
+   * 🔁 VARIAÇÃO DA MONTAGEM — o deslocamento INICIAL do cursor de rotação por grupo.
+   *
+   * 🔒 O que ela faz: começa a rotação de cada grupo noutro ponto do MESMO pool já elegível.
+   * 🔴 O que ela NÃO faz: não relaxa filtro nenhum. Equipamento, nível, banidos/preteridos,
+   * favoritos, `proiba` (puxar ≥ empurrar), `exigir` (reserva de cobertura), tetos, déficit e
+   * templates decidem exatamente como decidiam — a variação só muda por ONDE a varredura de
+   * um pool já aprovado começa. Um candidato que a regra recusa continua recusado.
+   *
+   * 🔒 Determinismo preservado: ela é ENTRADA. Mesmo perfil + mesma variação ⇒ mesma saída,
+   * byte a byte. Ausente ou 0 ⇒ o comportamento de sempre.
+   */
+  variacao?: number;
 }
 
 /** Um dia comporta reservar um acessório além do core? (≥ 3 slots livres p/ os grandes —
@@ -278,6 +291,13 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     });
   };
 
+  /**
+   * 🔁 Ponto de partida da rotação. `variacao` desloca o início da varredura do pool de TODO
+   * grupo; 0 (o default) reproduz a alocação de sempre. Normalizado para inteiro não-negativo
+   * aqui, e não no chamador, para que nenhuma borda (negativo, fracionário, NaN) escape.
+   */
+  const inicioRotacao = Number.isFinite(args.variacao)
+    ? Math.max(0, Math.trunc(args.variacao as number)) : 0;
   const cursor = new Map<GrupoPrimario, number>();
   /**
    * Próximo exercício do grupo: favoritos primeiro (sem repetir no dia), depois rotação.
@@ -305,7 +325,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     }
     const arr = porGrupo.get(g);
     if (!arr || arr.length === 0) return null;
-    const i0 = cursor.get(g) ?? 0;
+    const i0 = cursor.get(g) ?? inicioRotacao;
     // 1ª passada com a preferência (se houver); 2ª sem — nunca se deixa de preencher o
     // slot por causa de uma preferência de padrão.
     for (const comPreferencia of opts?.prefira ? [true, false] : [false]) {

@@ -38,7 +38,14 @@ export type { EventoProgressao, EventoTreino, EventoCalibracao } from './treino'
 export { ACAO_RECALIBRADO } from './treino';
 export * from './isometricos';
 export { avaliarGateTreino } from './treino-gate';
-export { montarRotina, locaisPermitidos, type OpcoesSemana } from './treino-montador';
+export { montarRotina, locaisPermitidos, poolElegivel, type OpcoesSemana } from './treino-montador';
+
+// --- 🦴 Cobertura muscular do dia em edição (diagnóstico; nunca bloqueia) ---
+export {
+  coberturaDoDia, gruposDoDia,
+  type CoberturaDoDia, type CoberturaDoGrupo, type ParteDoGrupo, type EstadoDaParte,
+  type SugestaoDeParte,
+} from './cobertura-editor';
 
 // --- Equipamento (modelo 2 níveis — DF 2026-07-04) ---
 export { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA, exercicioDisponivel } from './equipamento';

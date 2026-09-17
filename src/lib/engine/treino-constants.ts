@@ -103,6 +103,25 @@ export const REDUCAO_CARGA_DIFICIL = 0.1; // −~10% após 2 "difícil" seguidas
  */
 export const SERIES_MANUAIS_MAX = 99;
 
+/**
+ * 🔁 TETO DE FORMA do índice de variação da montagem automática — **trava de entrada, não
+ * regra de treino** (mesmo espírito de `SERIES_MANUAIS_MAX`). A variação só desloca o início
+ * da rotação num pool já elegível: qualquer inteiro é seguro para o motor, e o teto existe
+ * para o campo persistido não virar porta de payload nem número sem significado.
+ *
+ * O valor cobre com folga o maior pool de um grupo no catálogo atual — além dele a rotação
+ * volta ao começo e nenhuma montagem nova aparece.
+ */
+export const VARIACAO_TREINO_MAX = 60;
+
+/**
+ * 🔁 Quantas variações "Gerar novo treino" tenta antes de declarar que não há alternativa.
+ *
+ * 🔴 Ela é um TETO DE BUSCA, não uma promessa: esgotar as tentativas sem achar montagem
+ * diferente é um resultado legítimo, e a tela DIZ isso em vez de fingir novidade.
+ */
+export const VARIACOES_TENTATIVAS_MAX = 8;
+
 /** Deload (semana de alívio). */
 export const DELOAD_SEMANAS_DEFAULT = 6; // v2: agendado = semana 6 do mesociclo (universal)
 export const DELOAD_REDUCAO_VOLUME = 0.45; // −40–50% do volume (ponto: 45%)

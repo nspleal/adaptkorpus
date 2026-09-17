@@ -5,7 +5,7 @@
  * `PerfilResumo` (components/painel/Painel.tsx).
  */
 import { z } from 'zod';
-import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
+import { SERIES_MANUAIS_MAX, VARIACAO_TREINO_MAX } from '@/lib/engine/treino-constants';
 import { diasPadrao } from '@/lib/semana';
 
 /**
@@ -214,6 +214,13 @@ export const perfilResumoSchema = z.object({
    * treino é dito pelo CRÍTICO (aviso que não trava — DF①), nunca recusado na borda.
    */
   rotinaCustom: rotinaCustomSchema.optional(),
+  /**
+   * 🔁 A variação da montagem automática aceita em "Gerar novo treino". Inteiro não-negativo
+   * e com TETO de forma (o mesmo espírito da trava de tamanho da `rotinaCustom`): o valor é um
+   * índice de rotação, não uma regra de treino — qualquer número é seguro para o motor, e o
+   * teto existe só para o campo não virar porta de payload.
+   */
+  variacaoTreino: z.number().int().min(0).max(VARIACAO_TREINO_MAX).optional(),
   flagsSaude: z.object({
     gestacaoAmamentacao: z.boolean(),
     renal: z.boolean(),
@@ -281,6 +288,7 @@ export const ROTULOS_CAMPOS_PERFIL: Record<string, string> = {
   mesocicloInicio: 'início do ciclo',
   deloadAte: 'semana de alívio',
   reconhecidoEm: 'registro de pausa',
+  variacaoTreino: 'variação do treino',
 };
 
 /**
@@ -326,6 +334,8 @@ const OPCIONAIS_DESCARTAVEIS = {
   mesocicloInicio: perfilResumoSchema.shape.mesocicloInicio,
   deloadAte: perfilResumoSchema.shape.deloadAte,
   reconhecidoEm: perfilResumoSchema.shape.reconhecidoEm,
+  /** Índice ilegível cai para a ausência = montagem canônica. Nada de plano fica sem sair. */
+  variacaoTreino: perfilResumoSchema.shape.variacaoTreino,
 } as const;
 
 const DIA_DA_SEMANA = perfilResumoSchema.shape.treinoDias.element;

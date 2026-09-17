@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
 import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao } from '@/lib/engine/treino-types';
@@ -14,6 +14,7 @@ import SeletorExercicio, { type ContextoSeletor } from './SeletorExercicio';
 import { adicionarSemDuplicar, identidadesDe } from '@/lib/exercicio-identidade';
 import ResumoSeries from './ResumoSeries';
 import OrdemExercicios from './OrdemExercicios';
+import CoberturaMuscular, { type EfeitoDaSugestao } from './CoberturaMuscular';
 
 /**
  * 🧭 O EDITOR GUIADO — "Montar meu treino" (handoff-editor-guiado-2026-08-13).
@@ -83,6 +84,14 @@ export interface PrevisaoEditor {
   /** A faixa REALMENTE aplicável nesta semana (deload/retomada mudam a régua). */
   faixaVolumeSemana?: Faixa;
   faseVolume?: FaseVolume;
+  /**
+   * 🔒 O TEMPO de cada dia, na ordem dos dias com exercício, como o MOTOR o certificou.
+   * `null` onde ele se absteve (`NAO_AVALIADO`) — a tela se abstém junto, nunca estima.
+   * Existe para a sugestão de cobertura poder dizer "+X min no dia" com o número do motor.
+   */
+  duracaoSegPorDia?: readonly (number | null)[];
+  /** O dia excede o tempo por sessão? Veredito do motor (`estadoLimite`), não conta da tela. */
+  excedeTempoPorDia?: readonly boolean[];
 }
 
 /** Começar do plano atual conserva sua dose como escolha inicial do novo desenho manual.
@@ -156,12 +165,18 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
 }
 
 export default function EditorTreino({
-  inicial, ctxSeletor, exercises, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, preverPlano, semana,
-  onSalvar, onCancelar, onVoltarAoRecomendado, temCustom, onDesbanir, onAvisoMostrado,
+  inicial, ctxSeletor, exercises, elegiveis, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, preverPlano, semana,
+  onSalvar, onCancelar, onGerarNovo, onDesbanir, onAvisoMostrado,
 }: {
   inicial: DiaEditavel[];
   ctxSeletor: ContextoSeletor;
   exercises: readonly Exercise[];
+  /**
+   * 🔒 O POOL ELEGÍVEL do motor (`poolElegivel`) — a mesma autoridade que decide o que entra
+   * no plano. É dele que a cobertura muscular tira as sugestões: sugerir do catálogo inteiro
+   * ofereceria à pessoa exercício que o motor recusa.
+   */
+  elegiveis: readonly Exercise[];
   nivel: NivelExperiencia;
   objetivo: Objetivo;
   tempoPorSessaoMin: number;
@@ -182,16 +197,19 @@ export default function EditorTreino({
   semana?: number;
   onSalvar: (dias: DiaEditavel[], avaliacao: Avaliacao) => void;
   onCancelar: () => void;
-  onVoltarAoRecomendado: () => void;
-  /** Já existe um treino montado? Só então "Gerar novo treino" tem o que desfazer. */
-  temCustom: boolean;
+  /**
+   * 🔁 Abre a PROPOSTA de um treino novo montado pelo app. 🔴 Não substitui nada aqui: quem
+   * mostra a prévia e pede a confirmação é o Painel, e o desenho salvo só sai se a pessoa
+   * confirmar. O rascunho aberto neste editor não entra na proposta — ela parte do que está
+   * salvo, e é isso que a prévia diz.
+   */
+  onGerarNovo: () => void;
   onDesbanir?: (id: string) => void;
   /** Telemetria do risco exibido — o EVENTO ADVERSO da leva (payload fechado). */
   onAvisoMostrado?: (codigos: string[]) => void;
 }) {
   const [dias, setDias] = useState<DiaEditavel[]>(inicial.length > 0 ? inicial : [{ nome: 'Dia 1', weekdayIdx: 0, exercicios: [] }]);
   const [abrindoEm, setAbrindoEm] = useState<number | null>(null);
-  const [confirmarVolta, setConfirmarVolta] = useState(false);
   const previsao = useMemo(() => preverPlano(dias), [dias, preverPlano]);
   /**
    * 🔒 A procedência do bloco do foco chega ao crítico pelo ID, casando o dia editado com
@@ -208,23 +226,96 @@ export default function EditorTreino({
   }, [dias, previsao]);
   const previsto = previsao.dias;
 
-  const avaliacao = useMemo<Avaliacao>(() => {
-    // A prévia vem do MOTOR (mesmo caminho do plano salvo); os dias com exercício mantêm a
-    // ordem, então os índices de dia da semana acompanham por posição.
-    const comExercicio = dias.filter((d) => d.exercicios.length > 0);
+  /**
+   * 🔒 A AVALIAÇÃO DE UM DESENHO, em UMA função — usada pelo estado ao vivo e pela HIPÓTESE
+   * ("o que muda se eu adicionar este exercício?"). Duas cópias desta montagem seriam duas
+   * respostas possíveis para a mesma pergunta; a consequência que a cobertura mostra tem de
+   * sair exatamente do cálculo que o crítico já faz.
+   */
+  const avaliarDesenho = useCallback((lista: readonly DiaEditavel[]): {
+    previsao: PrevisaoEditor; avaliacao: Avaliacao;
+  } => {
+    const p = preverPlano(lista);
+    const comExercicio = lista.filter((d) => d.exercicios.length > 0);
+    let indice = 0;
+    const comProcedencia = lista.flatMap((d) => {
+      const previstoDoDia = d.exercicios.length ? p.dias[indice++] : undefined;
+      if (!previstoDoDia) return [];
+      return [d.extrasDoFoco
+        ? { ...previstoDoDia, extraDoFoco: previstoDoDia.exercicios.map((e) => d.extrasDoFoco!.includes(e.id)) }
+        : previstoDoDia];
+    });
     // 🔒 O editor NÃO supre `seriesPadrao`: o placar vem do MOTOR (preverPlano). Onde o motor
     // não anotou séries (deload/corpo-inteiro), o placar cai no piso do próprio crítico — e o
     // critério de TEMPO abstém-se (C1), nunca inventa.
-    return avaliarSemana(previstoComProcedencia, {
+    const avaliacao = avaliarSemana(comProcedencia, {
       nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino,
       // 🔴 Fase e faixa vêm do MOTOR, pela mesma prévia: sem elas o deload abria com 6
       // acusações de "faixa mínima desta semana" usando o piso terminal do mesociclo.
       ...(semana != null ? { semana } : {}),
+      ...(p.faixaVolumeSemana ? { faixaSemanal: p.faixaVolumeSemana } : {}),
+      ...(p.faseVolume ? { faseVolume: p.faseVolume } : {}),
+      diasDaSemanaIdx: comExercicio.slice(0, p.dias.length).map((d) => d.weekdayIdx),
+    });
+    return { previsao: p, avaliacao };
+  }, [preverPlano, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, semana]);
+
+  const avaliacao = useMemo<Avaliacao>(
+    // A prévia vem do MOTOR (mesmo caminho do plano salvo); os dias com exercício mantêm a
+    // ordem, então os índices de dia da semana acompanham por posição.
+    () => avaliarSemana(previstoComProcedencia, {
+      nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino,
+      ...(semana != null ? { semana } : {}),
       ...(previsao.faixaVolumeSemana ? { faixaSemanal: previsao.faixaVolumeSemana } : {}),
       ...(previsao.faseVolume ? { faseVolume: previsao.faseVolume } : {}),
-      diasDaSemanaIdx: comExercicio.slice(0, previsto.length).map((d) => d.weekdayIdx),
-    });
-  }, [dias, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, previsto, previstoComProcedencia, previsao, semana]);
+      diasDaSemanaIdx: dias.filter((d) => d.exercicios.length > 0).slice(0, previsto.length).map((d) => d.weekdayIdx),
+    }),
+    [dias, nivel, objetivo, tempoPorSessaoMin, limiteTempoTreino, previsto, previstoComProcedencia, previsao, semana],
+  );
+
+  /**
+   * 🔁 A CONSEQUÊNCIA de adicionar uma sugestão de cobertura — pelo CÁLCULO EXISTENTE.
+   *
+   * Tempo do dia: a certificação do motor (`duracaoSegPorDia`), que se abstém quando não tem
+   * como calcular — e aqui a tela se abstém junto (`deltaSegundos: null`).
+   * Volume: o placar PONDERADO do crítico (direto 1,0 + secundário 0,5), o mesmo da faixa.
+   *
+   * 🔴 Nada é adicionado por chamar isto: é uma simulação descartada assim que retorna.
+   */
+  const efeitoDeAdicionar = useCallback((indiceDoDia: number, ex: Exercise): EfeitoDaSugestao | null => {
+    const hipotese = dias.map((d, k) => (k === indiceDoDia
+      ? { ...d, exercicios: adicionarSemDuplicar(d.exercicios, [ex]).lista } : d));
+    if (hipotese[indiceDoDia]?.exercicios.length === dias[indiceDoDia]?.exercicios.length) return null;
+    const depois = avaliarDesenho(hipotese);
+    // Posição do dia entre os dias COM exercício — a mesma ordem que a prévia devolve.
+    const posicao = dias.slice(0, indiceDoDia).filter((d) => d.exercicios.length > 0).length;
+    const antesSeg = previsao.duracaoSegPorDia?.[posicao] ?? null;
+    const depoisSeg = depois.previsao.duracaoSegPorDia?.[posicao] ?? null;
+    const grupo = ex.grupoPrimario;
+    const linhaAntes = avaliacao.placar.find((l) => l.grupo === grupo);
+    const linhaDepois = depois.avaliacao.placar.find((l) => l.grupo === grupo);
+    /**
+     * 🔴 O placar do crítico cobre os grupos GRANDES. Para core, braços, panturrilha, lombar e
+     * antebraço ele simplesmente não tem linha — e a primeira versão desta função devolvia
+     * `0 − 0 = 0`, que a tela lia como "sem mudança no volume semanal de Core". Era afirmação
+     * sem conta (medido no QA desta leva). Sem linha ⇒ `null` ⇒ a tela não fala do semanal.
+     */
+    const semanal = linhaAntes && linhaDepois ? linhaDepois.ponderado - linhaAntes.ponderado : null;
+    const seriesDoDia = (p: PrevisaoEditor) => {
+      const series = p.dias[posicao]?.series;
+      if (!series || series.some((n) => n == null)) return null;
+      return series.reduce<number>((n, s) => n + (s ?? 0), 0);
+    };
+    const antesSeries = seriesDoDia(previsao);
+    const depoisSeries = seriesDoDia(depois.previsao);
+    return {
+      deltaSegundos: antesSeg == null || depoisSeg == null ? null : depoisSeg - antesSeg,
+      deltaSeriesNoDia: antesSeries == null || depoisSeries == null ? null : depoisSeries - antesSeries,
+      deltaSeriesDoGrupo: semanal,
+      grupo: linhaDepois?.rotulo ?? linhaAntes?.rotulo ?? ROTULO_GRUPO[grupo ?? ''] ?? (grupo ?? 'grupo'),
+      excedeOTempo: depois.previsao.excedeTempoPorDia?.[posicao] === true,
+    };
+  }, [dias, avaliarDesenho, previsao, avaliacao]);
 
   /**
    * 🔴 O QUE O MOTOR EXPLICA, NO EDITOR (correção 2026-09-15).
@@ -310,6 +401,17 @@ export default function EditorTreino({
               )}
             </OrdemExercicios>
             <button onClick={() => setAbrindoEm(i)} style={{ ...btnGhost, width: '100%', background: '#BDFF00', color: '#0D2818', minHeight: 48 }}>+ Adicionar exercícios</button>
+            {/* 🦴 A cobertura muscular DESTE dia, ao vivo. Diagnóstico: não trava o salvamento,
+                não adiciona nada sozinha e não repete o crítico (ela fala de REGIÕES, não de
+                volume, tempo ou fase). O que entra, entra por um toque da pessoa — e pelo
+                mesmo `adicionarSemDuplicar` do seletor. */}
+            <CoberturaMuscular
+              nomeDoDia={d.nome}
+              escolhidos={d.exercicios}
+              elegiveis={elegiveis}
+              onAdicionar={(ex) => mut(i, (dia) => ({ ...dia, exercicios: adicionarSemDuplicar(dia.exercicios, [ex]).lista }))}
+              efeitoDe={(ex) => efeitoDeAdicionar(i, ex)}
+            />
           </div>
         ))}
 
@@ -323,9 +425,10 @@ export default function EditorTreino({
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onCancelar} style={btnGhost}>Cancelar</button>
-          {temCustom && (
-            <button onClick={() => setConfirmarVolta(true)} style={btnGhost}>Gerar novo treino</button>
-          )}
+          {/* 🔁 Abre a PRÉVIA da proposta. 🔴 Nada é substituído aqui: o desenho salvo só sai
+              depois da confirmação, na tela da proposta. A proposta parte do treino SALVO —
+              o rascunho aberto neste editor não entra nela, e a prévia diz isso. */}
+          <button onClick={onGerarNovo} style={btnGhost}>Gerar novo treino</button>
           {/* 🔒 DF① — o salvar NUNCA desabilita por causa de aviso. Só o treino vazio não
               salva, e isso não é risco: é ausência de treino. */}
           <button
@@ -337,6 +440,10 @@ export default function EditorTreino({
             Salvar meu treino
           </button>
         </div>
+        <p style={{ margin: '10px 2px 0', fontSize: '.82rem', lineHeight: 1.5, color: 'rgba(234,229,219,.5)' }}>
+          &quot;Gerar novo treino&quot; monta uma proposta do app a partir do seu treino <strong>salvo</strong> —
+          o que você está editando aqui não entra nela. Você vê a proposta antes de substituir.
+        </p>
         {total === 0 && <p style={{ margin: '10px 2px 0', fontSize: '.84rem', color: 'rgba(234,229,219,.5)' }}>Adicione ao menos um exercício para salvar.</p>}
         {!diasUnicos && <p style={{ margin: '10px 2px 0', fontSize: '.84rem', color: '#ffb4a5' }}>Escolha dias diferentes: por enquanto, cada dia comporta um treino.</p>}
       </div>
@@ -357,20 +464,6 @@ export default function EditorTreino({
         />
       )}
 
-      {confirmarVolta && (
-        <div onClick={() => setConfirmarVolta(false)} style={{ position: 'fixed', inset: 0, zIndex: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)' }}>
-          <div role="dialog" aria-modal="true" aria-label="Substituir pelo novo treino" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(234,229,219,.14)', borderRadius: 20, padding: 22 }}>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Substituir pelo novo treino?</div>
-            <p style={{ margin: '0 0 16px', fontSize: '.9rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.55 }}>
-              O treino atual será substituído por uma nova montagem com o perfil atual. Seus registros e histórico serão preservados.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmarVolta(false)} style={btnGhost}>Manter o meu</button>
-              <button onClick={() => { setConfirmarVolta(false); onVoltarAoRecomendado(); }} style={{ flex: 1, background: '#BDFF00', color: '#0D2818', fontWeight: 700, padding: 12, border: 'none', borderRadius: 12, cursor: 'pointer' }}>Gerar novo treino</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
