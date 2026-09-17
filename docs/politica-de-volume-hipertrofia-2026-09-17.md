@@ -10,14 +10,22 @@ alteração do cofre. Nenhuma gravação em conta real.
 | Base | `origin/main` = `8b41ec9389629258966b61c8dfd6e75849744170` (PR #15) |
 | Branch | `trabalho/volume-hipertrofia-tabela` |
 | Worktree | `adaptkorpus-volume-hipertrofia` (isolada; nenhuma outra worktree foi tocada) |
-| SHA do candidato | `e1933bd4d1c8bb8d074d8bb334f03c61749d5b25` (1ª volta: `d93028b`; procedência: `6feab97`) |
-| Prévia (isolada) | `evokorpus-git-trabalho-volume-hipertro-63c1e5-nspleals-projects.vercel.app` — `dpl_3v6rgaFA1FpXQxJQ9irCXnLsmf1k`, target `null` (**preview**, não produção) |
-| Produção | intacta em `8b41ec9` (`dpl_8jmDTD7Nwc9F31R2GZzTrv5F3N2y`, target `production`) |
+| **Candidato** | o `HEAD` de `trabalho/volume-hipertrofia-tabela` — **nunca uma tag, nunca `main`** |
+| Linhagem do candidato | `6feab97` (procedência) → `d93028b` (1ª volta) → `e1933bd` (2ª volta, código) → `cec4c62` (2ª volta, docs) → `49dab05` (3ª volta) → **esta volta** |
+| Prévia (isolada) | `evokorpus-git-trabalho-volume-hipertro-63c1e5-nspleals-projects.vercel.app` — o **alias da branch**, que sempre aponta para o último deployment `target: null` (**preview**, nunca produção) |
+| **Publicado (produção)** | `8b41ec9` — `dpl_8jmDTD7Nwc9F31R2GZzTrv5F3N2y`, target `production`. **Intacto**: nenhuma volta desta série o tocou. |
+
+> 🔒 **Candidato ≠ publicado.** Tudo o que este documento descreve vive na branch e na prévia
+> isolada. A produção continua servindo `8b41ec9`, que é também a **base** de todo o trabalho —
+> nenhum merge foi feito, e a promoção é decisão do autor, por outra conta e em outro momento.
+>
+> ⚠️ A tabela nomeia a linhagem, não o SHA final: um commit não pode registrar o próprio hash.
+> O SHA vigente é o `HEAD` da branch, e o gate verde dele é a evidência que acompanha a entrega.
 
 A prévia responde `302` para quem não está logado: ela está sob a **proteção de deployment**
 da Vercel (SSO da conta). Abrir com a conta do autor logada serve normalmente; o SHA que o
-deployment reporta (`githubCommitSha`) é o mesmo `e1933bd` do `HEAD` da branch — duas pontas,
-o mesmo commit.
+deployment reporta (`githubCommitSha`) é sempre conferido contra o `HEAD` da branch — duas
+pontas, o mesmo commit — e essa conferência é refeita a cada volta.
 
 `origin/main` está **155 commits à frente** de `origin/claude/evokorpus-app-dev-9in0hs` (o `HEAD`
 remoto herdado) e o contém por inteiro — por isso ela é a base.
