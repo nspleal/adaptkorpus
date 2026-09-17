@@ -9,7 +9,7 @@ cofre. Nenhuma gravação em conta real.
 |---|---|
 | Base | `origin/main` = `2d951b4b64c05f1448a76995ea2b55898f5c1f99` (16/09, PR #14) |
 | Branch | `trabalho/gerar-atualizar-treino-cobertura` |
-| SHA do candidato | `3384d7b71bc881ba28782ffa64ed61ae008f6ada` |
+| SHA do candidato | `ec0a7fc0bec713fc5efc8477c4144b13fb741ae5` (deployment `dpl_6wJv9onDohv6Dn3uT3oHPV3KUgig`) |
 | Worktree | `adaptkorpus-treino-cobertura` (isolada; nenhuma outra worktree foi tocada) |
 | Prévia remota | `evokorpus-git-trabalho-gerar-atualizar-f23c54-nspleals-projects.vercel.app` — deployment `dpl_4Fbe1v8oRKVYA9q32azC5hPnhGPM`, target `null` (**preview**, não produção) |
 | Produção | intacta em `2d951b4` (`adaptkorpus.com`). Nenhum merge, nenhum deploy de produção. |
@@ -133,7 +133,10 @@ contagem de identificadas (conferido na tela: `LOMBAR · 0/2 identificadas` com 
 no dia). A frase da condição saiu de duas cópias para uma fonte só
 (`lib/condicao-execucao-copy`), lida pelo detalhe do exercício e pela cobertura do editor.
 
-### Dois defeitos encontrados na validação e corrigidos
+### Quatro defeitos encontrados na validação e corrigidos
+
+Os dois primeiros apareceram na leitura do código e nos testes; os dois últimos foram
+**reproduzidos na prévia autenticada, com backend real**.
 
 1. **Proposta velha gravava por cima do que mudou depois.** A proposta guardava o perfil
    INTEIRO e o gravava na confirmação. Entre montar e aplicar, o perfil pode andar — banimento
@@ -146,16 +149,26 @@ no dia). A frase da condição saiu de duas cópias para uma fonte só
    campos que decide.
 2. **Condicional lido como resolvível pela adição.** A copy anterior descrevia a condição sem
    dizer que escolher o mesmo exercício não fecha a pendência. Corrigido acima.
+3. **"Montar de novo" fechava o modal e não montava nada.** O guard do cálculo lia o ESTADO;
+   o remonte limpa a proposta e recalcula no mesmo tique, e a função agendada carrega a closure
+   do render ANTIGO, onde `proposta` ainda existe. O pedido morria no guard, **sem erro e sem
+   explicação**. O cálculo ganhou porta própria (`calcularProposta`) fechada por ref.
+4. **Duplo clique em "Usar este treino" gravava duas vezes.** Medido com a rede interceptada:
+   1 clique ⇒ 1 PUT; 2 cliques no mesmo tique ⇒ **2 PUT**. O segundo lia a closure anterior e o
+   `finally` já havia liberado o ref. Com a rede viva, o segundo sairia com a revisão velha ⇒
+   409 do CAS ⇒ a tela mostraria "atualizado em outro dispositivo": um **conflito falso**, criado
+   pelo próprio duplo clique. A proposta passou a viver num ref limpo SINCRONAMENTE no início de
+   aplicar.
 
 ### Verificação automática
 
-- **Suíte completa**, `CI=true npx vitest run` (sem filtrar projeto): **226 arquivos, 3680
-  aprovados, 24 históricos pulados, zero falhas**. Base medida antes das mudanças:
-  222 / 3565 / 24 / zero.
+- **Suíte completa**, `CI=true npx vitest run` (sem filtrar projeto, projetos históricos
+  incluídos): **226 arquivos, 3682 aprovados, 24 históricos pulados, zero falhas**. Base medida
+  antes das mudanças: 222 / 3565 / 24 / zero.
 - **Typecheck** e **build**: RC 0. **Lint**: os mesmos 5 warnings preexistentes da base.
-- **114 testes novos** em 4 arquivos: `engine/cobertura-editor.test.ts` (27),
+- **116 testes novos** em 4 arquivos: `engine/cobertura-editor.test.ts` (27),
   `engine/variacao-montagem.test.ts` (21), `proposta-treino.test.ts` (34),
-  `treino-acoes-e-cobertura-tela.test.ts` (32) — mais guards reescritos em
+  `treino-acoes-e-cobertura-tela.test.ts` (34) — mais guards reescritos em
   `editor-guiado.test.ts` (16, um a mais que os 15 da base).
 
 ### QA de interface — deload e retomada (dados descartáveis, build otimizado local)
@@ -169,6 +182,36 @@ Nenhuma redução aplicada duas vezes (a proposta nasce na mesma fase, não sobr
 nem sobre o já reduzido), nenhuma fase reiniciada, e o total do editor bate com o do plano e com
 o da proposta. No deload o crítico não acusa "abaixo do mínimo": quem fala é o aviso do motor,
 que sabe a causa — sem as duas vozes contraditórias sobre o mesmo placar.
+
+### QA com BACKEND REAL, na prévia, em conta descartável
+
+Conta criada pelo autor na prévia (a mesma base do Supabase de produção — por isso a conta
+descartável). Perfil: academia · intermediário · massa · 5 dias · 75 min · sem limite.
+`user_id` da conta de teste: `27a276fd-c85a-422e-b645-8775abad2133` (para descarte).
+
+| # | Cenário | Resultado |
+|---|---|---|
+| 1 | **Cancelar** a proposta | revisão **2 → 2**; plano idêntico item a item. Nada gravado. |
+| 2 | **Gerar** de plano automático, confirmar | revisão **2 → 3**, `variacaoTreino: 1`, `origem: automatico`, `mesocicloInicio` intacto |
+| 3 | **Recarregar** a página e comparar | dia, exercício, **ordem** e séries **idênticos** à proposta aceita, nos 4 dias |
+| 4 | Salvar **desenho manual** (tirando um exercício) | revisão **3 → 4**, `origem: usuario` |
+| 5 | **Conflito entre abas** | A abre proposta (rev. 4) · B salva (rev. **5**) · A confirma ⇒ **servidor continua em 5 com a versão de B**; A mostra *"Seu plano foi atualizado em outro dispositivo"* e oferece "Atualizar plano", que carrega a versão de B |
+| 6 | **Banir** exercício pela interface | revisão **5 → 6**, `banidos: [e56]`; o desenho salvo ainda o continha |
+| 7 | **Atualizar** (origem manual) | proposta diz *"O que muda é o seu treino salvo: Crucifixo inclinado sai dele de vez"*; aplicada ⇒ revisão **6 → 7**, id fora do desenho, **`origem` continua `usuario`** |
+| 8 | **Gerar** de desenho manual | proposta é o plano do app, declara a troca de origem, e o banido não aparece; aplicada ⇒ `origem: automatico` |
+| 9 | **Proposta desatualizada** | entrada da geração alterada com o modal aberto ⇒ aplicar **não grava**; modal permanece com *"Suas preferências mudaram depois que esta proposta foi montada"* e só "Manter o meu" / "Montar de novo" |
+| 10 | **Falha de rede** no PUT | nada é gravado (revisão inalterada), banner *"Não foi possível confirmar o salvamento agora"*, **nenhum anúncio de sucesso** |
+| 11 | **Nova tentativa** com a rede de volta | revisão **9 → 10**, banner sai, estado local preservado durante a falha |
+| 12 | **Clique duplo/triplo** em aplicar (já com a correção, em `ec0a7fc`) | **3 cliques no mesmo tique ⇒ 1 PUT** (`expectedRevision` 10), revisão 10 → 11, **sem conflito falso** |
+| 13 | **"Montar de novo"** na recusa (já com a correção) | monta proposta nova, o aviso sai e o botão de aplicar volta; durante a recusa, **zero PUT** |
+
+Os cenários 1–11 rodaram em `3384d7b`; 12 e 13 rodaram em `ec0a7fc`, depois das correções que
+eles próprios motivaram. Os cenários 1–11 não dependem do que mudou em `ec0a7fc` (guards de
+clique), e a suíte completa foi reexecutada em `ec0a7fc`.
+
+A interface **não anuncia sucesso** em momento nenhum: ela aplica local-first e, se a gravação
+falha, o banner existente diz que não foi confirmada. Nenhum caminho de gravação novo foi
+criado — tudo passa pela fila com CAS que já existia, e foi ela que recusou o conflito.
 
 ### QA de interface — cobertura muscular
 
@@ -201,17 +244,19 @@ aparece como **lacuna do catálogo**, sem sugestão inventada.
 - **Sem telemetria nova.** O vocabulário de eventos é fechado e cada tipo novo exige a migration
   que o `check` do banco espera (`metricas/eventos.ts`); sem ela a gravação seria rejeitada em
   silêncio. Medir as duas ações fica para a leva que trouxer a migration junto.
-- **Sem backend exercitado.** O QA rodou sem Supabase: a persistência remota, o CAS e o conflito
-  de revisão não foram exercitados nesta leva (o caminho de falha de rede, sim — o banner
-  apareceu e o estado local foi preservado). O campo novo `variacaoTreino` viaja no `prefs`
-  jsonb do `profile`, sem migration.
-- **Deload e retomada** foram verificados pela suíte (cenários de semana 6 e rampa), **não** na
-  interface ao vivo.
+- **Backend real exercitado** na prévia, em conta descartável (tabela acima). O campo novo
+  `variacaoTreino` viaja no `prefs` jsonb do `profile` — **sem migration**, confirmado no schema.
+- **Deload e retomada** foram verificados na **interface**, com dados descartáveis locais; na
+  prévia autenticada não foram reproduzidos (exigiriam plantar histórico na conta de teste).
 - **O condicional anatômico não tem declarante.** O app ainda não declara execução
   (`movimento`, `acaoPunho`, `retroversaoPelvica`), então na prática esses alvos ficam sempre
   PENDENTES. O parâmetro existe e é testado; falta a superfície que o preencha.
-- **QA por injeção de perfil** em `localStorage` para o estado "exercício banido": o caminho de
-  banimento pela interface é preexistente e não foi reexercitado.
+- **Conflito entre abas na MESMA aba** (a proposta ficar velha por mudança vinda de outro
+  aparelho) não é alcançável sem remontar o Painel: o app trata a atualização remota bloqueando
+  a gravação e oferecendo recarregar, que é a proteção mais forte e **foi** reproduzida. A
+  recusa por proposta desatualizada foi reproduzida com uma entrada da própria aba.
+- **Limpeza da conta de teste** fica com o autor: `user_id`
+  `27a276fd-c85a-422e-b645-8775abad2133`, com linhas em `profile`, `plans` e `plano_cas`.
 - Prévia local em `http://127.0.0.1:3142/app`, servidor de produção (`next start`) sobre o build
   otimizado — o servidor de desenvolvimento continua esbarrando na CSP vigente, que não foi
   relaxada.
