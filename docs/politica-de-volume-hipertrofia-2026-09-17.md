@@ -10,7 +10,14 @@ alteração do cofre. Nenhuma gravação em conta real.
 | Base | `origin/main` = `8b41ec9389629258966b61c8dfd6e75849744170` (PR #15) |
 | Branch | `trabalho/volume-hipertrofia-tabela` |
 | Worktree | `adaptkorpus-volume-hipertrofia` (isolada; nenhuma outra worktree foi tocada) |
+| SHA do candidato | `d93028ba665b71a4f62e95219ecebe82eb852ec3` |
+| Prévia (isolada) | `evokorpus-git-trabalho-volume-hipertro-63c1e5-nspleals-projects.vercel.app` — `dpl_AZuPEiZMT1DtwsfQEqcPYfc1khrz`, target `null` (**preview**, não produção), `READY` |
 | Produção | intacta em `8b41ec9` (`dpl_8jmDTD7Nwc9F31R2GZzTrv5F3N2y`, target `production`) |
+
+A prévia responde `302` para quem não está logado: ela está sob a **proteção de deployment**
+da Vercel (SSO da conta). Abrir com a conta do autor logada serve normalmente; o SHA que o
+deployment reporta (`githubCommitSha`) é o mesmo `d93028b` do `HEAD` da branch — duas pontas,
+o mesmo commit.
 
 `origin/main` está **155 commits à frente** de `origin/claude/evokorpus-app-dev-9in0hs` (o `HEAD`
 remoto herdado) e o contém por inteiro — por isso ela é a base.
