@@ -24,6 +24,12 @@ import type { RotinaSemanal } from '@/lib/engine';
  * sem tom de falha (a ausência de entrega descreve o arranjo, não acusa a pessoa).
  */
 export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | null {
+  const core = rotina?.focoCoreAdicional;
+  if (core) return core.entregues > 0
+    ? `Core em foco: +${core.entregues} série(s) nesta semana nos exercícios existentes, sem cessão de outros grupos.`
+    // Decisão do autor (2026-09-19): o foco fica salvo e a tela diz que nada foi aplicado —
+    // nunca apresentado como foco atendido.
+    : 'Foco salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino.';
   const bloco = rotina?.blocoFoco;
   if (bloco) {
     const grupos = bloco.grupos.map(g => ROTULO_GRUPO[g] ?? g).join(' e ');

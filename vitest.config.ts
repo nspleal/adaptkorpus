@@ -38,6 +38,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
+    /**
+     * Orçamento por teste. As varreduras do motor (216 cenários de foco, grades de retomada,
+     * transferência de dose) levam 4,4–5,4 s com a suíte inteira em paralelo — o limite padrão
+     * de 5 s as derrubava por tempo, sem asserção falha (conferência de 2026-09-19). O número
+     * não afrouxa nenhuma asserção: um teste que trava continua caindo, só que em 30 s.
+     */
+    testTimeout: 30_000,
     resolveSnapshotPath: (arquivo, extensao, contexto) => {
       const projeto = (contexto as { config?: { name?: string } } | undefined)?.config?.name;
       const base = join(dirname(arquivo), '__snapshots__', basename(arquivo));

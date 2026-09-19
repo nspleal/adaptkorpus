@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { GrupoEmFoco } from '../../components/painel/Favoritos';
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -416,7 +419,7 @@ describe('🔒 foco de CORE — séries nos slots existentes', () => {
    * limite; mas o COMPENSADOR cede o delta cheio, e o core absorve menos. O 1:1 quebra e o
    * volume semanal ENCOLHE, sem que nada acuse. A soma é a única asserção que enxerga isso.
    */
-  it('🔑 no plano, o total semanal NÃO muda — VARRIDO, não um cenário', () => {
+  it('🔑 core automático soma apenas a dose entregue sem cessão — 216 cenários', () => {
     /**
      * ⚠️ A 1ª escrita usava UM cenário, e três mutações passaram por ela (slots de core
      * inflados · compensador pelo alvo cru · piso real removido). Num único par
@@ -433,11 +436,17 @@ describe('🔒 foco de CORE — séries nos slots existentes', () => {
             for (const compensa of ['costas', 'peito', 'quadriceps'] as const) {
               const base = perfil({ nivelExperiencia: nivel, objetivo, diasDisponiveis: dias });
               const comFoco = perfil({ ...base, foco: { grupo: 'core' as never, compensa: compensa as never, semana: 1 } });
-              const [a, b] = [soma(base, semana), soma(comFoco, semana)];
-              if (a !== b) quebras.push(`${nivel}/${objetivo}/${dias}d/sem${semana}/${compensa}: ${a} → ${b}`);
+              // Uma montagem por lado: a soma e a dose adicional saem do MESMO plano com foco.
+              // A 3ª montagem por cenário levava esta varredura a 4,8 s no gate (limite 5 s)
+              // e a 6,1 s na suíte completa local — timeout, não defeito do motor.
+              const a = soma(base, semana);
+              const r = plano(comFoco, semana);
+              const b = r.dias.flatMap((d) => d.slots).reduce((n, s) => n + (s.series ?? 0), 0);
+              const adicional = r.focoCoreAdicional?.entregues ?? 0;
+              if (b !== a + adicional) quebras.push(`${nivel}/${objetivo}/${dias}d/sem${semana}/${compensa}: ${a} → ${b}`);
             }
-    expect(quebras, `o foco de core mudou o volume total em ${quebras.length} cenário(s): ${quebras.slice(0, 3).join(' · ')}`).toEqual([]);
-  });
+    expect(quebras, `o foco de core divergiu da dose adicional entregue em ${quebras.length} cenário(s): ${quebras.slice(0, 3).join(' · ')}`).toEqual([]);
+  }, 30_000);
 
   it('🔴 aceite 4 — a FREQUÊNCIA de core não muda em cenário nenhum', () => {
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
@@ -519,21 +528,19 @@ describe('🔒 foco de core — superfície, evento e copy', () => {
    * distinga o core.
    */
   it('🔴 a saída por ORDEM não é prometida a quem escolhe Core', () => {
-    const favoritos = fonte('src/components/painel/Favoritos.tsx');
-    const i = favoritos.indexOf('Braços e ombros vêm primeiro na sessão');
-    expect(i, 'a frase da saída por ordem sumiu — reancore este guard').toBeGreaterThan(-1);
-
-    // Sobe até o início da expressão condicional que a governa e exige que ela cite core.
-    const antes = favoritos.slice(Math.max(0, i - 400), i);
-    expect(antes, 'a promessa de ordem está solta — core a lê como se valesse para ele')
-      .toMatch(/foco\s*===\s*'core'|foco\s*!==\s*'core'/);
-
-    // E o ramo do core precisa dizer o que de fato acontece: sem folga, avisa e não ativa.
-    const j = favoritos.indexOf("foco === 'core'");
-    const ramo = favoritos.slice(j, i);
-    expect(ramo, 'o ramo do core não diz que pode não ativar').toMatch(/não ativa o foco/);
-    expect(ramo, 'o ramo do core promete mexer nos dias, e a DF os deixa intocados')
-      .toMatch(/dias não muda/);
+    for (const manual of [false, true]) {
+      const html = renderToStaticMarkup(createElement(GrupoEmFoco, {
+        grupos: [{id:'core',rotulo:'Core'}], foco:'core', compensa:null,
+        onFoco:()=>{}, onCompensa:()=>{}, manual,
+      }));
+      expect(html).not.toContain('Braços e ombros vêm primeiro na sessão');
+      if (manual) expect(html).toContain('não ativa o foco');
+      else {
+        expect(html).toContain('sem retirar séries de outros grupos');
+        expect(html).toContain('Os dias não mudam');
+        expect(html).not.toContain('Qual grupo cede');
+      }
+    }
   });
 
   it('🔴 aceite 6 — copy sem superlativo, e a recusa não soa como culpa', () => {

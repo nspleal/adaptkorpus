@@ -194,8 +194,8 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
       // Core conserva o par legado; os demais focos automáticos não exigem compensador.
       focoAgregado: focoGrupo === 'bracos' || focoGrupo === 'pernas'
         ? { grupo: focoGrupo, semana: inicial.focoAgregado?.grupo === focoGrupo ? inicial.focoAgregado.semana : 1 } : undefined,
-      foco: focoGrupo && (focoGrupo !== 'core' || focoCompensa) && !['bracos', 'pernas'].includes(focoGrupo)
-        ? { grupo: focoGrupo as never, ...(focoCompensa ? {compensa: focoCompensa as never} : {}), semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
+      foco: focoGrupo && (!inicial.rotinaCustom || focoGrupo !== 'core' || focoCompensa) && !['bracos', 'pernas'].includes(focoGrupo)
+        ? { grupo: focoGrupo as never, ...(inicial.rotinaCustom && focoCompensa ? {compensa: focoCompensa as never} : {}), semana: inicial.foco?.grupo === focoGrupo ? (inicial.foco?.semana ?? 1) : 1 }
         : undefined,
       modoForca,
       // Desligar vale já na próxima sessão: o valor sai daqui direto para o perfil.
@@ -320,6 +320,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
 
           <GrupoEmFoco
             grupos={GRUPOS_FOCO}
+            manual={Boolean(inicial.rotinaCustom)}
             foco={focoGrupo}
             compensa={focoCompensa}
             onFoco={(g) => { setFocoGrupo(g); if (g === null) setFocoCompensa(null); }}

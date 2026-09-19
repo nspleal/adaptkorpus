@@ -185,7 +185,8 @@ export function ExerciciosBanidos({ banidos, exercicioPorId, onRestaurar }: {
  *  · **quem já está no topo do volume não ganha séries: ganha ORDEM.** Prometer volume a
  *    quem está no MRV seria prometer o que o teto duro proíbe.
  */
-export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
+export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa, manual = false }: {
+  manual?: boolean;
   grupos: readonly { id: string; rotulo: string }[];
   foco: string | null;
   compensa: string | null;
@@ -202,9 +203,11 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
         * pressupõe uma prescrição inexistente — a classe de vazamento que já custou caro.
         */}
       <p style={{ margin: '0 0 12px', fontSize: '.82rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>
-        Um foco por vez, por 4 a 6 semanas. Na nova montagem automática, o foco acrescenta até dois exercícios de duas séries. Braços e pernas dividem esse bloco entre seus componentes. Em um dia de treino, o foco fica com dois exercícios no total. O tempo disponível pode reduzir o bloco.{' '}
+        Um foco por vez, por 4 a 6 semanas. {foco !== 'core' ? 'Na nova montagem automática, o foco acrescenta até dois exercícios de duas séries. Braços e pernas dividem esse bloco entre seus componentes. Em um dia de treino, o foco fica com dois exercícios no total. O tempo disponível pode reduzir o bloco.' : ''}{' '}
         {foco === 'core'
-          ? 'No core, as séries entram nos exercícios que você já faz — a quantidade de dias não muda. Se não houver folga, o app avisa e não ativa o foco.'
+          ? (manual
+            ? 'No core personalizado, as séries entram nos exercícios existentes mediante compensação. Sem folga, o app avisa e não ativa o foco.'
+            : 'No core automático, até duas séries adicionais na semana entram nos exercícios existentes, sem retirar séries de outros grupos. Os dias não mudam. Sem espaço nos limites do treino, o foco fica salvo e o app avisa que nenhum extra foi aplicado.')
           : 'Braços e ombros vêm primeiro na sessão. O treino personalizado mantém seus exercícios e sua ordem.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -213,7 +216,7 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa }: {
           <button key={g.id} type="button" onClick={() => onFoco(g.id)} aria-pressed={foco === g.id} style={pill(foco === g.id)}>{g.rotulo}</button>
         ))}
       </div>
-      {foco === 'core' && (
+      {manual && foco === 'core' && (
         <>
           <div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 6 }}>Qual grupo cede as séries?</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

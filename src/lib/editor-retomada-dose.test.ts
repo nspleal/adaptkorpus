@@ -150,11 +150,24 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
      * 🔵 NÚMEROS REMEDIDOS em 2026-09-17 — a faixa desejada de hipertrofia mudou
      * (avançado: 16–20 → 12–18), então o plano de referência tem outra composição. A
      * propriedade guardada é a mesma, e continua presa por número.
+     *
+     * 🔵 REMEDIDOS DE NOVO na correção da cobertura complementar (mesma data): o dia
+     * "Ombros + Braços" ganha um PAR compensado em ombros (`e41`→`e95`, `e95`→`e42`) que abre
+     * o deltoide posterior sem mover o crédito ponderado de NENHUM grupo — por isso a
+     * contagem de exercícios e de séries deste bloco não muda em lugar nenhum. É o efeito
+     * desejado: melhor cobertura pelo mesmo preço.
+     *
+     * 🔒 O que este bloco guarda continua idêntico: a dose do plano automático e a do editor
+     * são a mesma, exercício a exercício, e os dois adicionais do foco seguem na quinta com 2
+     * séries cada.
      */
+    // Adição autorizada de cobertura: e102 soma 4 séries no último dia.
+    // Demais quatro dias continuam com os números anteriores; reabertura compara cada slot.
+    expect(r.dias[4]!.slots.find(s => s.exercicio.id === 'e102')?.series).toBe(4);
     expect(r.dias.map((d) => [d.slots.length, d.slots.reduce((n, s) => n + (s.series ?? 0), 0)]))
-      .toEqual([[7, 21], [6, 20], [7, 27], [9, 26], [5, 16]]);
-    expect(total(r)).toBe(110);
-    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(34);
+      .toEqual([[7, 21], [6, 20], [7, 27], [9, 26], [6, 20]]);
+    expect(total(r)).toBe(114);
+    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(35);
     expect(r.dias[0]!.slots.find((s) => s.exercicio.id === 'e130')?.series).toBe(3);
     // Os dois adicionais do foco moram na quinta, com 2 séries cada.
     expect(r.dias[3]!.slots.slice(0, 2).map((s) => [s.exercicio.id, s.series]))
@@ -162,6 +175,6 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
     const custom = json(paraRotinaCustom(abrir(r, PERFIL)));
     const previsto = gerar({ ...PERFIL, rotinaCustom: custom }, semana1);
     expect(dose(previsto)).toEqual(dose(r));
-    expect(total(previsto)).toBe(110);
+    expect(total(previsto)).toBe(114);
   });
 });

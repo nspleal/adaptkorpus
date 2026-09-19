@@ -19,8 +19,13 @@ Nenhum código, teste, limite de volume ou pesquisa foi alterado por esta retifi
 O registro de publicação com SHA do merge, gate e deployment será mantido externamente,
 para distinguir a autorização de publicar da confirmação efetiva em produção.
 
-2026-09-17. **Candidato, sem publicação.** Nenhum merge, nenhum deploy de produção, nenhuma
-alteração do cofre. Nenhuma gravação em conta real.
+2026-09-17. **PUBLICADO** — esta série foi mergeada em `main` pelo PR #16 e hoje vive em
+`1a0f392`. A tabela de procedência abaixo é o registro do que ERA o candidato durante o
+trabalho; ela é história, não estado vigente.
+
+> 🔒 O candidato VIGENTE é outro: `trabalho/cobertura-complementar`, descrito em
+> [`selecao-complementar-2026-09-17.md`](./selecao-complementar-2026-09-17.md), que tem `1a0f392`
+> como base.
 
 ## Procedência
 
