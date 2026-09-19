@@ -1,6 +1,17 @@
 # Seleção, complementares e placar — 19/09/2026
 
-Base: `6cc5ec2f7913e35335b813ea9c433bab1835b972`. Branch: `trabalho/selecao-complementares-placar`. Candidata isolada; sem autorização de merge ou produção nesta tarefa.
+Base: `6cc5ec2f7913e35335b813ea9c433bab1835b972`. Branch: `trabalho/selecao-complementares-placar`.
+
+> **Estado: PUBLICADO.** Este documento foi escrito enquanto a mudança ainda era candidata e dizia
+> "candidata isolada; sem autorização de merge ou produção nesta tarefa". A autorização veio depois.
+> O trabalho foi publicado em 19/09/2026 pelo PR #18, merge commit
+> `67350feaed9c8f7658ff5febfcc1c39f9a8833d5` (árvore idêntica ao candidato
+> `1565f5b3047fa54748f1e723f7235a5607cccc3c`), gate de `main` 35472235629 `success`, deployment de
+> produção `dpl_ETrq6WTgrDPjopqAzs3X1WHQP4Qi` servindo `adaptkorpus.com`. O texto abaixo foi
+> preservado como estava, para não reescrever o histórico da decisão.
+>
+> **Dois resíduos daquela entrega foram corrigidos depois**, em 20/09/2026 — os cinco exercícios de
+> tríceps e a panturrilha omitida. Ver `triceps-panturrilha-2026-09-20.md`.
 
 ## Comportamento
 
@@ -35,4 +46,4 @@ Painel real em fixture descartável, sem conta ou backend real: desktop 1440×10
 
 O caso aproximado ainda tem cinco tríceps; os traços/doses explicam por que a consolidação conservadora não os remove. Panturrilha pode ser omitida por capacidade. A exceção localizada de trapézio não se estende a 5–7 dias. Esses limites são documentados, não encobertos por testes verdes.
 
-Evidências externas: `../evidencias-selecao-complementares-continuacao-20260919/`, incluindo `RELATORIO.md`, `ANTES-DEPOIS.md`, CSV/JSON completos, decisões, logs, contrafactuais, QA e hashes. SHA final, gate remoto e prévia são registrados ali após commit/push; este documento não afirma publicação em produção.
+Evidências externas da entrega original: `../evidencias-selecao-complementares-continuacao-20260919/`, incluindo `RELATORIO.md`, `ANTES-DEPOIS.md`, CSV/JSON completos, decisões, logs, contrafactuais, QA e hashes. SHA final, gate remoto e prévia estão registrados ali, e a publicação em `publicacao-20260919/PUBLICACAO.md`.
