@@ -93,7 +93,10 @@ A suíte completa local (233 arquivos, paralelismo padrão) reprovou seis testes
 (4,8 s no gate, 6,1 s aqui) e os quatro casos "desenho que CABE" da transferência de dose
 na retomada (4,4–4,7 s no gate). A varredura montava três planos por cenário; passou a
 montar dois, com a soma e a dose adicional lidas do mesmo plano com foco. Os cinco
-testes receberam orçamento explícito de 30 s. Nenhuma asserção mudou; o motor não mudou.
+testes receberam orçamento explícito de 30 s. Na rodada seguinte, outros três testes
+preexistentes (frequência FIT da retomada, desenho de antes da pausa) caíram do mesmo modo,
+a 5,3–5,4 s; o orçamento passou a ser global (`testTimeout: 30_000` em `vitest.config.ts`).
+Nenhuma asserção mudou; o motor não mudou.
 
 ## Decisão do autor — 19/09/2026 (substitui a compensação 1:1 e a recusa de salvamento)
 
