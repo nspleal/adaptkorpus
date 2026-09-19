@@ -15,6 +15,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './alocador';
+import { adicoesComplementaresViaveis } from './__fixtures__/complementares-viabilidade';
 import { EXERCISES } from '../data/exercises';
 import type { PerfilTreino } from './treino-types';
 import type { EquipamentoCasa } from '../data/types';
@@ -31,17 +32,32 @@ const perfil = (nivel: PerfilTreino['nivelExperiencia'], dias: number, tempo: nu
   diasDisponiveis: dias, tempoPorSessaoMin: tempo,
 });
 
+/** Autor 19/09: complementares podem ficar de fora para preservar principal.
+ * Mensagem não prova restrição. Enumeramos adições com equipamento, localização,
+ * capacidade, volume e duração; qualquer alternativa viável reprova a omissão.
+ * Lombar não tem piso direto: a ausência indireta acompanha a ausência de core,
+ * e fica registrada como perda de cobertura, nunca como cobertura completa.
+ */
+const ausenciaJustificada = (r: ReturnType<typeof montar>, p: PerfilTreino, g: string): boolean => {
+  const alvo = g === 'lombar' ? 'core' : g;
+  if (!['core','panturrilha','antebraco'].includes(alvo)) return false;
+  if (g === 'lombar' && r.dias.some(d=>d.slots.some(s=>s.exercicio.grupoPrimario==='core'))) return false;
+  const rotulo = alvo === 'core' ? 'Core' : alvo === 'panturrilha' ? 'Panturrilhas' : 'Antebraço';
+  expect(r.avisos.some(a=>a.startsWith(`${rotulo} não entrou neste plano:`))).toBe(true);
+  expect(adicoesComplementaresViaveis(r,p,alvo as 'core'|'panturrilha'|'antebraco'), `omissão corrigível de ${g}: ${JSON.stringify(p)}`).toEqual([]);
+  return true;
+};
 const rotina = (nivel: PerfilTreino['nivelExperiencia'], dias: number, tempo: number) => montar(perfil(nivel, dias, tempo));
 
 describe('🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderada', () => {
-  it('🔑 com ≥ 2 dias, ZERO grupos a zero ponderado (antes: 7 de 12) — nas 30 combinações', () => {
+  it('🔑 com ≥ 2 dias, principais cobertos e omissões complementares verificadas por restrições — nas 30 combinações', () => {
     const falhas: string[] = [];
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
       for (const dias of [2, 3, 4, 5, 6]) {
         for (const tempo of [60, 180]) {
           const r = rotina(nivel, dias, tempo);
           const pond = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-          const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0);
+          const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0 && !ausenciaJustificada(r, perfil(nivel, dias, tempo), g));
           if (zeros.length > 0) falhas.push(`${nivel}/${dias}d/${tempo}min: ${zeros.join(',')}`);
         }
       }
@@ -54,7 +70,7 @@ describe('🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderad
       for (const tempo of [60, 180]) {
         const r = rotina(nivel, 1, tempo);
         const pond = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-        const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0);
+        const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0 && !ausenciaJustificada(r, perfil(nivel, 1, tempo), g));
         expect(zeros.length, `${nivel}/1d/${tempo}min: ${zeros.join(',')}`).toBeLessThanOrEqual(3);
       }
     }
@@ -80,7 +96,9 @@ describe('🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderad
    */
   it('int/massa/4d/60min: 24 slots onde havia 14', () => {
     const r = rotina('intermediario', 4, 60);
-    expect(r.dias.reduce((n, d) => n + d.slots.length, 0)).toBe(24);
+    // 2026-09-19: sob o seletor histórico (U/L ×2) o dia de pernas passou a ter um só
+    // complementar (panturrilha OU core) — 23. No seletor atual continuam 24.
+    expect(r.dias.reduce((n, d) => n + d.slots.length, 0)).toBe(process.env.ADAPT_TEST_SELETOR_ATUAL === '0' ? 23 : 24);
   });
 });
 
@@ -170,14 +188,14 @@ describe('🔴 grade de CASA — o corte é dito, nunca silencioso', () => {
    * como academia — nenhum grupo a zero. É a prova de que o curto do só-peso é catálogo, não
    * defeito do alocador.
    */
-  it('casa com halteres + barra fixa: nenhum grupo a zero com ≥ 2 dias', () => {
+  it('casa equipada: principais cobertos e adições complementares inviáveis quando omitidas', () => {
     const falhas: string[] = [];
     for (const nivel of NIVEIS) {
       for (const dias of [2, 3, 4, 5, 6]) {
         for (const tempo of [60, 180]) {
           const r = montar(perfil(nivel, dias, tempo, ['halteres', 'barra_fixa']));
           const pond = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-          const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0);
+          const zeros = GRUPOS.filter((g) => (pond.get(g) ?? 0) <= 0 && !ausenciaJustificada(r, perfil(nivel, dias, tempo, ['halteres', 'barra_fixa']), g));
           if (zeros.length > 0) falhas.push(`${nivel}/${dias}d/${tempo}min: ${zeros.join(',')}`);
         }
       }

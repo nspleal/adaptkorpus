@@ -157,7 +157,8 @@ describe('🔒 o enum de grupos da borda espelha a biblioteca', () => {
 
 describe('foco agregado: transporte local completo', () => {
   it.each(['bracos', 'pernas'] as const)('%s atravessa schema, JSON profile e motor', grupo => {
-    const referencia: PerfilResumo = { ...BASE, diasDisponiveis: 1, treinoDias: ['seg'], tempoPorSessaoMin: 90 };
+    // Quatro dias permitem observar a composição do foco; um dia pode recusar extras por capacidade.
+    const referencia: PerfilResumo = { ...BASE, diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 90 };
     const p: PerfilResumo = { ...referencia, focoAgregado: { grupo, semana: 1 } };
     const validado = perfilResumoSchema.parse(p);
     expect(validado.focoAgregado).toEqual(p.focoAgregado);

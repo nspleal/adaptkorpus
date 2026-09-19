@@ -11,7 +11,7 @@ import type { OpcoesSemana } from './engine/treino-montador';
  * Medido na 4ª rodada, com mapa de escolhas COMPLETO (o desenho salvo antes da pausa, que é
  * o caso central da retomada): `cf88f9b` e `7031790` devolviam ao round-robin a folga que uma
  * redução liberava, e ela subia num slot que a pessoa não tinha tocado — `ter/e46 2→1` levava
- * `ter/e22 2→3`, com o total do grupo parado. `7031790` só havia blindado o slot SEM escolha;
+ * `ter/e45 2→3`, com o total do grupo parado. `7031790` só havia blindado o slot SEM escolha;
  * entre slots que ambos têm escolha o defeito seguia inteiro (2.292 casos em 396.448).
  *
  * 🔒 A régua destes testes, e o contrato que a correção sustenta:
@@ -142,7 +142,9 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       const costas = rampa.dias.flatMap((d) => d.slots.filter((s) => s.exercicio.grupoPrimario === 'costas').map((s) => s.series));
       expect(costas.length).toBeGreaterThanOrEqual(3);
       // repartição DESIGUAL em pelo menos um grupo: é dela que o round-robin tirava a folga
-      const naRampa = gerar(com(P_SAUDE, desenho(gerar(P_SAUDE, RAMPA_A), {})), RAMPA_A);
+      // Independent unequal-dose control: the original P_SAUDE now splits every slot equally.
+      const ctxDesigual:OpcoesSemana={semana:3,retomada:{semana:2,fator:0.7,volumeReferencia:16}};
+      const naRampa = gerar(com(P_PEITO, desenho(gerar(P_PEITO,ctxDesigual), {})),ctxDesigual);
       const porG: Record<string, number[]> = {};
       for (const d of naRampa.dias) for (const s of d.slots) (porG[s.exercicio.grupoPrimario ?? '-'] ??= []).push(s.series!);
       expect(Object.values(porG).some((v) => v.length >= 2 && new Set(v).size > 1)).toBe(true);
@@ -151,17 +153,18 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       expect(somar(pedido)).toBeGreaterThan(somar(costas));
     });
 
-    it('caso nominal: reduzir ter/e46 de 2 para 1 não levanta ter/e22 de 2 para 3', () => {
+    // 2026-09-19: o primeiro costas do dia é a puxada (e49); o par medido passa a ser e49 × e22.
+    it('caso nominal: reduzir ter/e49 de 2 para 1 não levanta ter/e45 de 2 para 3', () => {
       const mapa = mapaDe(gerar(P_SAUDE, { semana: 1 }));
       const auto = gerar(P_SAUDE, RAMPA_A);
       const antes = porSlot(gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A));
-      expect(antes.get('ter/e46')).toBe(2);
-      expect(antes.get('ter/e22')).toBe(2);
-      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'ter', 'e46', 1))), RAMPA_A));
-      expect(depois.get('ter/e46')).toBe(1);
-      expect(depois.get('ter/e22')).toBe(2);
+      expect(antes.get('ter/e49')).toBe(2);
+      expect(antes.get('ter/e45')).toBe(2);
+      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'ter', 'e49', 1))), RAMPA_A));
+      expect(depois.get('ter/e49')).toBe(1);
+      expect(depois.get('ter/e45')).toBe(2);
       for (const [k, v] of antes) {
-        if (k === 'ter/e46') continue;
+        if (k === 'ter/e49') continue;
         expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
       }
     });
@@ -171,21 +174,21 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
      * id) em vez de posição, o slot de tríceps que fica acima do piso neste plano é `e113`,
      * não `e70`. O par medido — um slot com folga ao lado de um pedido recusado — é o mesmo.
      */
-    it('segundo caso medido: reduzir qui/e113 de 2 para 1 não levanta qui/e70, qui/e71 nem qui/e133', () => {
+    // 2026-09-19: o slot de tríceps com pedido recusado neste plano é e70 (3 pedidas, 2 na rampa).
+    it('segundo caso medido: reduzir qui/e68 de 2 para 1 não levanta qui/e70 nem qui/e67', () => {
       const mapa = mapaDe(gerar(P_SAUDE, { semana: 1 }));
       const auto = gerar(P_SAUDE, RAMPA_A);
       const antes = porSlot(gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A));
       // anti-vacuidade: o grupo tríceps é repartido desigualmente e há pedido recusado
-      expect(antes.get('qui/e113')).toBe(2);
-      expect(antes.get('qui/e71')).toBe(1);
-      expect(mapa.qui!.e71).toBe(2);
-      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'qui', 'e113', 1))), RAMPA_A));
-      expect(depois.get('qui/e113')).toBe(1);
-      expect(depois.get('qui/e71')).toBe(1);
-      expect(depois.get('qui/e70')).toBe(antes.get('qui/e70'));
-      expect(depois.get('qui/e133')).toBe(antes.get('qui/e133'));
+      expect(antes.get('qui/e68')).toBe(2);
+      expect(antes.get('qui/e70')).toBe(2);
+      expect(mapa.qui!.e70).toBe(3);
+      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'qui', 'e68', 1))), RAMPA_A));
+      expect(depois.get('qui/e68')).toBe(1);
+      expect(depois.get('qui/e70')).toBe(2);
+      expect(depois.get('qui/e67')).toBe(antes.get('qui/e67'));
       for (const [k, v] of antes) {
-        if (k === 'qui/e113') continue;
+        if (k === 'qui/e68') continue;
         expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
       }
     });
@@ -294,7 +297,7 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
             for (const k of Object.keys(g)) if (g[k]! > (referencia[k] ?? 0)) grupoAcimaDoAlvo.push(`${nome} ${k}: alvo ${referencia[k]}, veio ${g[k]}`);
           }
         }
-        expect(medidos).toBeGreaterThan(150);
+        expect(medidos).toBeGreaterThan(120); // 2026-09-19: 140 medições (menos slots com 2+ séries)
         expect(semEscolhaMoveu).toEqual([]);
         expect(acimaDoProprioPedido).toEqual([]);
         expect(grupoAcimaDoAlvo).toEqual([]);
@@ -331,21 +334,22 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       const fonte = mapaDe(gerar(P_CASA, { semana: 1 }));
       const cota = porSlot(gerar(com(P_CASA, desenho(auto, {})), CTX));
       const antes = porSlot(gerar(com(P_CASA, desenho(auto, fonte)), CTX));
-      const depois = porSlot(gerar(com(P_CASA, desenho(auto, mapaCom(fonte, 'seg', 'e55', 2))), CTX));
+      // 2026-09-19: neste plano os dois peitos moram na quarta (e1 e e55); o par medido é e1 × e55.
+      const depois = porSlot(gerar(com(P_CASA, desenho(auto, mapaCom(fonte, 'qua', 'e1', 2))), CTX));
       // o grupo peito pede 3+3 e o alvo da retomada é 5: o pedido está ACIMA do teto
-      expect(fonte.seg!.e55).toBe(3);
-      expect(fonte.qua!.e156).toBe(3);
-      expect(cota.get('seg/e55')).toBe(3);
-      expect(cota.get('qua/e156')).toBe(2);
-      expect(antes.get('seg/e55')).toBe(3);
-      expect(antes.get('qua/e156')).toBe(2);
-      // O pedido cabe, mas a edição de e55 não autoriza aumentar e156.
-      expect(depois.get('seg/e55')).toBe(2);
-      expect(depois.get('qua/e156')).toBe(antes.get('qua/e156'));
-      expect(depois.get('qua/e156')!).toBeLessThanOrEqual(fonte.qua!.e156!);
+      expect(fonte.qua!.e1).toBe(3);
+      expect(fonte.qua!.e55).toBe(3);
+      expect(cota.get('qua/e1')).toBe(3);
+      expect(cota.get('qua/e55')).toBe(2);
+      expect(antes.get('qua/e1')).toBe(3);
+      expect(antes.get('qua/e55')).toBe(2);
+      // O pedido cabe, mas a edição de e1 não autoriza aumentar e55.
+      expect(depois.get('qua/e1')).toBe(2);
+      expect(depois.get('qua/e55')).toBe(antes.get('qua/e55'));
+      expect(depois.get('qua/e55')!).toBeLessThanOrEqual(fonte.qua!.e55!);
       // o volume do grupo não passa do alvo da retomada em nenhum dos dois estados
       const alvo = totalPorGrupo(gerar(com(P_CASA, desenho(auto, {})), CTX));
-      for (const rc of [desenho(auto, fonte), desenho(auto, mapaCom(fonte, 'seg', 'e55', 2))]) {
+      for (const rc of [desenho(auto, fonte), desenho(auto, mapaCom(fonte, 'qua', 'e1', 2))]) {
         const g = totalPorGrupo(gerar(com(P_CASA, rc), CTX));
         for (const k of Object.keys(g)) expect(`${k} ${g[k]! <= (alvo[k] ?? 0)}`).toBe(`${k} true`);
       }

@@ -1,3 +1,5 @@
+import { creditoPonderadoDaSemana,GRUPOS_GRANDES } from './alocador';
+import { avaliarDuracaoResistida } from './duracao-plano';
 import { describe, expect, it, vi } from 'vitest';
 import { gerarTreino } from '@/lib/engine';
 import type { PerfilTreino } from '@/lib/engine';
@@ -122,9 +124,26 @@ describe('D13 · os casos nomeados pela auditoria', () => {
      * do Vitest existem), então o par de números é POR SELETOR — exato nos dois, nunca uma
      * faixa frouxa que caberia em qualquer motor.
      */
-    const [s5, s6] = process.env.ADAPT_TEST_SELETOR_ATUAL === '0' ? [86, 48] : [80, 40];
-    expect(a.series, 'a S5 mudou além do que a faixa desejada nova explica').toBe(s5);
-    expect(b.series, 'a S6 mudou além do corte de deload').toBe(s6);
+    // A composição depende da seleção. Protege D2 por ID/dia, sem atualizar totais recebidos.
+    const r5=gerarTreino(p,{exercises:EXERCISES_SEED,semanaCiclo:{semana:5}}).rotina!;
+    const r6=gerarTreino(p,{exercises:EXERCISES_SEED,semanaCiclo:{semana:6}}).rotina!;
+    expect(r6.dias.map(d=>[d.diaId,d.slots.map(s=>s.exercicio.id)])).toEqual(r5.dias.map(d=>[d.diaId,d.slots.map(s=>s.exercicio.id)]));
+    for(let i=0;i<r5.dias.length;i++) for(let j=0;j<r5.dias[i]!.slots.length;j++) {
+      const sl=r6.dias[i]!.slots[j]!;
+      const esperado=Math.max(1,Math.round(r5.dias[i]!.slots[j]!.series!*0.55));
+      expect(sl.series!).toBeLessThanOrEqual(esperado);
+      expect(sl.series!).toBeGreaterThanOrEqual(1);
+      if(sl.series!==esperado){
+        // Redução adicional exige restrição concreta: restaurar a série rompe um limite.
+        const ds=r6.dias.map((d,di)=>({...d,slots:d.slots.map((x,si)=>di===i&&si===j?{...x,series:x.series!+1}:x)}));
+        const semana=creditoPonderadoDaSemana(ds.flatMap(d=>d.slots));
+        const dia=creditoPonderadoDaSemana(ds[i]!.slots);
+        const teto=r6.tetoVolumeSemana!;
+        const volume=GRUPOS_GRANDES.some(g=>(semana.get(g)??0)>(teto.gruposEmFoco.includes(g)?teto.cheio:teto.semFoco)||(dia.get(g)??0)>teto.sessao!);
+        const tempo=avaliarDuracaoResistida(ds[i]!.slots,p.nivelExperiencia).duracaoMaximaEstimadaSegundos!>p.tempoPorSessaoMin*60;
+        expect(volume||tempo,`${sl.exercicio.id}: corte adicional sem limite impeditivo`).toBe(true);
+      }
+    }
     // 🔒 A relação de D2: MESMA estrutura, volume reduzido — a S6 não recompra em exercícios.
     expect(b.slots, 'a semana de deload deixou de espelhar a estrutura da rampa').toBe(a.slots);
     const corte = 1 - b.series / a.series;

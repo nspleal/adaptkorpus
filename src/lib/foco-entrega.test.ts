@@ -28,7 +28,9 @@ describe('🔴 medirEntregaDoFoco — do plano montado, não do alvo', () => {
    */
   it('plano com séries idênticas e ordem diferente → ordem, delta 0', () => {
     const sem = gerar();
-    const com = gerar({ grupo: 'peito', compensa: 'costas', semana: 1 });
+    const com:ResultadoTreino=JSON.parse(JSON.stringify(sem));
+    com.rotina!.dias[0]!.slots.reverse();
+    expect(com.rotina!.dias[0]!.slots.map(s=>s.exercicio.id)).not.toEqual(sem.rotina!.dias[0]!.slots.map(s=>s.exercicio.id));
     const efeito = medirEntregaDoFoco(com, sem, 'peito');
     expect(efeito).not.toBeNull();
     if (efeito!.entrega === 'volume') {

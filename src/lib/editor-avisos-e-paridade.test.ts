@@ -98,7 +98,10 @@ describe('🔴 o editor mostra o que o motor explica', () => {
     const p = perfil({ tempoPorSessaoMin: 30 } as never);
     const opcoes = { semanaCiclo: { semana: 3 } };
     const antes = gerar(p, opcoes);
-    const editaveis = doPlano(antes.dias, p.treinoDias ?? [], undefined, undefined);
+    // Fixture deliberadamente sem tríceps direto: o automático corrigido já o preserva.
+    expect(antes.dias.some(d=>d.slots.some(s=>s.exercicio.grupoPrimario==='triceps'))).toBe(true);
+    const semTriceps=antes.dias.map(d=>({...d,slots:d.slots.filter(s=>s.exercicio.grupoPrimario!=='triceps')}));
+    const editaveis = doPlano(semTriceps, p.treinoDias ?? [], undefined, undefined);
     const previsao = preverPlano(p, editaveis, opcoes);
     const avaliacao = avaliarSemana(previsao.dias, {
       semana: 3, nivel: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 30, limiteTempoTreino: 'limitado',

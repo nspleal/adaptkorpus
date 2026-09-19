@@ -1,3 +1,4 @@
+import { ehComplementar, ehDiaDePernas, ehDiaDisponivel } from './selecao-referencia';
 import type {Exercise,GrupoPrimario} from '../data/types';
 import {ORDEM_SEMANA,type Weekday} from '../semana';
 import {secundariosDe} from './secundarios';
@@ -18,21 +19,29 @@ export function adicionarBlocoFoco(
  let solicitados=0;
  const tem=(d:DiaTreino,g:GrupoPrimario)=>d.slots.some(s=>s.exercicio.grupoPrimario===g);
  const consecutivo=(a:Weekday,b:Weekday)=>{const delta=Math.abs(ORDEM_SEMANA.indexOf(a)-ORDEM_SEMANA.indexOf(b));return delta===1||delta===6;};
- // A exceção de um dia conserva apenas um direto de cada grupo já representado.
- if(agenda.length===1)for(const d of dias){const vistos=new Set<GrupoPrimario>();d.slots=d.slots.filter(s=>{const g=s.exercicio.grupoPrimario;if(!g||vistos.has(g))return false;vistos.add(g);return true;});}
+ // Um dia conserva um direto por grupo, salvo o segundo costas já validado no baseline.
+ if(agenda.length===1)for(const d of dias){const vistos=new Map<GrupoPrimario,number>();d.slots=d.slots.filter(s=>{const g=s.exercicio.grupoPrimario;if(!g||(vistos.get(g)??0)>=(g==='costas'?2:1))return false;vistos.set(g,(vistos.get(g)??0)+1);return true;});}
+ const admiteComplementar=(d:DiaTreino,g:GrupoPrimario)=>{
+  if(!ehComplementar(g))return true;
+  const gs=d.slots.map(s=>s.exercicio.grupoPrimario).filter((x):x is GrupoPrimario=>x!=null);
+  const dedicado=ehDiaDisponivel(gs);
+  const local=g==='panturrilha'?ehDiaDePernas(gs):dedicado||gs.some(x=>['peito','costas','ombros','biceps','triceps'].includes(x));
+  return local&&(dedicado||!gs.some(ehComplementar));
+ };
  for(const g of grupos){
   const existentes=dias.filter(d=>tem(d,g));
   let destino:DiaTreino|undefined;
   if(agenda.length===1)destino=dias[0];
   else if(grupos.length>1)destino=existentes[0]; // agregado:1 por componente no recorte correspondente
   else if(existentes.length>=2)destino=existentes[1];
+  if(destino&&!admiteComplementar(destino,g))destino=undefined;
   if(!destino){
-   const compativeis=dias.filter(d=>!tem(d,g)&&d.diaId&&!existentes.some(e=>e.diaId&&consecutivo(d.diaId!,e.diaId)));
+   const compativeis=dias.filter(d=>admiteComplementar(d,g)&&!tem(d,g)&&d.diaId&&!existentes.some(e=>e.diaId&&consecutivo(d.diaId!,e.diaId)));
    const afinidade=(d:DiaTreino)=>d.slots.filter(s=>secundariosDe(s.exercicio).includes(g)||pool.some(e=>e.grupoPrimario===g&&secundariosDe(e).includes(s.exercicio.grupoPrimario!))).length;
    destino=compativeis.sort((a,b)=>(a.slots.length===0?-1:b.slots.length===0?1:afinidade(b)-afinidade(a)))[0];
   }
-  if(!destino){destino=existentes[0];if(destino)adaptados.push(g);}
-  if(!destino){faltantes.push(g);continue;}
+  if(!destino){destino=existentes.find(d=>admiteComplementar(d,g));if(destino)adaptados.push(g);}
+  if(!destino){solicitados+=agenda.length===1?1:grupos.length>1?1:2;faltantes.push(g);continue;}
   const quantidade=agenda.length===1?Math.max(0,2-destino.slots.filter(s=>s.exercicio.grupoPrimario===g).length):grupos.length>1?1:2;
   solicitados+=quantidade;
   const usados=new Set(destino.slots.map(s=>s.exercicio.id));
@@ -57,6 +66,7 @@ export function adicionarBlocoFoco(
   const opcoes=pool.filter(e=>e.grupoPrimario===g&&!usados.has(e.id))
    .sort((a,b)=>Number(favoritos.has(b.id))-Number(favoritos.has(a.id))
     ||Number(naSemana.has(a.id))-Number(naSemana.has(b.id)));
+  const limiteComplementar=ehComplementar(g)&&!ehDiaDisponivel(destino.slots.map(s=>s.exercicio.grupoPrimario).filter((x):x is GrupoPrimario=>x!=null))?1:quantidade;
   let entregues=0;
   /**
    * 🔴 REVISÃO INDEPENDENTE 15/09 (D-03) — A GUARDA PUXAR/EMPURRAR SAIU DAQUI.
@@ -77,7 +87,7 @@ export function adicionarBlocoFoco(
    * único exercício, então a falta é de catálogo e o aviso já era honesto.)
    */
   for(const e of opcoes){
-   if(entregues>=quantidade)break;
+   if(entregues>=Math.min(quantidade,limiteComplementar))break;
    const s:SlotExercicio={padrao:e.padraoMovimento,exercicio:e,...(favoritos.has(e.id)?{incluidoPorPreferencia:true}:{})};destino.slots.push(s);adicionais.add(s);entregues++;
   }
   if(entregues<quantidade)faltantes.push(g);
@@ -89,16 +99,66 @@ export function adicionarBlocoFoco(
  * nem exercícios. Se um grupo/ID não couber, conserva integralmente o baseline. */
 export function realocarBaselineAosRecortes(
  base:readonly DiaTreino[],recortes:readonly {nome:string;grupos:readonly GrupoPrimario[]}[],
-):{dias:DiaTreino[];adaptado:boolean}{
- if(base.length!==recortes.length)return {dias:[...base],adaptado:true};
+):{dias:DiaTreino[];adaptado:boolean;descartados:SlotExercicio[]}{
+ if(base.length!==recortes.length)return {dias:[...base],adaptado:true,descartados:[]};
  const dias=base.map((d,i)=>({...d,nome:recortes[i]!.nome,slots:[] as SlotExercicio[]}));
+ const descartados:SlotExercicio[]=[];
  for(let i=0;i<base.length;i++)for(const slot of base[i]!.slots){
   const g=slot.exercicio.grupoPrimario;
   const destinos=recortes.flatMap((r,k)=>g&&r.grupos.includes(g)&&!dias[k]!.slots.some(s=>s.exercicio.id===slot.exercicio.id)?[k]:[]);
   destinos.sort((a,b)=>Number(b===i)-Number(a===i)||dias[a]!.slots.filter(s=>s.exercicio.grupoPrimario===g).length-dias[b]!.slots.filter(s=>s.exercicio.grupoPrimario===g).length||a-b);
   const destino=destinos[0];
-  if(destino==null)return {dias:[...base],adaptado:true};
+  // Nenhum grupo é descartado para forçar a separação dos recortes.
+  if(destino==null){
+   return {dias:[...base],adaptado:true,descartados:[]};
+  }
   dias[destino]!.slots.push(slot);
  }
- return {dias,adaptado:false};
+ return {dias,adaptado:false,descartados};
+}
+
+
+/** Exceção explícita do autor (19/09): no automático de quatro dias com foco em
+ * pernas, duas sessões de core podem virar uma. Nenhum outro slot é retirado;
+ * a tentativa só vale se o chamador confirmar tempo, capacidade e volume.
+ */
+export function realocarPernasReduzindoCore(
+ base:readonly DiaTreino[],recortes:readonly {nome:string;grupos:readonly GrupoPrimario[]}[],
+ aceita:(dias:readonly DiaTreino[])=>boolean,
+):DiaTreino[]|null {
+ if(base.length!==4||recortes.length!==4)return null;
+ const cores=base.flatMap((d,i)=>d.slots.filter(s=>s.exercicio.grupoPrimario==='core').map(slot=>({dia:i,slot})));
+ if(cores.length!==2||cores[0]!.dia===cores[1]!.dia)return null;
+ // Preserva a preferência explícita se apenas uma das duas ocorrências for favorita.
+ const ordem=[...cores].sort((a,b)=>Number(!!b.slot.incluidoPorPreferencia)-Number(!!a.slot.incluidoPorPreferencia));
+ for(const manter of ordem){
+  if(cores.some(c=>c!==manter&&c.slot.incluidoPorPreferencia))continue;
+  const semCore=base.map(d=>({...d,slots:d.slots.filter(s=>s.exercicio.grupoPrimario!=='core')}));
+  // Os ombros podem compartilhar qualquer dos dois recortes superiores. Distribuir
+  // os slots existentes entre eles evita sobrecarregar só peito; não altera a dose.
+  const rotas=recortes.map(r=>({...r,grupos:r.grupos.some(g=>g==='peito'||g==='costas')
+   ?[...new Set([...r.grupos,'ombros' as const])]:r.grupos}));
+  const tentativa=realocarBaselineAosRecortes(semCore,rotas);
+  if(tentativa.adaptado)continue;
+  const diasOmbros=tentativa.dias.filter(d=>d.slots.some(s=>s.exercicio.grupoPrimario==='ombros')).map(d=>d.diaId);
+  if(diasOmbros.some((a,i)=>diasOmbros.slice(i+1).some(b=>{
+   if(!a||!b)return true;const delta=Math.abs(ORDEM_SEMANA.indexOf(a)-ORDEM_SEMANA.indexOf(b));return delta===1||delta===6;
+  })))continue;
+  const candidatos=tentativa.dias.flatMap((d,i)=>{
+   const gs=d.slots.map(s=>s.exercicio.grupoPrimario);
+   return gs.some(g=>['peito','costas','ombros','biceps','triceps'].includes(g??''))
+    &&!gs.some(g=>ehComplementar(g))?[i]:[];
+  }).sort((a,b)=>Number(b===manter.dia)-Number(a===manter.dia)||a-b);
+  for(const destino of candidatos){
+   const dias=tentativa.dias.map((d,i)=>({...d,slots:i===destino?[...d.slots,manter.slot]:[...d.slots]}));
+   const compativeis=dias.every(d=>{
+    const gs=d.slots.map(s=>s.exercicio.grupoPrimario).filter((g):g is GrupoPrimario=>g!=null);
+    return gs.filter(ehComplementar).length<=1&&(!gs.includes('panturrilha')||ehDiaDePernas(gs));
+   });
+   if(compativeis&&aceita(dias))return dias.map((d,i)=>({...d,nome:
+    d.slots.some(s=>s.exercicio.grupoPrimario==='ombros')&&!recortes[i]!.grupos.includes('ombros')
+     ?`${d.nome} + Ombros`:d.nome}));
+  }
+ }
+ return null;
 }

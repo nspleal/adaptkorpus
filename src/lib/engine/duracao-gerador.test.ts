@@ -116,8 +116,12 @@ describe('C1 gerador · a alavanca de redução preserva invariantes (§7.7)', (
     expect(totalSlots(reduzido)).toBeGreaterThan(0);
     // a invariante do alocador sobrevive à redução (é reexecução completa, não corte do último slot):
     expect(contaPadrao(reduzido, 'puxar')).toBeGreaterThanOrEqual(contaPadrao(reduzido, 'empurrar'));
-    // e o core continua presente (cobertura preservada):
-    expect(reduzido.dias.some((d) => d.slots.some((s) => s.exercicio.padraoMovimento === 'core'))).toBe(true);
+    // Autor 19/09: redução não retira principal para impor core.
+    if (!reduzido.dias.some(d => d.slots.some(s => s.exercicio.grupoPrimario === 'core'))) {
+      expect(reduzido.avisos.some(a => a.startsWith('Core não entrou'))).toBe(true);
+      // Neste perfil todas as sessões atingem o orçamento solicitado de três slots.
+      expect(reduzido.dias.every(d => d.slots.length === 3)).toBe(true);
+    }
   });
 });
 

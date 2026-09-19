@@ -47,7 +47,10 @@ describe('🔒 o placar É a conta do alocador v4 — nunca uma segunda conta', 
 
   it('as bandas vêm de `mev`/`mrv` — o placar não redigita número de nível', () => {
     const placar = placarDaSemana([diaDe('A', ['e1'])], CTX);
+    // 2026-09-19: só quem TEM faixa carrega mev/mrv; os demais estão no placar sem referência.
+    expect(placar.filter((l) => l.temFaixa)).toHaveLength(6);
     for (const l of placar) {
+      if (!l.temFaixa) { expect(l.mev).toBeUndefined(); expect(l.status).toBe('sem_referencia'); continue; }
       expect(l.mev).toBe(mev('intermediario', 'massa'));
       expect(l.mrv).toBe(mrv('intermediario', 'massa'));
     }
@@ -144,8 +147,8 @@ describe('🔴 avisos — risco explicado que NÃO trava (DF①)', () => {
     const dias = [{ nome: 'A', exercicios: [ex('e1'), ex('e10'), ex('e11')], series: [6, 6, 5] }];
     const placar = placarDaSemana(dias, CTX);
     const peito = placar.find((l) => l.grupo === 'peito')!;
-    expect(peito.ponderado, 'o cenário precisa cair na zona intermediária').toBeGreaterThan(peito.maxAutomatico);
-    expect(peito.ponderado).toBeLessThanOrEqual(peito.mrv);
+    expect(peito.ponderado, 'o cenário precisa cair na zona intermediária').toBeGreaterThan(peito.maxAutomatico!);
+    expect(peito.ponderado).toBeLessThanOrEqual(peito.mrv!);
     expect(peito.status).toBe('acima_do_automatico');
     const itens = avisos(dias, placar, CTX);
     const orienta = itens.find((a) => a.codigo === 'acima_do_maximo_automatico');

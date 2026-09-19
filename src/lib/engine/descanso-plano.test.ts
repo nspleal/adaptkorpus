@@ -45,16 +45,18 @@ function plano(s: number, over: Partial<PerfilTreino> = {}) {
     nome: d.nome,
     slots: d.slots.map((sl) => ({
       id: sl.exercicio.id,
+      complementar: ['core','panturrilha','antebraco'].includes(sl.exercicio.grupoPrimario??''),
       classe: classeDeDescanso(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       exigente: altaExigenciaDocumental(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       descansoSeg: sl.descansoSeg ?? null,
       series: sl.series,
+      cortouTempo: sl.seriesAntesDoCorteDeTempo != null && sl.series! < sl.seriesAntesDoCorteDeTempo,
     })),
   }));
 }
 
 const distintos = (dias: ReturnType<typeof plano>) =>
-  [...new Set(dias.flatMap((d) => d.slots.map((s) => s.descansoSeg)).filter((v): v is number => v != null))].sort((a, b) => a - b);
+  [...new Set(dias.flatMap((d) => d.slots.map((s) => s.descansoSeg)).filter((v): v is number => v != null))].sort((a, b) => (a ?? 0) - (b ?? 0));
 
 /**
  * 🔻 FIXTURES MOVIDAS PARA ORÇAMENTO FOLGADO (120 min) — leva B do v4, 2026-08-13.
@@ -88,7 +90,7 @@ describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', ()
     const porSemana = (s: number) => {
       const slots = plano(s, { tempoPorSessaoMin: 120 }).flatMap((d) => d.slots);
       return {
-        composto: [...new Set(slots.filter((x) => x.classe === 'COMPOSTO').map((x) => x.descansoSeg))],
+        composto: [...new Set(slots.filter((x) => x.classe === 'COMPOSTO').map((x) => x.descansoSeg))].sort((a, b) => (a ?? 0) - (b ?? 0)),
         isolado: [...new Set(slots.filter((x) => x.classe === 'ISOLADO').map((x) => x.descansoSeg))],
       };
     };
@@ -134,16 +136,14 @@ describe('🔒 aceite 5 — o orçamento cede descanso, nunca exercício', () =>
     let comReducao = 0; let semReducao = 0;
     for (const tempoPorSessaoMin of [5, 10, 20, 30, 45, 60, 90]) {
       const semanas = [1, 3, 5].map((s) => plano(s, { tempoPorSessaoMin }));
-      const cedeuSeries = (dias: ReturnType<typeof plano>) =>
-        dias.some(d => d.slots.some(s => (s.series ?? 4) < 3));
-      if (!semanas.some(cedeuSeries)) { semReducao += 1; continue; }
-      comReducao += 1;
-      for (const dias of semanas) {
-        if (!cedeuSeries(dias)) continue;
-        const compostos = dias.flatMap((d) => d.slots).filter((s) => s.classe === 'COMPOSTO');
-        const acimaDoPiso = compostos.filter((s) => (s.descansoSeg ?? 0) > (s.exigente ? 120 : PISO_DEGRADACAO.COMPOSTO));
-        expect(acimaDoPiso.map((s) => `${s.id}@${s.descansoSeg}`),
-          `${tempoPorSessaoMin} min: séries cederam com descanso ainda acima do piso`).toEqual([]);
+      for (const dias of semanas) for (const dia of dias) {
+        // Fase A: cortes em principais exigem degradação prévia. A adição tardia de
+        // complementar pode ceder sua própria dose, preservando o descanso dos principais.
+        if (!dia.slots.some(s=>s.cortouTempo&&!s.complementar)) { semReducao++; continue; }
+        comReducao++;
+        const compostos=dia.slots.filter(s=>s.classe==='COMPOSTO');
+        const acimaDoPiso=compostos.filter(s=>(s.descansoSeg??0)>(s.exigente?120:PISO_DEGRADACAO.COMPOSTO));
+        expect(acimaDoPiso.map(s=>`${s.id}@${s.descansoSeg}`),`${tempoPorSessaoMin}/${dia.nome}: corte antes do piso`).toEqual([]);
       }
     }
     expect(comReducao, 'nenhum orçamento cedeu séries: a implicação não foi exercida').toBeGreaterThan(0);
@@ -153,7 +153,12 @@ describe('🔒 aceite 5 — o orçamento cede descanso, nunca exercício', () =>
   it('quando o tempo aperta, quem cede é o DESCANSO — até os pisos de degradação', () => {
     const apertado = plano(5, { tempoPorSessaoMin: 30 });
     const folgado = plano(5, { tempoPorSessaoMin: 90 });
-    expect(Math.max(...distintos(apertado))).toBeLessThan(Math.max(...distintos(folgado)));
+    // Um dia pode caber no topo enquanto outro precisa degradar: comparar os mesmos IDs.
+    const longos=new Map(folgado.flatMap(d=>d.slots.map(s=>[`${d.nome}/${s.id}`,s.descansoSeg!] as const)));
+    const pares=apertado.flatMap(d=>d.slots.map(s=>({curto:s.descansoSeg!,longo:longos.get(`${d.nome}/${s.id}`)}))).filter(x=>x.longo!=null);
+    expect(pares.length).toBeGreaterThan(0);
+    expect(pares.some(x=>x.curto<x.longo!),'nenhum descanso efetivamente degradado').toBe(true);
+    expect(pares.every(x=>x.curto<=x.longo!)).toBe(true);
     // Pisos travados na spec: isolado/core 60 s, composto 90 s. Nada abaixo disso.
     for (const d of apertado)
       for (const sl of d.slots)

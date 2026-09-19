@@ -1,3 +1,4 @@
+import {avaliarDuracaoResistida} from './duracao-plano';
 import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
@@ -308,7 +309,8 @@ describe('🔒 o delta dos 18 `core` na saída REAL', () => {
    * composto e os dois recebiam a mesma faixa.
    */
   it('um `core` e um composto na mesma sessão recebem descansos DIFERENTES', () => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 60, diasDisponiveis: 4 });
+    // Explicit manual drawing keeps this rest-class control independent of complementary allocation.
+    const r = rotinaComCiclo({tempoPorSessaoMin:60,diasDisponiveis:1,treinoDias:['seg'],rotinaCustom:{origem:'usuario',dias:[{nome:'Controle',diaId:'seg',exercicioIds:['e11','e147']}]}});
     const diaComCore = r.dias.find(
       (d) => d.slots.some((s) => s.padrao === 'core') && d.slots.some((s) => s.padrao !== 'core' && s.padrao !== 'isolado'),
     );
@@ -344,13 +346,14 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
     // faixa: na semana 1 (RIR 3) ele JÁ é 60 s e degradar fica indistinguível.
     const r = rotinaComCiclo({ tempoPorSessaoMin: 60, nivelExperiencia: 'intermediario' }, 5);
     const diaDegradado = r.dias.find((d) =>
-      d.slots.some((x) => (x.padrao === 'isolado' || x.padrao === 'core') && x.descansoSeg === 60));
+      d.slots.some(x=>x.padrao==='isolado'&&x.descansoSeg===60&&descansoDoExercicio({exercicio:x.exercicio,rirAlvo:1,degradacao:0})!>60)
+      &&d.slots.filter(x=>!['isolado','core'].includes(x.padrao)).every(x=>x.descansoSeg===descansoDoExercicio({exercicio:x.exercicio,rirAlvo:1,degradacao:0})));
     expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();
     const comp = diaDegradado!.slots.filter((x) => x.padrao !== 'isolado' && x.padrao !== 'core');
     expect(comp.length).toBeGreaterThan(0);
     // A regra 3 concentra o benefício no composto pesado: ele NÃO cede enquanto o
     // acessório resolver. A ordem invertida rebaixaria o composto a 90 aqui.
-    for (const c of comp) expect(c.descansoSeg!, `composto ${c.exercicio.id}`).toBeGreaterThan(90);
+    for (const c of comp) expect(c.descansoSeg!, `composto ${c.exercicio.id}`).toBe(descansoDoExercicio({exercicio:c.exercicio,rirAlvo:1,degradacao:0}));
   });
 
   it('degradação nível 2: quando o acessório não basta, o COMPOSTO cede — mas só até 90 s', () => {
@@ -462,17 +465,17 @@ describe('🔒 o orçamento é POR DIA — dias de composição diferente saem d
      * é medida no caso acima, numa fixture apertada. Aqui ela vira o seu complemento honesto:
      * quando todos os dias cabem, todos ficam no TOPO da faixa — ninguém cede sem motivo.
      */
-    const compostoDoDia = r.dias
-      .map((d) => d.slots.filter((s) => !['isolado', 'core'].includes(s.padrao)).map((s) => s.descansoSeg ?? 0))
-      .filter((v) => v.length > 0)
-      .map((v) => Math.max(...v));
-    const cabemTodos = (r.duracaoDias ?? []).every((c) => c.estadoLimite === 'DENTRO_DO_LIMITE');
-    if (cabemTodos) {
-      expect(new Set(compostoDoDia).size, `dias cabem, mas o descanso variou: ${compostoDoDia}`).toBe(1);
-      expect(compostoDoDia[0], 'todos cabem e ainda assim ninguém chegou ao topo da faixa').toBe(180);
-    } else {
-      expect(new Set(compostoDoDia).size, `algum dia não cabe e mesmo assim ninguém cedeu: ${compostoDoDia}`).toBeGreaterThan(1);
+    // Final fit can be the RESULT of reducing rest, not proof that no reduction occurred.
+    let reduzidos=0,intactos=0;
+    for(const d of r.dias){
+      const normal=d.slots.map(sl=>({...sl,descansoSeg:descansoDoExercicio({exercicio:sl.exercicio,rirAlvo:1,degradacao:0})??0}));
+      const mudou=d.slots.some((sl,i)=>sl.descansoSeg!==normal[i]!.descansoSeg);
+      if(mudou){
+        reduzidos++;
+        expect(avaliarDuracaoResistida(normal,p.nivelExperiencia).duracaoMaximaEstimadaSegundos!,d.nome).toBeGreaterThan(75*60);
+      }else intactos++;
     }
+    expect(reduzidos).toBeGreaterThan(0);expect(intactos).toBeGreaterThan(0);
   });
 });
 

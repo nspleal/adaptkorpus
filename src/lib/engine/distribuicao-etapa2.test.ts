@@ -1,3 +1,5 @@
+import {verificarImpedimentoRecortes} from './__fixtures__/recortes-viabilidade';
+import {adicoesComplementaresViaveis} from './__fixtures__/complementares-viabilidade';
 import {describe,it,expect} from 'vitest';
 import {freqMaxPorGrupo} from './treino-retomada';
 import {creditoPonderadoDaSemana} from './alocador';
@@ -50,8 +52,10 @@ describe('etapa2: possibilidades na saída final',()=>{
   expect(comSegunda.length,'o bloco deixou de entregar em TODAS as agendas — o caso acima seria vazio').toBeGreaterThan(0);
  });
  it.each([4,5])('%i pernas: duas ênfases e dois superiores separados',n=>{
-  const gs=grupos(run(n,'pernas'));
-  expect(gs.filter(g=>g.includes('quadriceps')||g.includes('posterior'))).toHaveLength(2);
+  const r=run(n,'pernas'),gs=grupos(r);
+  const pernas=gs.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
+  if(pernas.length!==2)verificarImpedimentoRecortes(run(n),r,7);
+  else expect(pernas).toHaveLength(2);
   expect(gs.some(g=>g.includes('peito')&&!g.includes('costas'))).toBe(true);
   expect(gs.some(g=>g.includes('costas')&&!g.includes('peito'))).toBe(true);
   expect(gs.flat()).toContain('ombros');
@@ -60,7 +64,7 @@ describe('etapa2: possibilidades na saída final',()=>{
   const r=run(n,'pernas'),f=grupos(r);
   // Primários documentais do catálogo; não exige exclusividade anatômica.
   const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
-  expect(inferiores).toHaveLength(2);
+  if(inferiores.length!==2)verificarImpedimentoRecortes(run(n),r,7);
   /**
    * 🔴 L-03 (revisão independente 15/09) — A ASSERÇÃO NÃO DEPENDE MAIS DO AVISO DO MOTOR.
    * Antes, a verificação dos recortes era PULADA quando o próprio código sob teste emitia
@@ -72,12 +76,20 @@ describe('etapa2: possibilidades na saída final',()=>{
     &&inferiores.some(g=>g[0]==='posterior'&&!g.includes('quadriceps'));
   const avisou=r.avisos.some(a=>a.startsWith('Mantivemos a distribuição disponível'));
   expect(avisou,`recortes ${separou?'separados':'NÃO separados'}, aviso ${avisou?'presente':'ausente'}`).toBe(!separou);
-  expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','panturrilha','ombros','peito','costas']));
-  expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2});
+  expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','ombros','peito','costas']));
+  if(!f.flat().includes('panturrilha'))expect(adicoesComplementaresViaveis(r,{...base,diasDisponiveis:n,treinoDias:agendas[n]},'panturrilha')).toEqual([]);
+  expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:separou?2:1});
  });
- it('antebraço: bloco direto com foco explícito, sem novo dia exclusivo',()=>{
+ /**
+  * 🔵 2026-09-19 — antebraço é COMPLEMENTAR e entra em toda divisão com dia de superiores
+  * livre (um complementar por dia), com ou sem foco. A redação anterior exigia que SEM foco
+  * ele ficasse fora (DF② de 2026-08-12: só indireto); a decisão do autor de 2026-09-19 a
+  * substitui: "não omita antebraço silenciosamente". Continua sem dia exclusivo.
+  */
+ it('antebraço: bloco direto com e sem foco explícito, sempre num dia compartilhado',()=>{
   const f=grupos(run(4,'antebraco'));expect(f.some(g=>g.includes('antebraco')&&g.length>1)).toBe(true);
-  expect(grupos(run(4)).flat()).not.toContain('antebraco');
+  const s=grupos(run(4));expect(s.some(g=>g.includes('antebraco')&&g.length>1)).toBe(true);
+  expect(s.some(g=>g.length>0&&g.every(x=>x==='antebraco'))).toBe(false);
  });
 });
 
@@ -94,7 +106,11 @@ describe('etapa2: contratos no seletor atual, sem fixture histórica',()=>{
   expect(r.distribuicao).toBeUndefined();expect(rotinaCustom.dias[0]!.exercicioIds).toEqual(['e1','e11']);
  });
  it('7 dias conserva teto de força e oferece recuperação',()=>{
-  const r=run(7,'peito');expect(r.dias.length).toBeLessThanOrEqual(6);expect(r.diasCardioRecuperacao).toBeGreaterThanOrEqual(1);
+  const r=run(7,'peito');
+  // O dia já escolhido pode ser dedicado aos complementares (autor 19/09).
+  const principais=r.dias.filter(d=>d.slots.some(s=>!['core','antebraco','panturrilha','lombar'].includes(s.exercicio.grupoPrimario??'')));
+  expect(principais.length).toBeLessThanOrEqual(6);
+  expect(r.dias.length+r.diasCardioRecuperacao+(r.diasNaoAtendidos?.length??0)).toBe(7);
   /**
    * 🔵 2026-09-17 — a segunda sessão do foco depende de o bloco ENTRAR, e com os dois tetos
    * valendo ao mesmo tempo ele pode ser recusado. A propriedade é a mesma do caso acima:

@@ -64,8 +64,14 @@ describe('🔒 cobertura no teto — a instância medida (não a premissa)', () 
    * novo; esta foi medida no lugar e é ainda mais forte: o mínimo não é sequer o primeiro da
    * ordem, e o grupo já tem elástico e halteres marcados.
    */
-  it('🔴 o equipamento mínimo é MEDIDO: iniciante/emagrecimento/peito com elástico+halteres pede BANCO', () => {
-    const c = classif('iniciante', 'peito', ['elastico', 'halteres'], 'emagrecimento');
+  /**
+   * 🔵 CÉLULA REMEDIDA (2026-09-19). Com a seleção por referência, o pico do peito iniciante em
+   * casa com elástico+halteres passou a alcançar o MEV (a trava do empurrar deixou de forçar
+   * isolados no primeiro slot e a flexão/crucifixo entram na ordem certa). A célula que segue
+   * limitada e fechada por BANCO, com o mesmo par já marcado, é `avancado/saude/peito`.
+   */
+  it('🔴 o equipamento mínimo é MEDIDO: avançado/saúde/peito com elástico+halteres pede BANCO', () => {
+    const c = classif('avancado', 'peito', ['elastico', 'halteres'], 'saude');
     expect(c, 'a célula precisa continuar limitada — senão o caso não prova nada').not.toBeNull();
     expect(c!.equipamento, 'não é o primeiro da ordem de minimalidade').toBe('banco');
     expect(c!.exercicios.length).toBeGreaterThan(0);
@@ -81,7 +87,8 @@ describe('🔒 mutação eixo (a) — o equipamento nomeado REALMENTE fecha o gr
   const casos: [NivelExperiencia, GrupoPrimario, 'massa' | 'saude' | 'emagrecimento'][] = [
     ['iniciante', 'posterior', 'massa'],
     ['iniciante', 'ombros', 'emagrecimento'],
-    ['avancado', 'ombros', 'saude'],
+    // 🔵 2026-09-19: avançado/saúde/ombros passou a alcançar em casa-vazio; a célula limitada é peito.
+    ['avancado', 'peito', 'saude'],
   ];
   for (const [nivel, g, obj] of casos) {
     it(`${nivel}/${obj}/${g}: o teto COM o equipamento nomeado ≥ MEV; sem ele, < MEV`, () => {
@@ -97,14 +104,14 @@ describe('🔒 mutação eixo (a) — o equipamento nomeado REALMENTE fecha o gr
     const ORDEM = ['elastico', 'halteres', 'kettlebell', 'barra_fixa', 'banco', 'corda_pular', 'roda_abdominal'] as const;
     // 🔵 A célula em que o mínimo NÃO é o primeiro da ordem — a que torna o teste discriminante.
     const jaMarcados: EquipamentoCasa[] = ['elastico', 'halteres'];
-    const c = classif('iniciante', 'peito', jaMarcados, 'emagrecimento')!;
+    const c = classif('avancado', 'peito', jaMarcados, 'saude')!;
     expect(c.equipamento).toBe('banco');
-    const piso = mev('iniciante', 'emagrecimento');
+    const piso = mev('avancado', 'saude');
     let testados = 0;
     for (const eqp of ORDEM) {
       if (eqp === c.equipamento) break;
       if (jaMarcados.includes(eqp)) continue; // já está no perfil; não é candidato
-      expect(tetoPonderado(EXERCISES, 'iniciante', 'emagrecimento', 'casa', [...jaMarcados, eqp]).get('peito') ?? 0,
+      expect(tetoPonderado(EXERCISES, 'avancado', 'saude', 'casa', [...jaMarcados, eqp]).get('peito') ?? 0,
         `${eqp} vem antes de ${c.equipamento} e NÃO pode fechar (senão ele era o mínimo)`).toBeLessThan(piso);
       testados += 1;
     }

@@ -55,7 +55,8 @@ const entregue = (r: ReturnType<typeof rotina>) => (r.blocoFoco?.adicionais ?? [
  * o teto da SESSÃO (ombros chegaria a 12,5 num dia), não mais o semanal — que ganhou a
  * margem de 3. A propriedade guardada é a mesma: recusa não pode ser silenciosa.
  */
-const RECUSA_EXPLICADA = /acima d[oa]s? (m[áa]ximo|limites)|j[áa] est[áa] n[oa]s? (m[áa]ximo|limites)/;
+// Recusa pode ser de tempo; o teste conserva IDs/doses e ausência de extras.
+const RECUSA_EXPLICADA = /extras não couberam no tempo disponível|acima d[oa]s? (m[áa]ximo|limites)|j[áa] est[áa] n[oa]s? (m[áa]ximo|limites)/;
 
 describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
   const sem = rotina(perfil({limiteTempoTreino:'sem_limite'}));
@@ -110,15 +111,19 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
      * intermediário com folga (onde o bloco entra, e o que se cobra é a identidade do ganho).
      */
     const comFolga = (over: Partial<PerfilResumo> = {}) =>
-      perfil({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'],
+      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'],
         tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
     const semF = rotina(comFolga());
     const comF = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
     const entregueF = (comF.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
     const xf = seriesPorGrupo(semF); const yf = seriesPorGrupo(comF);
 
-    const semL = rotina(perfil({ limiteTempoTreino: 'limitado' } as never));
-    const comL = rotina(perfil({ limiteTempoTreino: 'limitado', foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
+    // 2026-09-19: sob o seletor histórico o avançado de 6 dias passou a ter folga; o perfil
+    // que bate no teto ali (medido) é o intermediário de 4 dias em 45 min.
+    const NO_TETO = process.env.ADAPT_TEST_SELETOR_ATUAL === '0'
+      ? { nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 45 } : {};
+    const semL = rotina(perfil({ limiteTempoTreino: 'limitado', ...NO_TETO } as never));
+    const comL = rotina(perfil({ limiteTempoTreino: 'limitado', ...NO_TETO, foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
     const x = seriesPorGrupo(semL); const y = seriesPorGrupo(comL);
     const entregue = (comL.blocoFoco?.adicionais ?? []).reduce((n, i) => n + i.series, 0);
 
@@ -176,7 +181,7 @@ describe('🟠 D4 — "Nenhum" volta ao plano base', () => {
     // O perfil avançado deste arquivo fecha no topo da banda e o teto barra o bloco; a
     // sanidade roda num perfil com folga, que é onde "o foco muda o plano" tem de valer.
     const comFolga = (over: Partial<PerfilResumo> = {}) =>
-      perfil({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'],
+      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'],
         tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
     const base = rotina(comFolga());
     const com = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));

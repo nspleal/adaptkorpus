@@ -46,6 +46,7 @@ import {
 import { descansoDoExercicio } from './descanso';
 import { faixaSegundos, repUnitDe } from './isometricos';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
+import { papelReferencia } from './selecao-referencia';
 
 /**
  * 🔒 Os 12 grupos do catálogo têm o MESMO nome no vocabulário de grupos do pacote, e a
@@ -318,7 +319,7 @@ export interface LimitesDeCredito {
      * tinha um, e o avançado 6d saía com quatro slots de core contra o invariante travado de
      * 2–3 por semana. Frequência e teto de slots por grupo são decisão do alocador.
      */
-    cabeNoTetoDeSlots: (novo: Exercise) => boolean;
+    cabeNoTetoDeSlots: (novo: Exercise, dia: number) => boolean;
     /** O dia ainda cabe no tempo com este exercício a mais, sem encurtar o descanso de ninguém? */
     cabeNoTempo: (dia: number, exerciciosDepois: readonly Exercise[]) => boolean;
     /** O crédito ponderado deste exercício cabe nos limites da SEMANA e da SESSÃO? */
@@ -730,6 +731,17 @@ export function otimizarCoberturaAnatomica(
             return e;
           });
           if (!padroesPreservados(antesLista, depoisLista)) continue;
+          // Com um único slot de costas, puxada e remada são alternativas elegíveis.
+          // Preservar a referência não pode congelar a primeira e impedir cobertura.
+          // Com dois ou mais slots, preservamos os papéis distintos já presentes.
+          const costasUnico = dia.slots.filter(s => s.exercicio.grupoPrimario === 'costas').length === 1;
+          const papel = (e: Exercise) => {
+            const f = papelReferencia(e);
+            return costasUnico && (f === 'puxada' || f === 'remada') ? 'costas-referencia' : f;
+          };
+          const papeisAntes = new Set(dia.slots.map(s => papel(s.exercicio)).filter(Boolean));
+          const papeisDepois = new Set(dia.slots.map(s => papel(s.exercicio === atual ? candidato : par && s.exercicio === par.de ? par.para : s.exercicio)).filter(Boolean));
+          if ([...papeisAntes].some(f => !papeisDepois.has(f))) continue;
 
           melhor = candidato;
           melhorGanho = ganho;
@@ -850,7 +862,7 @@ export function otimizarCoberturaAnatomica(
             if (noDia.has(candidato.id)) continue;
             const ganho = complementoAnatomico(candidato.id, desejados, abordados);
             if (ganho <= ganhoEscolhido) continue;
-            if (!limites.adicao.cabeNoTetoDeSlots(candidato)) continue;
+            if (!limites.adicao.cabeNoTetoDeSlots(candidato, d)) continue;
             const exsDepois = [...dia.slots.map((s) => s.exercicio), candidato];
             if (!limites.adicao.cabeNoTempo(d, exsDepois)) continue;
             if (!limites.adicao.cabeNoVolume(d, candidato)) continue;

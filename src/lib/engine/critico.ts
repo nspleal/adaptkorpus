@@ -65,28 +65,56 @@ export interface DiaDoEditor {
  * ultrapassou — exatamente o caso do desenho manual com 17 séries num intermediário
  * (máximo automático 16, teto cheio 19).
  */
-export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_do_automatico' | 'acima_mrv' | 'sem_estimulo';
+/**
+ * 🔵 `sem_referencia` (2026-09-19): o grupo é ACOMPANHADO pelo motor (a contagem existe e é
+ * mostrada, inclusive zerada), mas não tem faixa semanal definida — bíceps, tríceps,
+ * antebraço, core, panturrilha e lombar têm piso de presença ou política própria, não banda.
+ * A linha nunca vira verde: verde afirma "dentro da faixa", e não há faixa que o afirme.
+ */
+export type StatusGrupo = 'na_banda' | 'abaixo_mev' | 'acima_do_automatico' | 'acima_mrv' | 'sem_estimulo' | 'sem_referencia';
 
 export interface LinhaPlacar {
   grupo: GrupoPrimario;
   rotulo: string;
   /** Séries PONDERADAS da semana (direto 1,0 + secundário 0,5) — a conta do alocador v4. */
   ponderado: number;
+  /** Séries DIRETAS da semana (exercícios cujo grupo primário é este) — contagem, sem peso. */
+  direto: number;
+  /**
+   * A parcela INDIRETA já ponderada (secundários × 0,5). `direto + indireto = ponderado`.
+   * 🔒 São moedas distintas e a tela não as mistura: diretas são séries feitas; a indireta
+   * é crédito, nunca "meia série" realizada.
+   */
+  indireto: number;
   status: StatusGrupo;
-  /** Piso de aviso (MEV) — o mínimo da faixa DESEJADA desta semana. */
-  mev: number;
+  /**
+   * O grupo tem faixa semanal de referência? Só os GRANDES têm (DF②). Sem faixa, `mev`,
+   * `mrv` e `maxAutomatico` ficam ausentes e a linha diz "sem faixa de referência".
+   */
+  temFaixa: boolean;
+  /** Piso de aviso (MEV) — o mínimo da faixa DESEJADA desta semana. Ausente sem faixa. */
+  mev?: number;
   /**
    * Teto semanal CHEIO deste grupo. 🔴 `acima_mrv` é medido contra ELE — é o limite de
    * verdade. O grupo em foco já vem com o teto cheio; os demais também o carregam aqui, para
-   * a tela poder dizer o quanto ainda falta até o limite real.
+   * a tela poder dizer o quanto ainda falta até o limite real. Ausente sem faixa.
    */
-  mrv: number;
+  mrv?: number;
   /**
    * 🔵 Máximo que o app usa SOZINHO neste grupo (teto cheio − 3, salvo foco). Passar daqui
-   * não é passar do teto: é sair do que a montagem automática faria.
+   * não é passar do teto: é sair do que a montagem automática faria. Ausente sem faixa.
    */
-  maxAutomatico: number;
+  maxAutomatico?: number;
 }
+
+/**
+ * 🔵 TODOS os grupos que o motor acompanha, na ordem do placar (2026-09-19): os seis grandes
+ * com faixa primeiro, depois os acompanhados sem faixa. É a lista do vocabulário anatômico
+ * (`GrupoPrimario`), não uma seleção: um grupo com zero também aparece, com zero.
+ */
+export const GRUPOS_DO_PLACAR: readonly GrupoPrimario[] = [
+  ...GRUPOS_GRANDES, 'biceps', 'triceps', 'antebraco', 'core', 'panturrilha', 'lombar',
+];
 
 export type SeveridadeAviso = 'recomendacao' | 'risco';
 
@@ -246,9 +274,12 @@ function horasEntre(a: number, b: number): number {
 
 /**
  * O PLACAR da semana: séries ponderadas por grupo × banda do nível.
- * Só os GRANDES entram no placar por default — são os que a DF② põe "na banda"; os
- * pequenos têm piso de presença, não faixa, e apareceriam sempre "abaixo" sem significar
- * nada (a lição da régua de frequência: número sem significado vira ruído).
+ *
+ * 🔵 TODOS os grupos acompanhados (2026-09-19). Os GRANDES continuam sendo os únicos com
+ * faixa — são os que a DF② põe "na banda". Os demais (bíceps, tríceps, antebraço, core,
+ * panturrilha, lombar) mostram a contagem, inclusive zerada, com `sem_referencia`: eles não
+ * têm faixa, então não recebem verde nem "abaixo" — número sem faixa é contagem, não
+ * avaliação. A unidade é a mesma para todos (ponderada), e a linha separa direto de indireto.
  */
 export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritico): LinhaPlacar[] {
   const slots = dias.flatMap((d) => d.exercicios.map((e, i) => ({
@@ -256,13 +287,24 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
     series: d.series?.[i] ?? ctx.seriesPadrao ?? 1,
   })));
   const ponderado = creditoPonderadoDaSemana(slots);
+  const direto = new Map<GrupoPrimario, number>();
+  for (const s of slots) {
+    const g = s.exercicio.grupoPrimario;
+    if (g && s.series > 0) direto.set(g, (direto.get(g) ?? 0) + s.series);
+  }
   // A faixa da SEMANA quando o motor a publicou; a do nível quando não há fase a considerar.
   // Nas semanas normais as duas são a mesma — por isso a rampa não muda de comportamento.
   const piso = ctx.faixaSemanal?.min ?? mev(ctx.nivel, ctx.objetivo);
   const tetos = tetosDoContexto(ctx);
   const emFoco = new Set<GrupoPrimario>(tetos.gruposEmFoco);
-  return GRUPOS_GRANDES.map((g) => {
-    const v = Math.round((ponderado.get(g) ?? 0) * 10) / 10;
+  const arred = (n: number) => Math.round(n * 10) / 10;
+  return GRUPOS_DO_PLACAR.map((g) => {
+    const v = arred(ponderado.get(g) ?? 0);
+    const dir = arred(direto.get(g) ?? 0);
+    const ind = arred(v - dir);
+    if (!(GRUPOS_GRANDES as readonly string[]).includes(g)) {
+      return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status: 'sem_referencia' as const, temFaixa: false };
+    }
     /**
      * 🔵 O máximo AUTOMÁTICO deste grupo: quem está em foco já pode usar o teto cheio, e para
      * ele as duas linhas coincidem — não existe zona intermediária num grupo focado.
@@ -277,7 +319,7 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
           : v > maxAutomatico
             ? 'acima_do_automatico'
             : 'na_banda';
-    return { grupo: g, rotulo: rotulo(g), ponderado: v, status, mev: piso, mrv: tetos.cheio, maxAutomatico };
+    return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status, temFaixa: true, mev: piso, mrv: tetos.cheio, maxAutomatico };
   });
 }
 
@@ -340,7 +382,7 @@ export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number, f
       codigo: 'grupo_abaixo_do_minimo',
       severidade: 'recomendacao',
       texto: `${l.rotulo} está abaixo da faixa mínima desta semana (${l.ponderado} de ${l.mev} séries).`,
-      fato: { grupo: l.grupo, semana, valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev },
+      fato: { grupo: l.grupo, semana, valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mev', alvo: l.mev! },
     });
   }
   return itens;
@@ -391,7 +433,7 @@ export function avisos(
       codigo: 'acima_do_maximo',
       severidade: 'risco',
       texto: `${l.rotulo} está acima do volume máximo do seu nível (${l.ponderado} contra ${l.mrv} séries). Volume acima do que você recupera tende a atrapalhar, não somar.`,
-      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mrv', alvo: l.mrv },
+      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'mrv', alvo: l.mrv! },
     });
   }
 
@@ -408,7 +450,7 @@ export function avisos(
       codigo: 'acima_do_maximo_automatico',
       severidade: 'recomendacao',
       texto: `${l.rotulo} está com ${l.ponderado} séries nesta semana: acima das ${l.maxAutomatico} que o app usa quando monta sozinho, e ainda dentro do teto de ${l.mrv}. Se a escolha foi sua, ela vale — só acompanhe como você recupera.`,
-      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'max_automatico', alvo: l.maxAutomatico },
+      fato: { grupo: l.grupo, ...(ctx.semana != null ? { semana: ctx.semana } : {}), valor: l.ponderado, escopo: 'semana', metrica: 'series_ponderadas', limiar: 'max_automatico', alvo: l.maxAutomatico! },
     });
   }
 

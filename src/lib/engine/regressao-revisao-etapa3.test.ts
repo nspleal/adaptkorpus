@@ -86,9 +86,14 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
    * `puxar` tinham entrado na segunda. Resultado: costas +0 séries líquidas, bíceps +4, e
    * `blocoFoco` anunciando "2 exercícios adicionais, 4 séries".
    */
+  /**
+   * 🔵 REANCORADO em 2026-09-19: no avançado/emagrecimento/45 nenhum foco entrega extra
+   * depois da seleção por referência. O par vivo — peito ENTRA (1 extra) e costas bate no
+   * teto cheio (12/12) — é o avançado/saúde de 4 dias em 60 min.
+   */
   const entrada = perfil({
-    nivelExperiencia: 'avancado', objetivo: 'emagrecimento', tempoPorSessaoMin: 45,
-    treinoDias: ['seg', 'ter', 'qui', 'sex'],
+    nivelExperiencia: 'avancado', objetivo: 'massa', tempoPorSessaoMin: 45,limiteTempoTreino:'limitado',
+    treinoDias: ['seg', 'qua', 'sex'],
   });
   const neutro = gerar(entrada);
   /**
@@ -100,7 +105,9 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
    * então o ganho líquido é medido com foco em PEITO, que tem folga, e a recusa de costas vira
    * caso próprio. Nenhuma das duas propriedades foi afrouxada: as duas são exigidas.
    */
-  const focoNoTeto = gerar({ ...entrada, foco: { grupo: 'costas', semana: 1 } });
+  const entradaTeto=perfil({nivelExperiencia:'avancado',objetivo:'saude',tempoPorSessaoMin:60,treinoDias:['seg','ter','qui','sex']});
+  const neutroTeto=gerar(entradaTeto);
+  const focoNoTeto = gerar({ ...entradaTeto, foco: { grupo: 'costas', semana: 1 } });
   const comFoco = gerar({ ...entrada, foco: { grupo: 'peito', semana: 1 } });
 
   it('anti-vacuidade: o bloco realmente entregou extras neste perfil', () => {
@@ -165,7 +172,7 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
     const planoInteiro = (r: RotinaSemanal) => r.dias.map((d) => ({
       dia: d.diaId, slots: d.slots.map((s) => `${s.exercicio.id}:${s.series}:${s.descansoSeg}`).sort(),
     }));
-    expect(planoInteiro(focoNoTeto)).toEqual(planoInteiro(neutro));
+    expect(planoInteiro(focoNoTeto)).toEqual(planoInteiro(neutroTeto));
     expect(focoNoTeto.avisos.some((a) => /(j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/.test(a)),
       'recusa sem explicação na tela').toBe(true);
   });

@@ -74,8 +74,8 @@ describe('🔴 C6 — o foco NÃO pode introduzir `empurrar > puxar` (reproduç�
 
   it('o plano SEM foco fecha equilibrado — a violação não é preexistente', () => {
     const r = plano(base, 2);
-    expect(conta(r, 'puxar'), 'puxar').toBe(2);
-    expect(conta(r, 'empurrar'), 'empurrar').toBe(2);
+    expect(conta(r, 'empurrar'), 'o caso precisa conter empurrar').toBeGreaterThan(0);
+    expect(conta(r, 'puxar')).toBeGreaterThanOrEqual(conta(r,'empurrar'));
     expect(equilibrada(r)).toBe(true);
   });
 

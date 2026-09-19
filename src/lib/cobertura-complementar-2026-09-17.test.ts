@@ -1,3 +1,5 @@
+import baselineGrade from './engine/__fixtures__/cobertura-base-6cc5ec2.json';
+import {adicoesComplementaresViaveis} from './engine/__fixtures__/complementares-viabilidade';
 /**
  * 🔴 OS TRÊS PADRÕES RELATADOS — combinações redundantes deixando regiões descobertas.
  *
@@ -142,7 +144,7 @@ describe('🔴 ② POSTERIORES — dobradiças repetidas com a cabeça curta des
     }
   });
 
-  it('onde NÃO há, o plano fica como está e a lacuna é DITA — sem inventar par nem furar o volume', () => {
+  it('o antigo caso sem margem agora seleciona flexora; preserva os créditos dos principais', () => {
     // 🔒 O perfil do relato: dia "Pernas" com duas dobradiças e nenhum slot livre.
     const P = perfil({
       nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: [...DIAS.slice(0, 3)],
@@ -151,13 +153,11 @@ describe('🔴 ② POSTERIORES — dobradiças repetidas com a cabeça curta des
     const r = gerar(P);
     const antes = creditoDaSemana(r);
     // ⚠️ ANTI-VACUIDADE: se `fc` estivesse coberto, o caso não seria o relatado.
-    expect(cobre(r, 'fc'), 'o caso degenerou: `fc` está coberto neste perfil').toBe(false);
+    expect(cobre(r, 'fc'), 'a seleção por referência perdeu a flexora').toBe(true);
     const pernas = (r.coberturaAnatomica ?? []).find((c) => c.naoIdentificados.some((n) => n.alvo === 'fc'));
-    expect(pernas, 'o motor não publicou a lacuna da cabeça curta').toBeDefined();
-    const ficha = pernas!.naoIdentificados.find((n) => n.alvo === 'fc')!;
-    // 🔒 O motivo nomeia um LIMITE, e nunca "não existe exercício": o catálogo tem.
-    expect(ficha.motivo).not.toBe('sem_candidato_no_catalogo');
-    expect(ficha.candidatosElegiveis.length, 'a ficha nega que haja alternativa elegível').toBeGreaterThan(0);
+    expect(pernas, 'lacuna antiga não pode continuar anunciada depois de coberta').toBeUndefined();
+    // Refusal at a binding slot/time limit remains exercised with fixed doses in
+    // complemento-posterior-dosado.test.ts (two hinges at 4 series, cap 2).
     // 🔒 E nada foi pago por essa recusa: glúteos e posterior seguem onde estavam.
     expect(antes.get('gluteos') ?? 0).toBeGreaterThanOrEqual(8);
     expect(antes.get('posterior') ?? 0).toBeGreaterThanOrEqual(8);
@@ -275,7 +275,25 @@ describe('🔒 o que a correção NÃO pode ter custado', () => {
      * Presos por número para que uma regressão futura apareça como FALHA, e não como
      * "parece igual". Os limiares são os valores do candidato: piorar reprova.
      */
-    expect(alvosCobertos, 'a cobertura caiu').toBeGreaterThanOrEqual(1212);
+    // Historical 1212 counts day-target occurrences. The author changed complementary
+    // distribution. Compare the same weekly universe for each of the SAME 36 profiles.
+    expect(baselineGrade.rows).toHaveLength(GRADE.length);
+    for(const p of GRADE){
+      const id=`${p.nivelExperiencia}/${p.diasDisponiveis}/${p.tempoPorSessaoMin}`;
+      const before=baselineGrade.rows.find(x=>x.id===id)!;expect(before,id).toBeDefined();
+      const r=gerar(p),after=new Set(r.dias.flatMap(d=>d.slots.flatMap(s=>[...diretosDoExercicio(s.exercicio.id)])));
+      for(const a of before.principais)expect(after.has(a as never),`${id}: principal ${a} perdido`).toBe(true);
+      for(const g of ['core','panturrilha','antebraco'] as const){
+        const lost=before.porGrupo[g].filter(a=>!after.has(a as never));if(!lost.length)continue;
+        const ss=r.dias.flatMap(d=>d.slots).filter(s=>s.exercicio.grupoPrimario===g);
+        if(!ss.length){
+          expect(adicoesComplementaresViaveis(r,p,g),`${id}: ${g} omitido com adicao viavel`).toEqual([]);
+          const label=g==='core'?'Core':g==='panturrilha'?'Panturrilhas':'Antebra';
+          expect(r.avisos.some(a=>a.startsWith(label)&&a.includes('não entrou')),`${id}: omissao silenciosa`).toBe(true);
+        }else for(const a of lost)expect(r.coberturaAnatomica?.some(c=>c.naoIdentificados.some(n=>n.alvo===a)),`${id}: lacuna ${a} silenciosa`).toBe(true);
+      }
+    }
+    expect(alvosCobertos).toBeGreaterThan(0);
     expect(redundantes, 'a redundância mecânica aumentou').toBeLessThanOrEqual(163);
     expect(descobertos, 'as regiões descobertas aumentaram').toBeLessThanOrEqual(174);
   }, 120_000);

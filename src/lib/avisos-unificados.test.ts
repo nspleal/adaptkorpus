@@ -114,7 +114,9 @@ describe('D16 · no plano de verdade', () => {
   const perfil: PerfilTreino = {
     pesoKg: 75, alturaCm: 175, idade: 30,
     flagsSaude: { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false },
-    objetivo: 'saude', nivelExperiencia: 'iniciante', equipamento: 'casa', equipamentosCasa: [],
+    // 2026-09-19: em `saude` ombros passou a ser limitado pelo CATÁLOGO neste perfil; em `massa`
+    // continua pelo ORÇAMENTO, que é o caso que este bloco mede (o crítico também fala).
+    objetivo: 'massa', nivelExperiencia: 'iniciante', equipamento: 'casa', equipamentosCasa: [],
     diasDisponiveis: 3, treinoDias: diasPadrao(3) as Weekday[], tempoPorSessaoMin: 30,
   };
   const rotina = gerarTreino(perfil, { exercises: EXERCISES_SEED, semanaCiclo: { semana: 1 } }).rotina!;

@@ -1,3 +1,4 @@
+import { verificarDistribuicaoComplementares } from './__fixtures__/complementares-contrato';
 import {describe,it,expect} from 'vitest';
 import {gerarTreino,FORMULA_DURACAO_VERSION} from './index';
 import {montarRotina} from './treino-montador';
@@ -17,7 +18,8 @@ const composto=(s:ReturnType<typeof run>['dias'][number]['slots'][number])=>s.pa
 
 describe('rodada2: propriedades atuais antes protegidas por fotografias',()=>{
  it('dia não atendido: motivo, nome e exclusão continuam no auto atual',()=>{
-  const r=run({...base,objetivo:'emagrecimento',nivelExperiencia:'avancado',equipamento:'casa',equipamentosCasa:[],diasDisponiveis:5,tempoPorSessaoMin:20});
+  // 2026-09-19: o caso vivo por EQUIPAMENTO exige os dois tríceps de peso do corpo banidos (ver dia-nao-atendido.test).
+  const r=run({...base,objetivo:'massa',nivelExperiencia:'avancado',equipamento:'casa',equipamentosCasa:[],diasDisponiveis:5,tempoPorSessaoMin:20,preferencias:{banidos:['e40','e113','e114'],trocas:[]}});
   expect(r.diasNaoAtendidos?.length).toBeGreaterThan(0);
   for(const d of r.diasNaoAtendidos!){expect(d.nome.length).toBeGreaterThan(0);expect(d.motivo).toBe('EQUIPAMENTO');expect(d.slotsPedidos).toBeGreaterThan(0);expect(r.dias.map(x=>x.nome)).not.toContain(d.nome);expect(r.avisos.join(' ')).toContain(d.nome);}
   expect(r.dias.every(d=>d.slots.length>0)).toBe(true);
@@ -72,7 +74,8 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   const count=(g:string)=>r.dias.flatMap(d=>d.slots).filter(s=>s.padrao===g).length;
   expect(count('puxar')).toBeGreaterThanOrEqual(count('empurrar'));
   expect(count('dobradica_quadril')).toBeGreaterThanOrEqual(1);
-  expect(count('core')).toBeGreaterThanOrEqual(2);expect(count('core')).toBeLessThanOrEqual(3);
+    // Autor 19/09: localização e um complementar por dia precedem core 2x.
+    verificarDistribuicaoComplementares(r);
  });
  it('casa restrita: sessão curta é nomeada sem depender do rótulo Push',()=>{
   const r=run({...base,nivelExperiencia:'avancado',diasDisponiveis:6,equipamento:'casa',equipamentosCasa:[]});
@@ -121,7 +124,7 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
    const ponderado=creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')??0;
    expect(ponderado,`S${semana}: bloco recusado sem o grupo estar no teto`).toBeGreaterThan(teto-1);
    expect(ponderado).toBeLessThanOrEqual(teto);
-   expect(b.avisos.some(a=>/(j[áa] est[áa] no m[áa]ximo do seu n[íi]vel|levaria .* acima do m[áa]ximo do seu n[íi]vel)/.test(a)),`S${semana}: recusa sem explicação na tela`).toBe(true);
+   expect(b.avisos.some(a=>/(extras não couberam no tempo disponível|j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/.test(a)),`S${semana}: recusa sem explicação na tela`).toBe(true);
   }
  });
  /**

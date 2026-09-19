@@ -1,6 +1,7 @@
 import type { GrupoPrimario } from '../data/types';
 import { ORDEM_SEMANA, type Weekday } from '../semana';
 import type { TemplateDia } from './alocador';
+import { ehComplementar, ehDiaDePernas, ehDiaDisponivel } from './selecao-referencia';
 
 /** Política de produto de 13/09/2026: adjacência direta inclui a virada da semana.
  * Não estima sobreposição indireta nem cria piso fisiológico novo.
@@ -28,6 +29,45 @@ function ordenarRecortes(templates:readonly TemplateDia[],agenda:readonly Weekda
     for(let i=0;i<restantes.length;i++)visitar([...ordem,restantes[i]!],restantes.filter((_,j)=>j!==i));
   };
   visitar([],templates);return melhor;
+}
+
+/** Decisões explícitas de 19/09: diversidade antes de frequência, um complementar
+ * por dia misto, sem retirar principal. Full-body aceita qualquer complementar;
+ * dia dedicado recebe core e antebraço. A enumeração compara no máximo 8³ trios,
+ * antes de repetir um grupo: não declara inviável uma alternativa só por ordem gulosa.
+ */
+export function distribuirComplementares(
+  dias: TemplateDia[], originais: readonly TemplateDia[], agenda: readonly Weekday[], minimoCore: number,
+): void {
+  for (const d of dias) d.grupos = d.grupos.filter(g => !ehComplementar(g));
+  const ordem = ['panturrilha', 'core', 'antebraco'] as const;
+  const dedicado = (i: number) => ehDiaDisponivel(originais[i]!.grupos);
+  const pernas = (i: number) => ehDiaDePernas(dias[i]!.grupos);
+  const superior = (i: number) => dias[i]!.grupos.some(g => ['peito', 'costas', 'ombros', 'biceps', 'triceps'].includes(g));
+  const elegiveis = ordem.map(g => dias.flatMap((_, i) =>
+    (g === 'panturrilha' ? pernas(i) : dedicado(i) || superior(i)) ? [i] : []));
+  let melhor = [-1, -1, -1], notaMelhor: number[] = [-1];
+  for (const p of [-1, ...elegiveis[0]!]) for (const c of [-1, ...elegiveis[1]!]) for (const a of [-1, ...elegiveis[2]!]) {
+    const trio = [p, c, a];
+    if (trio.some((d, k) => d >= 0 && !dedicado(d) && trio.slice(k + 1).includes(d))) continue;
+    const nota = [trio.filter(i => i >= 0).length, Number(p >= 0), Number(c >= 0),
+      trio.filter(i => i >= 0 && dedicado(i)).length, ...trio.map(i => i < 0 ? -99 : -i)];
+    const primeiro = nota.findIndex((n, i) => n !== (notaMelhor[i] ?? -1));
+    if (primeiro >= 0 && nota[primeiro]! > (notaMelhor[primeiro] ?? -1)) { melhor = trio; notaMelhor = nota; }
+  }
+  ordem.forEach((g, k) => { const i = melhor[k]!; if (i >= 0) dias[i]!.grupos = [...dias[i]!.grupos, g]; });
+  // Só depois de oferecer os três grupos, repetir dentro da frequência já solicitada.
+  for (const g of ordem) {
+    const desejados = g === 'core' ? Math.min(3, Math.max(minimoCore, originais.filter(d => d.grupos.includes(g)).length))
+      : Math.max(1, originais.filter(d => d.grupos.includes(g)).length);
+    for (const i of elegiveis[ordem.indexOf(g)]!) {
+      const atuais = dias.flatMap((d, k) => d.grupos.includes(g) ? [k] : []);
+      if (atuais.length >= desejados) break;
+      if (dias[i]!.grupos.includes(g) || (!dedicado(i) && dias[i]!.grupos.some(ehComplementar))) continue;
+      if (atuais.some(k => diasConsecutivos(agenda[k]!, agenda[i]!))) continue;
+      dias[i]!.grupos = [...dias[i]!.grupos, g];
+    }
+  }
 }
 
 /** Distribui os grupos dos templates existentes, não exercícios ou séries.
@@ -60,15 +100,19 @@ export function distribuirGruposNoCalendario(
   const carga = agenda.map(() => 0);
   const dias: TemplateDia[] = agenda.map(() => ({ nome: '', grupos: [] }));
   let limitado = false;
-  const ordem = [...focos, ...grupos.filter(g => !focos.includes(g))];
+  const principais = grupos.filter(g => !ehComplementar(g));
+  const ordem = [...focos.filter(g => principais.includes(g)), ...principais.filter(g => !focos.includes(g))];
   for (const g of ordem) {
     if (!grupos.includes(g)) continue;
-    const originais = templates.flatMap((t, i) => t.grupos.includes(g) ? [i] : []);
-    const desejados = Math.max(1, originais.length, g === 'core' ? minimoCore : 0);
+    let originais = templates.flatMap((t, i) => t.grupos.includes(g) ? [i] : []);
+    // O tríceps acrescentado ao upper único mora onde o bíceps mora (não no dia de pernas).
+    if (g === 'triceps' && originais.length === 0) originais = templates.flatMap((t, i) => t.grupos.includes('biceps') ? [i] : []);
+    const desejados = Math.max(1, originais.length);
     const candidatos: number[][] = [];
     for (let mask = 1; mask < (1 << agenda.length); mask++) {
       const indices = agenda.flatMap((_, i) => mask & (1 << i) ? [i] : []);
-      if (indices.length > desejados) continue;
+      if (indices.length > desejados || indices.some(i => ehDiaDisponivel(templates[i]!.grupos))) continue;
+      // Recortes são dos grupos principais; o complementar segue a política própria acima.
       if (preservarRecortes && originais.length > 0 && indices.some(i => !originais.includes(i))) continue;
       if (indices.some((a, i) => indices.slice(i + 1).some(b => diasConsecutivos(agenda[a]!, agenda[b]!)))) continue;
       candidatos.push(indices);
@@ -84,6 +128,7 @@ export function distribuirGruposNoCalendario(
       carga[i]!++;
     }
   }
+  distribuirComplementares(dias, templates, agenda, minimoCore);
   // Preserva também a ordem interna dos templates compatíveis (desempate do alocador).
   for (let i = 0; i < dias.length; i++) dias[i]!.grupos = [...templates[i]!.grupos.filter(g => dias[i]!.grupos.includes(g)), ...dias[i]!.grupos.filter(g => !templates[i]!.grupos.includes(g))];
   // Nomes refletem o reagrupamento; nunca deixam rótulo Upper em um dia de pernas.
@@ -91,9 +136,12 @@ export function distribuirGruposNoCalendario(
   for (let i = 0; i < dias.length; i++) {
     const d = dias[i]!;
     const original = templates[i]!;
-    const mesmos = d.grupos.every(g => original.grupos.includes(g) || g === 'core' || (g === 'triceps' && original.grupos.includes('biceps'))) && original.grupos.every(g => d.grupos.includes(g));
+    // O complementar do dia (core/panturrilha/antebraço) não muda o nome: o tema é dos principais.
+    const mesmos = d.grupos.every(g => original.grupos.includes(g) || ehComplementar(g) || (g === 'triceps' && original.grupos.includes('biceps')))
+      && original.grupos.every(g => d.grupos.includes(g) || ehComplementar(g));
     d.nome = agenda.length === 1 ? 'Full-body' : mesmos ? original.nome : d.grupos.length ? d.grupos.map(g => nomes[g]).join(' + ') : 'Recuperação';
   }
-  limitado ||= [...demandaOriginal].some(([g, n]) => dias.filter(d => d.grupos.includes(g)).length < n);
+  // A redução de um complementar é política (um por dia), não limite de agenda.
+  limitado ||= [...demandaOriginal].some(([g, n]) => !ehComplementar(g) && dias.filter(d => d.grupos.includes(g)).length < n);
   return { dias, limitado };
 }

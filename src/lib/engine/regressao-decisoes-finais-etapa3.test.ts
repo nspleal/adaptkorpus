@@ -146,7 +146,9 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
     const aviso = plano.avisos.find((a) => a.startsWith('Para caber em') && a.includes('nesta sessão única'));
     expect(aviso, 'a retirada não foi nomeada em nenhum aviso').toBeTruthy();
     expect(diretos(plano, 'core'), 'core sobreviveu: o caso deixou de exercer a regra').toBe(0);
-    expect(aviso).toContain('Core');
+    // Core was omitted by the one-complementary policy, not removed by temporal dispensing.
+    expect(plano.avisos.some(a=>a.startsWith('Core')&&a.includes('não entrou'))).toBe(true);
+    expect(aviso).toContain('Panturrilhas');
     // Os demais grupos mantêm o único exercício — a política antiga continua valendo para eles.
     for (const g of GRUPOS_GRANDES) {
       if (GRUPOS_DISPENSAVEIS_FULLBODY_CURTO.includes(g)) continue; // 🔵 17/09: glúteos entrou na lista
