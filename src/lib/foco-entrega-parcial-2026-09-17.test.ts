@@ -48,9 +48,15 @@ const entrega = (r: RotinaSemanal) => {
 };
 
 /** O caso REPRODUZIDO na varredura: entrega parcial com a frase errada. */
+/**
+ * 🔵 REANCORADO em 2026-09-19: com a seleção por referência, o caso avançado/6d/45 passou a
+ * recusar o bloco inteiro. A entrega PARCIAL viva (1 de 2, o segundo cortado pelo tempo) é o
+ * iniciante de 3 dias em 30 min com foco em bíceps.
+ */
+// Controle discriminante em CP10: 1 de 2 extras, via porta pública, sem mudar o regime limitado.
 const CASO_PARCIAL = {
-  nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: [...DIAS.slice(0, 6)],
-  tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado', foco: { grupo: 'gluteos', compensa: 'ombros' },
+  nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: ['seg','qua','sex'],
+  tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', foco: { grupo: 'biceps', compensa: 'peito' },
 };
 
 describe('🔴 o bloco do foco: entrega parcial não é recusa total', () => {

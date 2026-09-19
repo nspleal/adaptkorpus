@@ -1,3 +1,4 @@
+import { verificarDistribuicaoComplementares } from './__fixtures__/complementares-contrato';
 /**
  * 🎛️ v4 · DF③ (2026-08-12) — a DIVISÃO como escolha do usuário (leva B2 do
  * handoff-motor-volume-v4). `auto` = padrão por dias · `superior-inferior` força Sup/Inf
@@ -50,8 +51,8 @@ describe('🎛️ DF③ — as três divisões', () => {
   it('prioridades: as invariantes seguem de pé (core 2–3× · puxar ≥ empurrar · dobradiça)', () => {
     const r = plano(perfil({ divisaoPreferida: 'prioridades' }));
     const contaPadrao = (p: string) => r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
-    expect(contaPadrao('core')).toBeGreaterThanOrEqual(2);
-    expect(contaPadrao('core')).toBeLessThanOrEqual(3);
+    // Autor 19/09: localização e um complementar por dia precedem core 2x.
+    verificarDistribuicaoComplementares(r);
     expect(contaPadrao('puxar')).toBeGreaterThanOrEqual(contaPadrao('empurrar'));
     expect(contaPadrao('dobradica_quadril')).toBeGreaterThanOrEqual(1);
   });

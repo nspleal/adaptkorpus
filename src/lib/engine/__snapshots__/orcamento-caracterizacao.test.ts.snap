@@ -63,7 +63,7 @@ exports[`📸 etapa3 — composição seletor atual > descanso efetivo da semana
 exports[`📸 etapa3 — composição seletor atual > descanso efetivo — massa, 30 min (o teto de 180 s depende do tempo) 1`] = `
 {
   "descanso": {
-    "max": 120,
+    "max": 180,
     "min": 90,
   },
   "tempo": 30,
@@ -74,7 +74,7 @@ exports[`📸 etapa3 — composição seletor atual > descanso efetivo — massa
 {
   "descanso": {
     "max": 180,
-    "min": 90,
+    "min": 120,
   },
   "tempo": 60,
 }
@@ -100,11 +100,7 @@ exports[`📸 etapa3 — composição seletor atual > descanso efetivo — modo 
 exports[`📸 etapa3 — composição seletor atual > o cap inicial não depende de quais exercícios caíram na sessão 1`] = `
 [
   {
-    "compostos": 0,
-    "slots": 4,
-  },
-  {
-    "compostos": 4,
+    "compostos": 2,
     "slots": 5,
   },
   {
@@ -112,8 +108,12 @@ exports[`📸 etapa3 — composição seletor atual > o cap inicial não depende
     "slots": 5,
   },
   {
-    "compostos": 4,
+    "compostos": 3,
     "slots": 4,
+  },
+  {
+    "compostos": 2,
+    "slots": 3,
   },
 ]
 `;
@@ -122,9 +122,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/emagrecim
 {
   "objetivo": "emagrecimento",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -132,9 +133,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/emagrecim
 exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 10 min — faixa em que o cap LIMITA 1`] = `
 {
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
   "tempo": 10,
 }
@@ -144,9 +146,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 12
 {
   "objetivo": "massa",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -157,6 +160,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 15
     3,
     3,
     3,
+    2,
   ],
   "tempo": 15,
 }
@@ -168,6 +172,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 20
     3,
     3,
     3,
+    2,
   ],
   "tempo": 20,
 }
@@ -179,6 +184,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 25
     4,
     4,
     4,
+    2,
   ],
   "tempo": 25,
 }
@@ -188,9 +194,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/saude, 12
 {
   "objetivo": "saude",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -198,8 +205,8 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/saude, 12
 exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
-    3,
+    2,
+    2,
     2,
     2,
   ],
@@ -237,7 +244,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/mass
     4,
     4,
     4,
-    4,
+    3,
   ],
   "tempo": 25,
 }
@@ -249,7 +256,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > intermediário/mass
     4,
     4,
     4,
-    4,
+    3,
   ],
   "tempo": 30,
 }
@@ -261,7 +268,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
     4,
     4,
     4,
-    4,
+    3,
   ],
   "tempo": 30,
 }
@@ -270,10 +277,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 45 min por sessão 1`] = `
 {
   "slots": [
-    4,
     5,
     5,
     4,
+    3,
   ],
   "tempo": 45,
 }
@@ -282,10 +289,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 60 min por sessão 1`] = `
 {
   "slots": [
-    5,
+    6,
     6,
     5,
-    5,
+    3,
   ],
   "tempo": 60,
 }
@@ -294,10 +301,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 75 min por sessão 1`] = `
 {
   "slots": [
-    5,
+    6,
     7,
-    5,
-    5,
+    6,
+    3,
   ],
   "tempo": 75,
 }
@@ -306,10 +313,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediári
 exports[`📸 etapa3 — nº de exercícios, seletor atual > massa/intermediário, 90 min por sessão 1`] = `
 {
   "slots": [
-    5,
+    6,
     7,
-    5,
-    5,
+    6,
+    3,
   ],
   "tempo": 90,
 }
@@ -326,10 +333,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > modo força em sess
 
 exports[`📸 etapa3 — nº de exercícios, seletor atual > modo força ligado (composto a 6RM) — o caminho do teto de 180 s 1`] = `
 [
-  5,
+  6,
   6,
   5,
-  5,
+  3,
 ]
 `;
 
@@ -340,7 +347,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível avancado, 60
     6,
     6,
     6,
-    5,
+    4,
   ],
 }
 `;
@@ -352,6 +359,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível iniciante, 6
     6,
     6,
     6,
+    2,
   ],
 }
 `;
@@ -360,10 +368,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível intermediari
 {
   "nivel": "intermediario",
   "slots": [
-    5,
+    6,
     6,
     5,
-    5,
+    3,
   ],
 }
 `;
@@ -372,10 +380,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo emagrecime
 {
   "objetivo": "emagrecimento",
   "slots": [
-    5,
+    6,
     6,
     5,
-    5,
+    3,
   ],
 }
 `;
@@ -384,10 +392,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo massa, 60 
 {
   "objetivo": "massa",
   "slots": [
-    5,
+    6,
     6,
     5,
-    5,
+    3,
   ],
 }
 `;
@@ -396,10 +404,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > objetivo saude, 60 
 {
   "objetivo": "saude",
   "slots": [
-    5,
     6,
-    5,
-    5,
+    6,
+    6,
+    3,
   ],
 }
 `;
@@ -408,10 +416,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 1 do mesocic
 {
   "semana": 1,
   "slots": [
-    5,
+    6,
     6,
     5,
-    5,
+    3,
   ],
 }
 `;
@@ -420,10 +428,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 3 do mesocic
 {
   "semana": 3,
   "slots": [
-    5,
+    6,
     6,
     5,
-    4,
+    3,
   ],
 }
 `;
@@ -435,7 +443,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 5 do mesocic
     5,
     6,
     5,
-    4,
+    3,
   ],
 }
 `;
@@ -447,7 +455,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > semana 6 do mesocic
     5,
     6,
     5,
-    4,
+    3,
   ],
 }
 `;
@@ -458,6 +466,6 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > sessão de 30 min, 
   4,
   4,
   4,
-  3,
+  2,
 ]
 `;

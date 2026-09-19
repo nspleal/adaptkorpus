@@ -28,6 +28,7 @@
  * PURO e determinístico: sem relógio, sem rede, sem estado global.
  */
 import type { Exercise, GrupoPrimario } from '../data/types';
+import { ehReferencia, rankReferencia } from './selecao-referencia';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { diretosDoExercicio, mesmoCustoDeSlot } from './cobertura-anatomica';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
@@ -222,6 +223,10 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
           && e.id !== antigo.id)
         .sort((a, b) => creditoPorSerie(a, grupo) - creditoPorSerie(b, grupo)
           || manutencao(b) - manutencao(a)
+          // 🔵 2026-09-19: entre equivalentes, a função de referência do grupo primeiro (o
+          // agachamento frontal antes do avanço com salto) — a ordem por id desempata.
+          || Number(ehReferencia(b)) - Number(ehReferencia(a))
+          || rankReferencia(a) - rankReferencia(b)
           || porId(a, b));
       if (candidatos.length === 0) {
         registrar(dia, grupo, { tipo: 'troca_de_exercicio', slot: antigo.id, aceita: false, motivo: 'sem_candidato_no_catalogo' });

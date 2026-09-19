@@ -1,0 +1,48 @@
+import {describe,it,expect} from 'vitest';
+import {gerarTreino} from './index';
+import {EXERCISES} from '../data/exercises';
+import {creditoPonderadoDaSemana} from './alocador';
+import {diretosDoExercicio} from './cobertura-anatomica';
+import {aplicarExcecaoTrapezio} from './excecao-trapezio-iniciante';
+import type {PerfilTreino,DiaTreino} from './treino-types';
+
+const p:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false},objetivo:'massa',nivelExperiencia:'iniciante',equipamento:'academia',equipamentosCasa:[],diasDisponiveis:4,treinoDias:['seg','ter','qui','sex'],tempoPorSessaoMin:30,limiteTempoTreino:'limitado'};
+// Contrafactual medido antes da exceção; não deriva os esperados da própria função.
+const fixture=():DiaTreino[]=>[
+  ['e15','e43','e14','e40'],['e49','e46','e168','e72'],
+  ['e28','e64','e57','e62'],['e73','e147'],
+].map((ids,i)=>({nome:`Dia ${i}`,diaId:p.treinoDias![i],slots:ids.map(id=>{
+  const exercicio=EXERCISES.find(e=>e.id===id)!;
+  return {exercicio,padrao:exercicio.padraoMovimento,series:id==='e49'?2:3,descansoSeg:60};
+})}));
+const aplicar=(perfil:PerfilTreino,dias:DiaTreino[])=>aplicarExcecaoTrapezio({perfil,dias,pool:EXERCISES,
+  materializar:(exercicio,s)=>({...s,exercicio,padrao:exercicio.padraoMovimento})});
+
+describe('exceção localizada autorizada: trapézio no iniciante 4d/30min',()=>{
+ it('preserva demais créditos, alvos, dose e grupos; aceita só os dois pisos autorizados',()=>{
+  const dias=fixture(),antes=dias.flatMap(d=>d.slots),c=creditoPonderadoDaSemana(antes);
+  expect(aplicar(p,dias)).toBe(true);
+  const depois=dias.flatMap(d=>d.slots),n=creditoPonderadoDaSemana(depois);
+  expect(n.get('biceps')).toBe(6);expect(n.get('ombros')).toBe(3);
+  for(const [g,v] of c)if(g!=='biceps'&&g!=='ombros')expect(n.get(g),g).toBe(v);
+  const aa=new Set(antes.flatMap(s=>[...diretosDoExercicio(s.exercicio.id)]));
+  const dd=new Set(depois.flatMap(s=>[...diretosDoExercicio(s.exercicio.id)]));
+  expect([...aa].every(a=>dd.has(a))).toBe(true);expect(dd.has('ts')).toBe(true);
+  expect(depois.map(s=>s.series)).toEqual(antes.map(s=>s.series));
+  expect(depois.filter(s=>s.padrao==='puxar')).toHaveLength(2);
+  expect(depois.filter(s=>s.padrao==='empurrar')).toHaveLength(2);
+ });
+ it.each([{nivelExperiencia:'intermediario'},{diasDisponiveis:5},{tempoPorSessaoMin:60},{equipamento:'casa'},{limiteTempoTreino:'sem_limite'}] as Partial<PerfilTreino>[])
+ ('não amplia a exceção para %j',over=>{const d=fixture(),antes=JSON.stringify(d);expect(aplicar({...p,...over},d)).toBe(false);expect(JSON.stringify(d)).toBe(antes);});
+ it('não retira remadas favoritas',()=>{const d=fixture();for(const s of d[1]!.slots)s.incluidoPorPreferencia=true;const a=JSON.stringify(d);expect(aplicar(p,d)).toBe(false);expect(JSON.stringify(d)).toBe(a);});
+ it('integra no automático com tempos reais e preserva manual',()=>{
+  const r=gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;
+  const ss=r.dias.flatMap(d=>d.slots),c=creditoPonderadoDaSemana(ss);
+  expect(ss.some(s=>diretosDoExercicio(s.exercicio.id).has('ts'))).toBe(true);
+  expect(c.get('biceps')).toBe(6);expect(c.get('ombros')).toBe(3);
+  expect(r.duracaoDias!.every(d=>d.estadoCalculo==='CALCULADO'&&d.duracaoMaximaEstimadaSegundos!<=1800)).toBe(true);
+  const dias=fixture().map(d=>({nome:d.nome,diaId:d.diaId,exercicioIds:d.slots.map(s=>s.exercicio.id)}));
+  const m=gerarTreino({...p,rotinaCustom:{origem:'usuario',dias}},{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;
+  expect(m.dias.map(d=>d.slots.map(s=>s.exercicio.id))).toEqual(dias.map(d=>d.exercicioIds));
+ });
+});

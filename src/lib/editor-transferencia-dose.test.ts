@@ -54,7 +54,10 @@ describe('Transferência do plano ao editor conserva dose e intenção',()=>{
     const saved={...p,rotinaCustom:custom};const preview=gerar(saved,{semana:6});
     expect(dose(preview)).toEqual(dose(rec));
     expect(paraRotinaCustom(abrir(preview,saved))).toEqual(custom);
-    expect(dose(gerar(saved,{semana:1}))).toEqual(dose(normal));
+    // Na volta à semana normal, dose por identidade é a propriedade. A ordem manual
+    // salva no deload não precisa imitar a ordem automática da semana 5.
+    const dosePorId = (r: RotinaSemanal) => dose(r).map(d => ({...d, slots: [...d.slots].sort((a,b) => String(a[0]).localeCompare(String(b[0])))}));
+    expect(dosePorId(gerar(saved,{semana:1}))).toEqual(dosePorId(normal));
   });
   it.each([false,true])('custom existente, escolhas explícitas=%s: rampa/deload/retomada não congelam nem apagam intenção',explicit=>{
     const custom:RotinaCustom={origem:'usuario',dias:[{nome:'Meu',diaId:'seg',exercicioIds:['e1','e21','e19'],...(explicit?{seriesPorExercicio:{e1:7,e19:1}}:{})}]};

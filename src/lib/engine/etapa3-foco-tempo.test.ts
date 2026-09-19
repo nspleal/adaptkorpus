@@ -16,7 +16,8 @@ describe('etapa3: plano concreto',()=>{
   for(const foco of [undefined,{grupo:'peito' as const,compensa:'triceps' as const,semana:1}]){
    const r=run(['seg'],{foco});
    const grupos=slots(r).map(s=>s.exercicio.grupoPrimario);
-   for(const g of [...GRUPOS_GRANDES,...GRUPOS_PEQUENOS_PISO,'core'])expect(grupos.filter(x=>x===g).length,g).toBe(g===foco?.grupo?2:1);
+   for(const g of [...GRUPOS_GRANDES,...GRUPOS_PEQUENOS_PISO].filter(g=>g!=='panturrilha'))expect(grupos.filter(x=>x===g).length,g).toBe(g==='costas'||g===foco?.grupo?2:1);
+   expect(grupos.filter(g=>['core','antebraco','panturrilha'].includes(g??'')).length).toBeLessThanOrEqual(1);
    expect(grupos).not.toContain('lombar');expect(grupos).not.toContain('antebraco');
   }
  });
@@ -82,7 +83,10 @@ describe('etapa3: plano concreto',()=>{
   // o bloco sobreviver (7 de 8, não 8 de 8). O que continua exato — e é o que se cobra — é
   // que aos 20 min a ELIMINAÇÃO do bloco acontece, e na maioria das agendas: o caminho de
   // eliminação segue exercido. As provas de baseline acima valem em todas elas.
-  if(tempo>=30)expect(comBloco,`nenhum bloco sobreviveu em ${tempo}min — o caso não discrimina`).toBeGreaterThan(0);
+  // 🔵 2026-09-19: com a seleção por referência (compostos de 120–180 s no lugar de isolados)
+  // o dia de 30 min fecha sem espaço para o extra em todas as agendas; o bloco volta a caber
+  // dos 45 min para cima (3 de 8 agendas). Aos 20 e 30 a eliminação é a regra exercida.
+  if(tempo>=45)expect(comBloco,`nenhum bloco sobreviveu em ${tempo}min — o caso não discrimina`).toBeGreaterThan(0);
   else{
    expect(semBloco,'20 min deixou de eliminar o bloco: o caminho de eliminação não é exercido').toBeGreaterThan(0);
    expect(semBloco,'aos 20 min a eliminação deixou de ser a regra').toBeGreaterThan(agendas.length/2);
@@ -95,16 +99,22 @@ describe('etapa3: plano concreto',()=>{
   * (`motor-treino-grupo-em-foco-x-mrv`). Onde há folga, o bloco continua sendo 2 × 2.
   */
  it('pernas: recortes reaproveitam todo o baseline de outros grupos; o bloco para no teto',()=>{
-  let comDois=0;
-  for(const agenda of agendas.slice(3)){
-   const a=run(agenda),b=run(agenda,{focoAgregado:{grupo:'pernas',semana:1}});
+  let comDois=0,comUm=0;
+  for(const {agenda,over} of [...agendas.slice(3).map(agenda=>({agenda,over:{} as Partial<PerfilTreino>})),{agenda:['seg','qua','sex'] as Weekday[],over:{nivelExperiencia:'iniciante',tempoPorSessaoMin:60,limiteTempoTreino:'limitado'} as Partial<PerfilTreino>}]){
+   const a=run(agenda,over),b=run(agenda,{...over,focoAgregado:{grupo:'pernas',semana:1}});
    const assinatura=(r:RotinaSemanal)=>slots(r).filter(s=>!['quadriceps','posterior'].includes(s.exercicio.grupoPrimario!)).map(s=>`${s.exercicio.id}:${s.series}`).sort();
-   expect(assinatura(b),`${agenda.join('-')}: terceiros pagaram pelo foco`).toEqual(assinatura(a));
+   const antigos=assinatura(a),novos=assinatura(b);
+   for(const item of antigos)expect(novos,`${agenda.join('-')}: terceiro removido`).toContain(item);
+   for(const item of novos.filter(x=>!antigos.includes(x))){
+    const e=EXERCISES.find(e=>e.id===item.split(':')[0])!;
+    expect(['core','panturrilha','antebraco']).toContain(e.grupoPrimario);
+   }
    const entregues=b.blocoFoco?.adicionais??[];
    expect(entregues.every(s=>s.series===2),`${agenda.join('-')}: série do extra fora do nominal`).toBe(true);
    expect(b.blocoFoco?.solicitados,'a INTENÇÃO do bloco continua sendo 2').toBe(2);
    if(entregues.length===2)comDois+=1;
    else{
+    if(entregues.length===1)comUm+=1;
     /**
      * 🔵 2026-09-17 — o teto deixou de ser um número só. A recusa parcial é aceitável quando
      * um componente encosta no teto SEMANAL do porte dele (cheio para quem está em foco) OU no
@@ -123,7 +133,10 @@ describe('etapa3: plano concreto',()=>{
     expect(b.avisos.some(x=>RECUSA_OU_APARO.test(x)),`${agenda.join('-')}: recusa sem explicação`).toBe(true);
    }
   }
-  expect(comDois,'nenhuma agenda entregou o bloco inteiro — o caso deixou de discriminar').toBeGreaterThan(0);
+  // 🔵 2026-09-19: com a extensora ao lado do agachamento e a flexora ao lado do stiff, o
+  // quadríceps chega ao teto de um treino só antes do extra em todas as agendas; o componente
+  // de posterior continua entrando (1 de 2) e a recusa do outro é dita — é isso que se cobra.
+  expect(comDois+comUm,'nenhuma agenda entregou componente algum do bloco — o caso deixou de discriminar').toBeGreaterThan(0);
  });
  /**
   * 🔴 DECISÃO REVERTIDA em 2026-09-15 — este caso afirmava o CONTRÁRIO e precisa ser lido junto
@@ -155,7 +168,7 @@ describe('etapa3: plano concreto',()=>{
   * A célula nova foi medida na varredura desta correção: INICIANTE 3d/60min/S5 com foco em
   * costas, onde o teto de 13 é atingido pelo baseline e o bloco é recusado por inteiro.
   */
- it('a MARGEM é do grupo em foco: o extra sobe de 9 até o teto cheio, e para ali',()=>{
+ it('a MARGEM é do grupo em foco: extras cabem na margem sem exigir saturação fracionária',()=>{
   const over={nivelExperiencia:'iniciante' as const,tempoPorSessaoMin:60,limiteTempoTreino:'limitado' as const};
   const a=run(['seg','qua','sex'],over,5);
   const b=run(['seg','qua','sex'],{...over,foco:{grupo:'costas',compensa:'biceps',semana:1}},5);
@@ -164,7 +177,10 @@ describe('etapa3: plano concreto',()=>{
   expect(t.gruposEmFoco,'o grupo focado precisa estar declarado').toEqual(['costas']);
   // 🔵 Sem foco o grupo para no MÁXIMO AUTOMÁTICO; com foco ele usa a margem e chega ao CHEIO.
   expect(pond(a),'sem foco, costas não pode passar do máximo automático').toBeLessThanOrEqual(t.semFoco);
-  expect(pond(b),'com foco, costas usa a margem e para no teto cheio').toBe(t.cheio);
+  expect(pond(b),'com foco, costas usa a margem').toBeGreaterThan(t.semFoco);
+  expect(pond(b)).toBeLessThanOrEqual(t.cheio);
+  // Crédito indireto fracionário: nem toda composição consegue fechar exatamente o teto.
+  expect(pond(b)+1,'mais uma série direta ultrapassaria o teto').toBeGreaterThan(t.cheio);
   expect(t.cheio-t.semFoco,'a margem é de 3 séries').toBe(3);
   // 🔒 E a exceção é DO GRUPO: ninguém mais passa do máximo automático por tabela.
   for(const g of GRUPOS_GRANDES){

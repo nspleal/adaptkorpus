@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import type { Exercise, GrupoPrimario } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
 import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao, RotinaSemanal } from '@/lib/engine/treino-types';
-import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico } from '@/lib/engine/critico';
+import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico, type LinhaPlacar } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
 import { contextoDaDose, type ReferenciaDose } from '@/lib/engine/referencia-dose';
@@ -318,7 +318,9 @@ export default function EditorTreino({
      * monta sozinho" de "acima do teto") e `passaDoTetoDaSessao` do aviso por sessão, casado
      * pelo fato (grupo + dia), não pelo texto.
      */
-    const passaDoSemanal = linhaDepois == null
+    // 🔵 2026-09-19: o placar agora tem linha para todo grupo; sem faixa não há teto a passar,
+    // e a tela se abstém (`null`) em vez de afirmar "não passa" de uma faixa que não existe.
+    const passaDoSemanal = linhaDepois == null || !linhaDepois.temFaixa
       ? null
       : linhaDepois.status === 'acima_mrv'
         ? 'teto' as const
@@ -530,13 +532,23 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
       {!compacto && (
         <>
           <div style={{ fontSize: '.76rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 9 }}>Sua semana</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: visiveis.length || avisos.length ? 13 : 0 }}>
+          {/**
+            * 🔵 2026-09-19 — TODOS os grupos acompanhados, com a unidade dita. O número do chip é
+            * a conta PONDERADA (direta 1,0 · indireta 0,5), a mesma da faixa; o título separa as
+            * diretas (séries feitas) do crédito indireto, que nunca é apresentado como "meia
+            * série". Grupo sem faixa mostra a contagem e diz que não há referência — sem verde.
+            */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 6 }}>
             {placar.map((l) => (
-              <span key={l.grupo} title={`${l.ponderado} séries · faixa ${l.mev}–${l.maxAutomatico} · teto ${l.mrv}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.8rem', fontWeight: 600, border: `1px solid ${corDoStatus(l.status).borda}`, color: corDoStatus(l.status).texto, borderRadius: 999, padding: '5px 10px' }}>
+              <span key={l.grupo} title={tituloDaLinha(l)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.8rem', fontWeight: 600, border: `1px solid ${corDoStatus(l.status).borda}`, color: corDoStatus(l.status).texto, borderRadius: 999, padding: '5px 10px' }}>
                 {corDoStatus(l.status).marca} {l.rotulo} <span style={{ opacity: 0.7, fontWeight: 500 }}>{l.ponderado}</span>
+                {!l.temFaixa && <span style={{ opacity: 0.55, fontWeight: 500, fontSize: '.72rem' }}>sem faixa</span>}
               </span>
             ))}
           </div>
+          <p style={{ margin: `0 0 ${visiveis.length || avisos.length ? 13 : 0}px`, fontSize: '.74rem', color: 'rgba(234,229,219,.5)' }}>
+            Séries ponderadas da semana (direta conta 1, indireta conta 0,5). Grupo marcado como “sem faixa” tem só a contagem: não há faixa de referência definida para ele.
+          </p>
         </>
       )}
       {avisos.map((a, i) => <Linha key={`a${i}`} item={a} />)}
@@ -549,10 +561,14 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
         * e glúteos abaixo do piso da fase). Duas falas contraditórias sobre o mesmo placar.
         * Ela só sai quando todo grupo está mesmo na banda; fora disso, quem explica é o aviso
         * do motor logo abaixo, que sabe o motivo (fase de recuperação, corte por tempo).
+        *
+        * 🔵 2026-09-19 — e ela só fala pelos grupos COM faixa. Os demais estão no placar com a
+        * contagem, mas não foram avaliados contra faixa nenhuma, e a frase diz isso em vez de
+        * afirmar uma avaliação completa que não houve.
         */}
       {!compacto && avisos.length === 0 && recomendacoes.length === 0
-        && placar.length > 0 && placar.every((l) => l.status === 'na_banda') && (
-        <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.6)' }}>Sua semana está dentro das faixas do seu nível.</p>
+        && placar.some((l) => l.temFaixa) && placar.filter((l) => l.temFaixa).every((l) => l.status === 'na_banda') && (
+        <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.6)' }}>{fraseDaSemana(placar)}</p>
       )}
     </div>
   );
@@ -642,8 +658,30 @@ function Linha({ item }: { item: ItemCritico }) {
   );
 }
 
+/**
+ * A frase positiva do placar — só sobre quem tem faixa (2026-09-19). Nomeia os grupos que
+ * ficaram fora da avaliação para a frase não afirmar cobertura completa.
+ */
+export function fraseDaSemana(placar: readonly LinhaPlacar[]): string {
+  const comFaixa = placar.filter((l) => l.temFaixa);
+  const semFaixa = placar.filter((l) => !l.temFaixa);
+  const lista = comFaixa.map((l) => l.rotulo).join(', ');
+  if (semFaixa.length === 0) return `Os grupos com faixa definida (${lista}) estão dentro das faixas do seu nível.`;
+  return `Os grupos com faixa definida (${lista}) estão dentro das faixas do seu nível. ${semFaixa.map((l) => l.rotulo).join(', ')} aparecem só com a contagem: não têm faixa de referência e não foram avaliados.`;
+}
+
+/** O título do chip: a unidade, a decomposição direta/indireta e a faixa (quando existe). */
+export function tituloDaLinha(l: LinhaPlacar): string {
+  const conta = `${l.ponderado} séries ponderadas (${l.direto} diretas + ${l.indireto} de crédito indireto, já a 0,5)`;
+  return l.temFaixa
+    ? `${conta} · faixa ${l.mev}–${l.maxAutomatico} · teto ${l.mrv}`
+    : `${conta} · sem faixa de referência definida para este grupo`;
+}
+
 const corDoStatus = (s: string) =>
   s === 'na_banda' ? { marca: '🟢', borda: 'rgba(22,163,74,.45)', texto: 'rgba(234,229,219,.9)' }
+  // 🔵 Sem faixa: contagem, não avaliação — marca neutra, nunca verde.
+  : s === 'sem_referencia' ? { marca: '◦', borda: 'rgba(234,229,219,.16)', texto: 'rgba(234,229,219,.62)' }
   : s === 'acima_mrv' ? { marca: '🔴', borda: 'rgba(229,72,77,.45)', texto: '#E5484D' }
   // 🔵 Acima do que o app monta sozinho e ainda dentro do teto — âmbar, não vermelho: é
   // escolha da pessoa, não limite ultrapassado.

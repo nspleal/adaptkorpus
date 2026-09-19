@@ -70,7 +70,11 @@ exports[`📸 etapa3 — composição seletor histórico > descanso efetivo — 
 exports[`📸 etapa3 — composição seletor histórico > o cap inicial não depende de quais exercícios caíram na sessão 1`] = `
 [
   {
-    "compostos": 2,
+    "compostos": 4,
+    "slots": 5,
+  },
+  {
+    "compostos": 3,
     "slots": 5,
   },
   {
@@ -78,11 +82,7 @@ exports[`📸 etapa3 — composição seletor histórico > o cap inicial não de
     "slots": 5,
   },
   {
-    "compostos": 4,
-    "slots": 5,
-  },
-  {
-    "compostos": 4,
+    "compostos": 3,
     "slots": 5,
   },
 ]
@@ -92,9 +92,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/emag
 {
   "objetivo": "emagrecimento",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -102,9 +103,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/emag
 exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/massa, 10 min — faixa em que o cap LIMITA 1`] = `
 {
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
   "tempo": 10,
 }
@@ -114,9 +116,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
 {
   "objetivo": "massa",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -127,6 +130,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
     3,
     3,
     3,
+    2,
   ],
   "tempo": 15,
 }
@@ -138,6 +142,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
     3,
     3,
     3,
+    2,
   ],
   "tempo": 20,
 }
@@ -149,6 +154,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/mass
     4,
     4,
     4,
+    2,
   ],
   "tempo": 25,
 }
@@ -158,9 +164,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/saud
 {
   "objetivo": "saude",
   "slots": [
-    3,
+    2,
     2,
     3,
+    2,
   ],
 }
 `;
@@ -168,9 +175,9 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > iniciante/saud
 exports[`📸 etapa3 — nº de exercícios, seletor histórico > intermediário/massa, 10 min — cap limitando com sPlan saturado 1`] = `
 {
   "slots": [
-    3,
     2,
-    3,
+    2,
+    2,
     2,
   ],
   "tempo": 10,
@@ -255,7 +262,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > massa/intermed
     6,
     6,
     6,
-    6,
+    5,
   ],
   "tempo": 60,
 }
@@ -267,7 +274,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > massa/intermed
     7,
     6,
     7,
-    6,
+    5,
   ],
   "tempo": 75,
 }
@@ -277,9 +284,9 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > massa/intermed
 {
   "slots": [
     7,
-    7,
-    7,
     6,
+    7,
+    5,
   ],
   "tempo": 90,
 }
@@ -299,7 +306,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > modo força li
   6,
   6,
   6,
-  6,
+  5,
 ]
 `;
 
@@ -322,6 +329,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > nível inician
     6,
     6,
     6,
+    2,
   ],
 }
 `;
@@ -333,7 +341,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > nível interme
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -345,7 +353,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > objetivo emagr
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -357,7 +365,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > objetivo massa
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -369,7 +377,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > objetivo saude
     6,
     5,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -381,7 +389,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > semana 1 do me
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -393,7 +401,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > semana 3 do me
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -405,7 +413,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > semana 5 do me
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;
@@ -417,7 +425,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > semana 6 do me
     6,
     6,
     6,
-    6,
+    5,
   ],
 }
 `;

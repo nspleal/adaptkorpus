@@ -153,13 +153,16 @@ describe('🔒 o que a explicação não pode custar', () => {
     const r = rotina(p);
     const dias = abrir(p, r);
     const alvo = r.fatosCorteTempo![0]!;
+    // 2026-09-19: a escolha não pode coincidir com o `para` do corte, senão a asserção abaixo
+    // não distingue escolha de corte. Escolhe-se um número diferente do que o app cortou.
+    const escolha = alvo.para === 3 ? 4 : 3;
     const editados = dias.map((d) => (d.exercicios.some((e) => e.id === alvo.exercicioId)
-      ? { ...d, seriesPorExercicio: { ...d.seriesPorExercicio, [alvo.exercicioId]: 3 } } : d));
+      ? { ...d, seriesPorExercicio: { ...d.seriesPorExercicio, [alvo.exercicioId]: escolha } } : d));
     const prev = prever(p, editados);
     const slot = prev.flatMap((d) => d.exercicios.map((e, i) => ({ id: e.id, s: d.series?.[i] })))
       .find((x) => x.id === alvo.exercicioId);
-    expect(slot?.s, 'a escolha da pessoa não sobreviveu').toBe(3);
-    expect(cortesVigentes(editados, prev).some((c) => c.para === 3)).toBe(false);
+    expect(slot?.s, 'a escolha da pessoa não sobreviveu').toBe(escolha);
+    expect(cortesVigentes(editados, prev).some((c) => c.nome === r.dias.flatMap(d => d.slots).find(s => s.exercicio.id === alvo.exercicioId)!.exercicio.nomePt)).toBe(false);
   });
 
   it('o desenho salvo sai idêntico com e sem a explicação (nada novo é persistido)', () => {

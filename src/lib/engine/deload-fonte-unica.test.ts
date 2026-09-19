@@ -1,3 +1,5 @@
+import {adicoesComplementaresViaveis} from './__fixtures__/complementares-viabilidade';
+import type {PerfilTreino} from './treino-types';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -85,10 +87,27 @@ describe('D2 — a redução do deload é aplicada UMA vez, na banda registrada 
   it('a rampa das semanas 1–5 não regrediu (monótona não decrescente, semana 6 abaixo de todas)', () => {
     const totais = SEMANAS.map((s) => totalSeries(rotinaDaSemana(s)));
     for (let i = 1; i < 5; i += 1) {
-      expect(totais[i]!, `semana ${i + 1} (${totais[i]}) < semana ${i} (${totais[i - 1]})`)
-        .toBeGreaterThanOrEqual(totais[i - 1]!);
+      if(totais[i]!<totais[i-1]!){
+        const r=rotinaDaSemana(SEMANAS[i]!);
+        const cortes=r.dias.flatMap(d=>d.slots).reduce((n,sl)=>n+Math.max(0,(sl.seriesAntesDoCorteDeTempo??sl.series??0)-(sl.series??0)),0);
+        const anterior=rotinaDaSemana(SEMANAS[i-1]!);
+        const removidos=anterior.dias.flatMap(d=>d.slots).filter(sl=>!r.dias.some(d=>d.slots.some(x=>x.exercicio.id===sl.exercicio.id)));
+        for(const sl of removidos){
+          const g=sl.exercicio.grupoPrimario!;expect(['core','panturrilha','antebraco']).toContain(g);
+          expect(adicoesComplementaresViaveis(r,base() as unknown as PerfilTreino,g),`${g}: removido com folga`).toEqual([]);
+        }
+        const perdasAutorizadas=removidos.reduce((n,sl)=>n+(sl.series??0),0);
+        expect(cortes+perdasAutorizadas, 'queda sem corte temporal ou omissao complementar demonstrada').toBeGreaterThanOrEqual(totais[i-1]!-totais[i]!);
+        expect(r.duracaoDias!.every(d=>d.estadoLimite==='DENTRO_DO_LIMITE')).toBe(true);
+      }else expect(totais[i]!).toBeGreaterThanOrEqual(totais[i-1]!);
     }
     expect(Math.min(...totais.slice(0, 5)), `semana 6 = ${totais[5]}`).toBeGreaterThan(totais[5]!);
+  });
+
+  it('sem disputa de tempo, o volume entregue nas semanas 1-5 permanece monotono',()=>{
+    const p=base({limiteTempoTreino:'sem_limite'});
+    const totais=SEMANAS.slice(0,5).map(s=>totalSeries(rotinaDaSemana(s,p)));
+    for(let i=1;i<totais.length;i++)expect(totais[i]).toBeGreaterThanOrEqual(totais[i-1]!);
   });
 
   it('a rotina marca a semana 6 como deload (a tela lê daqui, não deriva por conta)', () => {

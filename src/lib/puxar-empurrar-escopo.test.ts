@@ -77,8 +77,10 @@ describe('🔴 o caso medido: baseline equilibrado, extras do foco desequilibram
     const p = r();
     // 🔵 6 × 4 desde 2026-09-17 (era 7 × 5): com a faixa desejada menor o alocador dá menos
     // slots. O que o caso mede — plano desequilibrado, baseline equilibrado — é o mesmo.
-    expect(conta(p, 'empurrar', false), 'o cenário deixou de reproduzir o caso').toBe(6);
-    expect(conta(p, 'puxar', false)).toBe(4);
+    // A seleção por função muda a quantidade, não a propriedade: extras desequilibram
+    // o plano inteiro; o baseline mantém puxar >= empurrar, sem alerta indevido.
+    expect(conta(p, 'puxar', false)).toBeGreaterThan(0);
+    expect(conta(p, 'empurrar', false), 'o cenário deixou de reproduzir o caso').toBeGreaterThan(conta(p, 'puxar', false));
     const extras = p.dias.flatMap((d) => d.slots.filter((s) => s.extraDoFoco));
     expect(extras.length, 'sem extras marcados o caso não prova nada').toBeGreaterThan(0);
     // 🔒 A marca vem do bloco, não do grupo: os extras têm de estar no `blocoFoco` publicado.
@@ -88,8 +90,8 @@ describe('🔴 o caso medido: baseline equilibrado, extras do foco desequilibram
 
   it('o BASELINE está equilibrado — e é ele que o invariante mede', () => {
     const p = r();
-    expect(conta(p, 'puxar', true)).toBe(4);
-    expect(conta(p, 'empurrar', true)).toBe(4);
+    expect(conta(p, 'empurrar', true)).toBeGreaterThan(0);
+    expect(conta(p, 'puxar', true)).toBeGreaterThanOrEqual(conta(p, 'empurrar', true));
   });
 
   it('🔑 nenhum alerta indevido: nem o motor nem o crítico acusam', () => {
@@ -192,7 +194,7 @@ describe('🔒 desenho manual sem procedência: tudo conta, como antes', () => {
       .filter((s) => s.exercicio.grupoPrimario === 'peito' && !s.extraDoFoco);
     // ⚠️ ANTI-VACUIDADE: o plano focado precisa MESMO ter peitoral de baseline.
     expect(peitoraisBaseline.length, 'sem peitoral de baseline o caso não prova nada').toBeGreaterThan(0);
-    expect(conta(p, 'empurrar', true), 'o baseline perdeu empurrar por causa do grupo focado').toBe(4);
+    expect(conta(p, 'empurrar', true), 'o baseline perdeu empurrar por causa do grupo focado').toBe(conta(rotina(perfil(), OPC), 'empurrar', true));
   });
 
   it('o desenho da pessoa não recebe marca nenhuma', () => {
@@ -238,7 +240,8 @@ describe('🔴 abrir "Montar meu treino" não muda o veredito da mesma semana', 
 
   it('o crítico do editor mede o BASELINE e não acusa', () => {
     const { avaliacao } = abrirNoEditor();
-    expect(avaliacao.medidas.puxarEmpurrar).toEqual({ escopo: 'baseline', puxar: 4, empurrar: 4 });
+    const auto = rotina(perfil(FOCO), OPC);
+    expect(avaliacao.medidas.puxarEmpurrar).toEqual({ escopo: 'baseline', puxar: conta(auto, 'puxar', true), empurrar: conta(auto, 'empurrar', true) });
     expect(avaliacao.avisos.some((a) => a.codigo === 'puxar_menor_que_empurrar')).toBe(false);
   });
 

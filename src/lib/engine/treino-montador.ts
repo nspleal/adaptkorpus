@@ -1,7 +1,11 @@
+import { aplicarExcecaoTrapezio } from './excecao-trapezio-iniciante';
+import {completarPuxadasFullbody} from './fullbody-segunda-puxada';
+import { preencherComplementaresAusentes } from './preencher-complementares';
 import { adicionarSeriesCore } from './foco-core-adicional';
 import { completarPosteriorDosado } from './complemento-posterior-dosado';
 import { aplicarDoseReferenciada, contextoDaDose } from './referencia-dose';
-import {adicionarBlocoFoco,realocarBaselineAosRecortes} from './bloco-foco-adicional';
+import {adicionarBlocoFoco,realocarBaselineAosRecortes,realocarPernasReduzindoCore} from './bloco-foco-adicional';
+import { consolidarPequenos } from './consolidar-pequenos';
 // 🔒 Autoridade única do ajuste temporal: o montador chama a SEQUÊNCIA, nunca uma etapa
 // solta. As etapas seguem exportadas no módulo para teste unitário.
 import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura';
@@ -34,7 +38,7 @@ import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, maxSemanalSemFoco, mev, ordenarComFoco, tetoPonderadoNaSessao, tetoSemanalCheio, tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao, type DecisaoFoco, FOCO_SEMANAS } from './trilhos';
 import { diagnosticarDia, otimizarCoberturaAnatomica } from './cobertura-anatomica';
 import { gruposDoDia } from './cobertura-editor';
-import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana } from './alocador';
+import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana, type TemplateDia } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { creditar, creditoAtual, gruposSemEspaco, MARCA_PODA_SESSAO, MARCA_PODA_TETO, podarExcessoPonderado, podarExcessoPonderadoNaSessao, seriesQueCabemNoTeto, type SlotPonderavel } from './teto-ponderado';
 import { declararExcessoDeSessao, frasesDaExcecao, tentarAlternativasDeSessao, type AlternativaExaminada, type ExcecaoDeSessao } from './excecao-sessao';
@@ -48,7 +52,8 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
-import { distribuirGruposNoCalendario, diasConsecutivos } from './calendario-grupos';
+import { distribuirGruposNoCalendario, distribuirComplementares, diasConsecutivos } from './calendario-grupos';
+import { ehComplementar, ehDiaDisponivel } from './selecao-referencia';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FatoCorteTempo, FatoInvariantePadrao, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -436,9 +441,11 @@ export function montarRotina(
   const dias = diasDaAgenda.length;
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
-  const diasCardioRecuperacao = Math.max(0, dias - diasForca);
+  const diaComplementar = automatico ? diasDaAgenda.slice(diasForca).find(d =>
+    !diasOferecidosCardio.includes(d) && !diasOferecidosCardio.includes(ORDEM_SEMANA.indexOf(d))) : undefined;
+  const diasCardioRecuperacao = Math.max(0, dias - diasForca - Number(diaComplementar != null));
   /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
-  const diasForcaDaSemana = diasDaAgenda.slice(0, diasForca);
+  const diasForcaDaSemana = [...diasDaAgenda.slice(0, diasForca), ...(diaComplementar ? [diaComplementar] : [])];
 
   if (diasForca === 0) {
     return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
@@ -453,11 +460,21 @@ export function montarRotina(
   const baseDivisao = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
   const perfilBase = automatico ? {...perfil,foco:undefined,focoAgregado:undefined} : perfil;
   const selecao = selecionarDivisao(baseDivisao, perfilBase, automatico ? undefined : agregado, !!semanaCiclo?.retomada, CORE_MAX);
-  const calendario = distribuirGruposNoCalendario(selecao.dias, diasForcaDaSemana, automatico ? [] : prioritarios, Math.min(CORE_MIN, diasForca), selecao.preservarRecortes);
+  // O dia dedicado não muda a divisão nem a recuperação das sessões principais.
+  const calendarizar = (ts: readonly TemplateDia[], focos: readonly GrupoPrimario[], preservar = false) => {
+    const base = distribuirGruposNoCalendario(ts, diasDaAgenda.slice(0, diasForca), focos, Math.min(CORE_MIN, diasForca), preservar);
+    if (!diaComplementar) return base;
+    const dedicado: TemplateDia = { nome: 'Complementares', grupos: ['core', 'antebraco'] };
+    const originais = [...base.dias.map(d => ({...d, grupos:[...d.grupos]})), dedicado];
+    const novos = [...base.dias.map(d => ({...d, grupos:[...d.grupos]})), {...dedicado}];
+    distribuirComplementares(novos, originais, diasForcaDaSemana, Math.min(CORE_MIN, diasForca));
+    return {...base, dias: novos};
+  };
+  const calendario = calendarizar(selecao.dias, automatico ? [] : prioritarios, selecao.preservarRecortes);
   const selecaoFoco = automatico && agregado === 'pernas'
     ? selecionarDivisao(baseDivisao, perfil, agregado, !!semanaCiclo?.retomada, CORE_MAX) : selecao;
   const calendarioFoco = selecaoFoco === selecao ? calendario
-    : distribuirGruposNoCalendario(selecaoFoco.dias,diasForcaDaSemana,prioritarios,Math.min(CORE_MIN,diasForca),selecaoFoco.preservarRecortes);
+    : calendarizar(selecaoFoco.dias,prioritarios,selecaoFoco.preservarRecortes);
   const recortesFoco = selecaoFoco === selecao ? undefined : calendarioFoco.dias;
   const templates = calendario.dias;
   const split = diasForca === 1 ? 'Full-body' : templates.every((t, i) => t.nome === selecao.dias[i]?.nome) ? selecao.split : 'Distribuição pela agenda';
@@ -615,7 +632,7 @@ export function montarRotina(
     favoritos: favoritosEfetivos,
     alvoPonderado,
     seriesPlanejamento: prescricao.seriesPorExercicio.max,
-    tetoSlotsSemana: (g: GrupoPrimario) => ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
+    tetoSlotsSemana: (g: GrupoPrimario) => diasForca === 1 ? 1 : ((GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY),
     /**
      * 🔵 O TETO DE SESSÃO CHEGA NA COMPOSIÇÃO, não só na dose (decisão 2026-09-17).
      *
@@ -841,14 +858,9 @@ export function montarRotina(
       && favoritosEfetivos.has(e.id) === favorito),
     {
       seriesPlanejamento: prescricao.seriesPorExercicio.max,
-      /**
-       * 🔒 Exatamente os grupos que o BLOCO ADICIONAL do foco vai receber, com o mesmo
-       * filtro — `core` fora (o foco de core sobe séries nos slots que já existem, não
-       * acrescenta exercício) e nada na retomada (lá o bloco não é aplicado). Espelhar o
-       * argumento, e não repeti-lo por aproximação, é o que impede o passe de se comportar
-       * diferente conforme exista um foco que nem chega a criar slot.
-       */
-      gruposPreservados: semanaCiclo?.retomada ? [] : prioritarios.filter((g) => g !== 'core'),
+      // O passe conclui o baseline antes dos extras: a seleção não depende do foco.
+      // As guardas de custo, crédito, função e favoritos continuam valendo.
+      gruposPreservados: [],
       /**
        * 🔒 "Não ficou mais caro" nos TRÊS níveis, e não "ainda cabe". A diferença importa: um
        * dia que ainda cabe pode ter consumido a folga que a rampa e a poda usariam depois.
@@ -875,20 +887,33 @@ export function montarRotina(
           slotsLivres: (d: number) => Math.max(0, budgetPorDia - diasAlocados[d]!.slots.length),
           // Core usa séries adicionais depois do baseline. Sua cobertura pode receber
           // um slot dentro das margens, independentemente da escolha de foco.
-          gruposPreservados: prioritarios.filter(g => g !== 'core'),
+          gruposPreservados: [],
           /**
            * ESTRUTURA DO GRUPO: os MESMOS tetos de slots por semana que `alocarSemana`
            * recebeu — `tetoSlotsSemana` para os pequenos e `CORE_MAX` para o core. Frequência
            * e recuperação continuam sendo decisão do alocador, e a cobertura não as revisa.
            */
-          cabeNoTetoDeSlots: (novo: Exercise) => {
+          cabeNoTetoDeSlots: (novo: Exercise, d: number) => {
             const g = novo.grupoPrimario;
             if (!g) return false;
             const jaTem = diasAlocados.flatMap((x) => x.slots).filter((s) => s.grupo === g).length;
             const teto = g === 'core'
               ? CORE_MAX
               : (GRUPOS_PEQUENOS_PISO as readonly string[]).includes(g) ? tetoPequenos : Number.POSITIVE_INFINITY;
-            return jaTem + 1 <= teto;
+            if (jaTem + 1 > teto) return false;
+            /**
+             * 🔵 UM COMPLEMENTAR POR DIA (decisão do autor, 2026-09-19) — a mesma régua do
+             * alocador: core, panturrilha e antebraço entram uma vez por dia, e o dia que não é
+             * dedicado a eles comporta um só. Medido antes desta trava: a adição punha um segundo
+             * core no dia "Braços + Core" (quadrado lombar) — dois complementares no mesmo dia.
+             */
+            if (ehComplementar(g)) {
+              if (!templates[d]!.grupos.includes(g)) return false;
+              const slotsDoDia = diasAlocados[d]!.slots;
+              if (slotsDoDia.some((s) => s.grupo === g)) return false;
+              if (!ehDiaDisponivel(templates[d]!.grupos) && slotsDoDia.some((s) => ehComplementar(s.grupo))) return false;
+            }
+            return true;
           },
           /**
            * TEMPO: o dia tem de continuar cabendo no MESMO degrau de descanso. Não basta
@@ -967,6 +992,8 @@ export function montarRotina(
 
   function montarSaida(diasTreino: DiaTreino[], split: string, desenhoDaPessoa = false): RotinaSemanal {
     let focoCoreAdicional: { solicitadas: number; entregues: number } | undefined;
+    /** Os recortes do foco de pernas que de fato valeram (para o motivo dos complementares). */
+    let recortesEntreguesDoFoco: readonly { grupos: readonly GrupoPrimario[] }[] | undefined;
     let blocoFoco: RotinaSemanal['blocoFoco'];
     /**
      * 🔵 A EXCEÇÃO AO TETO POR SESSÃO (decisão de 2026-09-17, 2ª volta) — o que SOBROU depois
@@ -979,7 +1006,7 @@ export function montarRotina(
     // de distribuir séries. Crédito indireto não substitui esta cobertura.
     if (automatico && diasForca === 1 && diasTreino[0]) {
       const dia = diasTreino[0];
-      const grupos = [...GRUPOS_GRANDES, ...GRUPOS_PEQUENOS_PISO, 'core' as GrupoPrimario];
+      const grupos = [...GRUPOS_GRANDES, ...GRUPOS_PEQUENOS_PISO.filter(g => !ehComplementar(g)), ...templates[0]!.grupos.filter(ehComplementar)];
       const vistos = new Set<GrupoPrimario>();
       dia.slots = dia.slots.filter(s => {
         const g = s.exercicio.grupoPrimario;
@@ -987,7 +1014,10 @@ export function montarRotina(
         vistos.add(g); return true;
       });
       for (const g of grupos) if (!vistos.has(g)) {
-        const ex = pool.find(e => e.grupoPrimario === g);
+        const saldoPuxar = dia.slots.filter(s => s.padrao === 'puxar').length
+          - dia.slots.filter(s => s.padrao === 'empurrar').length;
+        const ex = pool.find(e => e.grupoPrimario === g
+          && (e.padraoMovimento !== 'empurrar' || saldoPuxar > 0));
         if (ex) dia.slots.push({exercicio: ex, padrao: ex.padraoMovimento});
         else avisos.push(`Sem exercício elegível para ${ROTULO_GRUPO[g]} no full-body.`);
       }
@@ -1524,9 +1554,14 @@ export function montarRotina(
         }
       };
       /** Regra 3 (cobertura > descanso longo): degrada o descanso até o dia caber. */
-      const degradarAteCaber=(d:DiaTreino):0|1|2=>{
+      const degradarAteCaber=(d:DiaTreino, apenas?: ReadonlySet<SlotExercicio>):0|1|2=>{
+        const preservados = new Map(d.slots.filter(s => apenas && !apenas.has(s)).map(s => [s, s.descansoSeg]));
         let nivel:0|1|2=0;
-        for(const deg of [0,1,2] as const){nivel=deg;aplicarDescanso(d,deg);if(cabeNoDia(d))break;}
+        for(const deg of [0,1,2] as const){
+          nivel=deg;aplicarDescanso(d,deg);
+          for (const [s, descanso] of preservados) s.descansoSeg = descanso;
+          if(cabeNoDia(d))break;
+        }
         return nivel;
       };
       /**
@@ -1552,11 +1587,6 @@ export function montarRotina(
        * A conta de volume por grupo dos dois arranjos é comparada abaixo, para que a
        * redistribuição nunca custe séries em silêncio.
        */
-      const volumePorGrupo=(dias:readonly DiaTreino[])=>{
-        const m=new Map<GrupoPrimario,number>();
-        for(const d of dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario;if(g)m.set(g,(m.get(g)??0)+(s.series??0));}
-        return m;
-      };
       /**
        * 🔵 P-01 (decisão do autor 2026-09-16) — a dispensa ordenada mora DENTRO da fase A,
        * que é a fase que NÃO conhece o foco. Assim a mesma retirada acontece no plano sem
@@ -1611,13 +1641,6 @@ export function montarRotina(
         return {dias:saida,degradacao,incompativeis};
       };
       const usaRecortes=!!recortesFoco && !rotinaBaseDoDeload && !semanaCiclo?.retomada;
-      const clonar=(dias:readonly DiaTreino[])=>dias.map(d=>({...d,slots:d.slots.map(s=>({...s}))}));
-      const volumeNeutro=usaRecortes?volumePorGrupo(aplicarFaseA(clonar(diasTreino)).dias):undefined;
-      if(usaRecortes){
-        const realocado=realocarBaselineAosRecortes(diasTreino,recortesFoco!);
-        diasTreino=realocado.dias;
-        if(realocado.adaptado)avisos.push('Mantivemos a distribuição disponível: não foi possível separar os recortes de pernas preservando os exercícios.');
-      }
       const faseA=aplicarFaseA(diasTreino,true);
       diasTreino=faseA.dias;
       const degradacaoDoDia=faseA.degradacao;
@@ -1649,13 +1672,6 @@ export function montarRotina(
        * certificado de que cabe. Nada é restaurado só porque o plano segue incompatível.
        */
       if(relatoReducao.acima.length)avisos.push(`Mesmo com os ajustes, a estimativa ainda passa do seu tempo: ${relatoReducao.acima.map(a=>`${a.nome} ~${Math.round(a.seg/60)} min`).join(', ')} (seu limite é ${perfil.tempoPorSessaoMin} min). Entregamos a versão reduzida; não dá para afirmar que ela cabe.`);
-      if(volumeNeutro){
-        // O custo da separação dos recortes é DITO, nunca silencioso (D-01/D-02 valem para
-        // a adição; aqui a decisão 3 pode mesmo mudar a distribuição, e a pessoa sabe).
-        const depois=volumePorGrupo(diasTreino);
-        const perdas=[...volumeNeutro].filter(([g,n])=>(depois.get(g)??0)<n).map(([g])=>ROTULO_GRUPO[g]);
-        if(perdas.length)avisos.push(`Separar os recortes de pernas custou séries em ${perdas.join(', ')} no tempo disponível. Sem a ênfase agregada, esses grupos mantêm o volume anterior.`);
-      }
       /**
        * 🔴 FASE B — O BLOCO ADICIONAL ENTRA POR ÚLTIMO E SAI PRIMEIRO.
        * Só extras são removidos aqui, e todos eles podem sair (o tempo pode eliminar o
@@ -1770,6 +1786,17 @@ export function montarRotina(
       // Autor 17/09: só a dose já distribuída permite avaliar a compensação real.
       // O teto do baseline não depende do foco. Deload herda a semana cheia; retomada não cresce.
       if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
+        const consolidados = consolidarPequenos({
+          dias: diasTreino, maxSeries: prescricao.seriesPorExercicio.max, tetoSemana: tetoSemanalGrupo,
+          cabe: (antes, depois) => {
+            const a = avaliarDuracaoResistida(antes, perfil.nivelExperiencia).duracaoMaximaEstimadaSegundos;
+            const b = avaliarDuracaoResistida(depois, perfil.nivelExperiencia).duracaoMaximaEstimadaSegundos;
+            const creditoAntes = creditoPonderadoDaSemana(antes);
+            return a != null && b != null && (limiteDia == null || b <= limiteDia)
+              && [...creditoPonderadoDaSemana(depois)].every(([g, n]) => n <= (tetoDaSessao ?? Infinity) || n <= (creditoAntes.get(g) ?? 0));
+          },
+        });
+        if (consolidados) avisos.push(`Consolidamos ${consolidados} exercício(s) redundante(s) de braços nos exercícios mantidos do mesmo dia, preservando séries totais, crédito dos grupos e cobertura identificada. A duração foi recalculada com os descansos dos exercícios mantidos.`);
         const complementosPosterior = completarPosteriorDosado({
           dias: diasTreino, pool, min: sMinDaSemana, max: prescricao.seriesPorExercicio.max,
           slotsMax: budgetPorDia,
@@ -1782,6 +1809,8 @@ export function montarRotina(
             ...(repUnitDe(e.id) === 'segundos' ? { holdSeg: faixaSegundos(e.id, perfil.nivelExperiencia)?.min } : {}),
           }),
           cabeNoTempo: (slots) => {
+            // O full-body de um dia conserva um posterior; não anunciar uma adição que o bloco removeria.
+            if (diasForca === 1 && slots.filter(s => s.exercicio.grupoPrimario === 'posterior').length > 1) return false;
             const medida = avaliarDuracaoResistida(slots, perfil.nivelExperiencia, limiteDia);
             return medida.estadoCalculo === 'CALCULADO' && (limiteDia === undefined
               || (medida.duracaoMaximaEstimadaSegundos ?? Infinity) <= limiteDia);
@@ -1795,6 +1824,64 @@ export function montarRotina(
           const antes = segundos(mudanca.antes), depois = segundos(mudanca.depois);
           const custo = antes != null && depois != null ? ` Variação estimada: ${Math.round((depois - antes) / 60)} min.` : '';
           avisos.push(`Cobertura de posteriores em ${diasTreino[mudanca.dia]!.nome}: ${novos.map(s => s.exercicio.nomePt).join(', ')}${retirados.length ? ` substitui ${retirados.map(s => s.exercicio.nomePt).join(', ')}` : ' adicionado'}. Mais ${soma(mudanca.depois) - soma(mudanca.antes)} série(s) no próprio grupo, preservando o crédito semanal dos demais.${custo}`);
+        }
+      }
+      if(diasForca===1&&!rotinaBaseDoDeload&&!deloadAgendado&&!semanaCiclo?.retomada&&diasTreino[0]){
+        const tentativa=completarPuxadasFullbody({dia:diasTreino[0],pool,nivel:perfil.nivelExperiencia,
+          limiteSeg:limiteDia,maxSlots:budgetPorDia,minSeries:limiteDia==null?sMinDaSemana:Math.min(2,sMinDaSemana),
+          tetoSemana:tetoSemanalGrupo,tetoDia:tetoDaSessao??Infinity,
+          materializar:(e,series,deg)=>({exercicio:e,padrao:e.padraoMovimento,series,
+            descansoSeg:descansoDoExercicio({exercicio:e,rirAlvo,modoForca:prescricao.modoForca,degradacao:deg})??0,
+            ...(favoritosEfetivos.has(e.id)?{incluidoPorPreferencia:true}:{})})});
+        if(tentativa.aplicado)diasTreino[0]=tentativa.dia;
+        if(tentativa.necessario)avisos.push(tentativa.aplicado
+          ? 'Full-body de um dia: incluímos um segundo exercício de costas para equilibrar puxar e empurrar, preservando os grupos principais; dose e descanso foram ajustados aos limites da sessão.'
+          : 'Full-body de um dia: o segundo exercício de costas necessário para conciliar o desenvolvimento com puxar ≥ empurrar não coube nos limites ou nas opções elegíveis. Mantivemos o plano anterior, sem retirar grupos principais.');
+      }
+      if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
+        aplicarExcecaoTrapezio({perfil, dias:diasTreino, pool,
+          materializar:(exercicio,slot)=>({...slot,exercicio,padrao:exercicio.padraoMovimento,
+            descansoSeg:descansoDoExercicio({exercicio,rirAlvo,modoForca:prescricao.modoForca,degradacao:0})??0})});
+      }
+      const preencherFolgasComplementares = () => {
+       if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada && diasForca > 1) {
+        preencherComplementaresAusentes({
+          dias: diasTreino, pool: [...pool].sort((a,b)=>Number(favoritosEfetivos.has(b.id))-Number(favoritosEfetivos.has(a.id))),
+          slotsMax: budgetPorDia, minSeries: limiteDia == null ? sMinDaSemana : Math.min(2,sMinDaSemana),
+          tetoSemana: tetoSemanalGrupo, tetoDia: tetoDaSessao ?? Infinity,
+          materializar: (e,d,deg) => ({exercicio:e,padrao:e.padraoMovimento,series:prescricao.seriesPorExercicio.max,
+            descansoSeg:descansoDoExercicio({exercicio:e,rirAlvo,modoForca:prescricao.modoForca,degradacao:Math.max(degradacaoDoDia[d]??0,limiteDia==null?0:deg) as 0|1|2})??0,
+            ...(favoritosEfetivos.has(e.id)?{incluidoPorPreferencia:true}:{}),
+            ...(repUnitDe(e.id)==='segundos'?{holdSeg:faixaSegundos(e.id,perfil.nivelExperiencia)?.min}:{})}),
+          cabeNoTempo: slots => {const m=avaliarDuracaoResistida(slots,perfil.nivelExperiencia);
+            return m.estadoCalculo==='CALCULADO' && (limiteDia===undefined||(m.duracaoMaximaEstimadaSegundos??Infinity)<=limiteDia);},
+        });
+      }
+      };
+      preencherFolgasComplementares();
+      // A ênfase só redistribui o baseline já finalizado. Não provoca nova poda,
+      // troca de exercício nem mudança de descanso nos grupos que não foram focados.
+      if (usaRecortes) {
+        const tentativaRecortes = realocarBaselineAosRecortes(diasTreino, recortesFoco!);
+        const maxAntes = new Map<GrupoPrimario, number>();
+        for (const d of diasTreino) for (const [g, n] of creditoPonderadoDaSemana(d.slots)) {
+          maxAntes.set(g, Math.max(maxAntes.get(g) ?? 0, n));
+        }
+        const aceitaRecortes = (dias:readonly DiaTreino[]) => dias.every(d =>
+          d.slots.length <= budgetPorDia && cabeNoDia(d)
+          && [...creditoPonderadoDaSemana(d.slots)].every(([g,n]) => n <= Math.max(tetoDaSessao ?? Infinity, maxAntes.get(g) ?? 0)));
+        const cabe = !tentativaRecortes.adaptado && aceitaRecortes(tentativaRecortes.dias);
+        const comCoreReduzido = !cabe && automatico && agregado==='pernas' && diasDaAgenda.length===4
+          ? realocarPernasReduzindoCore(diasTreino,recortesFoco!,aceitaRecortes) : null;
+        if (cabe || comCoreReduzido) {
+          diasTreino = comCoreReduzido ?? tentativaRecortes.dias;
+          recortesEntreguesDoFoco = recortesFoco!;
+          // A redistribuição pode abrir capacidade nas pernas. Só adição: não
+          // retira nem muda séries, descanso ou exercícios de nenhum slot retido.
+          preencherFolgasComplementares();
+          if(comCoreReduzido)avisos.push('Para separar as duas sessões de pernas em foco nos quatro dias escolhidos, reduzimos core de duas para uma sessão. Antebraço e todos os exercícios dos demais grupos foram preservados; mantivemos um complementar por dia.');
+        } else {
+          avisos.push('Mantivemos a distribuição disponível: separar os recortes de pernas não coube nos limites da sessão preservando todos os exercícios, séries e descansos.');
         }
       }
       if (prioritarios.includes('core') && !rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
@@ -1887,6 +1974,7 @@ export function montarRotina(
         if(hold!=null)adicional.holdSeg=hold;
         if(escolhasExecucao.has(adicional.exercicio.id))adicional.execucaoSelecionada=resolverExecucao(adicional.exercicio.id,adicional.exercicio.execucao,escolhasExecucao.get(adicional.exercicio.id));
       }
+      let relatarRecusaVolume = () => {};
       if(extrasRecusados.size>0){
         // O extra recusado sai do plano E do conjunto de adicionais: a partir daqui ele nunca
         // existiu, e o dia volta a ser o do plano sem foco pelo caminho já existente.
@@ -1903,6 +1991,7 @@ export function montarRotina(
          * Num foco agregado (pernas) um componente pode entrar e o outro não; por isso a lista
          * sai dos extras REALMENTE recusados, nunca de `prioritarios`.
          */
+        relatarRecusaVolume = () => {
         const recusados=[...new Set([...extrasRecusados].map(s=>s.exercicio.grupoPrimario).filter((g):g is GrupoPrimario=>g!=null))];
         const terceiros=[...bloqueadores].filter(g=>!recusados.includes(g));
         /**
@@ -1935,7 +2024,7 @@ export function montarRotina(
          * número dito vem da entrega real (`bloco.adicionais`), não da intenção
          * (`solicitados`) — a distinção que `treino-types` já declara.
          */
-        const entregues=[...bloco.adicionais];
+        const entregues=diasTreino.flatMap(d=>d.slots.filter(s=>bloco.adicionais.has(s)));
         const seriesEntregues=entregues.reduce((n,s)=>n+(s.series??0),0);
         const quantoEntrou=`${entregues.length} ${plural(entregues.length,'exercício','exercícios')}, com ${seriesEntregues} ${plural(seriesEntregues,'série','séries')}`;
         if(terceiros.length===0){
@@ -1949,11 +2038,14 @@ export function montarRotina(
             ? `O bloco do foco entrou só em parte — ${quantoEntrou}. Somar mais ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima ${q.de} do seu nível ${q.n}, porque esses exercícios também trabalham esse grupo de forma indireta.`
             : `O bloco do foco não entrou: somar ${recusados.map(g=>ROTULO_GRUPO[g]).join(', ')} aqui levaria ${terceiros.map(g=>ROTULO_GRUPO[g]).join(', ')} acima ${q.de} do seu nível ${q.n}, porque esses exercícios também trabalham esse grupo de forma indireta. Nesta semana o foco entra na ORDEM dos exercícios.`);
         }
+        };
       }
       if(extrasAparados>0)avisos.push('O bloco do foco entrou com menos séries do que o previsto para não passar dos limites de volume desta semana — nem o da semana, nem o de um treino só.');
       if(semanaCiclo?.retomada&&prioritarios.length)avisos.push('Retomada: mantivemos os limites desta fase; o bloco adicional do foco não foi aplicado.');
       if(bloco.adaptados.length)avisos.push('Segunda exposição adaptada à sessão existente do foco para respeitar a recuperação entre os dias escolhidos.');
-      if(bloco.faltantes.length)avisos.push('Não foi possível completar o bloco adicional do foco com os exercícios elegíveis neste plano.');
+      if(bloco.faltantes.length)avisos.push(bloco.faltantes.some(ehComplementar)
+        ? 'Não foi possível completar o bloco adicional do foco nos dias compatíveis, respeitando um exercício complementar por dia misto.'
+        : 'Não foi possível completar o bloco adicional do foco com os exercícios elegíveis neste plano.');
       /**
        * 🔴 REVALIDAÇÃO 16/09 — A ORDEM É DECIDIDA ANTES DA PERGUNTA "CABE?".
        *
@@ -1982,7 +2074,7 @@ export function montarRotina(
          * conhecer o foco, e extras que não cabem saem antes de provocar qualquer nova
          * redução nele.
          */
-        const degradacaoComBloco=degradarAteCaber(d);
+        const degradacaoComBloco=degradarAteCaber(d,bloco.adicionais);
         const ajuste=removerExtrasPorTempo(d,perfil.nivelExperiencia,limiteDia,bloco.adicionais);
         diasTreino[i]=ajuste.dia;
         if(ajuste.removidos.length)extrasRemovidos.dias.push(d.nome);
@@ -1996,7 +2088,15 @@ export function montarRotina(
           aplicarDescanso(diaSemBloco,degradacaoDoDia[i]??0);
         }
       }
-      if(extrasRemovidos.dias.length)avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${extrasRemovidos.dias.join(', ')}.`);
+      relatarRecusaVolume();
+      if(extrasRemovidos.dias.length){
+        const entregues=diasTreino.flatMap(d=>d.slots.filter(s=>bloco.adicionais.has(s)));
+        const series=entregues.reduce((n,s)=>n+(s.series??0),0);
+        const entrega=entregues.length>0
+          ? `O bloco do foco entrou só em parte — ${entregues.length} ${plural(entregues.length,'exercício','exercícios')}, com ${series} ${plural(series,'série','séries')}.`
+          : 'O bloco do foco não entrou: os extras não couberam no tempo disponível.';
+        avisos.push(`Bloco do foco reduzido pelo tempo disponível em ${extrasRemovidos.dias.join(', ')}. ${entrega}`);
+      }
       if(extrasRemovidos.descansoEncurtado.length)avisos.push(`Para caber o bloco do foco, o descanso de ${extrasRemovidos.descansoEncurtado.join(', ')} foi encurtado até o piso permitido.`);
       // 🔒 A marca vai NO SLOT, do mesmo Set que decidiu a adição: quem avaliar o plano
       // depois (crítico do editor, tela do plano salvo) lê a procedencia real em vez de
@@ -2020,10 +2120,42 @@ export function montarRotina(
     // (a reordenação por foco mora agora dentro do ramo automático, em `reordenarPeloFoco`,
     //  chamada ANTES da decisão de tempo — ver o comentário da fase B.)
 
-    // Cobertura direta dos complementares usa o piso já vigente do alocador.
+    // Cobertura direta dos pequenos usa o piso já vigente do alocador.
     const diretos = (g: GrupoPrimario) => diasTreino.reduce((n, d) => n + d.slots.filter(s => s.exercicio.grupoPrimario === g).length, 0);
-    const complementaresAusentes = GRUPOS_PEQUENOS_PISO.filter(g => diretos(g) < PEQUENOS_PISO_DIRETO);
+    const complementaresAusentes = GRUPOS_PEQUENOS_PISO.filter(g => !ehComplementar(g) && diretos(g) < PEQUENOS_PISO_DIRETO);
     if (complementaresAusentes.length) avisos.push(`Cobertura direta ausente neste plano: ${complementaresAusentes.map(g => ROTULO_GRUPO[g]).join(', ')}.`);
+    /**
+     * 🔵 OS COMPLEMENTARES QUE NÃO ENTRARAM SÃO DITOS (decisão do autor, 2026-09-19).
+     *
+     * Panturrilha e antebraço têm prioridade inferior aos grupos principais e entram um por
+     * dia (panturrilha no dia de pernas; antebraço num dia de superiores sem outro
+     * complementar). Quando não há dia que os comporte — ou o tempo da sessão não deixa slot
+     * além do trabalho principal — o plano diz o impedimento em vez de omiti-los. Só no
+     * automático com mais de um dia: no desenho da pessoa os exercícios são escolha dela, e o
+     * full-body de um dia tem o caminho próprio (a dispensa nomeada por tempo).
+     */
+    if (automatico && !desenhoDaPessoa) {
+      /** Os dias EFETIVOS: os recortes do foco de pernas, quando foram eles que valeram. */
+      const diasEfetivos = recortesEntreguesDoFoco ?? templates;
+      const motivoDoComplementar = (g: 'panturrilha' | 'antebraco' | 'core'): string | null => {
+        if (diretos(g) > 0) return null;
+        if (!pool.some((e) => e.grupoPrimario === g && e.padraoMovimento !== 'cardio')) return 'sem exercício elegível no seu equipamento e nível';
+        if (!diasEfetivos.some((t) => t.grupos.includes(g))) {
+          return g === 'panturrilha'
+            ? 'não há dia de pernas disponível dentro do limite de um complementar por dia'
+            : 'não há dia de superiores ou dedicado disponível dentro do limite de um complementar por dia';
+        }
+        const destinos = diasTreino.filter((_, i) => diasEfetivos[i]?.grupos.includes(g));
+        if (destinos.length && destinos.every(d => d.slots.length >= budgetPorDia)) {
+          return 'os dias compatíveis atingiram o limite de exercícios da sessão; o trabalho principal foi preservado';
+        }
+        return 'não coube nos limites de volume, tempo e distribuição do plano, preservando o trabalho principal';
+      };
+      for (const g of ['panturrilha', 'antebraco', 'core'] as const) {
+        const motivo = motivoDoComplementar(g);
+        if (motivo) avisos.push(`${ROTULO_GRUPO[g]} não entrou neste plano: ${motivo}.`);
+      }
+    }
     const focoAusente = prioritarios.filter(g => diretos(g) === 0);
     if (!custom && focoAusente.length) avisos.push(`O foco não foi atendido integralmente: sem exercício direto de ${focoAusente.map(g => ROTULO_GRUPO[g]).join(', ')} neste plano.`);
 
@@ -2055,7 +2187,9 @@ export function montarRotina(
     if (diasForca >= 2 && contaPadrao('dobradica_quadril') < 1) {
       avisos.push('Atenção: padrão de dobradiça/quadril (cadeia posterior) não foi coberto.');
     }
-    if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
+    if (automatico && !desenhoDaPessoa && contaPadrao('core') < CORE_MIN) {
+      avisos.push(`Core em ${contaPadrao('core')} sessão(ões): frequência menor nesta semana para respeitar os dias disponíveis, os limites da sessão e um complementar por dia misto.`);
+    } else if (diasForca >= 2 && (contaPadrao('core') < CORE_MIN || contaPadrao('core') > CORE_MAX)) {
       avisos.push('Atenção: core fora da faixa de 2–3×/semana.');
     }
     if (budgetPorDia <= 3) {

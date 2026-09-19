@@ -1,3 +1,6 @@
+import * as tetoPonderado from './engine/teto-ponderado';
+import * as consolidacao from './engine/consolidar-pequenos';
+import {EXERCISES} from './data/exercises';
 import * as complementoPosterior from './engine/complemento-posterior-dosado';
 import * as blocoFoco from './engine/bloco-foco-adicional';
 import { describe, expect, it, vi } from 'vitest';
@@ -90,18 +93,42 @@ describe('D1 — o canal existe e é verbatim', () => {
  * `avisos.push(` do montador: uma família nova nasce descoberta e derruba este teste, em vez
  * de entrar em silêncio. (`avisos.push(...avisosCustom)` é repasse, não família própria.)
  */
+// Notification-wiring boundary fixtures, not naturally generated profile evidence.
+// Real arithmetic runs on fixed-dose inputs. Only the dependency result is injected.
+const slotAviso=(id:string,series:number)=>{const exercicio=EXERCISES.find(e=>e.id===id)!;return {exercicio,padrao:exercicio.padraoMovimento,series,descansoSeg:120};};
+const avisoPodaSessao=(manual=false)=>{
+ const ss=['e9','e10','e11','e12'].map(id=>slotAviso(id,4));
+ const resultado=tetoPonderado.podarExcessoPonderadoNaSessao([ss],12,3);
+ expect(resultado.podados.length).toBeGreaterThan(0);expect(ss.reduce((n,s)=>n+s.series,0)).toBe(12);
+ const spy=vi.spyOn(tetoPonderado,'podarExcessoPonderadoNaSessao').mockReturnValueOnce(resultado);
+ try{return gerar(manual?{rotinaCustom:{origem:'usuario',dias:[{nome:'Peito',diaId:'seg',exercicioIds:['e9','e10','e11','e12']}]}}:{});}finally{spy.mockRestore();}
+};
+const avisoPosterior=()=>{
+ const ds=[{nome:'Fixture',slots:[slotAviso('e80',2),slotAviso('e81',2)]}];
+ const resultado=complementoPosterior.completarPosteriorDosado({dias:ds,pool:EXERCISES.filter(e=>e.id==='e64'),min:2,max:4,slotsMax:2,tetoSemana:()=>16,tetoDia:12,materializar:(e,n)=>slotAviso(e.id,n),cabeNoTempo:()=>true});
+ expect(resultado).toHaveLength(1);
+ const spy=vi.spyOn(complementoPosterior,'completarPosteriorDosado').mockReturnValueOnce(resultado);
+ try{return gerar();}finally{spy.mockRestore();}
+};
+const avisoConsolidacao=()=>{
+ const ds=[{nome:'Fixture',slots:['e67','e68','e69','e70'].map(id=>slotAviso(id,3))}];
+ const resultado=consolidacao.consolidarPequenos({dias:ds,maxSeries:4,tetoSemana:()=>100,cabe:()=>true});expect(resultado).toBeGreaterThan(0);
+ const spy=vi.spyOn(consolidacao,'consolidarPequenos').mockReturnValueOnce(resultado);
+ try{return gerar();}finally{spy.mockRestore();}
+};
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
-  ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({objetivo:'saude',nivelExperiencia:'iniciante',diasDisponiveis:3,treinoDias:undefined,foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:2}})],
+  ['consolidacao de bracos (fronteira controlada)', /Consolidamos/, avisoConsolidacao],
+  ['segunda puxada entregue', /incluímos um segundo exercício de costas/,()=>gerar({diasDisponiveis:1,treinoDias:['qua'],tempoPorSessaoMin:60},{semanaCiclo:{semana:3}})],
+  ['segunda puxada inviavel', /Mantivemos o plano anterior/,()=>gerar({diasDisponiveis:1,treinoDias:['qua'],tempoPorSessaoMin:30},{semanaCiclo:{semana:3}})],
+  ['frequencia reduzida de core', /Core em .*frequência menor/,()=>gerar({diasDisponiveis:2,treinoDias:['seg','ter'],tempoPorSessaoMin:30})],
+  // 2026-09-19: com um complementar por dia, o full-body ×3 do iniciante cede o 3º core à
+  // panturrilha e fica sem folga; a folga real com 3 slots de core está em avançado/saúde/6d.
+  ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "intermediario", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qua", "qui", "sex"], "diasDisponiveis": 5, "tempoPorSessaoMin": 75, "limiteTempoTreino": "limitado", "foco": {"grupo": "core", "semana": 1}}, {semanaCiclo:{semana:1}})],
   ['core sem margem', /Foco de core salvo, mas nenhum extra foi aplicado/, () => gerar({foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:5}})],
-  ['custo do complemento de posteriores (fixture de dose elegível)', /Cobertura de posteriores.*preservando o crédito semanal/, () => {
-    // Fixture local da fronteira entre dose e passe; a compensação em si tem testes puros.
-    const original=complementoPosterior.completarPosteriorDosado;
-    const spy=vi.spyOn(complementoPosterior,'completarPosteriorDosado').mockImplementation(args=>{
-      for(const d of args.dias)for(const s of d.slots)if(s.exercicio.grupoPrimario==='posterior')s.series=2;
-      return original(args);
-    });
-    try{return gerar({tempoPorSessaoMin:90});}finally{spy.mockRestore();}
-  }],
+  // 2026-09-19: o passe dosado dos posteriores passou a agir num perfil REAL (recortes de
+  // pernas com tempo curto: o dia de posteriores nasce com uma dobradiça e a flexora entra
+  // dosada), e a fixture deixou de precisar do espião que forçava a dose.
+  ['custo do complemento de posteriores (fronteira controlada)', /Cobertura de posteriores.*preservando o crédito semanal/, avisoPosterior],
   ['fullbody sem elegível', /Sem exercício elegível/, () => gerar({equipamento:'nenhum',treinoDias:['seg'],diasDisponiveis:1})],
   ['foco limitado por retomada', /bloco adicional do foco não foi aplicado/, () => gerar({foco:{grupo:'peito',semana:1}}, {semanaCiclo:{semana:3,retomada:{semana:1,fator:0.5,volumeReferencia:14}}})],
   ['segunda exposição adaptada', /Segunda exposição adaptada/, () => gerar({treinoDias:['seg','ter'],diasDisponiveis:2,foco:{grupo:'peito',semana:1}})],
@@ -124,7 +151,7 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['braços/ombros a 1 série', /ficaram? com 1 s[ée]rie\. Os exerc[íi]cios foram mantidos/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
   ['estimativa ainda acima do limite', /a estimativa ainda passa do seu tempo/, () => gerar({nivelExperiencia:'avancado',treinoDias:['seg'],diasDisponiveis:1,tempoPorSessaoMin:20})],
   ['recortes não realocáveis (falha injetada na dependência)', /Mantivemos a distribuição disponível/, () => {
-    const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true}));
+    const spy=vi.spyOn(blocoFoco,'realocarBaselineAosRecortes').mockImplementation(base=>({dias:[...base],adaptado:true,descartados:[]}));
     try{return gerar({treinoDias:['seg','qua','sex'],diasDisponiveis:3,nivelExperiencia:'avancado',focoAgregado:{grupo:'pernas',semana:1},limiteTempoTreino:'sem_limite'});}finally{spy.mockRestore();}
   }],
   /**
@@ -132,18 +159,21 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * inclusive para acomodar o bloco. Quando isso acontece o dia inteiro fica com descanso
    * mais curto (nunca abaixo do piso da classe), e a pessoa precisa saber por quê.
    */
-  ['descanso encurtado pelo bloco', /descanso de .* foi encurtado at[ée] o piso/, () => gerar({ nivelExperiencia: 'iniciante', equipamento: 'academia', treinoDias: ['seg', 'qui'], diasDisponiveis: 2, tempoPorSessaoMin: 30, foco: { grupo: 'peito', semana: 1 } })],
+  ['descanso encurtado pelo bloco', /descanso de .* foi encurtado at[ée] o piso/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "iniciante", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter"], "diasDisponiveis": 2, "tempoPorSessaoMin": 45, "limiteTempoTreino": "limitado", "focoAgregado": {"grupo": "pernas", "semana": 1}}, {semanaCiclo:{semana:3}})],
   /**
    * 🔴 Revisão independente 15/09 — o custo da separação dos recortes de pernas passou a ser
    * DITO. Ele já existia no candidato reprovado (medido: as MESMAS 91 configurações perdiam
    * volume, com os mesmos números), só que em silêncio. Perfil real, sem injeção.
    */
-  ['recortes de pernas custam séries', /Separar os recortes de pernas custou s[ée]ries/, () => gerar({ nivelExperiencia: 'intermediario', equipamento: 'academia', treinoDias: ['seg', 'qua', 'sex'], diasDisponiveis: 3, tempoPorSessaoMin: 30, focoAgregado: { grupo: 'pernas', semana: 1 } })],
+  ['core reduzido para duas pernas em quatro dias', /reduzimos core de duas para uma/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "intermediario", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qui", "sex"], "diasDisponiveis": 4, "tempoPorSessaoMin": 75, "limiteTempoTreino": "limitado", "focoAgregado": {"grupo": "pernas", "semana": 1}}, {semanaCiclo:{semana:1}})],
   ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
+  // 2026-09-19: dois dias, os dois com core (2×/semana) — cada dia comporta um complementar,
+  // então panturrilha e antebraço não entram, e o plano diz por quê.
+  ['complementar que não entrou (um por dia)', /não entrou neste plano:/, () => gerar({ diasDisponiveis: 2, treinoDias: ['seg', 'qui'] })],
   ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ equipamento: 'nenhum', foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
   ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
   ['distribuição original limitada', /Distribuição planejada.*não atendida integralmente/, () => gerar({ nivelExperiencia: 'avancado', treinoDias: ['seg','ter','qua'], diasDisponiveis: 3, tempoPorSessaoMin: 90, focoAgregado: { grupo: 'pernas', semana: 1 } })],
-  ['agenda limita', /agenda limita/, () => gerar({ treinoDias: ['seg','ter'], diasDisponiveis: 2 })],
+  ['agenda limita', /agenda limita/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "iniciante", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qui", "sex"], "diasDisponiveis": 4, "tempoPorSessaoMin": 30, "limiteTempoTreino": "limitado"}, {semanaCiclo:{semana:1}})],
   ['manual com foco', /ordem do seu treino foi preservada/, () => gerar({ rotinaCustom: SO_EMPURRAR, foco: { grupo: 'peito', compensa: 'costas', semana: 1 } })],
   ['escolhas inelegíveis', /não elegíveis no perfil/, () => gerar({ rotinaCustom: SO_EMPURRAR, equipamento: 'casa', equipamentosCasa: [] })],
   ['retomada · frequência limitada', /Retomada: frequ/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: SEIS_DIAS.map(diaId => ({ nome: diaId, diaId, exercicioIds: ['e1'] })) } }, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
@@ -197,7 +227,7 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   // 🔵 Perfil REMEDIDO em 2026-09-17: com a faixa desejada menor, `casa` a 4d/60min passou a
   // fechar todos os slots que o template pede e o aviso deixou de sair ali. A varredura desta
   // correção achou 1 604 células que ainda o produzem; esta é a mais apertada delas.
-  ['equipamento limita o dia', /Seu equipamento dispon[íi]vel limita/, () => gerar({ equipamento: 'casa', equipamentosCasa: [], diasDisponiveis: 1, treinoDias: ['seg'], tempoPorSessaoMin: 20 })],
+  ['equipamento limita o dia', /Seu equipamento dispon[íi]vel limita/, () => gerar({ equipamento: 'casa', equipamentosCasa: [], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'], tempoPorSessaoMin: 60 })],
   ['dia curto pelo teto semanal', /mais curtos? de prop[óo]sito/, () => gerar({ diasDisponiveis: 6, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'], nivelExperiencia: 'avancado', tempoPorSessaoMin: 90 })],
   ['séries manuais inválidas (D3)', /n[ãa]o [ée] um n[úu]mero inteiro/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: [{ nome: 'A', diaId: 'seg', exercicioIds: ['e1'], seriesPorExercicio: { e1: 0 } }] } })],
   ['cardio faltante (D4)', /Cardio: o plano pede/, () => gerar({ objetivo: 'emagrecimento', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] }, { diasOferecidosCardio: ['ter', 'qua', 'sex', 'dom'] as readonly Weekday[] })],
@@ -248,14 +278,13 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * poda, `casa/3d/45 min` deixou de podar — a troca resolve o dia sem tirar série de
    * ninguém. A célula que ainda poda depois de esgotadas as trocas é `avançado/6 d/45 min
    * limitado` (10 das 1 008 células da varredura por equipamento de academia).
+   * 🔵 REMEDIDOS em 2026-09-19 (seleção por referência): o intermediário de 3 dias passou a
+   * caber sem poda; a célula que ainda poda depois da troca é o avançado em Prioridades
+   * (4 d, 90 min): ombros recebe desenvolvimento + elevação + crucifixo invertido e ainda o
+   * crédito indireto do supino, e passa de 12 ponderadas no dia (varredura de 3 600 células).
    */
-  ['poda por sessão (automático)', /para não passar do máximo de um treino só/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' }, { semanaCiclo: { semana: 3 } })],
-  ['poda por sessão no desenho da pessoa (só o que o app dosou)', /para não passar do máximo de um treino só[\s\S]*que o app dosou/, () => {
-    const o = { nivelExperiencia: 'avancado' as const, diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' as const };
-    const auto = gerar(o, { semanaCiclo: { semana: 3 } })!;
-    const dias = auto.dias.map((d) => ({ nome: d.nome, diaId: d.diaId, exercicioIds: d.slots.map((s) => s.exercicio.id) }));
-    return gerar({ ...o, rotinaCustom: { origem: 'usuario', dias } }, { semanaCiclo: { semana: 3 } });
-  }],
+  ['poda por sessão (fronteira controlada do automático)', /para não passar do máximo de um treino só/, () => avisoPodaSessao(false)],
+  ['poda por sessão no desenho da pessoa (fronteira controlada)', /para não passar do máximo de um treino só[\s\S]*que o app dosou/, () => avisoPodaSessao(true)],
   ['deload que parte de um plano-base já ajustado', /plano-base desta semana de deload/, () => gerar({ nivelExperiencia: 'iniciante', objetivo: 'saude', equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 6 } })],
 ];
 
@@ -291,7 +320,11 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     //  + entrou a explicação da SEMANA DE ALÍVIO, que só existia por acidente (o contrato de
     //    `editor-avisos-e-paridade` vinha passando por causa da frase removida acima).
     // 44 → 46: foco de core com dose efetiva e custo da compensação de posteriores.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(46);
+    // 46 → 47 em 2026-09-19: o COMPLEMENTAR que não entrou (panturrilha/antebraço — um por
+    // dia, panturrilha no dia de pernas) é dito com o impedimento, em vez de omitido.
+    // CP33: removed arbitrary leg-series loss; added consolidation, explicit core
+    // reduction, lower core frequency and second-back outcomes.
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(50);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

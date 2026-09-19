@@ -1,3 +1,5 @@
+import { adicoesComplementaresViaveis } from './__fixtures__/complementares-viabilidade';
+import { verificarDistribuicaoComplementares } from './__fixtures__/complementares-contrato';
 import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
 import { aplicarDeload, dificuldadesLiberadas, prescreverTreino } from './treino';
@@ -22,12 +24,13 @@ function rotina(over: Partial<PerfilTreino> = {}) {
 }
 
 describe('montador de rotina (base real, 163 exercícios)', () => {
-  it('dias de força = min(dias, teto do nível); excedente → cardio/recuperação', () => {
-    // iniciante: teto 3. Com 6 dias → 3 de força, 3 de cardio/recuperação.
+  it('agenda inclui um dia escolhido para complementares além das sessões principais', () => {
+    // Autor 19/09: três principais, um dedicado já disponível e dois de recuperação.
     const r = rotina({ nivelExperiencia: 'iniciante', diasDisponiveis: 6 });
-    expect(r.diasForcaAgendados).toBe(3);
-    expect(r.diasCardioRecuperacao).toBe(3);
-    expect(r.dias).toHaveLength(3);
+    expect(r.diasForcaAgendados).toBe(4);
+    expect(r.diasCardioRecuperacao).toBe(2);
+    expect(r.dias).toHaveLength(4);
+    expect(r.dias[3]!.slots.every(s=>['core','antebraco'].includes(s.exercicio.grupoPrimario??''))).toBe(true);
   });
 
   it('todo exercício selecionado respeita equipamento/local e dificuldade liberada', () => {
@@ -60,12 +63,12 @@ describe('montador de rotina (base real, 163 exercícios)', () => {
     expect(temDobradica).toBe(true);
   });
 
-  it('invariante: core 2–3×/semana em qualquer split (≥ 2 dias)', () => {
+  it('complementares respeitam localização e limite, avisando frequência de core menor', () => {
     for (const dias of [2, 3, 4, 5, 6])
       for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
         const r = rotina({ diasDisponiveis: dias, nivelExperiencia: nivel });
         const core = r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === 'core').length, 0);
-        expect(core).toBeGreaterThanOrEqual(2);
+        verificarDistribuicaoComplementares(r);
         expect(core).toBeLessThanOrEqual(3);
       }
   });
@@ -102,7 +105,10 @@ describe('favoritos no montador (DF #12)', () => {
   it('favorito aparece em TODA sessão em que o padrão tem slot (isento da variedade B5)', () => {
     // e9 Supino reto (empurrar, INT, academia) favorito de um intermediário na academia
     const r = rotinaFav(['e9']);
-    const diasComEmpurrar = r.dias.filter((d) => d.slots.some((s) => s.padrao === 'empurrar'));
+    // 2026-09-19: o calendário automático só admite o favorito em dia cujo template tem o
+    // GRUPO dele (`respeitarGruposDoDia`); o dia de ombros ganhou desenvolvimento (empurrar) e
+    // não é dia de peito. A garantia vale onde o dia tem slot do padrão E do grupo.
+    const diasComEmpurrar = r.dias.filter((d) => d.slots.some((s) => s.padrao === 'empurrar') && d.slots.some((s) => s.exercicio.grupoPrimario === 'peito'));
     expect(diasComEmpurrar.length).toBeGreaterThan(0);
     for (const d of diasComEmpurrar) {
       expect(d.slots.some((s) => s.exercicio.id === 'e9'), `${d.nome} devia ter o favorito`).toBe(true);
@@ -134,9 +140,11 @@ describe('favoritos no montador (DF #12)', () => {
     const conta = (p: string) => r.dias.reduce((n, d) => n + d.slots.filter((s) => s.padrao === p).length, 0);
     expect(conta('puxar')).toBeGreaterThanOrEqual(conta('empurrar'));
     expect(conta('dobradica_quadril')).toBeGreaterThanOrEqual(1);
-    expect(conta('core')).toBeGreaterThanOrEqual(2);
+    verificarDistribuicaoComplementares(r);
     expect(conta('core')).toBeLessThanOrEqual(3);
-    expect(r.avisos).toHaveLength(0);
+    // 2026-09-19: o plano passou a DIZER o que não coube (dia mais curto, complementar que não
+    // entrou); a fotografia cobra só que nenhum aviso de INVARIANTE tenha saído.
+    expect(r.avisos.filter((a) => a.startsWith('Atenção:'))).toHaveLength(0);
   });
 
   it('determinismo: dupla chamada → rotina idêntica; set vazio → byte-idêntico ao default', () => {
@@ -216,6 +224,8 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
      * são ambos exercidos, em qualquer um dos dois projetos de seleção.
      */
     const CENARIOS: Partial<PerfilTreino>[] = [
+      // Constrained home pool: indirect credit binds the weekly cap after all substitutions.
+      {nivelExperiencia:'iniciante',equipamento:'casa',equipamentosCasa:[],diasDisponiveis:3,tempoPorSessaoMin:75,limiteTempoTreino:'sem_limite'},
       { nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 90 },
       { nivelExperiencia: 'avancado', diasDisponiveis: 3, tempoPorSessaoMin: 75 },
       /**
@@ -226,9 +236,13 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
        * 1 008 células da varredura, todas `avançado/6–7 d/45 min/limitado`).
        */
       { nivelExperiencia: 'avancado', diasDisponiveis: 6, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' },
+      // 🔵 2026-09-19: com a seleção por referência (supino no lugar de crucifixo, desenvolvimento
+      // no lugar de elevação), o crédito indireto sobe e o teto semanal volta a morder no
+      // iniciante de 3 dias sem limite de tempo — medido na semana 5.
+      { nivelExperiencia: 'iniciante', diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' },
     ];
     let semCorte = 0;
-    let comCorte = 0;
+    let comTetoVinculante = 0;
     for (const over of CENARIOS) {
       // Avançado/massa: banda 16–20, séries/exercício 3–4.
       const p = perfil(over);
@@ -250,6 +264,23 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
       const tetoSemanal = maxSemanalSemFoco(p.nivelExperiencia, 'massa');
       const tetoSessaoGrupo = tetoSeriesGrupoNaSessao(p.nivelExperiencia, 'massa');
       for (const [grupo, { slots }] of porSemana[0]!) {
+        // Autor 19/09: complementares cedem ao principal. A rampa dos principais
+        // continua exata; complementar sem folga pode sair com motivo verificável.
+        if (['core','panturrilha','antebraco'].includes(grupo)) {
+          rotinas.forEach((r,i)=>{
+            const diretos=r.dias.flatMap(d=>d.slots).filter(s=>s.exercicio.grupoPrimario===grupo);
+            if(!diretos.length){
+              expect(adicoesComplementaresViaveis(r,p,grupo as GrupoPrimario), `${JSON.stringify(over)} / S${SEMANAS[i]}: ${grupo} omitido com folga`).toEqual([]);
+              verificarDistribuicaoComplementares(r);
+            }
+            for(const slot of diretos){
+              expect(slot.series).toBeGreaterThanOrEqual(p.limiteTempoTreino==='limitado'?2:presc.seriesPorExercicio.min);
+              expect(slot.series).toBeLessThanOrEqual(presc.seriesPorExercicio.max);
+            }
+          });
+          continue;
+        }
+
         const porDia = layout(grupo);
         const sMax = presc.seriesPorExercicio.max;
         /** O que o layout comporta: teto por dia E teto de slots, o menor dos dois. */
@@ -260,6 +291,7 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
         const base = slots * presc.seriesPorExercicio.min;
         // 🔒 O alvo vem de `alvoDaSemana` — a autoridade da rampa —, não de uma reconstrução.
         const alvos = SEMANAS.map((s) => Math.min(Math.max(alvoDaSemana(banda, s as never), base), tetoAlcancavel));
+        porSemana.forEach((m,i)=>expect(m.has(grupo), `${JSON.stringify(over)}: ${grupo} desapareceu na semana ${SEMANAS[i]}`).toBe(true));
         const totais = porSemana.map((m) => m.get(grupo)!.series);
         const ehGrande = (GRUPOS_GRANDES as readonly string[]).includes(grupo);
         for (let i = 0; i < SEMANAS.length; i += 1) {
@@ -268,7 +300,10 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
           const alvo = alvos[i]!;
           const pond = pondSemana[i]!.get(grupo as GrupoPrimario) ?? 0;
           // ① O TETO SEMANAL, na conta que vale — sem foco, o máximo automático.
-          if (ehGrande) expect(pond, `${ctx}: passou do teto semanal`).toBeLessThanOrEqual(tetoSemanal);
+          if (ehGrande) {
+            expect(pond, `${ctx}: passou do teto semanal`).toBeLessThanOrEqual(tetoSemanal);
+            if(pond+1>tetoSemanal || rotinas[i]!.dias.some(d=>(creditoPonderadoDaSemana(d.slots).get(grupo as GrupoPrimario)??0)+1>tetoSessaoGrupo))comTetoVinculante++;
+          }
           // ①b E o TETO POR SESSÃO, que vale ao mesmo tempo (decisão 2026-09-17).
           if (ehGrande) {
             const porDiaPond = rotinas[i]!.dias.map((d) => creditoPonderadoDaSemana(d.slots).get(grupo as GrupoPrimario) ?? 0);
@@ -276,15 +311,25 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
           }
           // ② A rampa nunca entrega MAIS do que pediu.
           expect(entregue, `${ctx}: entregou acima do alvo da rampa`).toBeLessThanOrEqual(alvo);
-          if (entregue === alvo) { semCorte += 1; continue; }
+          // O alvo é ponderado: crédito indireto já pode ter completado a meta.
+          if (entregue === alvo || (ehGrande && pond >= alvo)) { semCorte += 1; continue; }
           // ③ Cortou? Então o corte foi FORÇADO por UM DOS DOIS tetos, e é MÍNIMO.
           expect(ehGrande, `${ctx}: grupo sem faixa não pode ter sido cortado`).toBe(true);
           const porDiaPond = rotinas[i]!.dias.map((d) => creditoPonderadoDaSemana(d.slots).get(grupo as GrupoPrimario) ?? 0);
           const apertouSemana = pond + 1 > tetoSemanal;
           const apertouSessao = porDiaPond.some((v) => v > 0 && v + 1 > tetoSessaoGrupo);
-          expect(apertouSemana || apertouSessao,
-            `${ctx}: cortou além do necessário (${entregue} contra alvo ${alvo}; pond ${pond}/${tetoSemanal}, dia ${porDiaPond.join('+')}/${tetoSessaoGrupo})`).toBe(true);
-          comCorte += 1;
+          // Uma série do posterior também credita glúteos: minimalidade precisa conferir
+          // todos os grandes e o teto por slot, não somente o grupo direto que cedeu.
+          const podeSomar=rotinas[i]!.dias.some((d,di)=>d.slots.some((slot,si)=>{
+            if(slot.exercicio.grupoPrimario!==grupo || slot.series!>=sMax)return false;
+            const dia=d.slots.map((x,j)=>j===si?{...x,series:x.series!+1}:x);
+            const semana=rotinas[i]!.dias.flatMap((x,j)=>j===di?dia:x.slots);
+            const cs=creditoPonderadoDaSemana(semana),cd=creditoPonderadoDaSemana(dia);
+            return GRUPOS_GRANDES.every(g=>(cs.get(g)??0)<=tetoSemanal && (cd.get(g)??0)<=tetoSessaoGrupo);
+          }));
+          expect(apertouSemana || apertouSessao || !podeSomar,
+            `${ctx}: havia incremento elegível sem violar os tetos`).toBe(true);
+
         }
         /**
          * 🔵 MONOTONICIDADE, NA MOEDA QUE VALE (2026-09-17).
@@ -318,7 +363,9 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     // ⚠️ ANTI-VACUIDADE: os dois regimes têm de existir, senão os ramos ② e ③ nunca são
     // exercidos e o teste passaria com qualquer motor.
     expect(semCorte, 'nenhum grupo entregou o alvo cheio — o cenário degenerou').toBeGreaterThan(0);
-    expect(comCorte, 'nenhum grupo foi limitado pelo teto ponderado — reancorar o cenário').toBeGreaterThan(0);
+    // A weighted target may already be fulfilled while its cap binds. Do not require
+    // artificial under-delivery to prove a binding cap; direct pruning has fixed-dose tests.
+    expect(comTetoVinculante, 'nenhum grupo exercitou um teto vinculante').toBeGreaterThan(0);
   });
 
   /**
@@ -507,14 +554,13 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
     const longo = rotinaSemana(1, { tempoPorSessaoMin: 90 });
     expect(longo.dias.flatMap(d=>d.slots).some(s=>s.descansoSeg===180)).toBe(true);
     const curto = rotinaSemana(1, { tempoPorSessaoMin: 30 });
-    expect(curto.semana?.descansoCompostoSeg.max).toBe(120); // sobre-afirmação de 2026-08-04, morta
-    // 🔑 O que o usuário VÊ aos 30 min é o valor DEGRADADO por classe (regra 3 — cede
-    // ISOLADO a 60 s, depois COMPOSTO a 90 s): a tela não promete o que o orçamento não
-    // reservou. ⚠️ O critério é a CLASSE, não o nome do padrão (`core` é classe ISOLADO).
-    const COMPOSTOS = new Set(['agachar', 'dobradica_quadril', 'empurrar', 'puxar']);
-    const slots = curto.dias.flatMap((d) => d.slots);
-    expect(slots.filter((s) => COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 120 || s.descansoSeg === 90), 'composto: piso da faixa ou degradado a 90').toBe(true);
-    expect(slots.filter((s) => !COMPOSTOS.has(s.padrao)).every((s) => s.descansoSeg === 60), 'semana 1 = piso do isolado/core').toBe(true);
+    const compostos=curto.dias.flatMap(d=>d.slots).filter(s=>classeDeDescanso(s.exercicio)==='COMPOSTO');
+    expect(compostos.length).toBeGreaterThan(0);
+    const valores=compostos.map(s=>s.descansoSeg!);
+    // O resumo é dos slots emitidos: não promete 120 se um dia cabe com 180.
+    expect(curto.semana?.descansoCompostoSeg).toEqual({min:Math.min(...valores),max:Math.max(...valores)});
+    for(const d of curto.duracaoDias??[])expect(d.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(30*60);
+
   });
 
   /**
@@ -565,7 +611,8 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
           for (const d of r.dias)
             for (const slot of d.slots) {
               if (slot.series != null) {
-                expect(slot.series, `${nivel}/${obj}/S${s}`).toBeGreaterThanOrEqual(faixa.min);
+                const corteTemporal=slot.seriesAntesDoCorteDeTempo!=null && slot.series<slot.seriesAntesDoCorteDeTempo;
+                expect(slot.series, `${nivel}/${obj}/S${s}`).toBeGreaterThanOrEqual(corteTemporal?1:faixa.min);
                 expect(slot.series, `${nivel}/${obj}/S${s}`).toBeLessThanOrEqual(faixa.max);
               }
             }

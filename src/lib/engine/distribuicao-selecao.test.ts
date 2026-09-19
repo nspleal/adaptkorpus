@@ -1,3 +1,4 @@
+import {verificarImpedimentoRecortes} from './__fixtures__/recortes-viabilidade';
 import {describe,it,expect} from 'vitest';
 import {contarRecortesEntregues} from './selecao-divisao';
 import {gerarTreino} from './index';
@@ -17,6 +18,11 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
  });
  it('três dias alternados, pernas: superiores completo e duas ênfases inferiores reais',()=>{
   const r=gerar(['seg','qua','sex'],'pernas');
+  if(r.dias.filter(pernas).length!==2){
+   verificarImpedimentoRecortes(gerar(['seg','qua','sex']),r,7);
+   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:1,atendida:false});
+   return;
+  }
   expect(r.dias.filter(pernas)).toHaveLength(2);
   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2,atendida:true});
   const upper=r.dias.find(d=>!pernas(d));expect(upper).toBeDefined();
@@ -36,7 +42,9 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
  it('consecutivos com pernas: não apaga a limitação da organização original',()=>{
   const r=gerar(['seg','ter','qua'],'pernas');
   expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(true);
-  expect(r.distribuicao).toMatchObject({limitadaPeloCalendario:true,atendida:false});
+  // Limite de capacidade não pode ser rotulado como limitação do calendário.
+  verificarImpedimentoRecortes(gerar(['seg','ter','qua']),r,7);
+  expect(r.distribuicao).toMatchObject({atendida:false});
  });
  it('equipamento impede braços no terminal: um exercício isolado não satisfaz a sessão',()=>{
   const r=gerarTreino({...base,equipamento:'nenhum',treinoDias:['seg','ter','qui','sex'],diasDisponiveis:4,focoAgregado:{grupo:'bracos',semana:1}},{exercises:EXERCISES,semanaCiclo:{semana:1}}).rotina!;

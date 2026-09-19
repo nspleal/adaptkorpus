@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { recomputarPlano } from './plano';
 import { poolElegivel } from './engine/treino-montador';
+import { orcamentoSlotsDoDia } from './engine/alocador';
 import { EXERCISES_SEED } from './data/seed';
 import {
   aplicarPropostaSobre, assinaturaDasEntradas, assinaturaDoTreino, atualizarDesenho,
@@ -125,11 +126,20 @@ describe('🔁 GERAR — variedade só entre alternativas VÁLIDAS', () => {
     expect(p.rotina.dias.flatMap((d) => d.slots.map((s) => s.exercicio.id))).not.toContain(ELEG_A);
   });
 
-  it('a variação não muda o NÚMERO de dias nem o de slots do dia', () => {
+  it('a variação não muda o NÚMERO de dias, e nenhum dia passa do orçamento de slots', () => {
     const antes = rotinaDe(PERFIL);
     const p = propor('gerar')!;
     expect(p.rotina.dias.length).toBe(antes.length);
-    expect(p.rotina.dias.map((d) => d.slots.length)).toEqual(antes.map((d) => d.slots.length));
+    /**
+     * 🔵 2026-09-19: o NÚMERO de slots de um dia pode mudar com a variação — outro exercício
+     * carrega outro crédito indireto, e o alocador por déficit para noutro ponto. É o que
+     * `variacao-montagem.test.ts` já registrava como consequência medida; aqui o que se fixa é
+     * que nenhum dia passa do orçamento f(tempo) e que a diferença fica em UM slot.
+     */
+    for (const [i, d] of p.rotina.dias.entries()) {
+      expect(d.slots.length).toBeLessThanOrEqual(orcamentoSlotsDoDia(PERFIL.tempoPorSessaoMin));
+      expect(Math.abs(d.slots.length - antes[i]!.slots.length)).toBeLessThanOrEqual(1);
+    }
   });
 
   it('sem montagem diferente ⇒ DIZ `sem_alternativa`, e não finge novidade', () => {

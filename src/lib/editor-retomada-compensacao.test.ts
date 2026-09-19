@@ -82,14 +82,15 @@ describe('Retomada · a escolha de um slot não se paga em outro', () => {
     expect(total(referencia)).toBeLessThan(total(gerar(PERFIL, { semana: 1 })));
     // O caso nominal medido, preso por número: reduzir e45 não pode mexer em e46.
     expect(porSlot(referencia).get('ter/e45')).toBe(3);
-    expect(porSlot(referencia).get('ter/e46')).toBe(2);
+    expect(porSlot(referencia).get('ter/e97')).toBe(2);
   });
 
-  it('o caso medido: reduzir e45 de 3 para 2 não levanta e46 de 2 para 3', () => {
+  // 2026-09-19: com puxada + remada antes de variantes, o quarto slot de costas é e97 (não e46).
+  it('o caso medido: reduzir e45 de 3 para 2 não levanta e97 de 2 para 3', () => {
     const r = gerar({ ...PERFIL, rotinaCustom: comEscolha(desenho, 'ter', 'e45', 2) }, RAMPA);
     const depois = porSlot(r);
     expect(depois.get('ter/e45')).toBe(2);
-    expect(depois.get('ter/e46')).toBe(2);
+    expect(depois.get('ter/e97')).toBe(2);
     for (const [k, v] of porSlot(referencia)) {
       if (k === 'ter/e45') continue;
       expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);

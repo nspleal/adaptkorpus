@@ -79,7 +79,8 @@ describe('error-hunt: corpus do motor de treino', () => {
               if (nivel === 'iniciante' && (p.rir.min < 2 || !p.semFalhaIniciante)) viol.push(`segurança iniciante ${rot}`);
 
               // Rotina: dias de força = min(dias, teto do nível).
-              const diasForcaEsp = Math.min(dias, vol.sessoes[1]);
+              const principaisEsperados = Math.min(dias, vol.sessoes[1]);
+              const diasForcaEsp = principaisEsperados + Number(dias > principaisEsperados);
               /**
                * ✏️ CORREÇÃO FUNDAMENTADA DA EXPECTATIVA (D14, 2026-09-11). O oráculo antigo
                * lia `diasForcaAgendados` como a agenda SOLICITADA. D14 separou as duas contas:
@@ -100,7 +101,15 @@ describe('error-hunt: corpus do motor de treino', () => {
                 if(r.rotina.resultadoGeracao?.tipo!=='ERRO_ALOCADOR')viol.push(`puxar<empurrar sem recusa ${rot}`);
               }
               if (diasForcaEsp >= 2 && conta('dobradica_quadril') < 1) viol.push(`sem dobradiça ${rot}`);
-              if (diasForcaEsp >= 2 && (conta('core') < 2 || conta('core') > 3)) viol.push(`core fora 2-3x ${rot}: ${conta('core')}`);
+              if (conta('core') > 3) viol.push(`core acima de 3x ${rot}`);
+              if (conta('core') < 2 && !r.rotina.avisos.some(a=>a.startsWith(`Core em ${conta('core')} sessão(ões): frequência menor`))) viol.push(`frequência menor sem aviso ${rot}`);
+              for (const d of r.rotina.dias) {
+                const gs=d.slots.map(s=>s.exercicio.grupoPrimario??'');
+                const cs=gs.filter(g=>['core','panturrilha','antebraco'].includes(g));
+                const dedicado=gs.every(g=>['core','panturrilha','antebraco','lombar'].includes(g));
+                if(!dedicado&&cs.length>1)viol.push(`complementares excessivos ${rot}/${d.nome}`);
+                if(gs.includes('panturrilha')&&!gs.some(g=>['quadriceps','posterior','gluteos'].includes(g)))viol.push(`panturrilha fora de pernas ${rot}`);
+              }
 
               // Elegibilidade dos exercícios (equipamento/local + dificuldade).
               const liberadas = new Set(nivel === 'iniciante' ? ['iniciante'] : nivel === 'intermediario' ? ['iniciante', 'intermediario'] : ['iniciante', 'intermediario', 'avancado']);

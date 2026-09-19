@@ -27,6 +27,7 @@
 import type { Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 import type { DivisaoPreferida, NivelExperiencia } from './treino-types';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
+import { ehComplementar, ehDiaDisponivel, ehReferencia, funcaoDe, rankReferencia, papelReferencia } from './selecao-referencia';
 
 /** DF②: quem é banda, quem é piso, quem é só-indireto. */
 export const GRUPOS_GRANDES: readonly GrupoPrimario[] = ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'];
@@ -317,12 +318,31 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    */
   const inicioRotacao = Number.isFinite(args.variacao)
     ? Math.max(0, Math.trunc(args.variacao as number)) : 0;
-  const cursor = new Map<GrupoPrimario, number>();
+  const cursorPorFuncao = new Map<string, number>();
+  /** Exercício por id — para ler a FUNÇÃO do que já está no dia (`escolher`). */
+  const porId = new Map<string, Exercise>();
+  for (const e of pool) porId.set(e.id, e);
   /**
-   * Próximo exercício do grupo: favoritos primeiro (sem repetir no dia), depois rotação.
-   *  `prefira` — preferência BRANDA (dobradiça): tenta com ela, cai sem ela;
+   * Próximo exercício do grupo: favoritos primeiro (sem repetir no dia), depois a ordem de
+   * seleção por FUNÇÃO (decisão do autor, 2026-09-19).
+   *  `prefira` — preferência BRANDA (dobradiça, indireto descoberto): vence tudo o mais;
    *  `proiba` — trava DURA (puxar ≥ empurrar): candidato proibido nunca sai daqui —
    *  vale inclusive para favorito, porque favorito nunca fura invariante (DF #12).
+   *
+   * 🔵 A ORDEM DOS CANDIDATOS (2026-09-19), depois de `prefira`:
+   *  ① a função que o grupo ainda NÃO tem neste dia (ou tem menos vezes) — é o que impede
+   *    três stiffs no mesmo dia, duas variações de crucifixo, quatro remadas sem puxada;
+   *  ② a ordem de REFERÊNCIA do grupo (`REFERENCIA_POR_GRUPO`): supino antes de crucifixo,
+   *    puxada e remada antes de barra fixa, agachamento/leg press/hack e extensora antes do
+   *    afundo, flexora ao lado do stiff;
+   *  ③ a ROTAÇÃO a partir do cursor (a variação de "Gerar novo treino") — desempate DENTRO da
+   *    mesma função: qual supino, qual remada. Ela não desmonta a estrutura.
+   *
+   * 🔴 O defeito que ① e ② fecham, medido no relato de 2026-09-19: o cursor só perguntava
+   * "qual é o próximo do pool?" — a preferência por dobradiça no primeiro slot de posterior
+   * saltava as três flexoras (índices 0–2) e deixava o cursor em cima do segundo stiff; o
+   * peito, bloqueado pela trava do empurrar na primeira rodada, caía num isolado e o cursor
+   * seguia dali para o crucifixo seguinte. Nenhum filtro mudou: só a ordem entre APROVADOS.
    */
   function escolher(
     g: GrupoPrimario,
@@ -344,21 +364,67 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     }
     const arr = porGrupo.get(g);
     if (!arr || arr.length === 0) return null;
-    const i0 = cursor.get(g) ?? inicioRotacao;
-    // 1ª passada com a preferência (se houver); 2ª sem — nunca se deixa de preencher o
-    // slot por causa de uma preferência de padrão.
-    for (const comPreferencia of opts?.prefira ? [true, false] : [false]) {
-      for (let k = 0; k < arr.length; k += 1) {
-        const e = arr[(i0 + k) % arr.length]!;
+    /** Quantas vezes cada função do grupo já aparece neste dia (favoritos inclusive). */
+    const funcoesNoDia = new Map<string, number>();
+    for (const id of usadosDia) {
+      const e = porId.get(id);
+      if (!e || e.grupoPrimario !== g) continue;
+      const f = papelReferencia(e) ?? funcaoDe(e);
+      funcoesNoDia.set(f, (funcoesNoDia.get(f) ?? 0) + 1);
+    }
+    /**
+     * 🔒 A ROTAÇÃO É POR FUNÇÃO. Cada função do grupo tem a sua lista (na ordem do pool:
+     * tier↑, id) e o seu cursor; a variação desloca todos os cursores. Assim "qual supino" e
+     * "qual remada" giram entre os dias e entre as gerações, sem que o salto do cursor de um
+     * pick pule as opções de outra função — era esse salto que deixava a remada baixa e a mesa
+     * flexora para trás (ver o relato de 2026-09-19).
+     */
+    const listas = new Map<string, Exercise[]>();
+    for (const e of arr) {
+      // Rotação por família preserva a preferência entre referências elegíveis.
+      // A contagem de repetição abaixo usa o papel comum (puxada/barra fixa),
+      // sem deixar que a rotação escolha barra fixa antes da puxada disponível.
+      const f = funcaoDe(e);
+      listas.set(f, [...(listas.get(f) ?? []), e]);
+    }
+    let melhor: { e: Exercise; funcao: string; k: number; pref: number; foraDaReferencia: number; repetida: number; rank: number; ordem: number } | null = null;
+    let ordem = 0;
+    for (const [funcao, lista] of listas) {
+      const i0 = cursorPorFuncao.get(`${g}|${funcao}`) ?? inicioRotacao;
+      let candidato: { e: Exercise; k: number; pref: number } | null = null;
+      for (let k = 0; k < lista.length; k += 1) {
+        const e = lista[(i0 + k) % lista.length]!;
         if (usadosDia.has(e.id)) continue;
         if (opts?.exigir && !opts.exigir(e)) continue;
         if (opts?.proiba?.(e)) continue;
-        if (comPreferencia && opts?.prefira && !opts.prefira(e)) continue;
-        cursor.set(g, i0 + k + 1);
-        return e;
+        const pref = opts?.prefira?.(e) ? 1 : 0;
+        // Dentro da função: a preferência branda vence; depois, a rotação.
+        if (candidato == null || pref > candidato.pref) candidato = { e, k, pref };
+        if (candidato.pref === 1) break;
+      }
+      ordem += 1;
+      if (!candidato) continue;
+      const cand = {
+        ...candidato, funcao, ordem,
+        // Primeiro oferecer funções ainda ausentes. A referência desempata funções
+        // igualmente novas, mas não obriga repetir puxadas enquanto falta encolhimento.
+        foraDaReferencia: ehReferencia(candidato.e) ? 0 : 1,
+        repetida: funcoesNoDia.get(papelReferencia(candidato.e) ?? funcao) ?? 0,
+        rank: rankReferencia(candidato.e),
+      };
+      if (melhor == null
+        || cand.pref > melhor.pref
+        || (cand.pref === melhor.pref && (cand.repetida < melhor.repetida
+          || (cand.repetida === melhor.repetida && (cand.foraDaReferencia < melhor.foraDaReferencia
+            || (cand.foraDaReferencia === melhor.foraDaReferencia && (cand.rank < melhor.rank
+              || (cand.rank === melhor.rank && cand.ordem < melhor.ordem)))))))) {
+        melhor = cand;
       }
     }
-    return null;
+    if (!melhor) return null;
+    const i0 = cursorPorFuncao.get(`${g}|${melhor.funcao}`) ?? inicioRotacao;
+    cursorPorFuncao.set(`${g}|${melhor.funcao}`, i0 + melhor.k + 1);
+    return melhor.e;
   }
 
   // Crédito ponderado PLANEJADO (séries de planejamento × peso) — a moeda do déficit.
@@ -435,10 +501,23 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * peito fechava abaixo da banda. Favorito é isento no pick (ver `escolher`); o balanço
    * semanal segue verificado no montador.
    */
+  /** Slots DIRETOS do grupo já colocados neste dia. */
+  const noDiaDoGrupo = (diaIdx: number, g: GrupoPrimario) => dias[diaIdx]!.slots.filter((s) => s.grupo === g).length;
   function colocar(diaIdx: number, g: GrupoPrimario, usadosDia: Set<string>): boolean {
     // O teto de slots diretos vale por QUALQUER porta (rodadas, reservas, preenchimento):
     // sem esta checagem aqui, a reserva do piso furava o teto dos pequenos.
     if ((slotsDiretos.get(g) ?? 0) >= args.tetoSlotsSemana(g)) return false;
+    /**
+     * 🔵 TETOS POR DIA (decisão do autor, 2026-09-19), pela mesma porta única:
+     *  · um complementar (core/panturrilha/antebraço) entra UMA vez por dia, e o dia que não
+     *    é dedicado a eles comporta no máximo UM complementar — panturrilha no dia de pernas
+     *    conta como o complementar desse dia.
+     */
+    if (ehComplementar(g)) {
+      if (noDiaDoGrupo(diaIdx, g) >= 1) return false;
+      if (!ehDiaDisponivel(templates[diaIdx]!.grupos)
+        && dias[diaIdx]!.slots.some((s) => ehComplementar(s.grupo))) return false;
+    }
     // 🔵 …e o teto PONDERADO do dia, pela mesma porta e pelo mesmo motivo (ver `tetoPonderadoDia`).
     // A checagem final (com o exercício já escolhido) fica em `registrar`; aqui só se descarta
     // o grupo cujo piso no dia já está no teto — o caso barato e mais comum.
@@ -530,15 +609,23 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * existe onde o orçamento comporta (dia com ≥ 3 slots livres para os grandes): em tempo
    * curto o piso do acessório cede ao tempo, nunca o contrário.
    */
+  // Num Upper com peito/costas/ombros, dois empurrar pedem dois puxar.
+  // Reservar braço antes desses quatro slots excluiria ombros pela própria trava.
+  // O piso direto dos pequenos continua condicionado a sobrar espaço para os grandes.
+  const minimoGrandesDoDia = (d: number) => ['peito', 'costas', 'ombros']
+    .every(g => templates[d]!.grupos.includes(g as GrupoPrimario))
+    ? Math.max(4, RESERVA_MINIMO_GRANDES) : RESERVA_MINIMO_GRANDES;
   const reservaPequeno = new Map<number, GrupoPrimario[]>();
   for (const g of GRUPOS_PEQUENOS_PISO) {
+    // 🔵 2026-09-19: panturrilha deixou de ser piso em disputa — é COMPLEMENTAR (passo 1e).
+    if (ehComplementar(g)) continue;
     if (!temPool(g)) continue;
     const candidatosDia = diasComGrupoNoTemplate(g)
-      .map((d) => ({ d, ocupadas: dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0) }))
+      .map((d) => ({ d, ocupadas: dias[d]!.slots.length + (reservaPequeno.get(d)?.length ?? 0) }))
       // 🔒 O `- PEQUENOS_PISO_DIRETO` é o piso da DF② entrando na conta pelo NOME. Era um
       // `- 1` cravado, com a constante da spec órfã ao lado: dois lugares para o mesmo
       // número, e nada obrigando os dois a concordarem (auditoria 2026-08-14).
-      .filter(({ ocupadas }) => budgetPorDia - ocupadas - PEQUENOS_PISO_DIRETO >= RESERVA_MINIMO_GRANDES)
+      .filter(({ d, ocupadas }) => budgetPorDia - ocupadas - PEQUENOS_PISO_DIRETO >= minimoGrandesDoDia(d))
       .sort((a, b) => a.ocupadas - b.ocupadas || a.d - b.d);
     const alvo = candidatosDia[0];
     if (!alvo) continue;
@@ -575,7 +662,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     for (const d of diasQuePodemPuxar.slice(0, quantosSoEmpurrar)) {
       // Só reserva onde ainda sobra orçamento para os grandes do dia — mesma regra do 1b:
       // em tempo curto a reserva cede ao tempo, nunca o contrário.
-      const ocupadas = dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
+      const ocupadas = dias[d]!.slots.length + (reservaPequeno.get(d)?.length ?? 0);
       if (budgetPorDia - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
       reservaPuxar.add(d);
     }
@@ -598,18 +685,59 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   // Antebraço explícito pode ocupar um bloco (decisão 25), sem criar banda nova.
   for(const g of args.prioritarios??[])for(const d of diasComGrupoNoTemplate(g)){
     if(g==='core'||dias[d]!.slots.some(s=>s.grupo===g))continue;
-    const reservadas=(reservadosCore.has(d)?1:0)+(reservaPequeno.get(d)?.filter(x=>x!==g).length??0);
+    const reservadas=reservaPequeno.get(d)?.filter(x=>x!==g).length??0;
     if(dias[d]!.slots.length+reservadas>=budgetPorDia)continue;
     if(colocar(d,g,usadosPorDia[d]!))reservaPequeno.set(d,(reservaPequeno.get(d)??[]).filter(x=>x!==g));
   }
 
-  const reservasDoDia = (d: number) => (reservadosCore.has(d) ? 1 : 0) + (reservaPequeno.get(d)?.length ?? 0);
+  /**
+   * ── Passo 1e: RESERVA dos COMPLEMENTARES (decisão do autor, 2026-09-19) ───────────────
+   *
+   * Core, panturrilha e antebraço têm prioridade INFERIOR aos grupos principais: o trabalho
+   * principal é montado e reservado antes (passos 1b–1d e as rodadas), e o complementar
+   * entra só onde o dia comporta um a mais SEM tirar slot dos grandes — a mesma régua do
+   * piso dos pequenos (`RESERVA_MINIMO_GRANDES`). Um complementar por dia; a exceção é o dia
+   * DISPONÍVEL (template só de complementares), que existe para eles.
+   *
+   * 🔒 O core continua com a reserva própria do passo 1 (a frequência 2–3×/semana é
+   * invariante travada e vence o orçamento). Aqui entram os outros dois, num dia que ainda
+   * não tem complementar. Quem decide EM QUE DIA cada um mora é o calendário
+   * (`calendario-grupos.ts`), que já garante panturrilha no dia de pernas e um só por dia.
+   */
+  const reservaComplementar = new Map<number, GrupoPrimario[]>();
+  for (let d = 0; d < templates.length; d += 1) {
+    const disponivel = ehDiaDisponivel(templates[d]!.grupos);
+    for (const g of templates[d]!.grupos) {
+      if (!ehComplementar(g) || g === 'core' || !temPool(g)) continue;
+      if (!disponivel && (reservadosCore.has(d) || (reservaComplementar.get(d)?.length ?? 0) > 0)) continue;
+      const ocupadas = dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0)
+        + (reservaPequeno.get(d)?.length ?? 0) + (reservaComplementar.get(d)?.length ?? 0);
+      if (!disponivel && budgetPorDia - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
+      if (disponivel && ocupadas >= budgetPorDia) continue;
+      reservaComplementar.set(d, [...(reservaComplementar.get(d) ?? []), g]);
+    }
+  }
+
+  const reservasDoDia = (d: number) => reservaPequeno.get(d)?.length ?? 0;
+
+  /**
+   * 🔵 A ORDEM DOS DIAS DENTRO DA RODADA (2026-09-19): quem coloca `puxar` entra antes.
+   *
+   * 🔴 O defeito medido: no round-robin por índice, o dia de peito vinha ANTES do dia de
+   * costas e encontrava a trava `puxar ≥ empurrar` em `0 ≥ 0` — nenhum puxar colocado ainda —
+   * e caía num isolado (crucifixo) mesmo com o supino elegível. Na rodada seguinte o peito
+   * já tinha gasto o slot. O dia que tem `costas` no template passa a ser visitado primeiro
+   * em cada rodada; cada dia continua recebendo UM slot por rodada, então nenhum dia ganha
+   * ou perde slot por isto — só a trava passa a ver o puxar que a semana de fato tem.
+   */
+  const ordemRodada = templates.map((_, d) => d)
+    .sort((a, b) => Number(templates[b]!.grupos.includes('costas')) - Number(templates[a]!.grupos.includes('costas')) || a - b);
 
   // ── Passo 2: rodadas — cada dia recebe 1 slot por vez, pelo MAIOR déficit ──
   // Round-robin entre os dias (e não dia a dia até encher) para a trava do empurrar
   // enxergar a semana inteira: o puxar do dia de Pull libera o empurrar do dia de Push.
   for (let rodada = 0; rodada < budgetPorDia; rodada += 1) {
-    for (let d = 0; d < templates.length; d += 1) {
+    for (const d of ordemRodada) {
       const cap = budgetPorDia - reservasDoDia(d);
       if (dias[d]!.slots.length >= cap) continue;
       if (args.preencherAteOrcamento) {
@@ -617,12 +745,13 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
          * PRIORIDADES (DF③): o dia é POR TEMA — o usuário o comprou, e o crédito indireto
          * vindo de outros dias não pode esvaziá-lo. Os grupos do tema se BALANCEIAM dentro
          * do dia (menos slots neste dia primeiro; empate pela ordem do template), até o
-         * orçamento. Lombar/antebraço seguem a nota do autor ("antebraço só se houver
-         * déficit") — e com a DF② eles nunca têm alvo direto, então nunca entram.
+         * orçamento. Lombar segue a nota do autor ("antebraço só se houver déficit") — e com
+         * a DF② ele nunca tem alvo direto, então nunca entra. Os complementares (core,
+         * panturrilha, antebraço) não disputam o tema: entram pela reserva própria.
          */
         const noDia = (g: GrupoPrimario) => dias[d]!.slots.filter((s) => s.grupo === g).length;
         const tema = templates[d]!.grupos
-          .filter((g) => g !== 'core' && temPool(g)
+          .filter((g) => !ehComplementar(g) && temPool(g)
             && (slotsDiretos.get(g) ?? 0) < args.tetoSlotsSemana(g)
             && (!(GRUPOS_SO_INDIRETO as readonly string[]).includes(g) || deficit(g) > 0))
           .sort((a, b) => noDia(a) - noDia(b) || templates[d]!.grupos.indexOf(a) - templates[d]!.grupos.indexOf(b));
@@ -636,8 +765,9 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
        * por déficit; os pequenos têm o piso garantido por RESERVA (passo 1b) e só disputam
        * déficit quando os grandes do dia estão satisfeitos (o 2º exercício deles, até o
        * teto) — sem isso a panturrilha (zero crédito indireto) drenava o 3º de costas.
+       * 🔵 2026-09-19: os complementares não disputam déficit — entram pela reserva (1/dia).
        */
-      const elegiveis = templates[d]!.grupos.filter((g) => g !== 'core' && podeReceber(g));
+      const elegiveis = templates[d]!.grupos.filter((g) => !ehComplementar(g) && podeReceber(g));
       const grandes = elegiveis.filter((g) => (GRUPOS_GRANDES as readonly string[]).includes(g));
       const ordenar = (lista: GrupoPrimario[]) =>
         [...lista].sort((a, b) => deficit(b) - deficit(a) || templates[d]!.grupos.indexOf(a) - templates[d]!.grupos.indexOf(b));
@@ -654,7 +784,25 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
        * full-body seria inventar uma divisão que o usuário não pediu; quando nem os pequenos
        * preenchem, o corte é CONTADO e DITO pelo montador (nunca engolido).
        */
-      const cascata = [...ordenar(grandes), ...ordenar(elegiveis.filter((g) => !grandes.includes(g)))];
+      /**
+       * 🔵 2026-09-19: com a trava `puxar ≥ empurrar` ATIVA, o grupo do dia que consegue
+       * colocar `puxar` vai à frente da cascata. É o mesmo motivo da ordem dos dias na
+       * rodada: sem isto o full-body começava pelo peito bloqueado (crucifixo no lugar do
+       * supino) e só depois colocava a remada que teria liberado o supino.
+       */
+      const travaAtiva = (contaPadrao.get('empurrar') ?? 0) >= (contaPadrao.get('puxar') ?? 0);
+      const liberaPuxar = (g: GrupoPrimario) => {
+        if(!travaAtiva)return false;
+        // Ter ALGUM puxar no grupo não basta: ombros também tem crucifixo invertido,
+        // mas sua referência elegível é desenvolvimento. O proxy colocava uma elevação
+        // lateral primeiro e não liberava empurrar; a remada só entrava na rodada seguinte.
+        const disponiveis=[...(favPorGrupo.get(g)??[]),...(porGrupo.get(g)??[])]
+          .filter(e=>!usadosPorDia[d]!.has(e.id)&&cabeNoPisoDoDia(d,e));
+        const rank=Math.min(...disponiveis.map(rankReferencia));
+        return disponiveis.some(e=>e.padraoMovimento==='puxar'&&rankReferencia(e)===rank);
+      };
+      const cascata = [...ordenar(grandes), ...ordenar(elegiveis.filter((g) => !grandes.includes(g)))]
+        .sort((a, b) => Number(liberaPuxar(b)) - Number(liberaPuxar(a)));
       for (const g of cascata) {
         if (colocar(d, g, usadosPorDia[d]!)) break;
       }
@@ -664,6 +812,34 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   // ── Passo 2b: os pequenos reservados entram (piso da DF②) ──────────────────
   for (const [d, gs] of reservaPequeno) {
     for (const g of gs) colocar(d, g, usadosPorDia[d]!);
+  }
+  /**
+   * ── Passo 2c: os COMPLEMENTARES entram — depois do trabalho principal (2026-09-19) ──
+   * Primeiro os reservados; depois, onde o dia ainda tem slot livre (as rodadas pararam por
+   * falta de déficit) e o template lista um complementar que não coube na reserva. Nunca
+   * se retira trabalho principal para encaixar um complementar: só slot vazio recebe.
+   */
+  /**
+   * 🔒 Complementar não faz sessão sozinho: num dia cujo trabalho PRINCIPAL não entrou
+   * (equipamento sem exercício para os grupos do dia — o caso D14, "dia não atendido"), o
+   * complementar também não entra. Um dia só de core não é a sessão de Push que a pessoa
+   * pediu, e continua sendo declarado como não atendido. O dia DISPONÍVEL não tem principal
+   * por definição e fica de fora desta trava.
+   */
+  const semPrincipal = (d: number) => !ehDiaDisponivel(templates[d]!.grupos)
+    && templates[d]!.grupos.some((g) => !ehComplementar(g))
+    && !dias[d]!.slots.some((s) => !ehComplementar(s.grupo));
+  for (const [d, gs] of reservaComplementar) {
+    if (semPrincipal(d)) continue;
+    for (const g of gs) if (dias[d]!.slots.length < budgetPorDia) colocar(d, g, usadosPorDia[d]!);
+  }
+  for (let d = 0; d < templates.length; d += 1) {
+    if (semPrincipal(d)) continue;
+    for (const g of templates[d]!.grupos) {
+      if (!ehComplementar(g) || g === 'core') continue;
+      if (dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) >= budgetPorDia) break;
+      colocar(d, g, usadosPorDia[d]!);
+    }
   }
 
   // ── Passo 3: o core reservado entra, fechando o dia ─────────────────────────
@@ -676,6 +852,8 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   };
   for (const d of reservadosCore) {
     if (coreSlots() >= args.coreMax) break;
+    if (semPrincipal(d) || dias[d]!.slots.length >= budgetPorDia) continue;
+    if (!ehDiaDisponivel(templates[d]!.grupos) && dias[d]!.slots.some(s => ehComplementar(s.grupo))) continue;
     const e = escolher('core', usadosPorDia[d]!, { prefira: prefiraCore() });
     if (!e) continue;
     dias[d]!.slots.push({ grupo: 'core', exercicio: e, favorito: favoritos.has(e.id) });
@@ -684,32 +862,8 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     slotsDiretos.set('core', coreSlots() + 1);
     contaPadrao.set(e.padraoMovimento, (contaPadrao.get(e.padraoMovimento) ?? 0) + 1);
   }
-  // Piso do core (2): quando o template dá menos de 2 dias com core (ex.: prioridades),
-  // a invariante vence o template — o core entra noutro dia com orçamento, ou substitui
-  // o último slot do grupo mais coberto.
-  if (templates.length >= 2 && coreSlots() < args.coreMin && temPool('core')) {
-    for (let d = templates.length - 1; d >= 0 && coreSlots() < args.coreMin; d -= 1) {
-      if (args.respeitarGruposDoDia && !templates[d]!.grupos.includes('core')) continue;
-      if (dias[d]!.slots.some((s) => s.grupo === 'core')) continue;
-      const e = escolher('core', usadosPorDia[d]!);
-      if (!e) continue;
-      if (dias[d]!.slots.length < budgetPorDia) {
-        dias[d]!.slots.push({ grupo: 'core', exercicio: e, favorito: favoritos.has(e.id) });
-      } else {
-        const idx = [...dias[d]!.slots.keys()].reverse()
-          .sort((a, b) => (slotsDiretos.get(dias[d]!.slots[b]!.grupo) ?? 0) - (slotsDiretos.get(dias[d]!.slots[a]!.grupo) ?? 0))[0];
-        if (idx == null) continue;
-        const sai = dias[d]!.slots[idx]!;
-        slotsDiretos.set(sai.grupo, (slotsDiretos.get(sai.grupo) ?? 1) - 1);
-        contaPadrao.set(sai.exercicio.padraoMovimento, (contaPadrao.get(sai.exercicio.padraoMovimento) ?? 1) - 1);
-        dias[d]!.slots[idx] = { grupo: 'core', exercicio: e, favorito: favoritos.has(e.id) };
-      }
-      usadosPorDia[d]!.add(e.id);
-      creditar(e);
-      slotsDiretos.set('core', coreSlots() + 1);
-      contaPadrao.set(e.padraoMovimento, (contaPadrao.get(e.padraoMovimento) ?? 0) + 1);
-    }
-  }
+  // Autor 19/09: frequência desejada não remove principal nem fura um complementar/dia.
+  // O calendário já escolheu os destinos; falta de orçamento é declarada pelo montador.
 
   // ── Passo 5: dobradiça PRESENTE (invariante travada — cadeia posterior). Em orçamento
   // curto o déficit pode nunca chegar aos grupos que a servem; aí a invariante vence: um
@@ -771,7 +925,11 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
         substituicao:for(const dia of dias)for(const slot of dia.slots){
           if(slot.favorito||!secundariosDe(slot.exercicio).includes(g))continue;
           const original=slot.exercicio;
-          for(const alternativa of porGrupo.get(slot.grupo)??[]){
+          // 🔵 2026-09-19: entre as alternativas, a de referência primeiro (agachamento frontal
+          // antes do agachamento isométrico na parede) — a ordem do pool desempata.
+          const alternativas=[...(porGrupo.get(slot.grupo)??[])]
+            .sort((a,b)=>Number(ehReferencia(b))-Number(ehReferencia(a))||rankReferencia(a)-rankReferencia(b));
+          for(const alternativa of alternativas){
             if(alternativa.padraoMovimento!==original.padraoMovimento
               ||dia.slots.some(s=>s.exercicio.id===alternativa.id))continue;
             slot.exercicio=alternativa;const depois=medir();
@@ -932,7 +1090,14 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
      *  · nenhum grupo do dia queria mais volume ⇒ o dia fechou porque a semana já está paga
      *    (`teto`) — foi o que a medição de 2026-08-13 achou em academia.
      */
-    dias[d]!.motivoCurto = !diasSemRedundancia.has(d) && templates[d]!.grupos.some((g) => g !== 'core' && podeReceber(g)) ? 'catalogo' : 'teto';
+    /**
+     * 🔵 2026-09-19: um grupo principal SEM exercício elegível nenhum também "ainda queria
+     * volume" — é o caso mais claro de catálogo, e `podeReceber` o escondia atrás de
+     * `temPool`. Medido: ombros em casa-vazio (só o pike, avançado) deixava o dia vazio com
+     * a causa dita como teto. Grupo satisfeito ou no teto de slots continua sendo `teto`.
+     */
+    const aindaQueria = (g: GrupoPrimario) => (slotsDiretos.get(g) ?? 0) < args.tetoSlotsSemana(g) && deficit(g) > 0;
+    dias[d]!.motivoCurto = !diasSemRedundancia.has(d) && templates[d]!.grupos.some((g) => !ehComplementar(g) && aindaQueria(g)) ? 'catalogo' : 'teto';
   }
 
   return dias;
