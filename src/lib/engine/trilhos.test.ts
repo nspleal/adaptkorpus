@@ -436,12 +436,17 @@ describe('🔒 foco de CORE — séries nos slots existentes', () => {
             for (const compensa of ['costas', 'peito', 'quadriceps'] as const) {
               const base = perfil({ nivelExperiencia: nivel, objetivo, diasDisponiveis: dias });
               const comFoco = perfil({ ...base, foco: { grupo: 'core' as never, compensa: compensa as never, semana: 1 } });
-              const [a, b] = [soma(base, semana), soma(comFoco, semana)];
-              const adicional = plano(comFoco, semana).focoCoreAdicional?.entregues ?? 0;
+              // Uma montagem por lado: a soma e a dose adicional saem do MESMO plano com foco.
+              // A 3ª montagem por cenário levava esta varredura a 4,8 s no gate (limite 5 s)
+              // e a 6,1 s na suíte completa local — timeout, não defeito do motor.
+              const a = soma(base, semana);
+              const r = plano(comFoco, semana);
+              const b = r.dias.flatMap((d) => d.slots).reduce((n, s) => n + (s.series ?? 0), 0);
+              const adicional = r.focoCoreAdicional?.entregues ?? 0;
               if (b !== a + adicional) quebras.push(`${nivel}/${objetivo}/${dias}d/sem${semana}/${compensa}: ${a} → ${b}`);
             }
     expect(quebras, `o foco de core divergiu da dose adicional entregue em ${quebras.length} cenário(s): ${quebras.slice(0, 3).join(' · ')}`).toEqual([]);
-  });
+  }, 30_000);
 
   it('🔴 aceite 4 — a FREQUÊNCIA de core não muda em cenário nenhum', () => {
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)

@@ -239,7 +239,7 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
         expect(medidos).toBeGreaterThan(150);
         expect(naoEntregues).toEqual([]);
         expect(moveu).toEqual([]);
-      });
+      }, 30_000); // 4,4–4,7 s no gate com o limite padrão de 5 s: estoura sob carga, não por defeito.
     }
 
     for (const cobertura of ['uma', 'varias', 'todas'] as const) {

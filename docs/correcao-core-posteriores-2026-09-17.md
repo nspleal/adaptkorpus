@@ -85,3 +85,12 @@ Presença no mapa não prova hipertrofia, dose suficiente ou predominância.
 Evidências externas: `../evidencias-cobertura-complementar-correcao-20260917/`.
 Gate remoto e deployment final são registrados no relatório externo pelo SHA exato;
 a aprovação local acima não se apresenta como resultado de execução remota.
+
+## Conferência de 19/09 — orçamento de tempo dos testes
+
+A suíte completa local (233 arquivos, paralelismo padrão) reprovou seis testes por
+`Test timed out in 5000ms`, não por asserção: a varredura de 216 cenários do foco de core
+(4,8 s no gate, 6,1 s aqui) e os quatro casos "desenho que CABE" da transferência de dose
+na retomada (4,4–4,7 s no gate). A varredura montava três planos por cenário; passou a
+montar dois, com a soma e a dose adicional lidas do mesmo plano com foco. Os cinco
+testes receberam orçamento explícito de 30 s. Nenhuma asserção mudou; o motor não mudou.
