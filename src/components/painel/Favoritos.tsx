@@ -207,7 +207,7 @@ export function GrupoEmFoco({ grupos, foco, compensa, onFoco, onCompensa, manual
         {foco === 'core'
           ? (manual
             ? 'No core personalizado, as séries entram nos exercícios existentes mediante compensação. Sem folga, o app avisa e não ativa o foco.'
-            : 'No core automático, até duas séries adicionais na semana entram nos exercícios existentes, sem retirar séries de outros grupos. Os dias não mudam; sem margem de volume e tempo, o app informa que não houve adição.')
+            : 'No core automático, até duas séries adicionais na semana entram nos exercícios existentes, sem retirar séries de outros grupos. Os dias não mudam. Sem espaço nos limites do treino, o foco fica salvo e o app avisa que nenhum extra foi aplicado.')
           : 'Braços e ombros vêm primeiro na sessão. O treino personalizado mantém seus exercícios e sua ordem.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>

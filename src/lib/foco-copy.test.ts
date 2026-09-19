@@ -82,3 +82,19 @@ describe('🔒 B2 — a tela diz qual ramo agiu', () => {
     }
   });
 });
+
+describe('🔒 core automático — decisão do autor de 2026-09-19', () => {
+  const comCore = (entregues: number): RotinaSemanal => ({ ...rot(undefined), focoCoreAdicional: { solicitadas: 2, entregues } });
+
+  it('com entrega: diz +N séries nos exercícios existentes, sem retirar de outros grupos', () => {
+    const f = fraseDoFoco(comCore(2))!;
+    expect(f).toContain('+2 série');
+    expect(f).toContain('sem cessão de outros grupos');
+  });
+
+  it('sem entrega: o foco fica SALVO e a frase diz que nada foi aplicado — nunca como foco atendido', () => {
+    const f = fraseDoFoco(comCore(0))!;
+    expect(f).toBe('Foco salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino.');
+    expect(f, 'zero entregue não pode soar como entrega').not.toMatch(/\+\d|em foco:/);
+  });
+});

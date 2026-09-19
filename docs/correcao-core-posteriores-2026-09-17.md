@@ -94,3 +94,15 @@ A suíte completa local (233 arquivos, paralelismo padrão) reprovou seis testes
 na retomada (4,4–4,7 s no gate). A varredura montava três planos por cenário; passou a
 montar dois, com a soma e a dose adicional lidas do mesmo plano com foco. Os cinco
 testes receberam orçamento explícito de 30 s. Nenhuma asserção mudou; o motor não mudou.
+
+## Decisão do autor — 19/09/2026 (substitui a compensação 1:1 e a recusa de salvamento)
+
+Confirmado pelo autor na conferência de 19/09: no treino automático o baseline é montado
+primeiro, sem retirar séries de outros grupos; o foco de core pode somar até duas séries
+semanais nos slots existentes, respeitando todos os limites (séries por exercício, teto
+ponderado semanal e diário, tempo). Sem folga, a preferência **fica salva** e o plano informa
+"Foco salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino" — nunca
+apresentado como foco atendido. Esta decisão substitui, para o automático, a compensação 1:1
+e a recusa de salvamento da política v3.1 (DF 2026-08-05); o desenho manual conserva o par
+core/compensador. A autorização cobre a correção e a validação do candidato; a publicação
+continua sendo decisão separada.

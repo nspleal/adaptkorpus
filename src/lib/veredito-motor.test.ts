@@ -92,7 +92,7 @@ describe('D1 — o canal existe e é verbatim', () => {
  */
 const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined][] = [
   ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({objetivo:'saude',nivelExperiencia:'iniciante',diasDisponiveis:3,treinoDias:undefined,foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:2}})],
-  ['core sem margem', /Foco de core: não houve folga/, () => gerar({foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:5}})],
+  ['core sem margem', /Foco de core salvo, mas nenhum extra foi aplicado/, () => gerar({foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:5}})],
   ['custo do complemento de posteriores (fixture de dose elegível)', /Cobertura de posteriores.*preservando o crédito semanal/, () => {
     // Fixture local da fronteira entre dose e passe; a compensação em si tem testes puros.
     const original=complementoPosterior.completarPosteriorDosado;

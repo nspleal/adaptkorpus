@@ -5,6 +5,7 @@ import { EXERCISES } from '../data/exercises';
 import { perfilBase } from '../../../scripts/dump-planos';
 import { creditoPonderadoDaSemana } from './alocador';
 import { diretosDoExercicio } from './cobertura-anatomica';
+import { fraseDoFoco } from '../foco-copy';
 
 describe('core adicional sem cessão de terceiros', () => {
   it('preserva cada exercício e dose do baseline nos 216 cenários de foco', () => {
@@ -61,4 +62,15 @@ it('confirmar e reabrir o core com foco conserva a dose, sem reaplicar o adicion
   atual=gerarTreino({...p,rotinaCustom:custom},op).rotina!;
   expect(dose(atual)).toEqual(dose(r));
  }
+});
+
+it('sem folga (avançado/massa/5d/S1): o foco fica salvo, o plano diz que nada foi aplicado e a dose é a do baseline', () => {
+ const p=perfilBase({nivelExperiencia:'avancado',objetivo:'massa',diasDisponiveis:5});
+ const op={exercises:EXERCISES,semanaCiclo:{semana:1 as const}};
+ const a=gerarTreino(p,op).rotina!;
+ const b=gerarTreino({...p,foco:{grupo:'core',semana:1}},op).rotina!;
+ expect(b.focoCoreAdicional).toEqual({solicitadas:2,entregues:0});
+ expect(b.dias.map(d=>d.slots.map(s=>[s.exercicio.id,s.series]))).toEqual(a.dias.map(d=>d.slots.map(s=>[s.exercicio.id,s.series])));
+ expect(b.avisos).toContain('Foco de core salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino (séries por exercício, volume e tempo).');
+ expect(fraseDoFoco(b)).toBe('Foco salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino.');
 });

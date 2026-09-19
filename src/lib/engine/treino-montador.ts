@@ -1811,7 +1811,9 @@ export function montarRotina(
         });
         avisos.push(focoCoreAdicional.entregues > 0
           ? `Foco de core: ${focoCoreAdicional.entregues} série(s) adicional(is) nos exercícios existentes, sem retirar séries de outros grupos.`
-          : 'Foco de core: não houve folga conjunta de séries por exercício, volume e tempo para somar trabalho nesta semana.');
+          // Decisão do autor (2026-09-19): substitui a compensação 1:1 e a recusa de salvamento
+          // da v3.1. Sem folga, a preferência fica salva e o plano diz que nada foi aplicado.
+          : 'Foco de core salvo, mas nenhum extra foi aplicado por falta de espaço nos limites do treino (séries por exercício, volume e tempo).');
       }
       const bloco=rotinaBaseDoDeload ? {dias:diasTreino,adicionais:new Set<SlotExercicio>(),adaptados:[] as GrupoPrimario[],faltantes:[] as GrupoPrimario[],solicitados:0} : adicionarBlocoFoco(diasTreino,diasForcaDaSemana,semanaCiclo?.retomada?[]:prioritarios.filter(g=>g!=='core'),pool,favoritosEfetivos);
       diasTreino=bloco.dias;
