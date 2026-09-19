@@ -96,16 +96,26 @@ describe('🔴 o caso relatado — Prioridades 4d, intermediário, 75+ , foco ag
       expect(r.blocoFoco?.adicionais.some(a=>a.exercicioId===s.exercicio.id)).toBe(true);
   });
 
-  it('complementares: um por dia, ausência de panturrilha por capacidade comprovada e demais nos superiores', () => {
+  /**
+   * 🔵 REANCORADO em 2026-09-20. A redação anterior fotografava a AUSÊNCIA da panturrilha
+   * («a sessão tem os sete slots ocupados, todos principais» + o aviso de que ela não entrou)
+   * como se fosse contrato. Aquilo era o RESÍDUO que o autor mandou corrigir, não uma regra:
+   * por decisão dele de 20/09, em "sem limite de tempo" o dia de pernas recebe um slot além
+   * do orçamento, exclusivamente para a panturrilha, sem tirar série de nenhum grupo. O que
+   * este `it` cobra segue sendo o mesmo: UM complementar por dia, panturrilha no dia de
+   * pernas, antebraço nos superiores, core 2–3×, e nenhum principal retirado.
+   * Ver `regressao-triceps-panturrilha-2026-09-20.test.ts`.
+   */
+  it('complementares: um por dia, panturrilha no dia de pernas e demais nos superiores', () => {
     for (const d of r.dias) {
       const comp = d.slots.filter((s) => ehComplementar(s.exercicio.grupoPrimario));
       expect(comp.length, `${d.nome}: ${comp.map((s) => s.exercicio.grupoPrimario).join(', ')}`).toBeLessThanOrEqual(1);
     }
-    // Não retirar principal: a sessão tem os sete slots ocupados, todos principais.
+    // Não retirar principal: os sete slots principais continuam ali; a panturrilha SOMA o oitavo.
     const pernas = dia(r, 'Pernas');
-    expect(pernas.slots).toHaveLength(7);
-    expect(pernas.slots.every(s => !ehComplementar(s.exercicio.grupoPrimario))).toBe(true);
-    expect(r.avisos.some(a => a.startsWith('Panturrilhas não entrou') && a.includes('limite de exercícios'))).toBe(true);
+    expect(pernas.slots.filter(s => !ehComplementar(s.exercicio.grupoPrimario))).toHaveLength(7);
+    expect(grupoDe(pernas, 'panturrilha')).toHaveLength(1);
+    expect(r.avisos.some(a => a.startsWith('Panturrilhas não entrou'))).toBe(false);
     expect(grupoDe(dia(r, 'Costas + Bíceps'), 'antebraco')).toHaveLength(1);
     const core = r.dias.filter((d) => grupoDe(d, 'core').length > 0).length;
     expect(core).toBeGreaterThanOrEqual(2);

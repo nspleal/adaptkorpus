@@ -1849,6 +1849,9 @@ export function montarRotina(
           dias: diasTreino, pool: [...pool].sort((a,b)=>Number(favoritosEfetivos.has(b.id))-Number(favoritosEfetivos.has(a.id))),
           slotsMax: budgetPorDia, minSeries: limiteDia == null ? sMinDaSemana : Math.min(2,sMinDaSemana),
           tetoSemana: tetoSemanalGrupo, tetoDia: tetoDaSessao ?? Infinity,
+          // Decisão do autor 20/09: só quem declarou "sem limite de tempo" ganha o slot extra
+          // da panturrilha, e só quando o dia de pernas já gastou o orçamento nos principais.
+          slotExtraPanturrilha: perfil.limiteTempoTreino === 'sem_limite',
           materializar: (e,d,deg) => ({exercicio:e,padrao:e.padraoMovimento,series:prescricao.seriesPorExercicio.max,
             descansoSeg:descansoDoExercicio({exercicio:e,rirAlvo,modoForca:prescricao.modoForca,degradacao:Math.max(degradacaoDoDia[d]??0,limiteDia==null?0:deg) as 0|1|2})??0,
             ...(favoritosEfetivos.has(e.id)?{incluidoPorPreferencia:true}:{}),
@@ -2102,6 +2105,48 @@ export function montarRotina(
       // depois (crítico do editor, tela do plano salvo) lê a procedencia real em vez de
       // tentar adivinhar pelo grupo focado — um peitoral do baseline não é extra.
       for(const d of diasTreino)for(const s of d.slots)if(bloco.adicionais.has(s)){extrasDoFoco.add(s);s.extraDoFoco=true;}
+      /**
+       * 🔵 O EXTRA DO FOCO CABE NOS EXERCÍCIOS QUE JÁ EXISTEM (2026-09-20).
+       *
+       * 🔴 Resíduo do PR #18: no caso relatado o dia de braços terminava com CINCO tríceps —
+       * quatro de baseline e o extra do bloco de foco. As 14 séries do grupo cabem em QUATRO
+       * exercícios (teto 4/exercício do intermediário): o quinto existia só para carregar
+       * dose. A consolidação de `consolidarPequenos` roda ANTES do bloco de foco, então nunca
+       * via o extra. Aqui ela roda de novo, depois que o extra existe e está marcado.
+       *
+       * 🔒 Só o extra é candidato, e só sai quando sua FUNÇÃO e TODOS os seus alvos
+       * documentais continuam cobertos, a dose inteira cabe nos mantidos do mesmo grupo e
+       * nenhum crédito, teto ou tempo piora — as mesmas provas de sempre. O que o bloco de
+       * foco pediu foi DOSE; a dose continua entregue, dentro de menos exercícios.
+       */
+      if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada) {
+        const extrasAntes = diasTreino.reduce((n, d) => n + d.slots.filter(x => x.extraDoFoco).length, 0);
+        const consolidadosDoFoco = consolidarPequenos({
+          dias: diasTreino, maxSeries: prescricao.seriesPorExercicio.max, tetoSemana: tetoSemanalGrupo,
+          somenteExtraDoFoco: true,
+          cabe: (antes, depois) => {
+            const a = avaliarDuracaoResistida(antes, perfil.nivelExperiencia).duracaoMaximaEstimadaSegundos;
+            const b = avaliarDuracaoResistida(depois, perfil.nivelExperiencia).duracaoMaximaEstimadaSegundos;
+            const creditoAntes = creditoPonderadoDaSemana(antes);
+            return a != null && b != null && (limiteDia == null || b <= limiteDia)
+              && [...creditoPonderadoDaSemana(depois)].every(([g, n]) => n <= (tetoDaSessao ?? Infinity) || n <= (creditoAntes.get(g) ?? 0));
+          },
+        });
+        if (consolidadosDoFoco) {
+          const extrasDepois = diasTreino.reduce((n, d) => n + d.slots.filter(x => x.extraDoFoco).length, 0);
+          /**
+           * 🔒 A consolidação CLONA os slots do dia (`{...s}`), então as referências guardadas
+           * em `bloco.adicionais`/`extrasDoFoco` deixam de apontar para os slots vivos. Sem
+           * re-sincronizar, um extra que SOBREVIVEU passaria a contar como baseline nos relatos
+           * — foi o que o contrato de `regressao-sequencia-reducao` pegou. A marca `extraDoFoco`
+           * viaja no clone e é ela que reconstrói os dois conjuntos.
+           */
+          bloco.adicionais.clear(); extrasDoFoco.clear();
+          for (const d of diasTreino) for (const x of d.slots) if (x.extraDoFoco) { bloco.adicionais.add(x); extrasDoFoco.add(x); }
+          bloco.solicitados = Math.max(0, bloco.solicitados - (extrasAntes - extrasDepois));
+          avisos.push(`O extra do foco coube nos exercícios que o dia já tinha: ${consolidadosDoFoco} exercício(s) a menos, com as mesmas séries, o mesmo crédito de cada grupo e a mesma cobertura identificada. A duração foi recalculada com os descansos dos exercícios mantidos.`);
+        }
+      }
       if (prioritarios.some(g => g !== 'core')) {
         const anteriores = rotinaBaseDoDeload?.blocoFoco?.adicionais ?? [];
         const entregues = diasTreino.flatMap(d => d.slots.filter(s => bloco.adicionais.has(s)

@@ -285,6 +285,9 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    */
   ['poda por sessão (fronteira controlada do automático)', /para não passar do máximo de um treino só/, () => avisoPodaSessao(false)],
   ['poda por sessão no desenho da pessoa (fronteira controlada)', /para não passar do máximo de um treino só[\s\S]*que o app dosou/, () => avisoPodaSessao(true)],
+  // 🔵 2026-09-20: o extra do foco que coube nos exercícios do próprio dia. Perfil medido: o
+  // caso relatado do PR #18 (Prioridades 4d, intermediário, 75 sem limite, foco em braços).
+  ['extra do foco consolidado nos exercícios do dia', /extra do foco coube nos exerc[íi]cios que o dia j[áa] tinha/, () => gerar({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', divisaoPreferida: 'prioridades', focoAgregado: { grupo: 'bracos', semana: 1 }, variacaoTreino: 1 }, { semanaCiclo: { semana: 5 } })],
   ['deload que parte de um plano-base já ajustado', /plano-base desta semana de deload/, () => gerar({ nivelExperiencia: 'iniciante', objetivo: 'saude', equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 6 } })],
 ];
 
@@ -324,7 +327,10 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // dia, panturrilha no dia de pernas) é dito com o impedimento, em vez de omitido.
     // CP33: removed arbitrary leg-series loss; added consolidation, explicit core
     // reduction, lower core frequency and second-back outcomes.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(50);
+    // 50 → 51 em 2026-09-20: o EXTRA DO FOCO consolidado nos exercícios que o dia já tinha
+    // (resíduo dos cinco tríceps do PR #18). O ponto é próprio porque o fato é outro: não é a
+    // consolidação de braços do baseline, é o extra do bloco cabendo na dose já existente.
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(51);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });
