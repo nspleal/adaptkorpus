@@ -141,9 +141,10 @@ function templatesAuto(diasForca: number, nivel: NivelExperiencia): { split: str
      * ("panturrilha só em dia de pernas"). O upper põe a terceira exposição onde ela é barata e
      * recupera mais rápido, e deixa as pernas nas duas do PPL.
      *
-     * 🔴 Mais dias NÃO é mais volume: o alvo semanal por grupo (`alvoPonderado`) e a poda
-     * semanal (`maxSemanalSemFoco`) continuam sendo os tetos. O sétimo dia acrescenta
-     * EXPOSIÇÃO e reparte a mesma dose; não multiplica a semana.
+     * 🔴 Mais dias não MULTIPLICA o volume: o alvo semanal por grupo (`alvoPonderado`) e a poda
+     * semanal (`maxSemanalSemFoco`) continuam sendo os tetos. A dose cresce muito menos que a
+     * agenda — medido em intermediário/academia/60 min/S5, +75 % de dias dá +31 % de séries —,
+     * e o que o sétimo dia acrescenta de fato é EXPOSIÇÃO (frequência por grupo).
      */
     default: return { split: 'Push / Pull / Legs ×2 + Upper', dias: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B, { nome: 'Upper', grupos: ['costas', 'peito', 'ombros', 'biceps', 'triceps', 'core'] }] };
   }

@@ -96,8 +96,8 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
           <InfoNeon />
           <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
             Para o seu nível, a referência é <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{referencia} sessões de musculação por semana</strong>.
-            Escolhendo {trainCount}, você recebe {trainCount} sessões: o plano inteiro é refeito e a mesma
-            dose semanal é repartida em mais dias — não multiplicamos o volume nem repetimos sessão.
+            Cada dia escolhido recebe uma sessão. O plano recalcula a divisão e distribui exercícios
+            e séries respeitando os limites de volume.
           </p>
         </div>
       )}

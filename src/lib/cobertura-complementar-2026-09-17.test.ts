@@ -303,23 +303,20 @@ describe('🔒 o que a correção NÃO pode ter custado', () => {
       }
     }
     /**
-/**
-     * 🔴 UM ALVO PRINCIPAL PERDIDO, DECLARADO E MEDIDO — 2026-09-20.
+     * 🔒 NENHUM ALVO PRINCIPAL PERDIDO — a exigência original, restaurada em 2026-09-20.
      *
-     * A grade tem 36 perfis. Em TRÊS deles — os três do INICIANTE com SEIS dias, nos três
-     * orçamentos de tempo — o trapézio (`ts`) sai da cobertura. Não é falta de tempo (perde-se
-     * igual a 45, 60 e 75 min): é a FORMA da semana. Até 19/09 esse perfil recebia 3 full-body
-     * mais um dia dedicado aos complementares, onde o encolhimento cabia; com a decisão do autor
-     * de 20/09 ele recebe 6 sessões no `templatesAuto(6)` (PPL ×2), cujos dias de ombro são
-     * preenchidos por desenvolvimento e elevação lateral — nenhum deles credita `ts`.
+     * 🔴 Ela tinha sido rebaixada a uma lista fechada de três perdas (o trapézio `ts` nos três
+     * perfis de iniciante com SEIS dias). A causa medida não era o orçamento de tempo — perdia-se
+     * igual a 45, 60 e 75 min —, era a ADIÇÃO de cobertura recusada por uma moeda saturada: com
+     * 4 slots de costas o iniciante soma 12 ponderadas PLANEJADAS contra um teto de 10, e a
+     * partir daí nenhuma adição naquele grupo passava, nem a que não acrescenta série nenhuma.
      *
-     * 🔒 A lista é FECHADA: qualquer alvo novo perdido derruba o teste, em vez de engordar um
-     * resíduo em silêncio. 📌 Fica para decisão do autor: fechar isto é mudar o desenho do PPL
-     * ×2 do iniciante (ou a ordem de referência de ombros), e nenhuma das duas é uma decisão
-     * desta candidata.
+     * 🔑 A correção é a segunda pergunta de `cabeNoVolume` (ver `treino-montador`): quando o
+     * grupo já alcançou o alvo da semana, o slot a mais REPARTE a dose em vez de acrescentá-la.
+     * Medido nos dois lados nestes três perfis: `ts` volta à cobertura e NENHUM crédito
+     * ponderado, alvo ou slot de outro grupo se move.
      */
-    expect(principaisPerdidos.sort(), `${principaisPerdidos.length} alvos principais perdidos`)
-      .toEqual(['iniciante/6/45: ts', 'iniciante/6/60: ts', 'iniciante/6/75: ts']);
+    expect(principaisPerdidos.sort(), `${principaisPerdidos.length} alvos principais perdidos`).toEqual([]);
     expect(alvosCobertos).toBeGreaterThan(0);
     expect(redundantes, 'a redundância mecânica aumentou').toBeLessThanOrEqual(163);
     expect(descobertos, 'as regiões descobertas aumentaram').toBeLessThanOrEqual(174);

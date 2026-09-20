@@ -299,7 +299,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
               <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
                 {inicial.rotinaCustom
                   ? <>Seu treino é <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>, então mudar os dias não redistribui as sessões — o desenho fica como está. Dia novo entra vazio: monte-o em “Montar meu treino” ou peça um treino novo.</>
-                  : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia marcado vira uma sessão, e a mesma dose semanal é repartida entre elas.</>}
+                  : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia escolhido recebe uma sessão, e o plano recalcula a divisão e distribui exercícios e séries respeitando os limites de volume.</>}
               </p>
             </div>
           </div>
@@ -372,7 +372,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>
               {inicial.rotinaCustom
                 ? <>Seu treino foi <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>: os dias novos são salvos, mas o desenho não é reescrito nem redistribuído. Use “Montar meu treino” ou “Gerar novo treino” para preencher os dias que entrarem. Suas preferências de alimentos não mudam.</>
-                : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia marcado vira uma sessão, com divisão, exercícios e séries recalculados. A dose semanal é repartida, não multiplicada. Suas preferências de alimentos não mudam.</>}
+                : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia escolhido recebe uma sessão. O plano recalcula a divisão e distribui exercícios e séries respeitando os limites de volume. Suas preferências de alimentos não mudam.</>}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={salvar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Confirmar e recalcular</button>

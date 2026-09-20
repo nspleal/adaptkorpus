@@ -194,10 +194,22 @@ describe('🔒 guard de cobertura — a pergunta que o motor nunca fez agora tem
  *  ② intermediário × avançado — a série por exercício É a mesma, então slot continua sendo
  *    proxy legítimo e a asserção original segue palavra por palavra.
  *
- * 📌 Medido de passagem e deixado registrado para o autor: em `3d/45min` o intermediário
- * entrega MAIS ponderadas que o avançado (84 contra 83). Não é desta candidata — três dias
- * nunca foram cortados por teto de nível e desligar as trocas de 20/09 não muda o número — e
- * a régua antiga não a enxergava. Fica como achado, não como asserção.
+ * 📌 ACHADO SEPARADO, REPRODUZIDO NA BASE PUBLICADA (2026-09-20, 3ª volta). Em `3d/45min` o
+ * intermediário entrega MAIS ponderadas que o avançado. A 2ª volta classificou isso como
+ * preexistente por um argumento fraco (desligar as trocas de 20/09 não mudava o número); a
+ * prova agora é direta: o MESMO caso, com as MESMAS entradas e a MESMA métrica (soma de
+ * `creditoPonderadoDaSemana`, `plano(perfil({nivel, diasDisponiveis: 3, tempoPorSessaoMin: 45}))`,
+ * semana 5), medido num worktree de `d43376ce` — o merge do PR #19, que é o que está em produção:
+ *
+ *   |            | base `d43376ce` | candidata |
+ *   |------------|-----------------|-----------|
+ *   | `3d/45min` | int 86 × av 84,5 ← invertido | int 84 × av 83 ← invertido |
+ *   | `3d/90min` | int 110 × av 106 ← invertido | int 108 × av 104,5 ← invertido |
+ *
+ * As duas células já estavam invertidas em produção; a candidata não as introduz e estreita um
+ * pouco a distância (1,5 → 1,0 e 4 → 3,5). Em três dias a agenda nunca foi cortada por teto de
+ * nível, então a decisão de 20/09 não toca este caso. Fica como ACHADO — corrigi-lo é outra
+ * rodada, e a régua antiga (contagem de slots) não o enxergava.
  */
 describe('🔒 a inversão morre: o nível nunca DIMINUI o treino', () => {
   it('em 3–6 dias · 45/60/90 min, a DOSE semanal cresce com o nível', () => {

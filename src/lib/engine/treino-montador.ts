@@ -18,7 +18,9 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
  *
  * Garantias (travadas na spec):
  *  - dias de força = TODOS os dias marcados para musculação (decisão do autor 2026-09-20; até
- *    19/09 era `min(dias_disponíveis, teto do nível)`). A dose semanal é repartida, não multiplicada;
+ *    19/09 era `min(dias_disponíveis, teto do nível)`). A dose NÃO acompanha o número de dias:
+ *    quem limita é o alvo por grupo, a poda semanal e os tetos por sessão e por exercício —
+ *    medido em intermediário/academia/60 min/S5, 4 → 7 dias (+75 %) dá 84 → 110 séries (+31 %);
  *  - slots do dia = orçamento de TEMPO (`orcamentoSlotsDoDia`); cada slot vai ao grupo com
  *    maior DÉFICIT PONDERADO do template do dia (`alocarSemana`);
  *  - puxar ≥ empurrar (saúde do ombro); dobradiça presente; core 2–3×/semana;
@@ -1173,19 +1175,57 @@ export function montarRotina(
            * VOLUME: crédito ponderado (direto 1,0 + indireto 0,5) do exercício novo somado ao
            * que a semana e o dia já têm, contra os MESMOS tetos que a poda usa. Nenhum grupo
            * é reduzido para abrir espaço — se não couber, o exercício não entra.
+           *
+           * 🔵 A SEGUNDA PERGUNTA (decisão do autor, 2026-09-20). A primeira mede tudo na moeda
+           * de PLANEJAMENTO (toda série no máximo do nível), e essa moeda satura: um iniciante
+           * com 4 slots de costas soma 12 ponderadas planejadas contra um teto de 10, e a partir
+           * daí NENHUMA adição naquele grupo é possível — nem a que não acrescenta série
+           * nenhuma. Medido: era isto, e não o orçamento de tempo, que tirava o trapézio
+           * (`ts`) dos três perfis de iniciante com seis dias.
+           *
+           * 🔑 Quando a primeira pergunta recusa, a segunda pergunta o que de fato acontece: o
+           * grupo JÁ ALCANÇOU o alvo da semana, então o slot a mais não acrescenta dose — ele
+           * REPARTE a mesma dose em mais um exercício. É a leitura de COMPOSIÇÃO × DOSE que
+           * `tetoPonderadoDia` já fixou no alocador: composição se mede no PISO.
+           *
+           * 🔒 As quatro travas que a mantêm honesta, cada uma nascida de uma perda medida:
+           *  ① o exercício não pode ter secundário — crédito indireto num vizinho É dose nova,
+           *    e ela derrubava antebraço e bíceps noutros perfis;
+           *  ② o grupo tem de estar de fato saturado no TOPO da banda (`jaTem × sMax ≥ banda.max`)
+           *    e a semana tem de continuar dosável com um slot a mais no PISO da banda
+           *    (`(jaTem+1) × sMin ≤ banda.min`) — senão o piso da composição empurra o grupo
+           *    para cima e a poda tira série de outro. 🔒 Os dois números são os da BANDA, não
+           *    os do alvo da semana: a estrutura tem de ser a MESMA nas semanas 1–5 do ciclo
+           *    (é a mesma razão do `alvoPonderado` do alocador), e a dosabilidade tem de valer
+           *    na semana mais baixa da rampa, não só na mais alta. Medido: com o alvo da semana
+           *    o encolhimento entrava na semana 3 e não na 1, e um avançado de 6 dias passava
+           *    do teto semanal de costas (20,5 contra 18);
+           *  ③ o alvo ganho tem de faltar na SEMANA, não só no dia: sem isto o encolhimento
+           *    entrava nos DOIS dias de Pull e diluía as remadas (bíceps 9 → 8,5);
+           *  ④ ela só usa a folga que SOBRA — nunca o último slot livre do dia, que é do
+           *    trabalho complementar que o montador ainda vai colocar (medido: sem isto o
+           *    antebraço perdia o slot dele no intermediário de 3 dias).
            */
           cabeNoVolume: (d: number, novo: Exercise) => {
-            const s = prescricao.seriesPorExercicio.max;
-            const comSeries = (slots: readonly { exercicio: Exercise }[]) =>
-              creditoPonderadoDaSemana(slots.map((x) => ({ exercicio: x.exercicio, series: s })));
-            const semana = comSeries(diasAlocados.flatMap((x) => x.slots));
-            const sessao = comSeries(diasAlocados[d]!.slots);
-            const doNovo = creditoPonderadoDaSemana([{ exercicio: novo, series: s }]);
-            for (const [g, n] of doNovo) {
-              if ((semana.get(g) ?? 0) + n > tetoSemanalGrupo(g)) return false;
-              if (tetoDaSessao != null && (sessao.get(g) ?? 0) + n > tetoDaSessao) return false;
-            }
-            return true;
+            const sMax = prescricao.seriesPorExercicio.max;
+            const comSeries = (slots: readonly { exercicio: Exercise }[], ss: number) =>
+              creditoPonderadoDaSemana(slots.map((x) => ({ exercicio: x.exercicio, series: ss })));
+            const doNovo = creditoPonderadoDaSemana([{ exercicio: novo, series: sMax }]);
+            const semana = comSeries(diasAlocados.flatMap((x) => x.slots), sMax);
+            const sessao = comSeries(diasAlocados[d]!.slots, sMax);
+            if ([...doNovo].every(([g, n]) => (semana.get(g) ?? 0) + n <= tetoSemanalGrupo(g)
+              && (tetoDaSessao == null || (sessao.get(g) ?? 0) + n <= tetoDaSessao))) return true;
+            const g = novo.grupoPrimario;
+            if (!g || secundariosDe(novo).length > 0) return false;                       // ①
+            if (budgetPorDia - diasAlocados[d]!.slots.length < 2) return false;            // ④
+            const naSemana = new Set(diasAlocados.flatMap((x) => x.slots)                 // ③
+              .flatMap((x) => [...diretosDoExercicio(x.exercicio.id)]));
+            if ([...diretosDoExercicio(novo.id)].every((a) => naSemana.has(a))) return false;
+            const sMin = prescricao.seriesPorExercicio.min;                                // ②
+            const jaTem = diasAlocados.flatMap((x) => x.slots).filter((x) => x.grupo === g).length;
+            if (jaTem * sMax < banda.max || (jaTem + 1) * sMin > banda.min) return false;
+            const sessaoPiso = comSeries(diasAlocados[d]!.slots, sMin);
+            return tetoDaSessao == null || (sessaoPiso.get(g) ?? 0) + sMin <= tetoDaSessao;
           },
         },
       }),

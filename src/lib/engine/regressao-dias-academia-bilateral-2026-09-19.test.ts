@@ -150,7 +150,15 @@ describe('① mudar os dias recalcula a semana inteira', () => {
     expect(b.dias).toHaveLength(4);
   });
 
-  it('MAIS DIAS NÃO É MAIS VOLUME: a dose é repartida, e os tetos dos PRs 17–19 seguem de pé', () => {
+  /**
+   * 🔵 TÍTULO CORRIGIDO EM 2026-09-20 (3ª volta). Ele dizia "a dose é repartida", e a medição
+   * diz outra coisa: a dose CRESCE — só que muito menos que a agenda. Em intermediário /
+   * academia / 60 min / semana 5, 4 → 7 dias é +75 % de dias e +31 % de séries diretas
+   * (84 → 110), +30 % de crédito ponderado (108 → 140). O que o teste sempre cobrou é isso:
+   * nem encolher, nem acompanhar o número de dias. A promessa de dose invariável saiu também
+   * da tela (`DiasEPreferencias`, `EditarPerfil`) e dos comentários do motor.
+   */
+  it('MAIS DIAS NÃO MULTIPLICA O VOLUME: a dose cresce menos que a agenda, e os tetos dos PRs 17–19 seguem de pé', () => {
     for (const nivelExperiencia of ['iniciante', 'intermediario', 'avancado'] as const) {
       const quatro = montar(comDias(TODOS.slice(0, 4), { nivelExperiencia }));
       const sete = montar(comDias(TODOS, { nivelExperiencia }));
@@ -159,6 +167,12 @@ describe('① mudar os dias recalcula a semana inteira', () => {
       expect(totalSeries(sete), `${rot}: 7 dias entregaram menos que 4`).toBeGreaterThanOrEqual(totalSeries(quatro));
       expect(totalSeries(sete), `${rot}: o volume acompanhou o número de dias`)
         .toBeLessThan(totalSeries(quatro) * (7 / 4));
+      // 🔒 E a mesma régua na OUTRA moeda: crédito ponderado (direto 1,0 + indireto 0,5).
+      //    As duas medições do relatório usam moedas e semanas diferentes; aqui ficam juntas
+      //    para que nenhuma promessa de "mesma dose" volte por uma delas.
+      const pond = (r: RotinaSemanal) => [...creditoPonderadoDaSemana(slots(r)).values()].reduce((n, v) => n + v, 0);
+      expect(pond(sete), `${rot}: ponderado encolheu com mais dias`).toBeGreaterThanOrEqual(pond(quatro));
+      expect(pond(sete), `${rot}: ponderado acompanhou o número de dias`).toBeLessThan(pond(quatro) * (7 / 4));
       for (const r of [quatro, sete]) {
         const teto = r.tetoVolumeSemana!;
         // ① teto SEMANAL por grupo, na conta ponderada que o motor usa.
