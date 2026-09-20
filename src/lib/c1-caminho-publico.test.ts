@@ -248,7 +248,14 @@ describe('C1.1 · planejamento temporal antes do reduce-to-fit', () => {
 // ITEM 3 — origem FUNCIONAL de `diasOferecidosCardio` (entra pelo fluxo público real)
 // ════════════════════════════════════════════════════════════════════════════════════════════
 describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (recomputarPlano)', () => {
-  const base = perfilResumo({ objetivo: 'emagrecimento', diasDisponiveis: 5, tempoPorSessaoMin: 60 });
+  /**
+   * 🔵 A VAGA É DECLARADA desde 2026-09-20. Até 19/09 a fixture dizia "5 dias disponíveis" e
+   * contava com o motor cortar a agenda no teto do nível para sobrar dia vago. Com a decisão do
+   * autor (todo dia marcado vira sessão), o que sobra é o que a pessoa NÃO marcou: `treinoDias`
+   * com três dias e `diasDisponiveis` cinco deixa os dias 3 e 4 vagos — exatamente a premissa
+   * que os casos abaixo sempre descreveram ("5 dias, 3 de força").
+   */
+  const base = perfilResumo({ objetivo: 'emagrecimento', diasDisponiveis: 5, tempoPorSessaoMin: 60, treinoDias: ['seg', 'ter', 'qua'] });
   const gerar = (dias: readonly number[]) =>
     recomputarPlano(base, { semanaCiclo: { semana: 1 }, diasOferecidosCardio: dias }).treino.rotina!;
 
@@ -356,7 +363,9 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
   });
 
   it('a duração FINAL soma o cardio no dia misto e mede o bloco isolado no destino', () => {
-    const rot = gerar([3, 4]);
+    // 🔵 20/09: o dia 2 (qua) TEM musculação e o 4 (sex) não — é o par misto × puro que o
+    // caso exige. Antes bastava oferecer 3 e 4 porque o corte por teto deixava o 3 com treino.
+    const rot = gerar([2, 4]);
     const finais = rot.planoFinalPorDia ?? [];
     const mistos = finais.filter((d) => d.tipo === 'TREINO_E_CARDIO');
     const puros = finais.filter((d) => d.tipo === 'CARDIO');
@@ -513,7 +522,9 @@ describe('C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 �
    * descansos anteriores à degradação durariam 3240 s, sem capacidade para cardio.
    */
   const montarF36 = (tempo = 45) => {
-    const p = perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, tempoPorSessaoMin: tempo });
+    // 🔵 20/09: a agenda de musculação é declarada (4 dias) e o 5º dia fica vago — é ele o
+    // DESTINO que esta fixture mede. Antes a vaga vinha do corte por teto de nível, que acabou.
+    const p = perfilTreino({ objetivo: 'massa', nivelExperiencia: 'intermediario', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui'], tempoPorSessaoMin: tempo });
     const base = prescreverTreino(p, avaliarGateTreino(p));
     const presc = {
       ...base,

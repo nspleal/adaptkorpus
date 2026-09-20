@@ -63,6 +63,28 @@ export function selecionarDivisao(
     // Foco individual conserva as outras ênfases, sem virar foco agregado.
     if(individual)for(const i of [1,3])dias[i]={...dias[i]!,grupos:[individual,...dias[i]!.grupos.filter(g=>g!==individual)]};
   }
+  /**
+   * 🔵 O SÉTIMO DIA (decisão do autor, 2026-09-20). Até 19/09 nenhuma divisão passava de seis
+   * recortes porque a agenda era cortada no teto do nível; agora o dia marcado para musculação
+   * vira sessão, e sete precisa de um sétimo recorte REAL.
+   *
+   * Ele não é escolhido a dedo nem copiado de outro dia: é a SEGUNDA EXPOSIÇÃO dos principais
+   * que os seis primeiros deixaram com uma só — a mesma régua de `FREQ_POR_GRUPO_MIN` (≥ 2×/sem)
+   * que o resto do motor já usa. Nenhum dia nasce vazio e nenhum complementar é inventado para
+   * fechar a conta: o volume segue limitado pelo alvo semanal por grupo e pela poda semanal.
+   */
+  if(n===7&&dias.length===6){
+    const exposicoes=(g:GrupoPrimario)=>dias.filter(d=>d.grupos.includes(g)).length;
+    /**
+     * 🔴 Grupo que faz parte dos RECORTES do foco fica FORA do sétimo dia — medido: com
+     * quadríceps e posterior juntos nele, o recorte "ênfases distintas" deixava de ser entregue
+     * (o motor passava a avisar "Mantivemos a distribuição disponível" num plano que, na
+     * estrutura, tinha as duas ênfases). A segunda exposição não pode desfazer a primeira.
+     */
+    const umaVez=(['peito','costas','quadriceps','posterior','ombros'] as GrupoPrimario[])
+      .filter(g=>!prioritarios.includes(g)&&dias.some(d=>d.grupos.includes(g))&&exposicoes(g)<2);
+    dias.push(dia('Corpo inteiro',...(umaVez.length?umaVez:(['peito','costas','quadriceps','posterior'] as GrupoPrimario[]))));
+  }
   if(individual&&['ombros','biceps','triceps','panturrilha','core','antebraco'].includes(individual)){
     // Blocos complementares compartilham sessões; não nasce dia só de antebraço/core.
     let locais=dias.flatMap((d,i)=>d.grupos.includes(individual)?[i]:[]);

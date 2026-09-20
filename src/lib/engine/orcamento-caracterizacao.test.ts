@@ -26,6 +26,18 @@ import { classeDeDescanso, descansoDoExercicio } from './descanso';
  *
  * ⚠️ Leia o resultado como fotografia, não como spec. Se um número aqui mudar sem que o
  * commit explique por quê, é regressão — não "o teste estava velho".
+ *
+ * 🔵 FOTOGRAFIA REFEITA EM 2026-09-20, e aqui está o porquê que o comentário acima cobra.
+ * As fixtures desta suíte declaram `diasDisponiveis` e não `treinoDias`, então a agenda é
+ * `diasPadrao(diasDisponiveis)`. Até 19/09 o motor cortava essa agenda no teto de sessões do
+ * nível e o dia excedente virava um dia DEDICADO aos complementares — por isso um iniciante
+ * com 4 dias fotografava `[2, 2, 3, 2]`: três sessões e um dia de core/antebraço. Desde a
+ * decisão do autor de 20/09 todo dia marcado vira sessão de força, e a mesma fixture fotografa
+ * `[2, 3, 3, 3]`: quatro sessões, com a divisão e a distribuição recalculadas.
+ *
+ * 🔒 O estimador NÃO mudou — nem o `cap()`, nem `sPlan`, nem o divisor. O que mudou foi
+ * quantas sessões a agenda produz, que é entrada dele. A rede continua inteira: qualquer
+ * número que se mexer daqui para frente sem explicação segue sendo regressão.
  */
 
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };

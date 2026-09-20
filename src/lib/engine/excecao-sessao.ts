@@ -14,11 +14,12 @@
  *  ② **nada de impossibilidade global afirmada a partir de uma tentativa gulosa.** Cada
  *    candidato examinado sai daqui NOMEADO, com o motivo da rejeição (`alternativas`). Quem
  *    lê o relatório vê o que foi tentado, não uma conclusão.
- *  ③ **nada de violar as regras vigentes para caber.** A troca preserva grupo primário,
- *    padrão de movimento e custo de tempo (`mesmoCustoDeSlot` — a mesma régua que a
- *    cobertura anatômica usa para trocar sem mexer no relógio), não repete exercício já no
- *    plano, não empurra ninguém acima de nenhum dos dois tetos e não derruba um grupo que
- *    estava dentro da faixa para baixo do mínimo dela.
+ *  ③ **nada de violar as regras vigentes para caber.** A troca preserva grupo primário e
+ *    padrão de movimento, não repete exercício já no plano, não empurra ninguém acima de
+ *    nenhum dos dois tetos e não derruba um grupo que estava dentro da faixa para baixo do
+ *    mínimo dela. O custo de tempo continua preservado por `mesmoCustoDeSlot`; desde 20/09,
+ *    um candidato de outro custo ainda pode entrar — mas só quando o chamador confirma, com
+ *    o descanso dele já recalculado, que o dia continua cabendo (`aceitaOutroCusto`).
  *
  * 🔒 O que este módulo NÃO faz: cortar série de terceiro. A poda (`podarExcessoPonderado`)
  * já tirou o que podia dos slots DIRETOS do próprio grupo, e cobrar de quem não estourou
@@ -128,8 +129,13 @@ function acimaDoTeto<S extends SlotPonderavel>(
   const fora: { dia: number; grupo: GrupoPrimario; ponderado: number }[] = [];
   dias.forEach((d, dia) => {
     const credito = creditoPonderadoDaSemana(d.slots);
-    for (const grupo of GRUPOS_GRANDES) {
-      const v = credito.get(grupo) ?? 0;
+    /**
+     * 🔵 2026-09-20 — TODOS os grupos, não só os GRANDES. O teto por sessão é o mesmo para
+     * todo mundo (`TETO_PONDERADO_SESSAO`, "para TODOS os níveis, COM ou SEM foco"), e varrer
+     * só os grandes deixava um bíceps a 14 num dia passar sem sequer tentar a troca. A ordem
+     * é determinística: a do mapa de crédito, que sai do próprio plano.
+     */
+    for (const [grupo, v] of credito) {
       if (v > teto) fora.push({ dia, grupo, ponderado: v });
     }
   });
@@ -156,6 +162,21 @@ export interface ArgsTentativa<S extends SlotPonderavel> {
    * garante que o relógio do dia não muda).
    */
   cabeNoTempo?: (dia: number, slots: readonly S[]) => boolean;
+  /**
+   * 🔵 2026-09-20 — O CUSTO DE TEMPO DIFERENTE DEIXA DE SER RECUSA AUTOMÁTICA.
+   *
+   * Até 19/09 a trava ③ exigia `mesmoCustoDeSlot` e pronto: um candidato que ocupasse outro
+   * tempo saía como `candidato_com_outro_custo_de_tempo`, mesmo quando o dia tinha folga de
+   * sobra. 🔴 Medido: era ISSO que impedia `e58` → `e153` (elevação pélvica na máquina) no
+   * plano de academia do PR #18/#19 — e, sem a troca, a poda tirava 2 séries DIRETAS de
+   * posterior e derrubava o crédito de glúteos junto.
+   *
+   * 🔒 A trava não sumiu: ela passa a ter uma segunda pergunta, e quem responde é o
+   * chamador, que é quem conhece o relógio do dia. O callback recebe o dia JÁ SIMULADO e só
+   * devolve `true` se, com o descanso do candidato recalculado, o dia continuar cabendo.
+   * Ausente ⇒ comportamento de antes, palavra por palavra.
+   */
+  aceitaOutroCusto?: (dia: number, slots: readonly S[]) => boolean;
 }
 
 export interface Troca {
@@ -237,7 +258,10 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
           registrar(dia, grupo, { tipo: 'troca_de_exercicio', slot: antigo.id, candidato: cand.id, aceita: false, motivo });
         if (usados.has(cand.id)) { rejeitar('candidato_ja_esta_no_plano'); continue; }
         if (creditoPorSerie(cand, grupo) >= creditoPorSerie(antigo, grupo)) { rejeitar('candidato_credita_o_mesmo_grupo'); continue; }
-        if (!mesmoCustoDeSlot(antigo, cand)) { rejeitar('candidato_com_outro_custo_de_tempo'); continue; }
+        if (!mesmoCustoDeSlot(antigo, cand)) {
+          const simulado = slots.map((s) => (s === slot ? { ...s, exercicio: cand } : s));
+          if (!args.aceitaOutroCusto?.(dia, simulado)) { rejeitar('candidato_com_outro_custo_de_tempo'); continue; }
+        }
         // Simula: troca, mede os DOIS limites no plano inteiro, e desfaz se piorar algo.
         const semanaAntes = creditoPonderadoDaSemana(dias.flatMap((d) => d.slots));
         const diaAntes = creditoPonderadoDaSemana(slots);

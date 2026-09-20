@@ -153,42 +153,71 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
       expect(somar(pedido)).toBeGreaterThan(somar(costas));
     });
 
-    // 2026-09-19: o primeiro costas do dia é a puxada (e49); o par medido passa a ser e49 × e22.
-    it('caso nominal: reduzir ter/e49 de 2 para 1 não levanta ter/e45 de 2 para 3', () => {
+    /**
+     * 🔵 OS DOIS CASOS DEIXARAM DE SER NOMES FIXOS — 2026-09-20.
+     *
+     * 🔴 Eles já tinham sido reancorados duas vezes (e113 → e70, e depois e49 × e22): o par
+     * medido mudava sempre que a SELEÇÃO mudava, e o que o caso prova nunca dependeu de quais
+     * ids caíram ali. Em 20/09 mudou de novo (a puxada da polia virou barra fixa supinada pela
+     * troca por equivalente mais completo), e em vez de cravar um terceiro nome o caso passa a
+     * DESCOBRIR o par no plano — mesma propriedade, uma âncora a menos para envelhecer.
+     *
+     * 🔒 A anti-vacuidade fica MAIS forte, não menos: o par tem de existir de verdade (dois
+     * slots do mesmo grupo, no mesmo dia, ambos com 2 séries na rampa) e o teste falha se não
+     * existir, em vez de passar por engano.
+     */
+    const parNoMesmoDia = (antes: Map<string, number | undefined>, r: RotinaSemanal) => {
+      for (const d of r.dias) {
+        const doisNaRampa = d.slots.filter((s) => antes.get(`${d.diaId}/${s.exercicio.id}`) === 2);
+        for (const a of doisNaRampa) {
+          const b = doisNaRampa.find((x) => x !== a && x.exercicio.grupoPrimario === a.exercicio.grupoPrimario);
+          if (b) return { dia: d.diaId!, reduzido: a.exercicio.id, vizinho: b.exercicio.id };
+        }
+      }
+      return null;
+    };
+
+    it('reduzir um slot de 2 para 1 não levanta o vizinho do mesmo grupo, no mesmo dia', () => {
       const mapa = mapaDe(gerar(P_SAUDE, { semana: 1 }));
       const auto = gerar(P_SAUDE, RAMPA_A);
-      const antes = porSlot(gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A));
-      expect(antes.get('ter/e49')).toBe(2);
-      expect(antes.get('ter/e45')).toBe(2);
-      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'ter', 'e49', 1))), RAMPA_A));
-      expect(depois.get('ter/e49')).toBe(1);
-      expect(depois.get('ter/e45')).toBe(2);
+      const comDesenho = gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A);
+      const antes = porSlot(comDesenho);
+      const par = parNoMesmoDia(antes, comDesenho);
+      expect(par, 'nenhum par de slots do mesmo grupo com 2 séries — o caso deixou de discriminar').toBeTruthy();
+      const { dia, reduzido, vizinho } = par!;
+      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, dia, reduzido, 1))), RAMPA_A));
+      expect(depois.get(`${dia}/${reduzido}`), `${dia}/${reduzido}`).toBe(1);
+      expect(depois.get(`${dia}/${vizinho}`), `${dia}/${vizinho} subiu`).toBe(2);
       for (const [k, v] of antes) {
-        if (k === 'ter/e49') continue;
+        if (k === `${dia}/${reduzido}`) continue;
         expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
       }
     });
 
-    /**
-     * 🔵 SLOT REANCORADO em 2026-09-17: com a repartição agora ordenada por IDENTIDADE (dia,
-     * id) em vez de posição, o slot de tríceps que fica acima do piso neste plano é `e113`,
-     * não `e70`. O par medido — um slot com folga ao lado de um pedido recusado — é o mesmo.
-     */
-    // 2026-09-19: o slot de tríceps com pedido recusado neste plano é e70 (3 pedidas, 2 na rampa).
-    it('segundo caso medido: reduzir qui/e68 de 2 para 1 não levanta qui/e70 nem qui/e67', () => {
+    it('o mesmo vale quando o vizinho teve PEDIDO RECUSADO pela rampa', () => {
       const mapa = mapaDe(gerar(P_SAUDE, { semana: 1 }));
       const auto = gerar(P_SAUDE, RAMPA_A);
-      const antes = porSlot(gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A));
-      // anti-vacuidade: o grupo tríceps é repartido desigualmente e há pedido recusado
-      expect(antes.get('qui/e68')).toBe(2);
-      expect(antes.get('qui/e70')).toBe(2);
-      expect(mapa.qui!.e70).toBe(3);
-      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, 'qui', 'e68', 1))), RAMPA_A));
-      expect(depois.get('qui/e68')).toBe(1);
-      expect(depois.get('qui/e70')).toBe(2);
-      expect(depois.get('qui/e67')).toBe(antes.get('qui/e67'));
+      const comDesenho = gerar(com(P_SAUDE, desenho(auto, mapa)), RAMPA_A);
+      const antes = porSlot(comDesenho);
+      // Um vizinho cujo PEDIDO (mapa) é maior do que a rampa entregou: é aí que a folga cedida
+      // por outro slot seria capturada, e é isso que não pode acontecer.
+      let achado: { dia: string; reduzido: string; vizinho: string } | null = null;
+      for (const d of comDesenho.dias) {
+        const naRampa = d.slots.filter((x) => antes.get(`${d.diaId}/${x.exercicio.id}`) === 2);
+        for (const a of naRampa) {
+          const b = naRampa.find((x) => x !== a && x.exercicio.grupoPrimario === a.exercicio.grupoPrimario
+            && (mapa[d.diaId!]?.[x.exercicio.id] ?? 0) > 2);
+          if (b) { achado = { dia: d.diaId!, reduzido: a.exercicio.id, vizinho: b.exercicio.id }; break; }
+        }
+        if (achado) break;
+      }
+      expect(achado, 'nenhum vizinho com pedido recusado — o caso deixou de discriminar').toBeTruthy();
+      const { dia, reduzido, vizinho } = achado!;
+      const depois = porSlot(gerar(com(P_SAUDE, desenho(auto, mapaCom(mapa, dia, reduzido, 1))), RAMPA_A));
+      expect(depois.get(`${dia}/${reduzido}`)).toBe(1);
+      expect(depois.get(`${dia}/${vizinho}`), `${dia}/${vizinho} capturou a folga`).toBe(2);
       for (const [k, v] of antes) {
-        if (k === 'qui/e68') continue;
+        if (k === `${dia}/${reduzido}`) continue;
         expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
       }
     });
@@ -297,7 +326,10 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
             for (const k of Object.keys(g)) if (g[k]! > (referencia[k] ?? 0)) grupoAcimaDoAlvo.push(`${nome} ${k}: alvo ${referencia[k]}, veio ${g[k]}`);
           }
         }
-        expect(medidos).toBeGreaterThan(120); // 2026-09-19: 140 medições (menos slots com 2+ séries)
+        // 2026-09-19: 140 medições. 🔵 2026-09-20: 111 — com a agenda inteira virando sessão, a
+        // mesma dose se reparte em mais dias e sobram menos slots com 2+ séries para reduzir.
+        // O piso acompanha o medido; a varredura continua longe de vazia.
+        expect(medidos).toBeGreaterThan(100);
         expect(semEscolhaMoveu).toEqual([]);
         expect(acimaDoProprioPedido).toEqual([]);
         expect(grupoAcimaDoAlvo).toEqual([]);

@@ -374,7 +374,15 @@ describe('🔒 foco de CORE — séries nos slots existentes', () => {
    * folga). A folga real com 3 slots de core existe onde há três dias de superiores:
    * `avancado/saude/6d`, semana 1 → core 10 de 12 (folga 2) e costas 12 acima do MEV 10.
    */
-  const COM_FOLGA = perfil({ nivelExperiencia: 'intermediario', objetivo: 'massa', diasDisponiveis: 5,treinoDias:['seg','ter','qua','qui','sex'],tempoPorSessaoMin:75,limiteTempoTreino:'limitado' });
+  /**
+   * 🔵 FIXTURE REMEDIDA EM 2026-09-20. Com 5 dias o intermediário passou a receber 5 sessões
+   * (antes eram 4 — a agenda era cortada no teto do nível) e a dose de core preenche o dia: a
+   * folga que este caso existe para exercitar sumiu DESTE perfil. Varredura de 192 combinações
+   * (nível × objetivo × 3–6 dias × 45/60/75/90 min × limite × semana): 13 células ainda têm folga
+   * de core E compensador acima do MEV. Esta é a mais próxima da original — só o número de
+   * dias muda (5 → 6), com folga de 2 e costas em 12.
+   */
+  const COM_FOLGA = perfil({ nivelExperiencia: 'intermediario', objetivo: 'massa', diasDisponiveis: 6,treinoDias:['seg','ter','qua','qui','sex','sab'],tempoPorSessaoMin:75,limiteTempoTreino:'limitado' });
   const SEMANA_COM_FOLGA = 1;
   const slotsCore = (r: ReturnType<typeof plano>) => r.dias.flatMap((d) => d.slots).filter((s) => s.exercicio.grupoPrimario === 'core');
   const seriesCore = (r: ReturnType<typeof plano>) => slotsCore(r).reduce((a, s) => a + (s.series ?? 0), 0);

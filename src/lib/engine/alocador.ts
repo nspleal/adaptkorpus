@@ -126,7 +126,26 @@ function templatesAuto(diasForca: number, nivel: NivelExperiencia): { split: str
         : { split: 'Upper / Lower / Full', dias: [{ ...UPPER_A, nome: 'Upper' }, { ...LOWER_A, nome: 'Lower' }, { ...FULL_C, nome: 'Full-body' }] };
     case 4: return { split: 'Upper / Lower ×2', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B] };
     case 5: return { split: 'PPL + Upper/Lower', dias: [{ ...PUSH_A, nome: 'Push' }, { ...PULL_A, nome: 'Pull' }, { ...LEGS_A, nome: 'Legs' }, { nome: 'Upper', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] }, { nome: 'Lower', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] }] };
-    default: return { split: 'Push / Pull / Legs ×2', dias: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B] };
+    case 6: return { split: 'Push / Pull / Legs ×2', dias: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B] };
+    /**
+     * 🔵 SETE DIAS — decisão do autor de 2026-09-20: o dia marcado para musculação vira sessão.
+     * Até 19/09 este `default` respondia por 6 e por qualquer número acima, porque a agenda
+     * nunca passava do teto do nível. Agora passa, e 7 precisa de desenho próprio: o PPL ×2 já
+     * dá 2 exposições a cada grupo e o sétimo dia é um UPPER — uma sessão de força de
+     * verdade, não um dia vazio nem a repetição de um dos seis.
+     *
+     * 🔴 Por que UPPER e não full-body — medido: com um full-body no sétimo dia as PERNAS
+     * passavam a pedir três exposições, e o calendário precisava espalhar a terceira por um dia
+     * vizinho. Num iniciante de 30 min esse dia não tinha orçamento para preencher o slot de
+     * perna, e a panturrilha ficava sozinha num dia sem pernas — quebrando a regra de 19/09
+     * ("panturrilha só em dia de pernas"). O upper põe a terceira exposição onde ela é barata e
+     * recupera mais rápido, e deixa as pernas nas duas do PPL.
+     *
+     * 🔴 Mais dias NÃO é mais volume: o alvo semanal por grupo (`alvoPonderado`) e a poda
+     * semanal (`maxSemanalSemFoco`) continuam sendo os tetos. O sétimo dia acrescenta
+     * EXPOSIÇÃO e reparte a mesma dose; não multiplica a semana.
+     */
+    default: return { split: 'Push / Pull / Legs ×2 + Upper', dias: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B, { nome: 'Upper', grupos: ['costas', 'peito', 'ombros', 'biceps', 'triceps', 'core'] }] };
   }
 }
 
@@ -137,6 +156,9 @@ function templatesSupInf(diasForca: number): { split: string; dias: TemplateDia[
     case 4: return { split: 'Upper / Lower ×2', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B] };
     case 5: return { split: 'Upper / Lower ×2 + Full', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, { ...FULL_C, nome: 'Full-body' }] };
     case 6: return { split: 'Upper / Lower ×3', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, { nome: 'Upper C', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] }, { nome: 'Lower C', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] }] };
+    // 7 dias (20/09): Sup/Inf ×3 + um quarto superior — mesma regra do `auto`, e pelo mesmo
+    // motivo: a terceira exposição das pernas já está no Lower C, e uma quarta se espalharia.
+    case 7: return { split: 'Upper / Lower ×3 + Upper', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, { nome: 'Upper C', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] }, { nome: 'Lower C', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] }, { nome: 'Upper D', grupos: ['costas', 'peito', 'ombros', 'triceps', 'biceps', 'core'] }] };
     default: return null; // 1 dia: Sup/Inf não existe — cai no auto (full-body)
   }
 }

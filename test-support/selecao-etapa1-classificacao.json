@@ -12,7 +12,7 @@
           "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
         },
         {
-          "nome": "🔒 a inversão morre: slots iniciante ≤ intermediário ≤ avançado em 3–6 dias · 45/60/90 min, o nível nunca DIMINUI o treino",
+          "nome": "🔒 a inversão morre: o nível nunca DIMINUI o treino em 3–6 dias · 45/60/90 min, a DOSE semanal cresce com o nível",
           "classificacao": "criterio_estrutural_substituido",
           "motivo": "Monotonicidade universal da contagem de slots por nível era propriedade dos templates antigos; decisões condicionais de distribuição não estabelecem quota crescente de exercícios. Pisos e tetos quantitativos não foram alterados.",
           "sucessor": "distribuicao-etapa2: possibilidades na saída final; matriz de agendas"

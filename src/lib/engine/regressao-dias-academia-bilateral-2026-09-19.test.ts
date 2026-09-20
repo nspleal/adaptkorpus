@@ -27,6 +27,8 @@ import { EXERCISES } from '../data/exercises';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino, tetoSessoesForca } from './treino';
 import { montarRotina, poolElegivel } from './treino-montador';
+import { creditoPonderadoDaSemana } from './alocador';
+import { tetoSeriesPorExercicio } from './trilhos';
 import { ehImprovisoDomestico, servePelaSelecaoAutomatica } from './equipamento';
 import { substituirExercicio } from './substituicao';
 import { funcaoDe } from './selecao-referencia';
@@ -55,62 +57,88 @@ const assinatura = (r: RotinaSemanal) =>
   r.dias.map((d) => `${d.diaId}:${d.nome}:${d.slots.map((s) => `${s.exercicio.id}x${s.series}`).join(',')}`).join('|');
 const DITO_DIAS = /Você marcou \d+ dias e o (plano usou|seu treino cobre)/;
 
-/* ═══════════════ ① O dia marcado que não vira sessão é DITO ═══════════════ */
+/* ═══════════ ① Todo dia marcado para musculação vira sessão ═══════════ */
 
-describe('① dias alterados: o teto do nível é dito, nunca calado', () => {
-  it('sete dias marcados, plano com menos: o motor nomeia os dias que viraram cardio/recuperação', () => {
-    const r = montar(comDias(TODOS));
-    const frase = r.avisos.find((a) => DITO_DIAS.test(a));
-    expect(frase, `nenhum aviso explica os dias que sobraram: ${r.avisos.join(' | ')}`).toBeDefined();
-    const ROTULO: Partial<Record<Weekday, string>> = { sab: 'sábado', dom: 'domingo', sex: 'sexta-feira' };
-    const sobraram = TODOS.filter((d) => !diasDo(r).includes(d));
-    expect(sobraram.length, 'o caso degenerou: a agenda coube inteira').toBeGreaterThan(0);
-    for (const dia of sobraram) {
-      expect(frase!.toLowerCase(), `${dia} não foi nomeado no aviso`).toContain(ROTULO[dia] ?? dia);
+/**
+ * 🔵 A DECISÃO DE 2026-09-20 SUBSTITUI A DE 19/09, e os testes seguem a decisão.
+ *
+ * Em 19/09 o corte `min(dias da agenda, teto do nível)` foi mantido e apenas DITO; os `it`
+ * desta seção cobravam a frase. A revisão recusou: dizer não atende quem marcou sete dias e
+ * recebeu cinco sessões. Agora a agenda manda, e o que se cobra aqui é o comportamento novo —
+ * quantidade exata de sessões, dias entregues, recálculo real da distribuição e os limites de
+ * volume de pé. As asserções antigas não foram afrouxadas: elas mediam uma regra que deixou
+ * de existir, e no lugar delas entraram asserções mais fortes sobre a regra que existe.
+ */
+describe('① a agenda manda: todo dia marcado vira sessão', () => {
+  it('de 1 a 7 dias, em todos os níveis: tantas sessões quantos dias, e nos dias certos', () => {
+    for (const nivelExperiencia of ['iniciante', 'intermediario', 'avancado'] as const) {
+      for (let n = 1; n <= 7; n += 1) {
+        const agenda = TODOS.slice(0, n);
+        const r = montar(comDias(agenda, { nivelExperiencia }));
+        const rot = `${nivelExperiencia}/${n}d`;
+        expect(r.dias.length, `${rot}: sessões entregues`).toBe(n);
+        expect(diasDo(r), `${rot}: dias entregues`).toEqual(agenda);
+        expect(r.diasForcaAgendados, `${rot}: contador`).toBe(n);
+        expect(r.diasCardioRecuperacao, `${rot}: dia descartado como recuperação`).toBe(0);
+        for (const d of r.dias) expect(d.slots.length, `${rot}: ${d.diaId} veio vazio`).toBeGreaterThan(0);
+        const assinaturas = r.dias.map((d) => d.slots.map((s) => s.exercicio.id).sort().join(','));
+        expect(new Set(assinaturas).size, `${rot}: sessão duplicada para preencher a contagem`).toBe(n);
+      }
     }
-    expect(frase).toContain(`${tetoSessoesForca('intermediario')} sessões de força`);
   });
 
-  it('agenda inteiramente atendida não inventa aviso nenhum', () => {
-    for (const n of [1, 2, 3, 4]) {
+  it('nenhuma frase de dia perdido sobra no caminho automático', () => {
+    for (let n = 1; n <= 7; n += 1) {
       const r = montar(comDias(TODOS.slice(0, n)));
       expect(r.avisos.filter((a) => DITO_DIAS.test(a)), `${n} dias`).toEqual([]);
     }
   });
 
-  it('o teto que a tela mostra é o MESMO do motor — uma leitura só', () => {
+  it('a referência do nível continua legível pela MESMA função — só deixou de cortar', () => {
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
+      const referencia = tetoSessoesForca(nivel);
+      expect(referencia, `${nivel}: a referência sumiu`).toBeGreaterThan(0);
       const r = montar(comDias(TODOS, { nivelExperiencia: nivel }));
-      const semComplementar = r.dias.filter((d) => !/Complementares/i.test(d.nome)).length;
-      expect(semComplementar, nivel).toBeLessThanOrEqual(tetoSessoesForca(nivel));
+      expect(r.dias.length, `${nivel}: a referência voltou a cortar a agenda`).toBe(7);
     }
   });
 });
 
 describe('① mudar os dias recalcula a semana inteira', () => {
-  it('5 → 7 e 4 → 6: os dias entregues saem da agenda confirmada, e o excedente é declarado', () => {
-    for (const [de, para] of [[5, 7], [4, 6]] as const) {
-      const agendaDe = TODOS.slice(0, de);
-      const agendaPara = TODOS.slice(0, para);
-      const antes = montar(comDias(agendaDe));
-      const depois = montar(comDias(agendaPara));
-      for (const [r, agenda] of [[antes, agendaDe], [depois, agendaPara]] as const) {
-        expect(new Set(diasDo(r)).size, 'dia repetido no plano').toBe(r.dias.length);
-        for (const d of diasDo(r)) expect(agenda, `${d} fora da agenda confirmada`).toContain(d!);
+  /** Quantos dias distintos tocam cada grupo — a frequência real entregue. */
+  const frequencia = (r: RotinaSemanal) => {
+    const m = new Map<string, number>();
+    for (const d of r.dias) {
+      for (const g of new Set(d.slots.flatMap((s) => (s.exercicio.grupoPrimario ? [s.exercicio.grupoPrimario] : [])))) {
+        m.set(g, (m.get(g) ?? 0) + 1);
       }
-      const naoAtendidos = agendaPara.filter((d) => !diasDo(depois).includes(d));
-      if (naoAtendidos.length > 0) expect(depois.avisos.some((a) => DITO_DIAS.test(a)), `${para} dias`).toBe(true);
     }
-  });
+    return m;
+  };
+  const totalSeries = (r: RotinaSemanal) => slots(r).reduce((n, s) => n + (s.series ?? 0), 0);
 
-  it('7 → 3: o plano encolhe de verdade — divisão, dias e distribuição mudam juntos', () => {
-    const sete = montar(comDias(TODOS));
-    const tres = montar(comDias(['seg', 'qua', 'sex']));
-    expect(tres.dias.length).toBe(3);
-    expect(diasDo(tres)).toEqual(['seg', 'qua', 'sex']);
-    expect(tres.split, 'a divisão não acompanhou a agenda').not.toBe(sete.split);
-    expect(assinatura(tres)).not.toBe(assinatura(sete));
-    expect(tres.avisos.filter((a) => DITO_DIAS.test(a)), 'com 3 dias nada sobra para declarar').toEqual([]);
+  it.each([[5, 7], [4, 6], [7, 3]] as const)('%i → %i: dias, divisão, distribuição e séries mudam juntos', (de, para) => {
+    const agendaDe = TODOS.slice(0, de);
+    const agendaPara = TODOS.slice(0, para);
+    const antes = montar(comDias(agendaDe));
+    const depois = montar(comDias(agendaPara));
+    expect(diasDo(antes)).toEqual(agendaDe);
+    expect(diasDo(depois)).toEqual(agendaPara);
+    expect(antes.dias).toHaveLength(de);
+    expect(depois.dias).toHaveLength(para);
+    /**
+     * Não basta anexar dias. O RÓTULO da divisão não serve de prova — quando o calendário
+     * reagrupa, os dois planos se chamam "Distribuição pela agenda" —, então o que se cobra é o
+     * conteúdo: a sequência de sessões e a FREQUÊNCIA por grupo têm de se mover na direção certa.
+     */
+    expect(assinatura(depois), 'o plano é o mesmo com dias colados').not.toBe(assinatura(antes));
+    expect(depois.dias.map((d) => d.nome), 'as sessões são as mesmas').not.toEqual(antes.dias.map((d) => d.nome));
+    const fa = frequencia(antes); const fd = frequencia(depois);
+    const cresceu = para > de;
+    expect([...fd.entries()].some(([g, v]) => (cresceu ? v > (fa.get(g) ?? 0) : v < (fa.get(g) ?? 0))),
+      `nenhum grupo ${cresceu ? 'ganhou' : 'perdeu'} exposição: antes ${JSON.stringify([...fa])} depois ${JSON.stringify([...fd])}`).toBe(true);
+    // Duração: cada dia é recalculado, nenhum fica sem estimativa.
+    for (const d of depois.dias) expect(d.slots.length, `${d.diaId} vazio`).toBeGreaterThan(0);
   });
 
   it('trocar QUAIS dias, mantendo a quantidade, move o plano para os novos dias', () => {
@@ -118,25 +146,45 @@ describe('① mudar os dias recalcula a semana inteira', () => {
     const b = montar(comDias(['ter', 'qua', 'sex', 'sab']));
     expect(diasDo(a)).toEqual(['seg', 'ter', 'qui', 'sex']);
     expect(diasDo(b)).toEqual(['ter', 'qua', 'sex', 'sab']);
+    expect(a.dias).toHaveLength(4);
+    expect(b.dias).toHaveLength(4);
   });
 
-  it('mais dias não multiplica o volume semanal (os tetos dos PRs 17–19 seguem de pé)', () => {
-    const tres = montar(comDias(['seg', 'qua', 'sex']));
-    const sete = montar(comDias(TODOS));
-    const direto = (r: RotinaSemanal) => slots(r).reduce((n, s) => n + (s.series ?? 0), 0);
-    expect(direto(sete)).toBeLessThanOrEqual(direto(tres) * 2);
-    for (const r of [tres, sete]) {
-      const teto = r.tetoVolumeSemana!;
-      for (const d of r.dias) {
-        const porGrupo = new Map<string, number>();
-        for (const s of d.slots) {
-          const g = s.exercicio.grupoPrimario;
-          if (!g) continue;
-          porGrupo.set(g, (porGrupo.get(g) ?? 0) + (s.series ?? 0));
+  it('MAIS DIAS NÃO É MAIS VOLUME: a dose é repartida, e os tetos dos PRs 17–19 seguem de pé', () => {
+    for (const nivelExperiencia of ['iniciante', 'intermediario', 'avancado'] as const) {
+      const quatro = montar(comDias(TODOS.slice(0, 4), { nivelExperiencia }));
+      const sete = montar(comDias(TODOS, { nivelExperiencia }));
+      const rot = `${nivelExperiencia}`;
+      // Nem encolhe (mais dias não pode piorar) nem multiplica na proporção dos dias.
+      expect(totalSeries(sete), `${rot}: 7 dias entregaram menos que 4`).toBeGreaterThanOrEqual(totalSeries(quatro));
+      expect(totalSeries(sete), `${rot}: o volume acompanhou o número de dias`)
+        .toBeLessThan(totalSeries(quatro) * (7 / 4));
+      for (const r of [quatro, sete]) {
+        const teto = r.tetoVolumeSemana!;
+        // ① teto SEMANAL por grupo, na conta ponderada que o motor usa.
+        const semana = creditoPonderadoDaSemana(slots(r));
+        for (const [g, v] of semana) expect(v, `${rot}/${g}: semana`).toBeLessThanOrEqual(teto.cheio);
+        // ② teto por SESSÃO, também ponderado.
+        for (const d of r.dias) {
+          const dia = creditoPonderadoDaSemana(d.slots);
+          for (const [g, v] of dia) expect(v, `${rot}/${d.diaId}/${g}: sessão`)
+            .toBeLessThanOrEqual(teto.sessao ?? Number.POSITIVE_INFINITY);
         }
-        for (const [g, v] of porGrupo) expect(v, `${d.diaId}/${g}`).toBeLessThanOrEqual(teto.sessao ?? Number.POSITIVE_INFINITY);
+        // ③ teto por EXERCÍCIO, do nível.
+        for (const s of slots(r)) expect(s.series ?? 0, `${rot}/${s.exercicio.id}`)
+          .toBeLessThanOrEqual(tetoSeriesPorExercicio(nivelExperiencia));
       }
     }
+  });
+
+  it('o cardio explicitamente escolhido sobrevive à mudança de dias', () => {
+    const oferecidos: Weekday[] = ['qua', 'sab'];
+    const p = comDias(['seg', 'ter', 'qui', 'sex', 'sab']);
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(),
+      { semana: 5, feedbackGrupos: new Map() }, undefined, undefined, oferecidos);
+    const daOferta = (r.fatosDistribuicaoCardio?.diasHorizonte ?? []).filter((d) => d.oferecido).map((d) => d.diaId);
+    expect(daOferta, 'a oferta de cardio não chegou aos fatos publicados').toEqual(oferecidos);
+    expect(r.dias).toHaveLength(5);
   });
 });
 
@@ -146,7 +194,7 @@ describe('① montagem manual: os dias do desenho valem, e o que falta é dito',
     dias: r.dias.map((d) => ({ nome: d.nome, diaId: d.diaId!, exercicioIds: d.slots.map((s) => s.exercicio.id) })),
   });
 
-  it('um desenho de sete dias entrega sete sessões — o teto do nível não apaga o desenho', () => {
+  it('um desenho de sete dias entrega sete sessões', () => {
     const base = montar(comDias(['seg', 'ter', 'qui', 'sex']));
     const sete: RotinaCustom = {
       origem: 'usuario',
@@ -163,13 +211,27 @@ describe('① montagem manual: os dias do desenho valem, e o que falta é dito',
     expect(r.avisos.filter((a) => DITO_DIAS.test(a)), 'nada falta quando o desenho cobre tudo').toEqual([]);
   });
 
-  it('dia da agenda que o desenho não cobre é NOMEADO (antes virava recuperação em silêncio)', () => {
+  it('salvar o perfil NÃO apaga o desenho: o dia que ele não cobre é nomeado, não reescrito', () => {
     const base = montar(comDias(['seg', 'ter', 'qui', 'sex']));
-    const r = montar(comDias(TODOS, { rotinaCustom: desenhoDe(base) }));
+    const desenho = desenhoDe(base);
+    const r = montar(comDias(TODOS, { rotinaCustom: desenho }));
+    // O desenho original continua byte a byte no plano.
+    for (const d of desenho.dias) {
+      const entregue = r.dias.find((x) => x.diaId === d.diaId);
+      expect(entregue, `${d.diaId} sumiu do desenho`).toBeTruthy();
+      expect(entregue!.slots.map((s) => s.exercicio.id), d.diaId).toEqual(d.exercicioIds);
+    }
     const frase = r.avisos.find((a) => DITO_DIAS.test(a));
     expect(frase, `o desenho cobre 4 de 7 e nada é dito: ${r.avisos.join(' | ')}`).toBeDefined();
     expect(frase).toContain('Quarta-feira');
     expect(frase).toContain('não reescreve o seu desenho');
+  });
+
+  it('a geração automática, pedida depois, usa a agenda atual e entrega os sete dias', () => {
+    // O mesmo perfil, SEM o desenho: é o que "gerar novo treino" faz depois da confirmação.
+    const r = montar(comDias(TODOS));
+    expect(r.dias).toHaveLength(7);
+    expect(diasDo(r)).toEqual([...TODOS]);
   });
 });
 
@@ -266,10 +328,9 @@ describe('③ execução bilateral como padrão', () => {
    *  · ALVOS diretos (`diretosDoExercicio`) — medido: o `e147` Bird dog (unilateral alternado)
    *    ocupa um slot de core onde a prancha `e7` (bilateral) estava livre, e os dois não cobrem
    *    os mesmos alvos;
-   *  · TRAÇOS mecânicos (`tracosMecanicos`) — medido: a elevação lateral na polia `e53`
-   *    (unilateral) entra no lugar da `e52` (bilateral) com os MESMOS alvos, porque o passe
-   *    anatômico só aceita a troca quando o candidato traz traço novo (`trazTracoNovo`), e a
-   *    polia traz. O alocador havia escolhido a bilateral; quem trocou foi a cobertura.
+   *  · TRAÇOS mecânicos (`tracosMecanicos`) — medido: o `e133` e o `e40` têm o mesmo alvo e
+   *    traços diferentes, e trocar um pelo outro custaria o traço. As duas moedas entram no
+   *    predicado porque as duas são cobertura.
    * A preferência por execução escolhe entre equivalentes; ela não é autorização para perder
    * alvo nem traço.
    */
@@ -341,27 +402,20 @@ describe('③ execução bilateral como padrão', () => {
     }
     expect(medidos).toBeGreaterThan(100);
     /**
-     * 🔵 RESÍDUO DECLARADO, com a causa medida — 4 células das 144 varridas.
+     * 🔵 O RESÍDUO DE 19/09 FECHOU — e a explicação de 19/09 estava errada.
      *
-     * Nelas o ALOCADOR escolhe a bilateral `e52` Elevação lateral (traçado no `escolher`), e
-     * quem a substitui depois é o PAR COMPENSADO do passe de cobertura anatômica
-     * (`procurarCompensacao`, `cobertura-anatomica.ts`): para uma troca que abre cobertura de
-     * ombro posterior, ele precisa de um segundo slot do mesmo grupo com crédito DIFERENTE, e
-     * dentro da função `elevacao-lateral` as duas únicas alternativas à `e52` (`e53` na polia e
-     * `e54` deitada) são unilaterais. Não existe par bilateral válido: manter a preferência ali
-     * custaria a cobertura que o par foi buscar.
+     * A lista fechada tinha 4 células e a causa registrada era "o passe anatômico precisa do
+     * traço novo que a polia traz". Medido em 20/09, não é isso: a `e52` e a `e53` têm os MESMOS
+     * alvos diretos (`dl`) e os MESMOS traços (`acao:elevacao_lateral`). O que acontecia era
+     * outra coisa — o alocador punha a `e52` num slot e a `e53` no outro (a função
+     * `elevacao-lateral` não tem uma segunda bilateral); depois a cobertura trocava a `e52` pela
+     * `e107` Crucifixo invertido na máquina, por causa do alvo `dp`, e a `e52` ficava LIVRE sem
+     * que ninguém revisse o slot da `e53`.
      *
-     * 🔒 A lista é FECHADA de propósito: qualquer célula nova entra como falha, em vez de
-     * engordar um resíduo em silêncio. Para fechá-la de vez o catálogo precisaria de uma
-     * elevação lateral bilateral com outro perfil de crédito — decisão de catálogo, do autor.
+     * `trocarParaBilateral` é essa releitura, e roda depois de todos os passes. A exceção não
+     * era necessária: era uma volta que faltava.
      */
-    const RESIDUO = [
-      'academia/avancado/4d/45/v0: qui/e53 (havia e52)',
-      'academia/avancado/4d/75/v0: qui/e53 (havia e52)',
-      'academia/avancado/5d/45/v0: qui/e53 (havia e52)',
-      'academia/avancado/5d/75/v0: qui/e53 (havia e52)',
-    ];
-    expect(fora.sort(), `${fora.length} slots unilaterais com bilateral disponível na mesma função`).toEqual(RESIDUO);
+    expect(fora.sort(), `${fora.length} slots unilaterais com bilateral disponível na mesma função`).toEqual([]);
   });
 
   it('a troca automática prefere o bilateral entre equivalentes', () => {

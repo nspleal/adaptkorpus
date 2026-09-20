@@ -54,8 +54,22 @@ describe('etapa2: possibilidades na saída final',()=>{
  it.each([4,5])('%i pernas: duas ênfases e dois superiores separados',n=>{
   const r=run(n,'pernas'),gs=grupos(r);
   const pernas=gs.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
-  if(pernas.length!==2)verificarImpedimentoRecortes(run(n),r,7);
-  else expect(pernas).toHaveLength(2);
+  /**
+   * 🔵 2026-09-20 — a régua deixou de ser "exatamente dois dias inferiores".
+   *
+   * O que este caso cobra é ÊNFASES DISTINTAS no terminal: um dia com ênfase em quadríceps e
+   * outro em posterior. Até 19/09 a agenda de 7 dias era cortada em 6 e isso coincidia com
+   * exatamente dois dias inferiores; com a decisão do autor a mesma agenda entrega 7 sessões e
+   * TRÊS dias tocam pernas — os dois recortes estão lá, e mais um. Exigir "== 2" passou a
+   * reprovar justamente o caso que atende melhor. A asserção passa a cobrar o que o título diz,
+   * e fica mais forte: as duas ênfases têm de ser distintas de verdade.
+   */
+  if(pernas.length<2)verificarImpedimentoRecortes(run(n),r,7);
+  else{
+    const soQuad=gs.some(g=>g.includes('quadriceps')&&!g.includes('posterior'));
+    const soPost=gs.some(g=>g.includes('posterior')&&!g.includes('quadriceps'));
+    expect(soQuad&&soPost,`ênfases não distintas em ${n} dias: ${JSON.stringify(gs)}`).toBe(true);
+  }
   expect(gs.some(g=>g.includes('peito')&&!g.includes('costas'))).toBe(true);
   expect(gs.some(g=>g.includes('costas')&&!g.includes('peito'))).toBe(true);
   expect(gs.flat()).toContain('ombros');
@@ -64,7 +78,11 @@ describe('etapa2: possibilidades na saída final',()=>{
   const r=run(n,'pernas'),f=grupos(r);
   // Primários documentais do catálogo; não exige exclusividade anatômica.
   const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
-  if(inferiores.length!==2)verificarImpedimentoRecortes(run(n),r,7);
+  // 🔵 2026-09-20: `< 2`, não `!== 2`. Com 7 dias marcados a agenda entrega 7 sessões e TRÊS
+  // dias tocam pernas; os dois recortes estão lá, e mais um. A prova de impossibilidade só faz
+  // sentido quando FALTA dia inferior — a distinção das ênfases é conferida logo abaixo, em
+  // `separou`, que é a asserção que este caso de fato carrega.
+  if(inferiores.length<2)verificarImpedimentoRecortes(run(n),r,7);
   /**
    * 🔴 L-03 (revisão independente 15/09) — A ASSERÇÃO NÃO DEPENDE MAIS DO AVISO DO MOTOR.
    * Antes, a verificação dos recortes era PULADA quando o próprio código sob teste emitia

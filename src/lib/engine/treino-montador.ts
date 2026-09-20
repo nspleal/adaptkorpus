@@ -17,7 +17,8 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
  * ①②③ de 2026-08-12 (contagem ponderada · cobertura · divisões).
  *
  * Garantias (travadas na spec):
- *  - dias de força = min(dias_disponíveis, teto do nível); excedente → cardio/recuperação;
+ *  - dias de força = TODOS os dias marcados para musculação (decisão do autor 2026-09-20; até
+ *    19/09 era `min(dias_disponíveis, teto do nível)`). A dose semanal é repartida, não multiplicada;
  *  - slots do dia = orçamento de TEMPO (`orcamentoSlotsDoDia`); cada slot vai ao grupo com
  *    maior DÉFICIT PONDERADO do template do dia (`alocarSemana`);
  *  - puxar ≥ empurrar (saúde do ombro); dobradiça presente; core 2–3×/semana;
@@ -27,7 +28,7 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
  *    onde elas moram, não a progressão (armadilha 7 do handoff);
  *  - determinístico (ordena por tier↑ depois id; rotaciona por grupo p/ variar).
  */
-import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload } from './treino';
+import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload, tetoSessoesForca } from './treino';
 import { exercicioDisponivel, servePelaSelecaoAutomatica } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
@@ -36,7 +37,7 @@ import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from '.
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, maxSemanalSemFoco, mev, ordenarComFoco, tetoPonderadoNaSessao, tetoSemanalCheio, tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao, type DecisaoFoco, FOCO_SEMANAS } from './trilhos';
-import { diagnosticarDia, otimizarCoberturaAnatomica } from './cobertura-anatomica';
+import { diagnosticarDia, diretosDoExercicio, otimizarCoberturaAnatomica, tracosMecanicos } from './cobertura-anatomica';
 import { gruposDoDia } from './cobertura-editor';
 import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana, type TemplateDia } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
@@ -52,8 +53,8 @@ import { faixaSegundos, repUnitDe } from './isometricos';
 import { duracaoDoDiaDeCardio, MODALIDADE_PADRAO_DIA } from './dia-de-cardio';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
-import { distribuirGruposNoCalendario, distribuirComplementares, diasConsecutivos } from './calendario-grupos';
-import { ehComplementar, ehDiaDisponivel } from './selecao-referencia';
+import { distribuirGruposNoCalendario, diasConsecutivos } from './calendario-grupos';
+import { ehComplementar, ehDiaDisponivel, funcaoDe, papelReferencia } from './selecao-referencia';
 import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FatoCorteTempo, FatoInvariantePadrao, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
@@ -205,6 +206,175 @@ function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modal
 
 /** Padrões independentes que o adaptador temporal exige de toda realocação. */
 const COBERTURA_TEMPORAL_OBRIGATORIA = ['puxar', 'empurrar', 'agachar'] as const;
+
+const creditoDe = (e: Exercise, series: number) => creditoPonderadoDaSemana([{ exercicio: e, series }]);
+const mesmoConjunto = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
+  a.size === b.size && [...a].every((x) => b.has(x));
+
+/**
+ * 🔒 EQUIVALÊNCIA NEUTRA — a condição que as duas trocas de 20/09 compartilham.
+ *
+ * Dois exercícios são intercambiáveis quando têm os mesmos ALVOS DIRETOS e os mesmos TRAÇOS
+ * MECÂNICOS (a cobertura do dia não se move) e as mesmas três entradas que o adaptador de
+ * duração lê — `padraoMovimento`, `execucao` e `repUnitDe` (o tempo do dia não se move).
+ *
+ * 🔴 A FUNÇÃO não entra aqui de propósito, e a diferença importa: quem exige função igual é a
+ * troca que evita a PODA (lá o slot é o mesmo papel, só sem o crédito que estourava). A troca
+ * que alimenta o FOCO compara exercícios anatomicamente idênticos de funções diferentes —
+ * puxada na polia e barra fixa supinada têm o mesmo alvo direto (`lat`) e o mesmo traço
+ * (`puxada_vertical`), e é exatamente aí que mora a escolha que serve o foco declarado.
+ */
+function equivalenteNeutro(a: Exercise, b: Exercise): boolean {
+  return a.padraoMovimento === b.padraoMovimento
+    && a.execucao === b.execucao
+    && repUnitDe(a.id) === repUnitDe(b.id)
+    && mesmoConjunto(diretosDoExercicio(a.id), diretosDoExercicio(b.id))
+    && mesmoConjunto(tracosMecanicos(a.id), tracosMecanicos(b.id));
+}
+
+
+/**
+ * 🔵 VOLTAR AO BILATERAL QUANDO ELE FICA LIVRE — decisão do autor, 2026-09-20 (ponto ③).
+ *
+ * 🔴 A CAUSA DAS QUATRO CÉLULAS RESIDUAIS DE 19/09, agora medida (e a explicação anterior
+ * estava errada, o que este comentário corrige): o alocador escolhia CERTO. Num dia de ombros
+ * de avançado ele punha a `e52` Elevação lateral (bilateral) num slot e, como a função
+ * `elevacao-lateral` não tem uma segunda bilateral, punha a `e53` na polia (unilateral) no
+ * outro. Depois o passe de cobertura anatômica trocava a `e52` pela `e107` Crucifixo invertido
+ * na máquina — troca legítima, ela traz o alvo `dp` (ombro posterior) que faltava no dia, e a
+ * `e107` também é bilateral. Só que ao sair, a `e52` ficou LIVRE — e ninguém voltou para ver
+ * que o slot da `e53` agora tinha uma bilateral equivalente disponível.
+ *
+ * Não era, portanto, uma exceção necessária: era uma releitura que faltava. A `e52` e a `e53`
+ * têm os MESMOS alvos diretos (`dl`) e os MESMOS traços (`acao:elevacao_lateral`) — o
+ * "traço novo da polia" registrado em 19/09 não existe.
+ *
+ * 🔒 Este passe roda DEPOIS de todos os outros justamente por isso: ele lê o dia como ele
+ * ficou. Exige, para trocar: mesmo grupo, mesma função, os alvos e os traços do unilateral
+ * INTEIRAMENTE cobertos pela bilateral, nenhum grupo perdendo crédito e a bilateral livre no
+ * dia. A execução bilateral nunca custa mais tempo que `UNILATERAL_DOIS_LADOS`, então o dia
+ * não pode estourar por causa dela.
+ *
+ * 🔒 Preferência, não filtro: onde não há bilateral equivalente (a família `afundo` inteira,
+ * por exemplo) o unilateral continua entrando. E o desenho da pessoa não é tocado.
+ */
+interface DiaTrocavel { slots: { exercicio: Exercise; series?: number | null }[] }
+
+function trocarParaBilateral(
+  dias: readonly DiaTrocavel[],
+  pool: readonly Exercise[],
+  seriesPadrao = 1,
+): { dia: number; de: string; para: string }[] {
+  const trocas: { dia: number; de: string; para: string }[] = [];
+  dias.forEach((dia, d) => {
+    for (const alvo of dia.slots) {
+      const saiu = alvo.exercicio;
+      if (ehBilateral(saiu)) continue;
+      const usados = new Set(dia.slots.map((s) => s.exercicio.id));
+      const series = alvo.series ?? seriesPadrao;
+      const antes = creditoDe(saiu, series);
+      const alvosDele = diretosDoExercicio(saiu.id);
+      const tracosDele = tracosMecanicos(saiu.id);
+      const bilateral = pool.find((c) => c.id !== saiu.id && !usados.has(c.id) && ehBilateral(c)
+        && c.grupoPrimario === saiu.grupoPrimario && funcaoDe(c) === funcaoDe(saiu)
+        // 🔴 Medido: sem esta linha a troca podia pôr um ISOMÉTRICO no lugar de um exercício
+        // de repetições; o slot ficava sem `holdSeg` e o dia inteiro virava NAO_AVALIADO.
+        && repUnitDe(c.id) === repUnitDe(saiu.id)
+        && [...alvosDele].every((a) => diretosDoExercicio(c.id).has(a))
+        && [...tracosDele].every((t) => tracosMecanicos(c.id).has(t))
+        && [...antes].every(([g, v]) => (creditoDe(c, series).get(g) ?? 0) >= v));
+      if (!bilateral) continue;
+      alvo.exercicio = bilateral;
+      trocas.push({ dia: d, de: saiu.id, para: bilateral.id });
+    }
+  });
+  return trocas;
+}
+
+/**
+ * 🔵 ENTRE EQUIVALENTES, O MAIS COMPLETO — decisão do autor, 2026-09-20 (ponto ②).
+ *
+ * Quando dois exercícios são anatomicamente idênticos e custam o mesmo tempo (`equivalenteNeutro`)
+ * e um deles AINDA trabalha um grupo que o outro não trabalha, escolher o menos completo é
+ * desperdiçar estímulo de graça. A barra fixa supinada e a puxada triângulo têm o mesmo alvo
+ * (`lat`) e o mesmo traço (`puxada_vertical`); a primeira também solicita o bíceps. É ela.
+ *
+ * 🔴 O CRITÉRIO NÃO OLHA O FOCO — e isso foi uma CORREÇÃO de rota, medida: a primeira
+ * versão desta troca escolhia "o equivalente que alimenta o grupo EM FOCO", e com isso o
+ * baseline dos outros grupos passava a depender de haver ou não foco. É exatamente a regressão
+ * que D-01/D-02 existem para impedir (`etapa3-foco-tempo.test.ts`): com foco em costas, um slot
+ * de ombros trocava `e107` por `e106`. O critério é Pareto e independente do foco — nenhum
+ * grupo recebe menos, ao menos um recebe mais —, então o plano neutro e o plano com foco fazem
+ * a MESMA troca e o baseline fica idêntico.
+ *
+ * 🔒 NÃO É VOLUME NOVO: não cria série, não cria slot, não move tempo. As mesmas séries
+ * passam a creditar também o grupo que o exercício realmente solicita.
+ *
+ * 🔒 SEM GUARDA DE TETO AQUI, e de propósito: nesta etapa nenhum slot tem dose — o alocador
+ * planeja TODOS em `seriesPlanejamento` e quem faz caber são as podas (semanal e de sessão) e a
+ * `tentarAlternativasDeSessao`, cada uma com a dose real na mão. Uma guarda medida em séries de
+ * planejamento recusaria toda troca, porque em `sPlan` todo dia já nasce acima do teto.
+ *
+ * 🔴 Medido na fixture do PR #18/#19: sem ela o bíceps em foco fecha a semana em 17,5
+ * ponderadas; com ela, em 19 — o teto cheio do grupo —, com as MESMAS 16 séries diretas.
+ */
+/**
+ * 🔒 O LIMITE DA TROCA ACIMA — e ele foi aprendido errando, em 20/09.
+ *
+ * 🔴 Medido na primeira versão, que só exigia equivalência anatômica: a flexão de braço
+ * credita peito + tríceps + ombros e o supino credita menos grupos, então o critério "mais
+ * completo" TIRAVA o supino do dia de peito — exatamente o que a seleção por referência do
+ * PR #18/#19 existe para impedir (`regressao-selecao-complementares-2026-09-19`).
+ *
+ * A trava usa a autoridade que já existia para isso: `papelReferencia`, o papel EXIGIDO pelo
+ * autor (supino, puxada, remada, agachar, extensora, flexora). A troca só atravessa função
+ * quando o catálogo declara que as duas cumprem o MESMO papel exigido — puxada na polia e
+ * barra fixa supinada são ambas `'puxada'`, e é por isso que aquela troca é legítima. Onde não
+ * há papel exigido (`null`), a função tem de ser a mesma: sem papel declarado, o motor não tem
+ * autoridade para dizer que duas funções se substituem.
+ */
+function mesmoPapelOuMesmaFuncao(a: Exercise, b: Exercise): boolean {
+  const pa = papelReferencia(a);
+  return pa != null ? pa === papelReferencia(b) : funcaoDe(a) === funcaoDe(b);
+}
+
+function trocarPorEquivalenteMaisCompleto(args: {
+  dias: readonly DiaTrocavel[];
+  pool: readonly Exercise[];
+  /** Séries usadas quando o slot ainda não tem dose — a comparação é invariante à escala. */
+  seriesPadrao?: number;
+}): { dia: number; de: string; para: string; ganhos: GrupoPrimario[] }[] {
+  const { dias, pool, seriesPadrao = 1 } = args;
+  const trocas: { dia: number; de: string; para: string; ganhos: GrupoPrimario[] }[] = [];
+  dias.forEach((dia, d) => {
+    for (const alvo of dia.slots) {
+      const saiu = alvo.exercicio;
+      const series = alvo.series ?? seriesPadrao;
+      if (series <= 0) continue;
+      const usados = new Set(dia.slots.map((s) => s.exercicio.id));
+      /** A variedade do dia não pode piorar: função que já está no dia não entra de novo. */
+      const funcoesDoDia = new Set(dia.slots.filter((x) => x !== alvo).map((x) => funcaoDe(x.exercicio)));
+      const antes = creditoDe(saiu, series);
+      /** Pareto estrito: ninguém perde, alguém ganha. Desempate por id — determinismo. */
+      const melhores = pool.filter((c) => c.id !== saiu.id && !usados.has(c.id)
+        && equivalenteNeutro(c, saiu)
+        && mesmoPapelOuMesmaFuncao(c, saiu)
+        && (funcaoDe(c) === funcaoDe(saiu) || !funcoesDoDia.has(funcaoDe(c)))
+        && [...antes].every(([g, v]) => (creditoDe(c, series).get(g) ?? 0) >= v)
+        && [...creditoDe(c, series)].some(([g, v]) => v > (antes.get(g) ?? 0)))
+        .sort((a, b) => {
+          const total = (e: Exercise) => [...creditoDe(e, series).values()].reduce((n, v) => n + v, 0);
+          return total(b) - total(a) || (a.id < b.id ? -1 : 1);
+        });
+      const melhor = melhores[0];
+      if (!melhor) continue;
+      alvo.exercicio = melhor;
+      const ganhos = [...creditoDe(melhor, series)].flatMap(([g, v]) => (v > (antes.get(g) ?? 0) ? [g] : []));
+      trocas.push({ dia: d, de: saiu.id, para: melhor.id, ganhos });
+    }
+  });
+  return trocas;
+}
 
 /**
  * 🔴 D13 — a última semana de RAMPA do mesociclo: o plano-base com que a semana de deload se
@@ -465,13 +635,43 @@ export function montarRotina(
     ? ORDEM_SEMANA.filter((dia) => perfil.treinoDias!.includes(dia))
     : diasPadrao(Math.max(0, Math.floor(perfil.diasDisponiveis)));
   const dias = diasDaAgenda.length;
-  const teto = prescricao.sessoesForcaSemana.max;
-  const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
-  const diaComplementar = automatico ? diasDaAgenda.slice(diasForca).find(d =>
-    !diasOferecidosCardio.includes(d) && !diasOferecidosCardio.includes(ORDEM_SEMANA.indexOf(d))) : undefined;
-  const diasCardioRecuperacao = Math.max(0, dias - diasForca - Number(diaComplementar != null));
-  /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
-  const diasForcaDaSemana = [...diasDaAgenda.slice(0, diasForca), ...(diaComplementar ? [diaComplementar] : [])];
+  /**
+   * 🔵 DECISÃO DO AUTOR — 2026-09-20: O DIA MARCADO PARA MUSCULAÇÃO VIRA SESSÃO.
+   *
+   * Até 19/09 esta linha era `Math.min(dias, teto do nível)`: a agenda da pessoa era cortada
+   * pelo teto de sessões do nível e o excedente virava cardio/recuperação. Era a regra do
+   * Passo 3 (cofre `motor-treino-volume-e-frequencia-por-nivel`, claims --007 e --010). Na
+   * rodada de 19/09 ela foi apenas DITA; a revisão recusou: dizer não atende quem marcou
+   * sete dias e continuou recebendo cinco sessões.
+   *
+   * 🔴 O QUE MUDOU, exatamente: o número do nível deixa de ser LIMITE da agenda e continua
+   * sendo REFERÊNCIA — é ele que a tela recomenda antes de a pessoa escolher (`tetoSessoesForca`
+   * em `DiasEPreferencias`) e é ele que o teto de cobertura usa para medir o pico do nível.
+   * O que ele não faz mais é apagar um dia escolhido.
+   *
+   * 🔒 O QUE NÃO MUDOU: mais dias NÃO é mais volume. Quem limita a semana continua sendo o
+   * alvo por grupo (`alvoPonderado` = topo da faixa), a poda semanal (`maxSemanalSemFoco` /
+   * `tetoSemanalCheio`), o teto por sessão (`TETO_PONDERADO_SESSAO`) e o teto por exercício.
+   * Sete dias repartem a MESMA dose em mais exposições — não a multiplicam.
+   *
+   * ⚠️ Esta é uma decisão de PRODUTO tomada nesta candidata, ainda NÃO arquivada no cofre.
+   * Enquanto não voltar de lá, a página citada acima continua descrevendo a regra antiga.
+   */
+  const diasForca = dias;
+  /**
+   * 🔒 DIA DE CARDIO/RECUPERAÇÃO — a origem mudou, a feature não.
+   *
+   * Antes ele era o RESTO do corte: agenda menos teto do nível. Sem corte não há resto, e
+   * inventar um seria voltar a decidir pela pessoa. A origem passa a ser a única honesta: os
+   * dias que ela declarou TER (`diasDisponiveis`) e NÃO marcou para musculação. Nos caminhos
+   * vivos do app os dois números são iguais por construção (`diasDisponiveis = treinoDias.length`
+   * em `EditarPerfil` e no onboarding), então o dia automático de cardio deixa de aparecer —
+   * e é exatamente o que a decisão de 20/09 pede. O cardio EXPLÍCITO (`diasOferecidosCardio`)
+   * é outro caminho e continua intacto: ele nunca dependeu deste número.
+   */
+  const diasCardioRecuperacao = Math.max(0, Math.floor(perfil.diasDisponiveis) - diasForca);
+  /** As sessões de força ocupam TODOS os dias escolhidos, na ordem real da semana. */
+  const diasForcaDaSemana = [...diasDaAgenda];
 
   if (diasForca === 0) {
     return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
@@ -489,16 +689,16 @@ export function montarRotina(
   const baseDivisao = templatesDaSemana(diasForca, perfil.nivelExperiencia, divisao);
   const perfilBase = automatico ? {...perfil,foco:undefined,focoAgregado:undefined} : perfil;
   const selecao = selecionarDivisao(baseDivisao, perfilBase, automatico ? undefined : agregado, !!semanaCiclo?.retomada, CORE_MAX);
-  // O dia dedicado não muda a divisão nem a recuperação das sessões principais.
-  const calendarizar = (ts: readonly TemplateDia[], focos: readonly GrupoPrimario[], preservar = false) => {
-    const base = distribuirGruposNoCalendario(ts, diasDaAgenda.slice(0, diasForca), focos, Math.min(CORE_MIN, diasForca), preservar);
-    if (!diaComplementar) return base;
-    const dedicado: TemplateDia = { nome: 'Complementares', grupos: ['core', 'antebraco'] };
-    const originais = [...base.dias.map(d => ({...d, grupos:[...d.grupos]})), dedicado];
-    const novos = [...base.dias.map(d => ({...d, grupos:[...d.grupos]})), {...dedicado}];
-    distribuirComplementares(novos, originais, diasForcaDaSemana, Math.min(CORE_MIN, diasForca));
-    return {...base, dias: novos};
-  };
+  /**
+   * 🔒 O dia DEDICADO aos complementares (PR #18, 19/09) não sumiu: ele continua sendo um
+   * recorte das divisões de 5–7 dias (`complemento()` em `selecao-divisao.ts`) e `distribuirComplementares`
+   * segue sendo quem o alimenta, dentro de `distribuirGruposNoCalendario`. O que saiu daqui foi
+   * o ANEXO: o dia extra que era grudado no fim porque a agenda passava do teto. Sem corte de
+   * agenda não há excedente para anexar — e anexar um dia de core/antebraço só para fechar a
+   * contagem é exatamente o "complementar artificial" que a decisão de 20/09 proíbe.
+   */
+  const calendarizar = (ts: readonly TemplateDia[], focos: readonly GrupoPrimario[], preservar = false) =>
+    distribuirGruposNoCalendario(ts, diasForcaDaSemana, focos, Math.min(CORE_MIN, diasForca), preservar);
   const calendario = calendarizar(selecao.dias, automatico ? [] : prioritarios, selecao.preservarRecortes);
   const selecaoFoco = automatico && agregado === 'pernas'
     ? selecionarDivisao(baseDivisao, perfil, agregado, !!semanaCiclo?.retomada, CORE_MAX) : selecao;
@@ -635,11 +835,18 @@ export function montarRotina(
       .map((d) => ({ nome: d.nome, ...(d.diaId ? { diaId: d.diaId } : {}), motivo: 'DESENHO_VAZIO' as const })));
     const diasUsuarioComExercicio = diasUsuario.filter((d) => d.slots.length > 0);
     if (diasUsuarioComExercicio.length > 0 || custom.dias.some(d => d.exercicioIds.length > 0)) {
-      // O teto vigente orienta a recomendação; não apaga o desenho manual.
-      const cortados = diasUsuarioComExercicio.slice(diasForca);
+      /**
+       * A REFERÊNCIA do nível orienta; ela nunca apagou o desenho manual e desde 20/09 também
+       * não corta a agenda. 🔴 Até 19/09 a comparação era contra `diasForca` — que ERA o corte;
+       * agora `diasForca` é a agenda inteira, e comparar contra ele faria a frase sumir
+       * exatamente quando ela é útil. A comparação passa a ser contra a referência do nível,
+       * que é o que a frase sempre quis dizer.
+       */
+      const referenciaDoNivel = tetoSessoesForca(perfil.nivelExperiencia);
+      const acimaDaReferencia = Math.max(0, diasUsuarioComExercicio.length - referenciaDoNivel);
       const mantidos = diasUsuarioComExercicio;
-      if (cortados.length > 0) {
-        avisosCustom.push(`Seu treino tem ${diasUsuarioComExercicio.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} dias excedem a recomendação atual. Seu desenho foi preservado.`);
+      if (acimaDaReferencia > 0) {
+        avisosCustom.push(`Seu treino tem ${diasUsuarioComExercicio.length} dias e a referência do seu nível é ${referenciaDoNivel} por semana — ${acimaDaReferencia} ${acimaDaReferencia === 1 ? 'dia excede' : 'dias excedem'} a recomendação atual. Seu desenho foi preservado.`);
       }
       // DF②: exercícios, ordem e quantidade do usuário ficam intactos. O caminho canônico
       // certifica duração e recomenda cardio mais abaixo; nunca aplica reduce-to-fit ao manual.
@@ -997,6 +1204,25 @@ export function montarRotina(
     if (dia.naoPreenchidos === 0) dia.motivoCurto = null;
   }
   void trocasAnatomicas;
+
+  /**
+   * 🔵 A TROCA POR EQUIVALENTE MAIS COMPLETO (20/09) RODA AQUI — e o lugar é parte da correção.
+   *
+   * 🔴 Medido: com ela no fim do pipeline, o plano trocava o exercício DEPOIS de a rampa
+   * ter distribuído as séries, e a prévia do editor — que recebe os ids finais e recalcula tudo
+   * do zero — chegava a outra dose (`e14` com 2 séries no plano e 1 na prévia, na retomada). A
+   * paridade plano × editor é contrato; escolha de exercício é SELEÇÃO e tem de terminar antes
+   * da dose. Aqui ela vê o dia como a cobertura anatômica o deixou, e tudo o que vem depois
+   * (rampa, descanso, poda, duração) é calculado uma vez só, sobre os exercícios definitivos.
+   *
+   * 🔒 Não toca o desenho da pessoa: o caminho custom nem passa por `diasAlocados`. A outra
+   * troca de 20/09 — `trocarParaBilateral` — é a única que roda no FIM, e tem de ser: ela existe
+   * justamente para reler o dia depois de todos os passes (foco, complementares, tempo).
+   */
+  const trocasMaisCompletas = trocarPorEquivalenteMaisCompleto({
+    dias: diasAlocados, pool, seriesPadrao: prescricao.seriesPorExercicio.max,
+  });
+  void trocasMaisCompletas;
 
   /**
    * 🔒 O PIPELINE COMPARTILHADO — tudo o que vem DEPOIS de saber quais exercícios entram:
@@ -1551,10 +1777,24 @@ export function montarRotina(
       const rirAlvo=prescricao.rirAlvoSemana??rirAlvoDaSemana(prescricao.rir,semanaCiclo?.semana??1);
       const limiteDia=limiteDiarioSegundos;
       /** Descanso pela autoridade única (`descansoDoExercicio`), no nível pedido. */
+      /**
+       * Rededuz do EXERCÍCIO os campos do slot que dependem dele — descanso e hold.
+       *
+       * 🔴 O hold entrou aqui em 2026-09-20, e não por precaução: até 19/09 toda troca tardia
+       * exigia `mesmoCustoDeSlot`, que inclui a faixa de isometria, então o hold do slot
+       * continuava válido por construção. Com a troca de outro custo liberada
+       * (`aceitaOutroCusto`), um exercício de repetições pode sair por um ISOMÉTRICO — e o slot
+       * ficava sem `holdSeg`, a fórmula recusava medir e o DIA INTEIRO virava `NAO_AVALIADO`
+       * (medido: `e118` no dia de costas de um avançado 4d/75 com foco em posterior).
+       */
       const aplicarDescanso=(d:DiaTreino,degradacao:0|1|2)=>{
         for(const slot of d.slots){
           const descanso=descansoDoExercicio({exercicio:slot.exercicio,rirAlvo,modoForca:prescricao.modoForca,semanaRampa:semanaCiclo?.retomada?.semana,degradacao});
           if(descanso!=null)slot.descansoSeg=descanso;
+          if(repUnitDe(slot.exercicio.id)==='segundos'){
+            const hold=faixaSegundos(slot.exercicio.id,perfil.nivelExperiencia)?.min;
+            if(hold!=null)slot.holdSeg=hold;
+          }else if(slot.holdSeg!=null)delete slot.holdSeg;
         }
       };
       const cabeNoDia=(d:DiaTreino)=>{
@@ -1750,8 +1990,27 @@ export function montarRotina(
           dias: diasTreino, teto: tetoDaSessao, pool, tetoSemanal: tetoSemanalGrupo,
           pisoSemanal: faixaDaSemana.min,
           cabeNoTempo: (_dia, slots) => cabeNoDia({ ...diasTreino[_dia]!, slots: [...slots] }),
+          /**
+           * 🔵 20/09 — a segunda pergunta da trava ③ (ver `excecao-sessao.ts`): o candidato
+           * de outro custo entra se o dia, COM O DESCANSO DELE recalculado, continuar cabendo.
+           * Quem sabe recalcular descanso é este arquivo, então a resposta mora aqui.
+           */
+          aceitaOutroCusto: (_dia, slots) => {
+            const clone: DiaTreino = { ...diasTreino[_dia]!, slots: slots.map((s) => ({ ...s })) };
+            aplicarDescanso(clone, degradacaoDoDia[_dia] ?? 0);
+            return cabeNoDia(clone);
+          },
         });
       if (tentativa.trocas.length > 0) {
+        /**
+         * 🔒 O descanso do exercício novo tem de valer no plano, não só na simulação. Até
+         * 19/09 isso era desnecessário (a troca só aceitava custo idêntico); desde que ela pode
+         * mudar o custo, deixar o descanso velho no slot é a divergência plano × editor que a
+         * paridade cobra — a prévia recalcula do zero e chega a outro número.
+         */
+        for (const d of new Set(tentativa.trocas.map((t) => t.dia))) {
+          aplicarDescanso(diasTreino[d]!, degradacaoDoDia[d] ?? 0);
+        }
         /**
          * 🔒 A TROCA É DITA (D-01/D-02: o custo é dito, nunca silencioso). Trocar o exercício
          * que a pessoa vai ver é mudança visível, e o motivo dela é o teto do dia.
@@ -1782,6 +2041,28 @@ export function montarRotina(
        * 🔒 Aqui não há margem de 3 e não há exceção de foco — o teto do dia é o mesmo para
        * todos os grupos, e o crédito indireto conta igual.
        */
+      /**
+       * 🔵 A RELEITURA BILATERAL (ponto ③) RODA POR ÚLTIMO, e tem de rodar: ela existe para
+       * ver o dia DEPOIS de todos os passes — foi um passe posterior (a cobertura anatômica)
+       * que liberou a `e52` e deixou a `e53` no slot vizinho. Rodando cedo, ela reencontraria
+       * o problema logo em seguida: medido, 28 slots unilaterais evitáveis contra 0.
+       *
+       * 🔒 Verificada: bilateral e unilateral têm descansos próprios, então o dia é recalculado
+       * e revertido inteiro se deixar de caber. (Na prática o bilateral nunca custa mais tempo
+       * que `UNILATERAL_DOIS_LADOS`, mas a verificação é barata e não se assume tempo.)
+       */
+      if (automatico) {
+        const antes = diasTreino.map((d) => d.slots.map((sl) => ({ exercicio: sl.exercicio, descansoSeg: sl.descansoSeg })));
+        const feitas = trocarParaBilateral(diasTreino, pool);
+        for (const d of new Set(feitas.map((t) => t.dia))) {
+          aplicarDescanso(diasTreino[d]!, degradacaoDoDia[d] ?? 0);
+          if (cabeNoDia(diasTreino[d]!)) continue;
+          diasTreino[d]!.slots.forEach((sl, k) => {
+            const orig = antes[d]?.[k];
+            if (orig) { sl.exercicio = orig.exercicio; sl.descansoSeg = orig.descansoSeg; }
+          });
+        }
+      }
       const podaSessao = tetoDaSessao == null
         ? { podados: [], irredutiveis: [] }
         : podarExcessoPonderadoNaSessao(diasTreino.map(d => d.slots), tetoDaSessao, sMinDaSemana);
@@ -1875,7 +2156,17 @@ export function montarRotina(
       const preencherFolgasComplementares = () => {
        if (!rotinaBaseDoDeload && !deloadAgendado && !semanaCiclo?.retomada && diasForca > 1) {
         preencherComplementaresAusentes({
-          dias: diasTreino, pool: [...pool].sort((a,b)=>Number(favoritosEfetivos.has(b.id))-Number(favoritosEfetivos.has(a.id))),
+          dias: diasTreino,
+          /**
+           * 🔴 ISOMÉTRICO SEM HOLD DECLARADO NÃO ENTRA por este caminho — medido em 20/09:
+           * o preenchimento materializa `holdSeg` a partir de `faixaSegundos`, e quando ela não
+           * cobre o exercício o slot nasce sem hold, a fórmula de duração recusa medir e o DIA
+           * INTEIRO vira `NAO_AVALIADO` (visto com `e118` num plano de academia). O filtro é do
+           * próprio contrato da fórmula, não um remendo: sem hold não há tempo para estimar.
+           */
+          pool: [...pool]
+            .filter((e) => repUnitDe(e.id) !== 'segundos' || faixaSegundos(e.id, perfil.nivelExperiencia) != null)
+            .sort((a,b)=>Number(favoritosEfetivos.has(b.id))-Number(favoritosEfetivos.has(a.id))),
           slotsMax: budgetPorDia, minSeries: limiteDia == null ? sMinDaSemana : Math.min(2,sMinDaSemana),
           tetoSemana: tetoSemanalGrupo, tetoDia: tetoDaSessao ?? Infinity,
           // Decisão do autor 20/09: só quem declarou "sem limite de tempo" ganha o slot extra
@@ -2353,17 +2644,19 @@ export function montarRotina(
         ...(d.slotsNaoPreenchidos != null ? { slotsPedidos: d.slotsNaoPreenchidos } : {}),
       }));
     /**
-     * 🔵 O DIA ESCOLHIDO QUE NÃO VIROU TREINO É DITO (relato 2026-09-19).
+     * 🔵 O DIA ESCOLHIDO QUE NÃO VIROU TREINO É DITO (relato 2026-09-19, revisto em 20/09).
      *
-     * 🔴 O defeito que isto fecha, medido: perfil intermediário marcando os SETE dias recebia
-     * um plano de segunda a sexta e NENHUMA frase sobre sábado e domingo — e o Editar perfil
-     * ainda rotulava os sete como "Treino". A pessoa lia "mudei os dias e o treino não mudou".
-     * A regra em si é do cofre (`motor-treino-volume-e-frequencia-por-nivel`, claims --007 e
-     * --010: `min(dias_disponiveis, teto)`, excedente → cardio/recuperação); o que faltava era
-     * DIZÊ-LA. Nada é redistribuído aqui: o dia continua sendo cardio/recuperação.
+     * 🔴 O que mudou na revisão: na GERAÇÃO AUTOMÁTICA este aviso não tem mais como aparecer
+     * por causa do teto do nível — `diasForca` passou a ser a agenda inteira, então todo dia
+     * marcado recebe sessão. O bloco continua porque as OUTRAS causas continuam existindo:
+     *  · desenho manual que cobre menos dias do que a pessoa marcou — o app não reescreve o
+     *    desenho dela, e calar seria a redistribuição silenciosa que a D14 proíbe;
+     *  · dia que o motor não conseguiu preencher por razão própria — e esse já vem declarado
+     *    em `diasNaoAtendidos`, com motivo, e por isso é excluído aqui (a mesma verdade
+     *    contada duas vezes não é mais verdade).
      *
-     * 🔒 Dia já declarado em `diasNaoAtendidos` não entra: ele tem motivo próprio e frase
-     * própria, e repetir seria a mesma verdade contada duas vezes.
+     * 🔒 A frase do caminho automático NÃO cita mais teto de sessões: citá-lo contradiria a
+     * decisão de 20/09. Ela diz o fato — o dia ficou sem sessão — e não promete recuperação.
      */
     const jaDeclarados = new Set(diasNaoAtendidos.flatMap((d) => (d.diaId ? [d.diaId] : [])));
     const comSessao = new Set(diasEntregues.flatMap((d) => (d.diaId ? [d.diaId] : [])));
@@ -2376,9 +2669,8 @@ export function montarRotina(
       avisos.push(desenhoDaPessoa
         ? `Você marcou ${diasDaAgenda.length} dias e o seu treino cobre ${comSessao.size}. ${Lista} ${ficaram} sem sessão: `
           + 'o app não reescreve o seu desenho. Monte esses dias em "Montar meu treino" ou peça um treino novo.'
-        : `Você marcou ${diasDaAgenda.length} dias e o plano usou ${comSessao.size}: o seu nível comporta `
-          + `${teto} sessões de força por semana${diaComplementar ? ', mais um dia dedicado aos complementares' : ''}. `
-          + `${Lista} ${ficaram} como cardio/recuperação — não movemos nem repetimos uma sessão para preencher.`);
+        : `Você marcou ${diasDaAgenda.length} dias e o plano usou ${comSessao.size}. ${Lista} ${ficaram} sem sessão de `
+          + 'força nesta semana — não movemos nem repetimos uma sessão para preencher.');
     }
     return {
       diasForcaAgendados: diasEntregues.length,

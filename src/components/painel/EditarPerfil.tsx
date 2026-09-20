@@ -299,7 +299,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
               <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
                 {inicial.rotinaCustom
                   ? <>Seu treino é <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>, então mudar os dias não redistribui as sessões — o desenho fica como está. Dia novo entra vazio: monte-o em “Montar meu treino” ou peça um treino novo.</>
-                  : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões são redistribuídas nos novos dias.</>}
+                  : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia marcado vira uma sessão, e a mesma dose semanal é repartida entre elas.</>}
               </p>
             </div>
           </div>
@@ -335,8 +335,9 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
           />
 
           {/* 🏃 C2 — CARDIO FAVORITO. A spec de cardio já previa modalidade escolhida (default
-              caminhada; as 6 do registro) — faltava só o campo. Ele alimenta o slot do dia
-              excedente. Render INCONDICIONAL, pela mesma regra da descobribilidade. */}
+              caminhada; as 6 do registro) — faltava só o campo. Desde 20/09 ele alimenta o cardio
+              dos dias OFERECIDOS (e o dia de recuperação, quando houver): o dia excedente por teto
+              de nível deixou de existir. Render INCONDICIONAL, pela regra da descobribilidade. */}
           <CardioFavorito valor={cardioFav} onValor={setCardioFav} />
 
           {/* 🎛️ v4 · DF③ — a DIVISÃO como escolha. Render INCONDICIONAL (regra da
@@ -371,7 +372,7 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
             <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>
               {inicial.rotinaCustom
                 ? <>Seu treino foi <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>: os dias novos são salvos, mas o desenho não é reescrito nem redistribuído. Use “Montar meu treino” ou “Gerar novo treino” para preencher os dias que entrarem. Suas preferências de alimentos não mudam.</>
-                : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões serão redistribuídas nos novos dias. Suas preferências de alimentos não mudam.</>}
+                : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>refaz sua semana</strong> — cada dia marcado vira uma sessão, com divisão, exercícios e séries recalculados. A dose semanal é repartida, não multiplicada. Suas preferências de alimentos não mudam.</>}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={salvar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Confirmar e recalcular</button>
@@ -430,7 +431,7 @@ function CardioFavorito({ valor, onValor }: { valor: ModalidadeCardio | null; on
     <div style={{ marginTop: 26 }}>
       <div style={{ fontSize: '.95rem', fontWeight: 700, marginBottom: 4 }}>Cardio favorito</div>
       <p style={{ margin: '0 0 12px', fontSize: '.85rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>
-        Quando sobrar um dia sem treino de força, ele entra com esta modalidade.
+        É a modalidade padrão do seu cardio — no dia que você oferecer e num dia sem musculação, se houver.
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button type="button" onClick={() => onValor(null)} aria-pressed={valor === null} style={pilulaCardio(valor === null)}>Sem preferência</button>

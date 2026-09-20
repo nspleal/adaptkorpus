@@ -176,15 +176,48 @@ describe('🔒 guard de cobertura — a pergunta que o motor nunca fez agora tem
   });
 });
 
-describe('🔒 a inversão morre: slots iniciante ≤ intermediário ≤ avançado', () => {
-  it('em 3–6 dias · 45/60/90 min, o nível nunca DIMINUI o treino', () => {
+/**
+ * 🔒 A INVERSÃO MORRE — e a régua passou a ser a certa em 2026-09-20.
+ *
+ * 🔴 O que este teste existe para impedir: um nível mais alto receber MENOS TREINO. Até
+ * 19/09 ele media isso pela contagem de SLOTS, e funcionava por um motivo que deixou de valer:
+ * a agenda do iniciante era cortada no teto de 3 sessões, então ele nunca somava muitos slots.
+ * Com a decisão do autor de 20/09 (todo dia marcado vira sessão), um iniciante de 4 dias passa
+ * a ter 4 sessões — e slot deixa de ser proxy de treino, porque ele faz 3 séries por exercício
+ * e o intermediário faz 4: medido, `4d/60min` dá 24 slots ao iniciante contra 23 ao
+ * intermediário, e 62 séries contra 84.
+ *
+ * 🔵 A correção é de RÉGUA, não de exigência, e cada metade fica com a sua:
+ *  ① iniciante × intermediário — eles NÃO compartilham `seriesPorExercicio.max` (3 contra 4),
+ *    então contar slots comparava coisas diferentes. A régua passa a ser a DOSE (séries de
+ *    trabalho na semana), que é o que "menos treino" quer dizer. Vale nas 12 células varridas;
+ *  ② intermediário × avançado — a série por exercício É a mesma, então slot continua sendo
+ *    proxy legítimo e a asserção original segue palavra por palavra.
+ *
+ * 📌 Medido de passagem e deixado registrado para o autor: em `3d/45min` o intermediário
+ * entrega MAIS ponderadas que o avançado (84 contra 83). Não é desta candidata — três dias
+ * nunca foram cortados por teto de nível e desligar as trocas de 20/09 não muda o número — e
+ * a régua antiga não a enxergava. Fica como achado, não como asserção.
+ */
+describe('🔒 a inversão morre: o nível nunca DIMINUI o treino', () => {
+  it('em 3–6 dias · 45/60/90 min, a DOSE semanal cresce com o nível', () => {
     for (const dias of [3, 4, 5, 6]) {
       for (const tempo of [45, 60, 90]) {
-        const total = (nivel: PerfilTreino['nivelExperiencia']) =>
-          plano(perfil({ nivelExperiencia: nivel, diasDisponiveis: dias, tempoPorSessaoMin: tempo })).dias.flatMap((d) => d.slots).length;
-        const [i, m, a] = [total('iniciante'), total('intermediario'), total('avancado')];
-        expect(i, `${dias}d/${tempo}min: iniciante ${i} > intermediário ${m}`).toBeLessThanOrEqual(m);
-        expect(m, `${dias}d/${tempo}min: intermediário ${m} > avançado ${a}`).toBeLessThanOrEqual(a);
+        const medir = (nivel: PerfilTreino['nivelExperiencia']) => {
+          const r = plano(perfil({ nivelExperiencia: nivel, diasDisponiveis: dias, tempoPorSessaoMin: tempo }));
+          const slots = r.dias.flatMap((d) => d.slots);
+          const cred = creditoPonderadoDaSemana(slots);
+          return { slots: slots.length, series: slots.reduce((n, s) => n + (s.series ?? 0), 0),
+            credito: [...cred.values()].reduce((n, v) => n + v, 0) };
+        };
+        const [i, m, a] = [medir('iniciante'), medir('intermediario'), medir('avancado')];
+        // ① Iniciante × intermediário: a régua é a DOSE — eles não compartilham a série por
+        //    exercício (3 contra 4), então contar slots comparava coisas diferentes.
+        expect(i.series, `${dias}d/${tempo}min: iniciante ${i.series} > intermediário ${m.series} séries`).toBeLessThanOrEqual(m.series);
+        // ② Intermediário × avançado: a série por exercício É a mesma (4), então aqui slot
+        //    continua sendo proxy legítimo de treino — e a asserção original segue intacta.
+        expect(m.slots, `${dias}d/${tempo}min: intermediário ${m.slots} > avançado ${a.slots} slots`).toBeLessThanOrEqual(a.slots);
+        expect(i.slots, `${dias}d/${tempo}min: iniciante sem slots`).toBeGreaterThan(0);
       }
     }
   });

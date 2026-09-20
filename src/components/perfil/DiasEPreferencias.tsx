@@ -59,17 +59,19 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
   else if (trainCount === 7) { notaShow = true; notaText = 'Recomendamos manter ao menos um dia de descanso — é quando o corpo se recupera. Você pode seguir assim mesmo se quiser.'; }
 
   /**
-   * 🔵 O TETO DE SESSÕES DO NÍVEL, DITO AQUI (relato 2026-09-19).
+   * 🔵 A REFERÊNCIA DO NÍVEL — SUGESTÃO, NÃO LIMITE (decisão do autor, 2026-09-20).
    *
-   * 🔴 O defeito: esta faixa marcava os sete dias como "Treino" e o plano entregava quatro,
-   * sem uma linha explicando. O teto vem do cofre (`motor-treino-volume-e-frequencia-por-nivel`)
-   * e é lido pela MESMA função do motor (`tetoSessoesForca`) — a tela não tem número próprio.
+   * 🔴 O que esta nota dizia até 19/09: que o nível "comportava" N sessões e que os dias a mais
+   * virariam cardio. Era verdade então, e deixou de ser: o motor passou a transformar em sessão
+   * TODO dia marcado para musculação. Manter a frase antiga aqui seria a tela contradizendo o
+   * plano — o defeito de 19/09 ao contrário.
    *
-   * 🔒 Nada é bloqueado: escolher mais dias continua valendo, e o dia a mais pode virar o dia
-   * dedicado aos complementares ou cardio/recuperação. O que muda é a pessoa saber disso ANTES.
+   * 🔒 O número continua vindo da MESMA função do motor (`tetoSessoesForca`, cofre
+   * `motor-treino-volume-e-frequencia-por-nivel`): a tela não tem número próprio. O que mudou é
+   * o papel — ele orienta uma escolha, não a corta. Nada é bloqueado e nada é descartado.
    */
-  const teto = nivel ? tetoSessoesForca(nivel) : null;
-  const acimaDoTeto = teto != null && trainCount > teto;
+  const referencia = nivel ? tetoSessoesForca(nivel) : null;
+  const acimaDaReferencia = referencia != null && trainCount > referencia;
 
   return (
     <div>
@@ -89,13 +91,13 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(234,229,219,.3)' }} />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: contagemFont, fontWeight: 800, letterSpacing: '-.02em', color: 'rgba(234,229,219,.85)' }}>{restCount}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>{restWord} de descanso</span></div>
       </div>
-      {acimaDoTeto && (
+      {acimaDaReferencia && (
         <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)' }}>
           <InfoNeon />
           <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
-            Seu nível comporta <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{teto} sessões de musculação por semana</strong>, mais
-            um dia dedicado aos complementares. Escolhendo {trainCount}, os dias que sobrarem entram como
-            cardio ou recuperação — não repetimos uma sessão para preencher.
+            Para o seu nível, a referência é <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{referencia} sessões de musculação por semana</strong>.
+            Escolhendo {trainCount}, você recebe {trainCount} sessões: o plano inteiro é refeito e a mesma
+            dose semanal é repartida em mais dias — não multiplicamos o volume nem repetimos sessão.
           </p>
         </div>
       )}

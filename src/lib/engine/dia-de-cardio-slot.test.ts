@@ -5,7 +5,7 @@ import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana } from './treino-montador';
 import { arredondar5, duracaoDoDiaDeCardio } from './dia-de-cardio';
 import { EXERCISES } from '../data/exercises';
-import { montarSemana } from '../semana';
+import { diasPadrao, montarSemana } from '../semana';
 import { sessoesResistidas, sessoesTreino, type SessaoHistorico } from '../treino-historico';
 import { semanaDoCiclo } from './treino-mesociclo';
 import type { FlagsSaude } from './types';
@@ -33,14 +33,29 @@ function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
   };
 }
 
-/** Uma rotina com dias EXCEDENTES de verdade (mais dias disponíveis que o teto de força). */
+/**
+ * Uma rotina com dias EXCEDENTES de verdade.
+ *
+ * 🔵 A ORIGEM DO EXCEDENTE MUDOU EM 2026-09-20 — e a fixture acompanha, sem mudar um
+ * número. Até 19/09 ele nascia do corte `min(agenda, teto do nível)`: a pessoa marcava cinco
+ * dias, o nível comportava quatro, e o quinto virava cardio à revelia dela. Esse corte acabou
+ * — todo dia marcado para musculação vira sessão. O excedente REAL é o outro, e sempre foi o
+ * mais honesto: dias que a pessoa declarou TER (`diasDisponiveis`) e NÃO marcou para
+ * musculação (`treinoDias`).
+ *
+ * 🔒 A fixture passa a declarar isso explicitamente, mantendo a MESMA agenda e o MESMO
+ * número de dias excedentes de antes (os primeiros dias viram treino, os últimos ficam
+ * vagos). Os três guards continuam rodando sobre um dia de cardio de verdade — nenhuma
+ * asserção abaixo foi tocada.
+ */
 function rotinaComExcedente(over: Partial<PerfilTreino> = {}) {
-  const p = perfil(over);
+  const p0 = perfil(over);
   const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
-  const prescricao = prescreverTreino(p, avaliarGateTreino(p));
-  const dias = Math.max(0, Math.floor(p.diasDisponiveis));
-  const diasForca = dias < 1 ? 0 : Math.min(dias, prescricao.sessoesForcaSemana.max);
-  const diasVagosOferecidos = Array.from({ length: dias - diasForca }, (_, i) => diasForca + i);
+  const prescricao = prescreverTreino(p0, avaliarGateTreino(p0));
+  const dias = Math.max(0, Math.floor(p0.diasDisponiveis));
+  const marcados = dias < 1 ? 0 : Math.min(dias, prescricao.sessoesForcaSemana.max);
+  const p: PerfilTreino = { ...p0, treinoDias: diasPadrao(dias).slice(0, marcados) };
+  const diasVagosOferecidos = Array.from({ length: dias - marcados }, (_, i) => marcados + i);
   return montarRotina(
     prescricao, p, EXERCISES, undefined, opc, undefined, undefined, diasVagosOferecidos,
   );

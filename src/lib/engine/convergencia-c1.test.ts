@@ -83,7 +83,10 @@ describe('C1 §8.1 · uma única definição (proíbe cópia local)', () => {
 
 describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SHA, autor teste 7)', () => {
   const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
-  const perfil: PerfilTreino = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'emagrecimento', nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 5, tempoPorSessaoMin: 60 };
+  // 🔵 20/09: a agenda de musculação é declarada. Com o corte por teto de nível fora, o dia
+  // VAGO — que este bloco precisa para exercitar o dia de cardio puro — passa a vir de a pessoa
+  // não o ter marcado. Mesmos 5 dias no horizonte, mesmos [0, 4] oferecidos para cardio.
+  const perfil: PerfilTreino = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'emagrecimento', nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui'], tempoPorSessaoMin: 60 };
 
   it('o CRÍTICO real recompõe independentemente o plano automático FINAL, inclusive cardio', () => {
     const presc = prescreverTreino(perfil, avaliarGateTreino(perfil));
@@ -147,7 +150,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
   });
 
   it('ancora o horizonte na entrada externa mesmo quando todas as saídas são truncadas juntas', () => {
-    const perfilSeteDias = { ...perfil, diasDisponiveis: 7 };
+    const perfilSeteDias = { ...perfil, diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as PerfilTreino['treinoDias'] };
     const presc = prescreverTreino(perfilSeteDias, avaliarGateTreino(perfilSeteDias));
     const rotina = montarRotina(presc, perfilSeteDias, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [0, 6]);
     const adulterada = structuredClone(rotina);

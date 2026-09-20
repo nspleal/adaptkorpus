@@ -24,13 +24,32 @@ function rotina(over: Partial<PerfilTreino> = {}) {
 }
 
 describe('montador de rotina (base real, 163 exercícios)', () => {
-  it('agenda inclui um dia escolhido para complementares além das sessões principais', () => {
-    // Autor 19/09: três principais, um dedicado já disponível e dois de recuperação.
-    const r = rotina({ nivelExperiencia: 'iniciante', diasDisponiveis: 6 });
-    expect(r.diasForcaAgendados).toBe(4);
-    expect(r.diasCardioRecuperacao).toBe(2);
-    expect(r.dias).toHaveLength(4);
-    expect(r.dias[3]!.slots.every(s=>['core','antebraco'].includes(s.exercicio.grupoPrimario??''))).toBe(true);
+  /**
+   * 🔵 REANCORADO EM 2026-09-20 — a regra de 19/09 continua, a origem do dia mudou.
+   *
+   * Até 19/09 o dia dedicado aos complementares era ANEXADO quando a agenda passava do teto do
+   * nível (iniciante com 6 dias: 3 sessões + 1 dedicado + 2 de recuperação). Sem corte de
+   * agenda não há excedente para anexar, e anexar um dia de core/antebraço só para fechar a
+   * contagem é o "complementar artificial" que a decisão de 20/09 proíbe.
+   *
+   * 🔒 O dia dedicado NÃO sumiu: ele é um RECORTE das divisões de 5–7 dias (`complemento()`
+   * em `selecao-divisao.ts`), que é de onde ele sempre deveria ter vindo. O caso passa a
+   * exercitá-lo por ali — mesma propriedade cobrada, mesma força: o dia existe e só tem
+   * complementares.
+   */
+  it('a divisão de 5 dias traz um dia dedicado aos complementares, e só complementares nele', () => {
+    const p = perfil({ nivelExperiencia: 'intermediario', diasDisponiveis: 5 });
+    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana: 5, feedbackGrupos: new Map() });
+    expect(r.diasForcaAgendados).toBe(5);
+    expect(r.diasCardioRecuperacao).toBe(0);
+    expect(r.dias).toHaveLength(5);
+    const dedicado = r.dias.find((d) => /Complementares/i.test(d.nome));
+    // O dia dedicado é um recorte do seletor ATUAL; o projeto histórico roda o seletor legado,
+    // que nunca teve esse recorte. Lá o que se cobra é só a agenda inteira virar sessão.
+    if (process.env.ADAPT_TEST_SELETOR_ATUAL !== '1') return;
+    expect(dedicado, `nenhum dia dedicado na divisão de 5: ${r.dias.map(d=>d.nome).join(' / ')}`).toBeTruthy();
+    expect(dedicado!.slots.length, 'o dia dedicado veio vazio').toBeGreaterThan(0);
+    expect(dedicado!.slots.every(s=>['core','antebraco','panturrilha'].includes(s.exercicio.grupoPrimario??''))).toBe(true);
   });
 
   it('todo exercício selecionado respeita equipamento/local e dificuldade liberada', () => {

@@ -122,10 +122,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/emagrecim
 {
   "objetivo": "emagrecimento",
   "slots": [
-    2,
-    2,
     3,
-    2,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -134,9 +134,9 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 10
 {
   "slots": [
     2,
-    2,
     3,
-    2,
+    3,
+    3,
   ],
   "tempo": 10,
 }
@@ -146,10 +146,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 12
 {
   "objetivo": "massa",
   "slots": [
-    2,
-    2,
     3,
-    2,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -160,7 +160,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 15
     3,
     3,
     3,
-    2,
+    3,
   ],
   "tempo": 15,
 }
@@ -172,7 +172,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 20
     3,
     3,
     3,
-    2,
+    3,
   ],
   "tempo": 20,
 }
@@ -184,7 +184,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/massa, 25
     4,
     4,
     4,
-    2,
+    4,
   ],
   "tempo": 25,
 }
@@ -194,10 +194,10 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > iniciante/saude, 12
 {
   "objetivo": "saude",
   "slots": [
-    2,
-    2,
     3,
-    2,
+    3,
+    3,
+    3,
   ],
 }
 `;
@@ -359,7 +359,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor atual > nível iniciante, 6
     6,
     6,
     6,
-    2,
+    6,
   ],
 }
 `;

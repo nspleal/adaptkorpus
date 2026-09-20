@@ -35,11 +35,28 @@ describe('exceção localizada autorizada: trapézio no iniciante 4d/30min',()=>
  it.each([{nivelExperiencia:'intermediario'},{diasDisponiveis:5},{tempoPorSessaoMin:60},{equipamento:'casa'},{limiteTempoTreino:'sem_limite'}] as Partial<PerfilTreino>[])
  ('não amplia a exceção para %j',over=>{const d=fixture(),antes=JSON.stringify(d);expect(aplicar({...p,...over},d)).toBe(false);expect(JSON.stringify(d)).toBe(antes);});
  it('não retira remadas favoritas',()=>{const d=fixture();for(const s of d[1]!.slots)s.incluidoPorPreferencia=true;const a=JSON.stringify(d);expect(aplicar(p,d)).toBe(false);expect(JSON.stringify(d)).toBe(a);});
+ /**
+  * 🔵 NÚMEROS REMEDIDOS EM 2026-09-20, e o motivo não é a exceção: o perfil deste caso é
+  * iniciante com 4 dias marcados. Até 19/09 ele recebia 3 sessões full-body (a agenda era
+  * cortada no teto do nível) mais um dia dedicado a complementares; desde a decisão do autor
+  * ele recebe 4 sessões Upper/Lower ×2. Com 30 min por sessão o dia cabe 4 slots, e num Upper
+  * de 4 slots costas/peito/ombros ficam à frente do bíceps — o crédito de bíceps cai de 6 para
+  * 2 (só indireto) e o de ombros sobe de 3 para 6.
+  *
+  * 🔒 O CONTRATO DA EXCEÇÃO não mudou e continua provado acima, na fixture montada à mão
+  * (bíceps 6 · ombros 3 · séries idênticas · padrões preservados). O que este caso cobra é a
+  * INTEGRAÇÃO: o trapézio entra no plano automático, os tempos fecham e o manual não é tocado.
+  * 🔴 E a perda de bíceps direto não passa calada — asserção nova, abaixo.
+  */
  it('integra no automático com tempos reais e preserva manual',()=>{
   const r=gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;
   const ss=r.dias.flatMap(d=>d.slots),c=creditoPonderadoDaSemana(ss);
   expect(ss.some(s=>diretosDoExercicio(s.exercicio.id).has('ts'))).toBe(true);
-  expect(c.get('biceps')).toBe(6);expect(c.get('ombros')).toBe(3);
+  expect(c.get('biceps')).toBe(2);expect(c.get('ombros')).toBe(6);
+  // O bíceps ficou sem exercício direto neste orçamento — e o motor DIZ isso.
+  expect(ss.some(s=>s.exercicio.grupoPrimario==='biceps'),'bíceps direto apareceu: remeça os números').toBe(false);
+  expect(r.avisos.some(a=>/Cobertura direta ausente neste plano:.*B[í i]ceps/i.test(a)),
+    `a ausência de bíceps direto não foi dita: ${r.avisos.join(' | ')}`).toBe(true);
   expect(r.duracaoDias!.every(d=>d.estadoCalculo==='CALCULADO'&&d.duracaoMaximaEstimadaSegundos!<=1800)).toBe(true);
   const dias=fixture().map(d=>({nome:d.nome,diaId:d.diaId,exercicioIds:d.slots.map(s=>s.exercicio.id)}));
   const m=gerarTreino({...p,rotinaCustom:{origem:'usuario',dias}},{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;

@@ -78,9 +78,12 @@ describe('error-hunt: corpus do motor de treino', () => {
               if (p.rir.min < 1) viol.push(`RIR < 1 ${rot}`);
               if (nivel === 'iniciante' && (p.rir.min < 2 || !p.semFalhaIniciante)) viol.push(`segurança iniciante ${rot}`);
 
-              // Rotina: dias de força = min(dias, teto do nível).
-              const principaisEsperados = Math.min(dias, vol.sessoes[1]);
-              const diasForcaEsp = principaisEsperados + Number(dias > principaisEsperados);
+              // 🔵 Rotina: dias de força = TODOS os dias marcados (decisão do autor 2026-09-20).
+              // Até 19/09 o oráculo era `min(dias, teto do nível)` mais o dia dedicado aos
+              // complementares quando sobrava agenda. Sem corte não há sobra: a agenda solicitada
+              // é a própria conta, e a soma com os dias NÃO ATENDIDOS continua sendo o que prova
+              // que nenhum dia desapareceu em silêncio.
+              const diasForcaEsp = dias;
               /**
                * ✏️ CORREÇÃO FUNDAMENTADA DA EXPECTATIVA (D14, 2026-09-11). O oráculo antigo
                * lia `diasForcaAgendados` como a agenda SOLICITADA. D14 separou as duas contas:

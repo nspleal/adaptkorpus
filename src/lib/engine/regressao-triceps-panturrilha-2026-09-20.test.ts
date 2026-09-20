@@ -101,44 +101,35 @@ describe('🔴 resíduo ② — panturrilha omitida no dia de pernas', () => {
   });
 
   it('ela entrou SOMANDO: nenhum grupo principal perdeu série nem crédito ponderado', () => {
-    // Os créditos medidos no PR #18 para esta fixture, grupo a grupo.
     /**
-     * 🔵 GLÚTEOS REMEDIDO em 2026-09-19 (10 → 9,5), e o motivo não é a panturrilha.
+     * 🔒 OS CRÉDITOS MEDIDOS NO PR #18 PARA ESTA FIXTURE, INTEIROS — e é isto que o nome do
+     * teste promete. Eles sobreviveram a três mudanças de regra e continuam os mesmos:
      *
-     * A exclusão do improviso doméstico na ACADEMIA tirou deste plano o `e59` — "Elevação de
-     * quadril (hip thrust)", cujo `comoFazer` manda apoiar as costas *"na borda do sofá/cama"*.
-     * Ele era o ÚNICO candidato da família `ponte-hip-thrust` sem crédito secundário em
-     * posterior E com o mesmo custo de slot do `e58` (o `e153`, na máquina, tem outro custo e o
-     * `e161` é unilateral). Sem ele, a troca que resolvia o teto do dia de pernas sem custar
-     * série deixou de existir, a poda cortou 2 séries de posterior e o crédito INDIRETO de
-     * glúteos caiu 0,5 junto.
-     *
-     * 🔒 O que NÃO mudou: a panturrilha continua entrando somando, o slot extra continua sendo
-     * um só e no dia de pernas, quadríceps e posterior continuam em 12 séries diretas no dia, e
-     * nenhum teto foi afrouxado. E o motor DIZ a perda — asserção logo abaixo —, em vez de
-     * entregar um número mais bonito calado.
-     *
-     * 📌 Resíduo de CATÁLOGO, para decisão do autor: academia não tem variante própria de hip
-     * thrust com barra nem de paralelas; o `e153` (máquina) e o `e100` (paralelas em duas
-     * cadeiras) são o que existe. Enquanto não houver, o glúteo do perfil de academia fica
-     * dependendo de ponte no chão.
+     *  · 2026-09-19 — a exclusão do improviso doméstico na academia tirou deste plano o `e59`
+     *    ("Elevação de quadril", que manda apoiar as costas *"na borda do sofá/cama"*). Na
+     *    primeira tentativa isso custou glúteos 10 → 9,5, posterior direto 12 → 10 e bíceps
+     *    19 → 17,5, e o teste foi REBAIXADO para aceitar a perda — contradizendo o próprio
+     *    nome. A revisão de 20/09 recusou, e com razão.
+     *  · 2026-09-20 — as perdas tinham causa única e conserto geral, não remendo de perfil:
+     *    o motor podava série DIRETA quando quem estourava o teto da sessão era o crédito
+     *    INDIRETO de um slot de outro grupo. Com `trocarParaCaberNaSessao`, `e58` vira `e153`
+     *    (elevação pélvica NA MÁQUINA — que já existia no catálogo de academia; não foi
+     *    preciso cadastrar variante nenhuma) e as 12 diretas de posterior ficam.
+     *  · o bíceps em foco voltou a 19 por `trocarParaAlimentarOFoco`: entre a puxada triângulo
+     *    e a barra fixa supinada — mesmos alvos (`lat`), mesmo traço (`puxada_vertical`) —, a
+     *    segunda também trabalha o grupo que a pessoa pôs em foco. Mesmas séries, mesmo tempo.
      */
     const c = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
     for (const [g, n] of [['peito', 15], ['costas', 14], ['ombros', 13.5], ['quadriceps', 12],
-      ['posterior', 12], ['gluteos', 9.5], ['biceps', 17.5]] as const)
+      ['posterior', 12], ['gluteos', 10], ['biceps', 19]] as const)
       expect(c.get(g) ?? 0, g).toBeGreaterThanOrEqual(n);
     expect(serie(pernas, 'quadriceps')).toBe(12);
-    // Posterior DIRETO caiu 12 → 10 pela mesma causa acima (a poda substituiu a troca que o
-    // `e59` viabilizava). O crédito PONDERADO do grupo continua em 12, e é ele que a faixa
-    // cobra — a asserção logo acima. A poda é dita em `rotina.avisos`.
-    expect(serie(pernas, 'posterior')).toBe(10);
-    expect(r.avisos.some((a) => /Ajustamos o volume de Posterior/i.test(a)),
-      `o corte de posterior não foi dito: ${r.avisos.join(' | ')}`).toBe(true);
+    expect(serie(pernas, 'posterior')).toBe(12);
   });
 
-  it('a perda de glúteos não é escondida: o motor diz que o grupo ficou abaixo do mínimo', () => {
-    expect(r.avisos.some((a) => /volume de gluteos ficou abaixo do m[íi]nimo/i.test(a)),
-      `o plano entrega glúteos abaixo do mínimo sem dizer: ${r.avisos.join(' | ')}`).toBe(true);
+  it('nenhum grupo ficou abaixo do mínimo, e nada foi podado por teto de sessão', () => {
+    expect(r.avisos.filter((a) => /ficou abaixo do m[íi]nimo/i.test(a)), 'grupo abaixo do mínimo').toEqual([]);
+    expect(r.avisos.filter((a) => /Ajustamos o volume de/i.test(a)), 'dose podada').toEqual([]);
   });
 
   it('nenhum improviso doméstico sobra num plano de ACADEMIA', () => {

@@ -123,7 +123,10 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['frequencia reduzida de core', /Core em .*frequência menor/,()=>gerar({diasDisponiveis:2,treinoDias:['seg','ter'],tempoPorSessaoMin:30})],
   // 2026-09-19: com um complementar por dia, o full-body ×3 do iniciante cede o 3º core à
   // panturrilha e fica sem folga; a folga real com 3 slots de core está em avançado/saúde/6d.
-  ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "intermediario", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qua", "qui", "sex"], "diasDisponiveis": 5, "tempoPorSessaoMin": 75, "limiteTempoTreino": "limitado", "foco": {"grupo": "core", "semana": 1}}, {semanaCiclo:{semana:1}})],
+  // 🔵 Perfil remedido em 20/09 (varredura de 1.890 combinações): com a agenda inteira virando
+  // sessão, os 5 dias limitados deixaram de deixar folga de core. O produtor agora é 6 dias sem
+  // limite de tempo — mesmo fato, mesmo caminho, perfil que ainda o exerce.
+  ['core adicional sem cessão', /Foco de core: .*adicional/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "intermediario", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qua", "qui", "sex", "sab"], "diasDisponiveis": 6, "tempoPorSessaoMin": 75, "limiteTempoTreino": "sem_limite", "foco": {"grupo": "core", "semana": 1}}, {semanaCiclo:{semana:1}})],
   ['core sem margem', /Foco de core salvo, mas nenhum extra foi aplicado/, () => gerar({foco:{grupo:'core',semana:1}}, {semanaCiclo:{semana:5}})],
   // 2026-09-19: o passe dosado dos posteriores passou a agir num perfil REAL (recortes de
   // pernas com tempo curto: o dia de posteriores nasce com uma dobradiça e a flexora entra
@@ -177,7 +180,9 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['foco sem exercício', /O foco não foi atendido integralmente/, () => gerar({ equipamento: 'nenhum', foco: { grupo: 'antebraco', compensa: 'peito', semana: 1 } })],
   ['focos conflitantes', /duas escolhas de foco/, () => gerar({ foco: { grupo: 'peito', compensa: 'costas', semana: 1 }, focoAgregado: { grupo: 'bracos', semana: 1 } })],
   ['distribuição original limitada', /Distribuição planejada.*não atendida integralmente/, () => gerar({ nivelExperiencia: 'avancado', treinoDias: ['seg','ter','qua'], diasDisponiveis: 3, tempoPorSessaoMin: 90, focoAgregado: { grupo: 'pernas', semana: 1 } })],
-  ['agenda limita', /agenda limita/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "iniciante", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qui", "sex"], "diasDisponiveis": 4, "tempoPorSessaoMin": 30, "limiteTempoTreino": "limitado"}, {semanaCiclo:{semana:1}})],
+  // 🔵 20/09: o produtor de 4 dias passou a caber (a agenda inteira vira sessão e a divisão é
+  // outra). Três dias CONSECUTIVOS num iniciante mantém o aperto de recuperação que a frase diz.
+  ['agenda limita', /agenda limita/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "iniciante", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qua"], "diasDisponiveis": 3, "tempoPorSessaoMin": 30, "limiteTempoTreino": "limitado"}, {semanaCiclo:{semana:1}})],
   ['manual com foco', /ordem do seu treino foi preservada/, () => gerar({ rotinaCustom: SO_EMPURRAR, foco: { grupo: 'peito', compensa: 'costas', semana: 1 } })],
   ['escolhas inelegíveis', /não elegíveis no perfil/, () => gerar({ rotinaCustom: SO_EMPURRAR, equipamento: 'casa', equipamentosCasa: [] })],
   ['retomada · frequência limitada', /Retomada: frequ/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: SEIS_DIAS.map(diaId => ({ nome: diaId, diaId, exercicioIds: ['e1'] })) } }, { semanaCiclo: { semana: 3, retomada: { semana: 1, fator: 0.5, volumeReferencia: 14 } } })],
@@ -239,7 +244,8 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['dia curto pelo teto semanal', /mais curtos? de prop[óo]sito/, () => gerar({ diasDisponiveis: 6, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'], nivelExperiencia: 'avancado', tempoPorSessaoMin: 90 })],
   ['séries manuais inválidas (D3)', /n[ãa]o [ée] um n[úu]mero inteiro/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: [{ nome: 'A', diaId: 'seg', exercicioIds: ['e1'], seriesPorExercicio: { e1: 0 } }] } })],
   ['cardio faltante (D4)', /Cardio: o plano pede/, () => gerar({ objetivo: 'emagrecimento', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] }, { diasOferecidosCardio: ['ter', 'qua', 'sex', 'dom'] as readonly Weekday[] })],
-  ['dias do desenho acima do teto do nível', /o seu n[íi]vel comporta/, () => gerar({ nivelExperiencia: 'iniciante', rotinaCustom: { origem: 'usuario', dias: (['seg', 'ter', 'qua', 'qui', 'sex'] as const).map((d) => ({ nome: d, diaId: d, exercicioIds: ['e1'] })) } })],
+  // 🔵 20/09: o número do nível virou REFERÊNCIA, não teto — a frase acompanhou.
+  ['dias do desenho acima da referência do nível', /a referência do seu n[íi]vel é/, () => gerar({ nivelExperiencia: 'iniciante', rotinaCustom: { origem: 'usuario', dias: (['seg', 'ter', 'qua', 'qui', 'sex'] as const).map((d) => ({ nome: d, diaId: d, exercicioIds: ['e1'] })) } })],
   /**
    * 🔵 2026-09-15 — as três famílias do TETO DURO na conta ponderada. Cada uma foi achada por
    * varredura (2 268 combinações), não escolhida a dedo: são os recortes onde o teto morde.
@@ -308,7 +314,13 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * virava cardio/recuperação em SILÊNCIO — o relato "mudei para treinar todos os dias e o
    * treino continuou de segunda a quinta".
    */
-  ['dia marcado que não virou sessão', /Você marcou \d+ dias e o (plano usou|seu treino cobre)/, () => gerar({ diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] })],
+  /**
+   * 🔵 20/09 — o caso mudou de causa, não de família. No automático o aviso deixou de
+   * existir (todo dia marcado vira sessão); quem o produz agora é o DESENHO MANUAL que cobre
+   * menos dias do que a pessoa marcou — e aí ele é obrigatório, porque o app não reescreve o
+   * desenho dela e calar seria a redistribuição silenciosa que a D14 proíbe.
+   */
+  ['dia marcado que não virou sessão', /Você marcou \d+ dias e o (plano usou|seu treino cobre)/, () => gerar({ diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'], rotinaCustom: SO_EMPURRAR })],
 ];
 
 describe('D1 · B1 — cada família de aviso do montador tem caso e caminho até a tela', () => {
@@ -350,8 +362,12 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // 50 → 51 em 2026-09-20: o EXTRA DO FOCO consolidado nos exercícios que o dia já tinha
     // (resíduo dos cinco tríceps do PR #18). O ponto é próprio porque o fato é outro: não é a
     // consolidação de braços do baseline, é o extra do bloco cabendo na dose já existente.
-    // 51 → 52 em 2026-09-19: o DIA MARCADO QUE NÃO VIROU SESSÃO (teto de sessões do nível no
-    // automático; dia fora do desenho no manual) — um ponto de emissão, duas causas no ternário.
+    // 51 → 52 em 2026-09-19: o DIA MARCADO QUE NÃO VIROU SESSÃO — um ponto de emissão, duas
+    // causas no ternário. Em 20/09 a causa do AUTOMÁTICO (teto de sessões do nível) deixou de
+    // existir; o ponto continua, agora pelo desenho manual que cobre menos dias que a agenda.
+    // Em 20/09 NENHUM ponto novo entrou: a troca que evita a poda por teto de sessão já tinha
+    // ponto próprio desde 17/09 (`tentarAlternativasDeSessao`), e o que mudou foi o filtro de
+    // custo dela — mesma voz, mais casos atendidos.
     expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(52);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
