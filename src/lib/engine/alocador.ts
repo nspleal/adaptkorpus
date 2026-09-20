@@ -28,6 +28,7 @@ import type { Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 import type { DivisaoPreferida, NivelExperiencia } from './treino-types';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
 import { ehComplementar, ehDiaDisponivel, ehReferencia, funcaoDe, rankReferencia, papelReferencia } from './selecao-referencia';
+import { ehBilateral } from '../data/lateralidade';
 
 /** DF②: quem é banda, quem é piso, quem é só-indireto. */
 export const GRUPOS_GRANDES: readonly GrupoPrimario[] = ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'];
@@ -387,20 +388,35 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       const f = funcaoDe(e);
       listas.set(f, [...(listas.get(f) ?? []), e]);
     }
-    let melhor: { e: Exercise; funcao: string; k: number; pref: number; foraDaReferencia: number; repetida: number; rank: number; ordem: number } | null = null;
+    let melhor: { e: Exercise; funcao: string; k: number; pref: number; bi: number; foraDaReferencia: number; repetida: number; rank: number; ordem: number } | null = null;
     let ordem = 0;
     for (const [funcao, lista] of listas) {
       const i0 = cursorPorFuncao.get(`${g}|${funcao}`) ?? inicioRotacao;
-      let candidato: { e: Exercise; k: number; pref: number } | null = null;
+      let candidato: { e: Exercise; k: number; pref: number; bi: number } | null = null;
       for (let k = 0; k < lista.length; k += 1) {
         const e = lista[(i0 + k) % lista.length]!;
         if (usadosDia.has(e.id)) continue;
         if (opts?.exigir && !opts.exigir(e)) continue;
         if (opts?.proiba?.(e)) continue;
         const pref = opts?.prefira?.(e) ? 1 : 0;
-        // Dentro da função: a preferência branda vence; depois, a rotação.
-        if (candidato == null || pref > candidato.pref) candidato = { e, k, pref };
-        if (candidato.pref === 1) break;
+        /**
+         * 🔵 BILATERAL PRIMEIRO, DENTRO DA MESMA FUNÇÃO (pedido do autor, 2026-09-19).
+         *
+         * 🔒 O escopo é a FUNÇÃO — a família de equivalência que já decide "mesmo movimento,
+         * outro implemento". Por isso a troca nunca muda o que o slot faz: stiff unilateral
+         * (e82) cede a vez ao stiff bilateral da mesma `stiff-terra`; puxada unilateral na
+         * polia (e51) cede à puxada da mesma `puxada-vertical`. Onde a função inteira é
+         * unilateral (`afundo`), nada muda e o unilateral entra como sempre.
+         *
+         * 🔒 Fica ABAIXO de `exigir`/`proiba` (filtros duros da cobertura e do puxar≥empurrar)
+         * e ABAIXO de `prefira` (a preferência branda que já existia) — e ACIMA da rotação,
+         * senão a variação de "Gerar novo treino" devolveria o unilateral no próximo giro.
+         */
+        const bi = ehBilateral(e) ? 1 : 0;
+        // Dentro da função: preferência branda → execução bilateral → rotação.
+        if (candidato == null || pref > candidato.pref
+          || (pref === candidato.pref && bi > candidato.bi)) candidato = { e, k, pref, bi };
+        if (candidato.pref === 1 && candidato.bi === 1) break;
       }
       ordem += 1;
       if (!candidato) continue;

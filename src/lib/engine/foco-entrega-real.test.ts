@@ -26,7 +26,14 @@ import type { FlagsSaude } from './types';
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 const perfil = (over: Partial<PerfilTreino> = {}): PerfilTreino => ({
   pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: SEM, objetivo: 'massa',
-  nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 6, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', ...over,
+  /**
+   * 🔵 AGENDA REMEDIDA em 2026-09-19 (6 dias → 3). Com a seleção por execução bilateral e o
+   * improviso doméstico fora da academia, o baseline de 6 dias já chega ao topo da banda de
+   * peito nas semanas 2 e 3 — e nos DOIS seletores o bloco passa a entregar ORDEM, não séries,
+   * o que tornaria as três propriedades triviais. Com 3 dias há folga nos dois seletores. As
+   * propriedades ①②③ não mudaram.
+   */
+  nivelExperiencia: 'intermediario', equipamento: 'academia', diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', ...over,
 });
 const plano = (p: PerfilTreino, semana: SemanaCiclo) =>
   montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, new Set(), { semana });

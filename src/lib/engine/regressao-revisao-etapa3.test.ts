@@ -105,7 +105,14 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
    * então o ganho líquido é medido com foco em PEITO, que tem folga, e a recusa de costas vira
    * caso próprio. Nenhuma das duas propriedades foi afrouxada: as duas são exigidas.
    */
-  const entradaTeto=perfil({nivelExperiencia:'avancado',objetivo:'saude',tempoPorSessaoMin:60,treinoDias:['seg','ter','qui','sex']});
+  /**
+   * 🔵 PERFIL REMEDIDO em 2026-09-19: com o improviso doméstico fora da academia, o
+   * avançado/saúde 4 d/60 min deixou de fechar costas no teto (o bloco passou a caber, e a
+   * identidade deste caso virava trivial ao contrário). A varredura desta correção achou 24
+   * células que ainda põem costas no teto CHEIO com o bloco recusado e o plano idêntico ao
+   * neutro; esta é a primeira, e muda só o objetivo.
+   */
+  const entradaTeto=perfil({nivelExperiencia:'avancado',objetivo:'emagrecimento',tempoPorSessaoMin:60,treinoDias:['seg','ter','qui','sex']});
   const neutroTeto=gerar(entradaTeto);
   const focoNoTeto = gerar({ ...entradaTeto, foco: { grupo: 'costas', semana: 1 } });
   const comFoco = gerar({ ...entrada, foco: { grupo: 'peito', semana: 1 } });

@@ -9,7 +9,8 @@
 import { macrosDePrato } from '../data/nutrition';
 import { ESCALA_PORCAO } from './constants';
 import { dificuldadesLiberadas } from './treino';
-import { exercicioDisponivel } from './equipamento';
+import { exercicioDisponivel, servePelaSelecaoAutomatica } from './equipamento';
+import { ehBilateral } from '../data/lateralidade';
 import { mesmaFamilia } from './familias';
 import type { Recipe, RecipeMacros } from '../data/types';
 import type {
@@ -187,8 +188,11 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
 
   // Há algum candidato de mesmo tipo elegível? (decide a degradação do pliométrico)
   // Filtro duro #1 (nunca relaxado): equipamento no modelo 2 níveis (checklist de casa).
+  // 🔵 2026-09-19 — a troca é SELEÇÃO AUTOMÁTICA: em academia, o improviso doméstico (remada
+  // na mesa, paralelas em duas cadeiras) fica fora, como fica fora da geração.
   const baseElegivel = (y: typeof atual) =>
-    y.id !== atual.id && exercicioDisponivel(y, p.equipamento, p.equipamentosCasa) && liberadas.has(y.nivel);
+    y.id !== atual.id && exercicioDisponivel(y, p.equipamento, p.equipamentosCasa) && liberadas.has(y.nivel)
+    && servePelaSelecaoAutomatica(y, p.equipamento);
   const temMesmoTipo = p.exercises.some((y) => baseElegivel(y) && y.tipo === atual.tipo);
 
   function tipoCompativel(y: typeof atual): boolean {
@@ -242,6 +246,14 @@ export function substituirExercicio(p: PedidoSubExercicio): ResultadoSubExercici
       const da = a.nivel === atual.nivel ? 0 : 1;
       const db = b.nivel === atual.nivel ? 0 : 1;
       if (da !== db) return da - db; // mesma dificuldade
+      /**
+       * 🔵 Execução BILATERAL antes da unilateral (pedido do autor, 2026-09-19). Entra DEPOIS
+       * da preservação e da família — as duas travas que garantem que o substituto faz a mesma
+       * coisa —, então ela escolhe entre equivalentes e nunca troca a função do exercício.
+       */
+      const ba = ehBilateral(a) ? 0 : 1;
+      const bb = ehBilateral(b) ? 0 : 1;
+      if (ba !== bb) return ba - bb;
       const ta = a.tier ?? 99;
       const tb = b.tier ?? 99;
       if (ta !== tb) return ta - tb; // mais familiar (T1 = menor)

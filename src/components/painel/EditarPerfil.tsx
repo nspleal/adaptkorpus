@@ -290,10 +290,17 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
           <div>
             <div style={cap}>Dias de treino</div>
             <p style={{ margin: '0 0 2px', fontSize: '.85rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Selecione os dias de treino. Os outros entram como descanso na sua semana.</p>
-            <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} contagemFont="1.5rem" stripMarginTop={14} />
+            <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} contagemFont="1.5rem" stripMarginTop={14} nivel={experiencia} />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, padding: '13px 15px', borderRadius: 12, background: 'rgba(189,255,0,.05)', border: '1px solid rgba(189,255,0,.2)' }}>
               <svg width={17} height={17} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M4 12a8 8 0 1 1 2.5 5.8" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" fill="none" /><path d="M4 18v-4.4h4.4" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
-              <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões são redistribuídas nos novos dias.</p>
+              {/* 🔵 2026-09-19 — a frase dependia de quem monta o treino. Para quem desenhou o
+                  próprio treino, o app NÃO reescreve o desenho: prometer redistribuição aqui era
+                  anunciar um recálculo que não acontece (relato "mudei os dias e nada mudou"). */}
+              <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
+                {inicial.rotinaCustom
+                  ? <>Seu treino é <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>, então mudar os dias não redistribui as sessões — o desenho fica como está. Dia novo entra vazio: monte-o em “Montar meu treino” ou peça um treino novo.</>
+                  : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões são redistribuídas nos novos dias.</>}
+              </p>
             </div>
           </div>
 
@@ -361,7 +368,11 @@ export default function EditarPerfil({ inicial, onCancelar, onSalvar, modoDiario
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, background: 'linear-gradient(168deg, rgba(16,42,26,.98), rgba(15,15,14,.98))', border: '1px solid rgba(189,255,0,.3)', borderRadius: 22, padding: 26, boxShadow: '0 40px 90px -30px rgba(0,0,0,.8)', animation: `evkPop .3s ${EASE}` }}>
             <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(189,255,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M4 5v5h5M20 19v-5h-5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /><path d="M19 9a7.5 7.5 0 00-13-2.5L4 10M5 15a7.5 7.5 0 0013 2.5L20 14" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg></div>
             <h2 style={{ margin: '0 0 10px', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-.01em' }}>Recalcular seu plano?</h2>
-            <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões serão redistribuídas nos novos dias. Suas preferências de alimentos não mudam.</p>
+            <p style={{ margin: '0 0 22px', fontSize: '.94rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.6 }}>
+              {inicial.rotinaCustom
+                ? <>Seu treino foi <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>montado por você</strong>: os dias novos são salvos, mas o desenho não é reescrito nem redistribuído. Use “Montar meu treino” ou “Gerar novo treino” para preencher os dias que entrarem. Suas preferências de alimentos não mudam.</>
+                : <>Mudar seus dias de treino <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>reorganiza sua semana</strong> — as sessões serão redistribuídas nos novos dias. Suas preferências de alimentos não mudam.</>}
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={salvar} className="hov-btn" style={{ width: '100%', background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Confirmar e recalcular</button>
               <button onClick={() => setConfirmar(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Voltar e revisar</button>

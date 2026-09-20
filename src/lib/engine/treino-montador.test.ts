@@ -435,8 +435,19 @@ describe('rampa de volume no montador (mesociclo v2)', () => {
       if (meta < topo) abaixoDoTopo += 1;
       // A rampa nunca entrega MAIS do que a meta realizável…
       expect(direta, `${g}: entregou acima da meta realizável (${direta} > ${meta})`).toBeLessThanOrEqual(meta);
-      // …e entrega a meta cheia, salvo quando o teto ponderado mordeu (e aí a poda explicou).
-      expect(direta >= meta || pond + 1 > tetoSemanal,
+      /**
+       * …e entrega a meta cheia, salvo quando UM DOS DOIS tetos ponderados mordeu.
+       *
+       * 🔵 2026-09-19 — o teto por SESSÃO entrou na lista de desculpas legítimas. Ele já era
+       * cobrado duas linhas abaixo, mas não era aceito como motivo de entrega menor: medido
+       * em POSTERIOR neste cenário (10 diretas de 12 realizáveis, 12 ponderadas de 16 na
+       * semana) o que barrou foi o dia, não a semana — o grupo fecha exatamente nas 12
+       * ponderadas de um treino só. Exigir a meta cheia ali seria exigir que o motor furasse
+       * um teto que a decisão de 2026-09-17 travou.
+       */
+      const noTetoDaSessao = r5.dias.some((d) =>
+        (creditoPonderadoDaSemana(d.slots).get(g as GrupoPrimario) ?? 0) + 1 > tetoSessaoGrupo);
+      expect(direta >= meta || pond + 1 > tetoSemanal || noTetoDaSessao,
         `${g}: entregou ${direta} de ${meta} realizáveis, com ponderado ${pond}/${tetoSemanal}`).toBe(true);
       // E o teto por sessão vale ao mesmo tempo.
       for (const [di, d] of r5.dias.entries()) {

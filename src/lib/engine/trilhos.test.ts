@@ -274,9 +274,14 @@ describe('🔒 o foco chega ao PLANO', () => {
      * mesmo e entregava 20. A identidade "o total sobe só o que o bloco entregou" precisa de
      * uma semana com folga para não ser trivial; a recusa no topo tem caso próprio em
      * `foco-teto-mrv.test.ts`, com a explicação exigida na tela.
+     *
+     * 🔵 2026-09-19 — a semana desceu de 2 para 1 pela MESMA razão, um degrau antes: com a
+     * seleção por execução bilateral e o improviso doméstico fora da academia, o baseline do
+     * SELETOR HISTÓRICO já chega ao topo na semana 2 e o bloco fica vazio ali. A semana 1
+     * ainda tem folga nos dois seletores, e a identidade volta a ter conteúdo.
      */
-    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }), 2);
-    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }, 2);
+    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }), 1);
+    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }, 1);
     const entregue = com.blocoFoco?.adicionais.reduce((n, a) => n + a.series, 0) ?? 0;
     expect(entregue, 'bloco vazio — a identidade seria trivial').toBeGreaterThan(0);
     expect(soma(com)).toBe(soma(sem) + entregue);

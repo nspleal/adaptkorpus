@@ -346,7 +346,7 @@ export default function Onboarding() {
                 {step === 3 && <StepCards titulo="Qual é o seu objetivo?" opts={OBJETIVOS} sel={objetivo} onSel={setObjetivo} />}
                 {step === 4 && <StepCards titulo="Seu nível de atividade" opts={ATIVIDADES} sel={atividade} onSel={setAtividade} />}
                 {step === 5 && <StepCards titulo="Sua experiência de treino" sub="É diferente do seu dia a dia — aqui é há quanto tempo você treina de forma consistente." opts={EXPERIENCIAS} sel={experiencia} onSel={setExperiencia} />}
-                {step === 6 && <Step6 {...{ local, setLocal, equipsCasa, toggleEquip, limparEquips: () => setEquipsCasa([]), treinoDias, toggleDia, tempo, limiteTempoTreino, setTempo: escolherTempo }} />}
+                {step === 6 && <Step6 {...{ local, setLocal, equipsCasa, toggleEquip, limparEquips: () => setEquipsCasa([]), treinoDias, toggleDia, tempo, limiteTempoTreino, setTempo: escolherTempo, nivel: experiencia }} />}
                 {step === 7 && <Step7 {...{ padrao, setPadrao, alergias, toggleAlergia, naoCurto, addFood, removeFood, orcamento, setOrcamento }} />}
               </div>
             </div>
@@ -485,10 +485,11 @@ function StepCards<T extends string>({ titulo, sub, opts, sel, onSel }: { titulo
   );
 }
 
-function Step6({ local, setLocal, equipsCasa, toggleEquip, limparEquips, treinoDias, toggleDia, tempo, limiteTempoTreino, setTempo }: {
+function Step6({ local, setLocal, equipsCasa, toggleEquip, limparEquips, treinoDias, toggleDia, tempo, limiteTempoTreino, setTempo, nivel }: {
   local: EquipamentoDisp; setLocal: (v: EquipamentoDisp) => void;
   equipsCasa: EquipamentoCasa[]; toggleEquip: (eq: EquipamentoCasa) => void; limparEquips: () => void;
   treinoDias: Weekday[]; toggleDia: (w: Weekday) => void; tempo: number; limiteTempoTreino?: PerfilResumo['limiteTempoTreino']; setTempo: (v: number) => void;
+  nivel: NivelExperiencia;
 }) {
   return (
     <div>
@@ -511,7 +512,7 @@ function Step6({ local, setLocal, equipsCasa, toggleEquip, limparEquips, treinoD
       </div>
       <div style={labelCap}>Quais dias você treina?</div>
       <p style={{ margin: '0 0 2px', fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Escolha os dias em que você treina. Os outros são descanso — faz parte do plano.</p>
-      <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} stripMarginTop={14} />
+      <SeletorDias treinoDias={treinoDias} onToggle={toggleDia} stripMarginTop={14} nivel={nivel} />
       <div style={{ marginTop: 22 }}>
         <div style={labelCap}>Tempo por sessão</div>
         <div style={{ display: 'flex', gap: 7 }}>{[30, 45, 60, 75].map((t) => <button type="button" aria-pressed={t === 75 ? limiteTempoTreino === 'sem_limite' : tempo === t && limiteTempoTreino !== 'sem_limite'} key={t} onClick={() => setTempo(t)} style={{ ...segBase, ...((t === 75 ? limiteTempoTreino === 'sem_limite' : tempo === t && limiteTempoTreino !== 'sem_limite') ? segSel : {}) }}>{t === 75 ? '75+' : t}</button>)}</div>

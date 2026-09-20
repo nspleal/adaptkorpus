@@ -120,8 +120,11 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
 
     // 2026-09-19: sob o seletor histórico o avançado de 6 dias passou a ter folga; o perfil
     // que bate no teto ali (medido) é o intermediário de 4 dias em 45 min.
+    // 2026-09-19 (2ª medição, exclusão do improviso doméstico na academia): o intermediário de
+    // 4 dias também ganhou folga sob o seletor histórico — o bloco passou a entregar 2. O que
+    // ainda bate no teto ali é o AVANÇADO na mesma agenda e no mesmo tempo.
     const NO_TETO = process.env.ADAPT_TEST_SELETOR_ATUAL === '0'
-      ? { nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 45 } : {};
+      ? { nivelExperiencia: 'avancado', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 45 } : {};
     const semL = rotina(perfil({ limiteTempoTreino: 'limitado', ...NO_TETO } as never));
     const comL = rotina(perfil({ limiteTempoTreino: 'limitado', ...NO_TETO, foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
     const x = seriesPorGrupo(semL); const y = seriesPorGrupo(comL);

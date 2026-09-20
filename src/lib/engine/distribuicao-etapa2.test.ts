@@ -157,7 +157,14 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
  });
  it.each([2,3] as const)('adição na divisão explícita estável, semana %i: preservação de terceiros',semana=>{
   // Caminho explícito suportado pelo seletor atual, sem simular o seletor antigo.
-  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:75,limiteTempoTreino:'sem_limite',divisaoPreferida:'superior-inferior'};
+  /**
+   * 🔵 PERFIL REMEDIDO em 2026-09-19 (exclusão do improviso doméstico na academia): a 75 min
+   * sem limite o peito deste perfil passou a encostar no teto e o bloco não entrega mais nada
+   * — as igualdades abaixo virariam triviais. A varredura desta correção achou 459 células que
+   * entregam o bloco nas DUAS semanas (2 e 3); esta é a mais próxima da anterior, mudando só
+   * o tempo por sessão.
+   */
+  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:45,limiteTempoTreino:'limitado',divisaoPreferida:'superior-inferior'};
   const run=(p:PerfilTreino)=>gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
   const a=run(p),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}});
   const totais=(r:typeof a)=>{const m=new Map<string,number>();for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m.set(g,(m.get(g)??0)+(s.series??0));}return m;};

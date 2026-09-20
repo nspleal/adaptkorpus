@@ -172,15 +172,23 @@ describe('🟢 o excesso do BASELINE foi corrigido nas células em que foi medid
    *  · `iniciante/massa/4d/60min/sem_limite/S6` — teto de fase (deload) com foco, onde o
    *    máximo automático de 10 e a redução do deload se encontram.
    */
+  /**
+   * 🔵 REANCORADO de novo em 2026-09-19, pelo mesmo aviso de anti-vacuidade. Com o improviso
+   * doméstico fora da ACADEMIA, o baseline de academia parou de encostar no teto semanal em
+   * toda a grade varrida (240 células, zero podas) — `avancado/saude/3d/60min/limitado/S3`
+   * deixou de exercitar a poda. A célula que a exercita hoje é a mesma banda de saúde no
+   * inventário de CASA com halteres e elástico (96 células ainda podam nesta varredura).
+   */
   const CASOS = [
-    { nivel: 'avancado', objetivo: 'saude', dias: 3, tempo: 60, limite: 'limitado', semana: 3 },
-    { nivel: 'iniciante', objetivo: 'massa', dias: 4, tempo: 60, limite: 'sem_limite', semana: 6 },
+    { nivel: 'iniciante', objetivo: 'saude', dias: 3, tempo: 60, limite: 'limitado', semana: 5, casa: ['halteres', 'elastico'] },
+    { nivel: 'iniciante', objetivo: 'massa', dias: 4, tempo: 60, limite: 'sem_limite', semana: 6, casa: undefined },
   ] as const;
 
   for (const c of CASOS) {
-    it(`${c.nivel}/${c.objetivo}/${c.dias}d/${c.tempo}min/${c.limite}/S${c.semana}: o baseline volta para dentro do teto`, () => {
+    it(`${c.casa ? 'casa+' + c.casa.join('/') : 'academia'} · ${c.nivel}/${c.objetivo}/${c.dias}d/${c.tempo}min/${c.limite}/S${c.semana}: o baseline volta para dentro do teto`, () => {
       const p = perfil({ nivelExperiencia: c.nivel, objetivo: c.objetivo, diasDisponiveis: c.dias,
-        treinoDias: DIAS.slice(0, c.dias) as never, tempoPorSessaoMin: c.tempo, limiteTempoTreino: c.limite } as never);
+        treinoDias: DIAS.slice(0, c.dias) as never, tempoPorSessaoMin: c.tempo, limiteTempoTreino: c.limite,
+        ...(c.casa ? { equipamento: 'casa', equipamentosCasa: c.casa } : {}) } as never);
       const semFoco = rotina(p, c.semana);
       const comFoco = rotina({ ...p, foco: { grupo: 'peito', compensa: 'ombros', semana: c.semana } } as never, c.semana);
       // 🔑 O que era a pendência: esta lista NÃO era vazia. Agora é, e o foco não a reabre.

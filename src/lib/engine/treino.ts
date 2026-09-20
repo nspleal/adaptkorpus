@@ -40,6 +40,25 @@ export function dificuldadesLiberadas(nivel: NivelExperiencia): NivelExercicio[]
 }
 
 /**
+ * 🔒 O TETO DE SESSÕES DE FORÇA POR SEMANA — 2 a 3 (iniciante), 3 a 4 (intermediário),
+ * 4 a 6 (avançado). Travado no cofre (`motor-treino-volume-e-frequencia-por-nivel`, claims
+ * --002 a --004 e --007: *"as sessões de força/sem são o teto do nível"*), com a regra de
+ * agenda do Passo 3 no claim --010: `min(dias_disponiveis, teto)`, excedente → cardio/recuperação.
+ *
+ * 🔑 Esta função existe para o teto ter UMA leitura: o montador a usa para cortar a agenda e a
+ * TELA a usa para DIZER o corte antes de a pessoa escolher os dias. Sem ela, o Editar perfil
+ * marcaria sete dias como "Treino" enquanto o plano entregava quatro — que é exatamente o
+ * relato de 2026-09-19 ("mudei para treinar todos os dias e o treino continuou de seg a qui").
+ *
+ * 🔴 Não é o número de dias do PLANO: um dia da agenda além do teto ainda pode virar o dia
+ * DEDICADO aos complementares (decisão de 2026-09-19, PR #18). Este é o teto das sessões de
+ * força, e só dele.
+ */
+export function tetoSessoesForca(nivel: NivelExperiencia): number {
+  return VOLUME_NIVEL[nivel].sessoesForca.max;
+}
+
+/**
  * Gera a prescrição FITT. NÃO chamar com gate ROTEAR (fail-safe → erro).
  * Usa o objetivo EFETIVO (RESTRINGIR já redirecionou emagrecimento → saúde no gate).
  */

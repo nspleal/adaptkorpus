@@ -28,7 +28,7 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
  *  - determinístico (ordena por tier↑ depois id; rotaciona por grupo p/ variar).
  */
 import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload } from './treino';
-import { exercicioDisponivel } from './equipamento';
+import { exercicioDisponivel, servePelaSelecaoAutomatica } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
 import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
@@ -58,8 +58,8 @@ import type { ModalidadeCardio } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FatoCorteTempo, FatoInvariantePadrao, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
-import { resolverExecucao } from '../data/lateralidade';
-import { ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
+import { ehBilateral, resolverExecucao } from '../data/lateralidade';
+import { DIA_LABEL, ORDEM_SEMANA, diasPadrao, type Weekday } from '../semana';
 
 /**
  * 🔒 O POOL ELEGÍVEL — autoridade ÚNICA do "este exercício pode entrar no seu plano?".
@@ -95,7 +95,33 @@ function poolDosExcluidos(
   return exercises
     .filter((e) => !excluidos.has(e.id) && exercicioDisponivel(e, perfil.equipamento, perfil.equipamentosCasa) && liberadas.has(e.nivel))
     .slice()
-    .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    /**
+     * 🔵 A lateralidade desempata DENTRO do tier (2026-09-19). O tier (familiaridade) continua
+     * mandando; entre exercícios igualmente familiares, o bilateral vem primeiro — e é isso que
+     * faz TODO caminho que pega "o primeiro do pool" (complementares, cobertura anatômica,
+     * bloco de foco, exceções de sessão, full-body) herdar a preferência sem repeti-la em cada
+     * um. Nenhum filtro muda: o unilateral continua no pool e continua entrando quando é o que
+     * existe.
+     */
+    .sort((a, b) => (a.tier ?? 99) - (b.tier ?? 99)
+      || (ehBilateral(a) ? 0 : 1) - (ehBilateral(b) ? 0 : 1)
+      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * 🔵 O POOL DA SELEÇÃO AUTOMÁTICA — o subconjunto do elegível que o MOTOR pode escolher
+ * sozinho (2026-09-19). Hoje ele tira uma coisa só: o improviso doméstico de quem treina em
+ * ACADEMIA (ver `servePelaSelecaoAutomatica`).
+ *
+ * 🔒 Um ponto de derivação só, e ele é o `pool` que o montador passa adiante: alocador,
+ * complementares, cobertura anatômica, bloco de foco, exceções de sessão e full-body recebem
+ * TODOS este pool. É o que impede um fallback de reintroduzir o que a regra acabou de tirar.
+ *
+ * 🔒 O elegível COMPLETO continua existindo e continua sendo a autoridade do desenho manual:
+ * o que a pessoa escolheu a dedo não é apagado por uma regra de seleção automática.
+ */
+function poolDaSelecaoAutomatica(pool: readonly Exercise[], equipamento: EquipamentoDisp): Exercise[] {
+  return pool.filter((e) => servePelaSelecaoAutomatica(e, equipamento));
 }
 
 /** Locais acessíveis por disponibilidade de equipamento. */
@@ -453,7 +479,10 @@ export function montarRotina(
 
   // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
   // liberada. Ordenado (tier↑, depois id). 🔒 Mesma função que a tela consome.
-  const pool = poolDosExcluidos(exercises, perfil, excluidos);
+  /** Elegível COMPLETO — a autoridade do desenho manual (o que a pessoa pode ter no plano). */
+  const poolDoPerfil = poolDosExcluidos(exercises, perfil, excluidos);
+  /** O que o MOTOR pode escolher sozinho. Tudo abaixo daqui seleciona a partir DELE. */
+  const pool = poolDaSelecaoAutomatica(poolDoPerfil, perfil.equipamento);
 
   // ── 🔢 v4 — templates por GRUPO + orçamento de slots por tempo (DFs ①②③) ──
   const divisao = perfil.divisaoPreferida ?? 'auto';
@@ -574,9 +603,9 @@ export function montarRotina(
   const diasNaoAtendidosCustom: DiaNaoAtendido[] = [];
   if (custom && custom.dias.length > 0) {
     if (prioritarios.length > 0) avisosCustom.push('Foco atualizado: considere priorizar os exercícios escolhidos. A ordem do seu treino foi preservada.');
-    const indisponiveis = [...new Set(custom.dias.flatMap(d => d.exercicioIds))].filter(id => !pool.some(e => e.id === id));
+    const indisponiveis = [...new Set(custom.dias.flatMap(d => d.exercicioIds))].filter(id => !poolDoPerfil.some(e => e.id === id));
     if (indisponiveis.length) avisosCustom.push(`Exercícios do desenho não elegíveis no perfil atual: ${indisponiveis.join(', ')}. As escolhas salvas foram preservadas; revise equipamento e restrições.`);
-    const porId = new Map(pool.map((e) => [e.id, e]));
+    const porId = new Map(poolDoPerfil.map((e) => [e.id, e]));
     const diasUsuario = custom.dias
       .map((d, customIdx) => ({
         nome: d.nome,
@@ -2323,6 +2352,34 @@ export function montarRotina(
         motivo: d.motivoDoCorte ?? ('DESENHO_VAZIO' as const),
         ...(d.slotsNaoPreenchidos != null ? { slotsPedidos: d.slotsNaoPreenchidos } : {}),
       }));
+    /**
+     * 🔵 O DIA ESCOLHIDO QUE NÃO VIROU TREINO É DITO (relato 2026-09-19).
+     *
+     * 🔴 O defeito que isto fecha, medido: perfil intermediário marcando os SETE dias recebia
+     * um plano de segunda a sexta e NENHUMA frase sobre sábado e domingo — e o Editar perfil
+     * ainda rotulava os sete como "Treino". A pessoa lia "mudei os dias e o treino não mudou".
+     * A regra em si é do cofre (`motor-treino-volume-e-frequencia-por-nivel`, claims --007 e
+     * --010: `min(dias_disponiveis, teto)`, excedente → cardio/recuperação); o que faltava era
+     * DIZÊ-LA. Nada é redistribuído aqui: o dia continua sendo cardio/recuperação.
+     *
+     * 🔒 Dia já declarado em `diasNaoAtendidos` não entra: ele tem motivo próprio e frase
+     * própria, e repetir seria a mesma verdade contada duas vezes.
+     */
+    const jaDeclarados = new Set(diasNaoAtendidos.flatMap((d) => (d.diaId ? [d.diaId] : [])));
+    const comSessao = new Set(diasEntregues.flatMap((d) => (d.diaId ? [d.diaId] : [])));
+    const semForca = diasDaAgenda.filter((d) => !comSessao.has(d) && !jaDeclarados.has(d));
+    if (semForca.length > 0) {
+      const nomes = semForca.map((d) => DIA_LABEL[d].full);
+      const lista = nomes.length === 1 ? nomes[0]! : `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}`;
+      const Lista = lista.charAt(0).toUpperCase() + lista.slice(1);
+      const ficaram = semForca.length === 1 ? 'ficou' : 'ficaram';
+      avisos.push(desenhoDaPessoa
+        ? `Você marcou ${diasDaAgenda.length} dias e o seu treino cobre ${comSessao.size}. ${Lista} ${ficaram} sem sessão: `
+          + 'o app não reescreve o seu desenho. Monte esses dias em "Montar meu treino" ou peça um treino novo.'
+        : `Você marcou ${diasDaAgenda.length} dias e o plano usou ${comSessao.size}: o seu nível comporta `
+          + `${teto} sessões de força por semana${diaComplementar ? ', mais um dia dedicado aos complementares' : ''}. `
+          + `${Lista} ${ficaram} como cardio/recuperação — não movemos nem repetimos uma sessão para preencher.`);
+    }
     return {
       diasForcaAgendados: diasEntregues.length,
       diasCardioRecuperacao,

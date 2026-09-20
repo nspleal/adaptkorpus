@@ -300,7 +300,14 @@ describe('preservação como filtro duro + famílias (DF 2026-07-04)', () => {
     const int = listarSubstituicoesExercicio(
       { exercicioAtual: byId.get('e151')!, equipamento: 'nenhum', nivelExperiencia: 'intermediario', exercises: EXERCISES }, 4,
     ).map((r) => r.exercicio!.id);
-    expect(int).toEqual(['e143', 'e163']); // pliométricos (mesmo grupo pernas)
+    /**
+     * 🔵 2026-09-19 — a ORDEM mudou, a lista não: os dois pliométricos de pernas continuam
+     * sendo os candidatos, e nenhum filtro se moveu. O que entrou foi a preferência por
+     * execução BILATERAL como desempate entre equivalentes (pedido do autor), e ela põe
+     * e163 Agachamento com salto (BILATERAL) antes de e143 Avanço com salto
+     * (UNILATERAL_ALTERNADO). Os dois preservam grupo e padrão do e151.
+     */
+    expect(int).toEqual(['e163', 'e143']); // pliométricos (mesmo grupo pernas), bilateral primeiro
     const ini = substituirExercicio({ exercicioAtual: byId.get('e151')!, equipamento: 'nenhum', nivelExperiencia: 'iniciante', exercises: EXERCISES });
     expect(ini.status).toBe('ok'); // degrada p/ cardio do mesmo padrão — nunca vazio
     expect(ini.exercicio!.padraoMovimento).toBe('cardio');

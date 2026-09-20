@@ -238,9 +238,16 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
    * degenerou e não prova nada) e a correção que o salvou é NOMEADA no plano.
    */
   it('a antiga célula de resíduo cabe hoje, e a troca que a resolveu é dita', () => {
+    /**
+     * 🔵 CÉLULA REMEDIDA em 2026-09-19: com o improviso doméstico fora da academia, o avançado
+     * 6 d/45 min deixou de ter a TROCA como saída — ele resolve o dia podando série (o aviso
+     * ali passou a ser "Ajustamos o volume de Posterior"), e o caso deixaria de provar o que
+     * promete. A varredura desta correção achou 68 células em que a troca ainda resolve o dia
+     * sem exceção e sem esvaziar o posterior; esta é a primeira.
+     */
     const p = perfil({
-      nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: DIAS.slice(0, 6),
-      tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado',
+      nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: DIAS.slice(0, 4),
+      tempoPorSessaoMin: 45, limiteTempoTreino: 'sem_limite', divisaoPreferida: 'superior-inferior',
     });
     const r = plano(p, 3);
     expect(acimaNaSessao(r), 'a célula voltou a estourar o teto do dia').toEqual([]);

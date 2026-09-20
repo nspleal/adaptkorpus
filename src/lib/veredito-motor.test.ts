@@ -165,7 +165,11 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * DITO. Ele já existia no candidato reprovado (medido: as MESMAS 91 configurações perdiam
    * volume, com os mesmos números), só que em silêncio. Perfil real, sem injeção.
    */
-  ['core reduzido para duas pernas em quatro dias', /reduzimos core de duas para uma/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "intermediario", "objetivo": "massa", "equipamento": "academia", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qui", "sex"], "diasDisponiveis": 4, "tempoPorSessaoMin": 75, "limiteTempoTreino": "limitado", "focoAgregado": {"grupo": "pernas", "semana": 1}}, {semanaCiclo:{semana:1}})],
+  // 🔵 PERFIL REMEDIDO em 2026-09-19: o intermediário de academia 4 d/75 min parou de ceder
+  // o segundo core (o improviso doméstico saiu do dia e o orçamento se reorganizou). A
+  // varredura achou 252 células que ainda produzem a cessão, 190 com ≥ 3 dias e ≥ 45 min;
+  // esta é a primeira — e continua sendo um perfil real, sem injeção.
+  ['core reduzido para duas pernas em quatro dias', /reduzimos core de duas para uma/, () => gerar({"pesoKg": 80, "alturaCm": 178, "idade": 30, "flagsSaude": {"gestacaoAmamentacao": false, "renal": false, "cardiaca": false, "lesao": false, "diabetes": false}, "nivelExperiencia": "avancado", "objetivo": "massa", "equipamento": "casa", "equipamentosCasa": [], "treinoDias": ["seg", "ter", "qui", "sex"], "diasDisponiveis": 4, "tempoPorSessaoMin": 75, "limiteTempoTreino": "limitado", "focoAgregado": {"grupo": "pernas", "semana": 1}}, {semanaCiclo:{semana:1}})],
   ['complementares ausentes', /Cobertura direta ausente/, () => gerar({ rotinaCustom: SO_EMPURRAR })],
   // 2026-09-19: dois dias, os dois com core (2×/semana) — cada dia comporta um complementar,
   // então panturrilha e antebraço não entram, e o plano diz por quê.
@@ -190,7 +194,11 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * 🔵 As DUAS famílias novas da 2ª volta: a troca que EVITA o excesso e a exceção que o
    * DECLARA quando nem a troca resolveu.
    */
-  ['troca de exercício para caber no teto do dia', /Trocamos \d+ exerc[íi]cios?/, () => gerar({ nivelExperiencia: 'avancado', diasDisponiveis: 6, treinoDias: SEIS_DIAS, tempoPorSessaoMin: 45, limiteTempoTreino: 'limitado' }, { semanaCiclo: { semana: 3 } })],
+  // 🔵 PERFIL REMEDIDO em 2026-09-19 (exclusão do improviso doméstico na academia): o
+  // avançado 6 d/45 min deixou de precisar da troca. A varredura desta correção (108 864
+  // células) achou 4 404 que ainda a produzem, 285 delas com ≥ 3 dias e ≥ 45 min; esta é a
+  // primeira delas.
+  ['troca de exercício para caber no teto do dia', /Trocamos \d+ exerc[íi]cios?/, () => gerar({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qua', 'qui'], tempoPorSessaoMin: 45, limiteTempoTreino: 'sem_limite', divisaoPreferida: 'superior-inferior' }, { semanaCiclo: { semana: 3 } })],
   ['exceção ao teto por sessão, declarada', /acima das \d+ que o app usa como limite de um treino s[óo]/, () => {
     /**
      * 🔒 O caso é o DESENHO DA PESSOA, e não por conveniência: na varredura de 10 080
@@ -260,9 +268,13 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
    * As células abaixo vieram da varredura desta correção — 80 produzem a poda semanal e 50 a
    * poda por sessão.
    */
-  ['poda do baseline (automático)', /para não passar do máximo desta semana/, () => gerar({ equipamento: 'casa', equipamentosCasa: [], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75 }, { semanaCiclo: { semana: 5 } })],
+  // 🔵 PERFIS REMEDIDOS em 2026-09-19 (preferência por execução bilateral): `casa` sem
+  // checklist a 3 d/75 min deixou de podar — trocado o segundo isolado por um bilateral, o
+  // crédito ponderado fecha dentro do teto. A célula que ainda poda é a mesma casa COM
+  // halteres e elástico (17 463 células produzem a poda semanal na varredura desta correção).
+  ['poda do baseline (automático)', /para não passar do máximo desta semana/, () => gerar({ equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 5 } })],
   ['poda do baseline no desenho da pessoa (só o que o app dosou)', /s[ée]ries? sa[íıi](ram|u) de exerc[íi]cios? que o app dosou/, () => {
-    const o = { equipamento: 'casa', equipamentosCasa: [], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75 };
+    const o = { equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' };
     const auto = gerar(o, { semanaCiclo: { semana: 5 } })!;
     const dias = auto.dias.map((d) => ({ nome: d.nome, diaId: d.diaId, exercicioIds: d.slots.map((s) => s.exercicio.id) }));
     return gerar({ ...o, rotinaCustom: { origem: 'usuario', dias } }, { semanaCiclo: { semana: 5 } });
@@ -289,6 +301,14 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   // caso relatado do PR #18 (Prioridades 4d, intermediário, 75 sem limite, foco em braços).
   ['extra do foco consolidado nos exercícios do dia', /extra do foco coube nos exerc[íi]cios que o dia j[áa] tinha/, () => gerar({ nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: ['seg', 'ter', 'qui', 'sex'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', divisaoPreferida: 'prioridades', focoAgregado: { grupo: 'bracos', semana: 1 }, variacaoTreino: 1 }, { semanaCiclo: { semana: 5 } })],
   ['deload que parte de um plano-base já ajustado', /plano-base desta semana de deload/, () => gerar({ nivelExperiencia: 'iniciante', objetivo: 'saude', equipamento: 'casa', equipamentosCasa: ['halteres', 'elastico'], diasDisponiveis: 3, treinoDias: ['seg', 'ter', 'qua'], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite' }, { semanaCiclo: { semana: 6 } })],
+  /**
+   * 🔵 2026-09-19 — O DIA MARCADO QUE NÃO VIROU SESSÃO. Um ponto de emissão só, com as duas
+   * causas no ternário: no automático é o teto de sessões do nível (`min(dias, teto)` do
+   * cofre) e no desenho da pessoa é o dia que o desenho não cobre. Antes disto o excedente
+   * virava cardio/recuperação em SILÊNCIO — o relato "mudei para treinar todos os dias e o
+   * treino continuou de segunda a quinta".
+   */
+  ['dia marcado que não virou sessão', /Você marcou \d+ dias e o (plano usou|seu treino cobre)/, () => gerar({ diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] })],
 ];
 
 describe('D1 · B1 — cada família de aviso do montador tem caso e caminho até a tela', () => {
@@ -330,7 +350,9 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // 50 → 51 em 2026-09-20: o EXTRA DO FOCO consolidado nos exercícios que o dia já tinha
     // (resíduo dos cinco tríceps do PR #18). O ponto é próprio porque o fato é outro: não é a
     // consolidação de braços do baseline, é o extra do bloco cabendo na dose já existente.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(51);
+    // 51 → 52 em 2026-09-19: o DIA MARCADO QUE NÃO VIROU SESSÃO (teto de sessões do nível no
+    // automático; dia fora do desenho no manual) — um ponto de emissão, duas causas no ternário.
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(52);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });

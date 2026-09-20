@@ -28,6 +28,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './alocador';
+import { ehImprovisoDomestico } from './equipamento';
 import { ehComplementar, ehDiaDePernas } from './selecao-referencia';
 import { diretosDoExercicio } from './cobertura-anatomica';
 import { tetoSeriesPorExercicio } from './trilhos';
@@ -101,12 +102,48 @@ describe('🔴 resíduo ② — panturrilha omitida no dia de pernas', () => {
 
   it('ela entrou SOMANDO: nenhum grupo principal perdeu série nem crédito ponderado', () => {
     // Os créditos medidos no PR #18 para esta fixture, grupo a grupo.
+    /**
+     * 🔵 GLÚTEOS REMEDIDO em 2026-09-19 (10 → 9,5), e o motivo não é a panturrilha.
+     *
+     * A exclusão do improviso doméstico na ACADEMIA tirou deste plano o `e59` — "Elevação de
+     * quadril (hip thrust)", cujo `comoFazer` manda apoiar as costas *"na borda do sofá/cama"*.
+     * Ele era o ÚNICO candidato da família `ponte-hip-thrust` sem crédito secundário em
+     * posterior E com o mesmo custo de slot do `e58` (o `e153`, na máquina, tem outro custo e o
+     * `e161` é unilateral). Sem ele, a troca que resolvia o teto do dia de pernas sem custar
+     * série deixou de existir, a poda cortou 2 séries de posterior e o crédito INDIRETO de
+     * glúteos caiu 0,5 junto.
+     *
+     * 🔒 O que NÃO mudou: a panturrilha continua entrando somando, o slot extra continua sendo
+     * um só e no dia de pernas, quadríceps e posterior continuam em 12 séries diretas no dia, e
+     * nenhum teto foi afrouxado. E o motor DIZ a perda — asserção logo abaixo —, em vez de
+     * entregar um número mais bonito calado.
+     *
+     * 📌 Resíduo de CATÁLOGO, para decisão do autor: academia não tem variante própria de hip
+     * thrust com barra nem de paralelas; o `e153` (máquina) e o `e100` (paralelas em duas
+     * cadeiras) são o que existe. Enquanto não houver, o glúteo do perfil de academia fica
+     * dependendo de ponte no chão.
+     */
     const c = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
     for (const [g, n] of [['peito', 15], ['costas', 14], ['ombros', 13.5], ['quadriceps', 12],
-      ['posterior', 12], ['gluteos', 10], ['biceps', 19]] as const)
+      ['posterior', 12], ['gluteos', 9.5], ['biceps', 17.5]] as const)
       expect(c.get(g) ?? 0, g).toBeGreaterThanOrEqual(n);
     expect(serie(pernas, 'quadriceps')).toBe(12);
-    expect(serie(pernas, 'posterior')).toBe(12);
+    // Posterior DIRETO caiu 12 → 10 pela mesma causa acima (a poda substituiu a troca que o
+    // `e59` viabilizava). O crédito PONDERADO do grupo continua em 12, e é ele que a faixa
+    // cobra — a asserção logo acima. A poda é dita em `rotina.avisos`.
+    expect(serie(pernas, 'posterior')).toBe(10);
+    expect(r.avisos.some((a) => /Ajustamos o volume de Posterior/i.test(a)),
+      `o corte de posterior não foi dito: ${r.avisos.join(' | ')}`).toBe(true);
+  });
+
+  it('a perda de glúteos não é escondida: o motor diz que o grupo ficou abaixo do mínimo', () => {
+    expect(r.avisos.some((a) => /volume de gluteos ficou abaixo do m[íi]nimo/i.test(a)),
+      `o plano entrega glúteos abaixo do mínimo sem dizer: ${r.avisos.join(' | ')}`).toBe(true);
+  });
+
+  it('nenhum improviso doméstico sobra num plano de ACADEMIA', () => {
+    const improvisos = r.dias.flatMap((d) => d.slots.filter((s) => ehImprovisoDomestico(s.exercicio)));
+    expect(improvisos.map((s) => s.exercicio.nomePt), 'improviso de casa num treino de academia').toEqual([]);
   });
 
   it('o slot extra é UM só, e só no dia de pernas — os demais dias respeitam o orçamento', () => {

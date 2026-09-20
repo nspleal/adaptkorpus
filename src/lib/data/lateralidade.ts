@@ -260,3 +260,20 @@ export function resolverExecucao(
   }
   return execucaoSelecionada;
 }
+
+/**
+ * 🔵 PREFERÊNCIA POR EXECUÇÃO BILATERAL (pedido do autor, 2026-09-19): *"quero exercícios
+ * bilaterais como padrão, para facilitar a execução"* — o relato nomeou "Stiff unilateral"
+ * (e82) e a captura trouxe "Puxada unilateral na polia" (e51).
+ *
+ * 🔒 É PREFERÊNCIA DE DESEMPATE, nunca filtro: o unilateral continua elegível e continua
+ * entrando quando é a única opção da função (a família `afundo`, por exemplo, é inteira
+ * unilateral). E não afirma nada sobre valor científico de uma execução ou da outra — é a
+ * facilidade de execução que o autor pediu.
+ *
+ * `UNILATERAL_ALTERNADO` entra junto do `UNILATERAL_DOIS_LADOS` no lado "não bilateral":
+ * a pergunta aqui é "os dois lados no mesmo movimento?", e a resposta é a mesma para os dois.
+ */
+export function ehBilateral(ex: { execucao: ExecucaoLateralidade }): boolean {
+  return ex.execucao === 'BILATERAL';
+}

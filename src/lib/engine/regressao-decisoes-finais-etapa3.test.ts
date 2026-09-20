@@ -190,7 +190,13 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
 });
 
 describe('P-02 — foco agregado «pernas»: quadríceps + posterior, 2 séries cada', () => {
-  const entrada = perfil({ treinoDias: ['seg', 'ter', 'qui', 'sex'], limiteTempoTreino: 'sem_limite' });
+  /**
+   * 🔵 NÍVEL REMEDIDO em 2026-09-19: com o improviso doméstico fora da academia, o
+   * intermediário de 4 dias passou a entregar só um dos dois componentes do foco de pernas
+   * (o dia ficou sem folga para o segundo). A varredura desta correção achou 183 células que
+   * entregam os DOIS com 2 séries cada; esta é a mesma agenda e o mesmo tempo, um nível abaixo.
+   */
+  const entrada = perfil({ nivelExperiencia: 'iniciante', treinoDias: ['seg', 'ter', 'qui', 'sex'], limiteTempoTreino: 'sem_limite' });
   const neutro = gerar(entrada);
   const agregado = gerar({ ...entrada, focoAgregado: { grupo: 'pernas', semana: 1 } });
   const grupoDe = (id: string) => EXERCISES.find((e) => e.id === id)?.grupoPrimario;

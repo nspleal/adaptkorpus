@@ -116,14 +116,27 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(P_SEM_LIMITE,s),0),
    'nenhuma semana entregou bloco — as igualdades acima seriam triviais').toBeGreaterThan(0);
  });
- it('🔒 e quando o bloco é recusado, é porque o grupo está NO teto — não porque sumiu',()=>{
+ it('🔒 e quando o bloco é recusado, é porque um teto morde — não porque sumiu',()=>{
   const recusadas=([1,4,5] as const).filter(s=>entregueDe(run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},s))===0);
   for(const semana of recusadas){
    const b=run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
    const teto=b.faixaVolumeSemana!.max;
    const ponderado=creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')??0;
-   expect(ponderado,`S${semana}: bloco recusado sem o grupo estar no teto`).toBeGreaterThan(teto-1);
-   expect(ponderado).toBeLessThanOrEqual(teto);
+   /**
+    * 🔵 2026-09-19 — a asserção passou a cobrir os DOIS tetos que a recusa pode ter, porque
+    * a própria regex de aviso logo abaixo já aceitava os dois desde sempre:
+    *  ① o grupo FOCADO no topo da faixa semanal; ou
+    *  ② um TERCEIRO grupo no teto de sessão (12 ponderadas num mesmo dia) — o caso medido
+    *    nesta correção, em que somar peito levaria OMBROS acima do teto do dia pelo crédito
+    *    indireto. Antes o número casava por acidente (peito estava em 14), e a exclusão do
+    *    improviso doméstico na academia desfez a coincidência.
+    * O que continua cobrado é o essencial: recusa SEMPRE tem um teto que a explica — nunca
+    * "o bloco sumiu".
+    */
+   const tetoDaSessao=b.tetoVolumeSemana?.sessao;
+   const noTetoDaSessao=tetoDaSessao!=null&&b.dias.some(d=>[...creditoPonderadoDaSemana(d.slots).values()].some(v=>v>=tetoDaSessao));
+   expect(ponderado>teto-1||noTetoDaSessao,`S${semana}: bloco recusado sem nenhum teto no limite (peito ${ponderado}/${teto})`).toBe(true);
+   expect(ponderado).toBeLessThanOrEqual(b.tetoVolumeSemana!.cheio);
    expect(b.avisos.some(a=>/(extras não couberam no tempo disponível|j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/.test(a)),`S${semana}: recusa sem explicação na tela`).toBe(true);
   }
  });

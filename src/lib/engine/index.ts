@@ -28,6 +28,7 @@ export {
   aplicarDeload,
   dificuldadesLiberadas,
   feedbackRefinado,
+  tetoSessoesForca,
 } from './treino';
 // --- Mesociclo v2 (DF 2026-07-08) ---
 export {

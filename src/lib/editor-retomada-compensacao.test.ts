@@ -73,26 +73,32 @@ describe('Retomada · a escolha de um slot não se paga em outro', () => {
    * `ter/costas` — 3/3/3/2 —, onde a folga liberada por um slot é exatamente o que poderia
    * subir noutro. A propriedade guardada é idêntica.
    */
+  /**
+   * 🔵 REANCORADO em 2026-09-19. Com a preferência por execução bilateral e o improviso
+   * doméstico fora da academia, o dia `ter` passou a repartir costas igualmente (3/3/3) — o
+   * par de compensação não existe mais ali. O dia com repartição desigual neste plano é `sex`,
+   * em POSTERIOR (3/3/2). A propriedade guardada é a mesma, letra por letra: reduzir um slot
+   * não pode levantar outro.
+   */
   it('anti-vacuidade: o dia medido tem grupo repartido desigualmente e a rampa corta de verdade', () => {
-    const ter = referencia.dias.find((d) => d.diaId === 'ter')!;
-    const costas = ter.slots.filter((s) => s.exercicio.grupoPrimario === 'costas').map((s) => s.series);
-    expect(costas.length).toBeGreaterThanOrEqual(4);
+    const sex = referencia.dias.find((d) => d.diaId === 'sex')!;
+    const posterior = sex.slots.filter((s) => s.exercicio.grupoPrimario === 'posterior').map((s) => s.series);
+    expect(posterior.length).toBeGreaterThanOrEqual(3);
     // Repartição desigual: é dela que o round-robin tira a folga quando um slot é reduzido.
-    expect(new Set(costas).size).toBeGreaterThan(1);
+    expect(new Set(posterior).size).toBeGreaterThan(1);
     expect(total(referencia)).toBeLessThan(total(gerar(PERFIL, { semana: 1 })));
-    // O caso nominal medido, preso por número: reduzir e45 não pode mexer em e46.
-    expect(porSlot(referencia).get('ter/e45')).toBe(3);
-    expect(porSlot(referencia).get('ter/e97')).toBe(2);
+    // O caso nominal medido, preso por número: reduzir e123 não pode mexer em e83.
+    expect(porSlot(referencia).get('sex/e123')).toBe(3);
+    expect(porSlot(referencia).get('sex/e83')).toBe(2);
   });
 
-  // 2026-09-19: com puxada + remada antes de variantes, o quarto slot de costas é e97 (não e46).
-  it('o caso medido: reduzir e45 de 3 para 2 não levanta e97 de 2 para 3', () => {
-    const r = gerar({ ...PERFIL, rotinaCustom: comEscolha(desenho, 'ter', 'e45', 2) }, RAMPA);
+  it('o caso medido: reduzir e123 de 3 para 2 não levanta e83 de 2 para 3', () => {
+    const r = gerar({ ...PERFIL, rotinaCustom: comEscolha(desenho, 'sex', 'e123', 2) }, RAMPA);
     const depois = porSlot(r);
-    expect(depois.get('ter/e45')).toBe(2);
-    expect(depois.get('ter/e97')).toBe(2);
+    expect(depois.get('sex/e123')).toBe(2);
+    expect(depois.get('sex/e83')).toBe(2);
     for (const [k, v] of porSlot(referencia)) {
-      if (k === 'ter/e45') continue;
+      if (k === 'sex/e123') continue;
       expect(`${k}=${depois.get(k)}`).toBe(`${k}=${v}`);
     }
   });

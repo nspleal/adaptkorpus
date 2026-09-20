@@ -81,8 +81,15 @@ describe('C1 gerador · MESMA função do crítico sobre o MESMO plano (§8.1)',
     const orc = 75 * 60;
     for (const d of r.dias) {
       const viaGerador = avaliarDuracaoResistida(d.slots, 'avancado', orc);
-      // o crítico monta {exercicio, series, descansoSeg} a partir do MESMO dia:
-      const comoCritico = d.slots.map((s) => ({ exercicio: s.exercicio, series: s.series, descansoSeg: s.descansoSeg }));
+      /**
+       * O crítico remonta o slot a partir do MESMO dia, com os campos que a fórmula lê.
+       * 🔵 2026-09-19 — `holdSeg` entrou na projeção: ele é um DESSES campos (isométrico sem
+       * hold ⇒ `HOLD_AUSENTE` ⇒ NAO_AVALIADO), e a projeção de três campos só passava porque
+       * nenhum plano desta fixture trazia isométrico. Nenhum consumidor real monta a forma de
+       * três campos — `critico.ts` e o montador passam o slot inteiro —, então incluir o hold
+       * aproxima o teste do que o crítico faz, em vez de afastá-lo.
+       */
+      const comoCritico = d.slots.map((s) => ({ exercicio: s.exercicio, series: s.series, descansoSeg: s.descansoSeg, holdSeg: s.holdSeg }));
       const viaCritico = avaliarDuracaoResistida(comoCritico, 'avancado', orc);
       expect(viaCritico).toEqual(viaGerador);
     }

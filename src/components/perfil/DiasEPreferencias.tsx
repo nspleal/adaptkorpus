@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
-import { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA } from '@/lib/engine';
+import { EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA, tetoSessoesForca } from '@/lib/engine';
+import type { NivelExperiencia } from '@/lib/engine';
 import type { EquipamentoCasa } from '@/lib/data/types';
 import { ORDEM_SEMANA, DIA_LABEL, type Weekday } from '@/lib/semana';
 import { buscarAlimentos, nomeAlimento, PALETA_ALIMENTOS } from '@/lib/data/paleta-alimentos';
@@ -33,8 +34,13 @@ const InfoBone = () => (
 
 /* ════════════════════ Seletor de dias (Seg–Dom) ════════════════════ */
 
-export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', stripMarginTop = 24 }: {
+export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', stripMarginTop = 24, nivel }: {
   treinoDias: Weekday[]; onToggle: (w: Weekday) => void; contagemFont?: string; stripMarginTop?: number;
+  /**
+   * 🔵 O NÍVEL, SÓ PARA DIZER O TETO (2026-09-19). Ausente = a nota não aparece (onboarding
+   * antes de o nível existir), e nada mais muda.
+   */
+  nivel?: NivelExperiencia;
 }) {
   const sel = new Set(treinoDias);
   const trainCount = treinoDias.length;
@@ -51,6 +57,19 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
   let notaShow = false, notaText = '';
   if (trainCount === 0) { notaShow = true; notaText = 'Selecione ao menos um dia para treinar — os outros ficam como descanso.'; }
   else if (trainCount === 7) { notaShow = true; notaText = 'Recomendamos manter ao menos um dia de descanso — é quando o corpo se recupera. Você pode seguir assim mesmo se quiser.'; }
+
+  /**
+   * 🔵 O TETO DE SESSÕES DO NÍVEL, DITO AQUI (relato 2026-09-19).
+   *
+   * 🔴 O defeito: esta faixa marcava os sete dias como "Treino" e o plano entregava quatro,
+   * sem uma linha explicando. O teto vem do cofre (`motor-treino-volume-e-frequencia-por-nivel`)
+   * e é lido pela MESMA função do motor (`tetoSessoesForca`) — a tela não tem número próprio.
+   *
+   * 🔒 Nada é bloqueado: escolher mais dias continua valendo, e o dia a mais pode virar o dia
+   * dedicado aos complementares ou cardio/recuperação. O que muda é a pessoa saber disso ANTES.
+   */
+  const teto = nivel ? tetoSessoesForca(nivel) : null;
+  const acimaDoTeto = teto != null && trainCount > teto;
 
   return (
     <div>
@@ -70,6 +89,16 @@ export function SeletorDias({ treinoDias, onToggle, contagemFont = '1.7rem', str
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'rgba(234,229,219,.3)' }} />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: contagemFont, fontWeight: 800, letterSpacing: '-.02em', color: 'rgba(234,229,219,.85)' }}>{restCount}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>{restWord} de descanso</span></div>
       </div>
+      {acimaDoTeto && (
+        <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)' }}>
+          <InfoNeon />
+          <p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>
+            Seu nível comporta <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>{teto} sessões de musculação por semana</strong>, mais
+            um dia dedicado aos complementares. Escolhendo {trainCount}, os dias que sobrarem entram como
+            cardio ou recuperação — não repetimos uma sessão para preencher.
+          </p>
+        </div>
+      )}
       {notaShow && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 16, padding: '12px 14px', borderRadius: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.14)' }}>
           <InfoNeon /><p style={{ margin: 0, fontSize: '.87rem', color: 'rgba(234,229,219,.72)', lineHeight: 1.5 }}>{notaText}</p>

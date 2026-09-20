@@ -103,7 +103,15 @@ describe('exceção autorizada: core 2→1 apenas para recortes de pernas em qua
 
 
 it('caminho real: quatro dias, duas pernas, core 2→1 e principais preservados',()=>{
- const p:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false},objetivo:'massa',nivelExperiencia:'intermediario',equipamento:'academia',diasDisponiveis:4,treinoDias:['seg','ter','qui','sex'],tempoPorSessaoMin:75,limiteTempoTreino:'limitado'};
+ /**
+  * 🔵 PERFIL REMEDIDO em 2026-09-19. Com o improviso doméstico fora da ACADEMIA, o
+  * intermediário de academia 4 d/75 min passou a separar as duas sessões de pernas SEM ceder
+  * o segundo core — a cessão deixou de acontecer ali, e o caso deixaria de exercitar a regra
+  * que ele existe para provar. A varredura desta correção (108 864 células) achou 252 que
+  * ainda produzem a cessão; esta é a primeira com ≥ 3 dias e ≥ 45 min. A regra sob teste (core
+  * 2→1 autorizada no foco de pernas/4d, principais e antebraço preservados) é a mesma.
+  */
+ const p:PerfilTreino={pesoKg:80,alturaCm:180,idade:30,flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false},objetivo:'massa',nivelExperiencia:'avancado',equipamento:'casa',equipamentosCasa:[],diasDisponiveis:4,treinoDias:['seg','ter','qui','sex'],tempoPorSessaoMin:75,limiteTempoTreino:'limitado'};
  const run=(perfil:PerfilTreino)=>gerarTreino(perfil,{exercises:EXERCISES,semanaCiclo:{semana:1}}).rotina!;
  const antes=run(p),depois=run({...p,focoAgregado:{grupo:'pernas',semana:1}});
  const core=(r:typeof antes)=>r.dias.filter(d=>d.slots.some(s=>s.exercicio.grupoPrimario==='core')).length;

@@ -54,6 +54,45 @@ export function exercicioDisponivel(
   return eOk && ouOk;
 }
 
+/* ════════════════ Improviso doméstico × academia ════════════════ */
+
+/**
+ * 🔵 IMPROVISO DOMÉSTICO — o exercício existe só para quem não tem equipamento nenhum e
+ * monta o aparelho com móvel da casa (relato 2026-09-19: um treino de ACADEMIA recebeu
+ * *"Remada invertida com cabo de vassoura"* ao lado de máquinas e polias).
+ *
+ * 🔒 A MARCA JÁ EXISTE NO CATÁLOGO, e não é inventada aqui: `local: 'casa_sem'` (cenário
+ * doméstico sem equipamento) MAIS a anotação de montagem entre parênteses em
+ * `equipamentoDetalhe` — a mesma convenção que `RE_PESO_CORPORAL` documenta logo abaixo,
+ * onde o parêntese "descreve COMO montar o exercício, não carga externa". Hoje são sete:
+ * apoio no sofá, 2 cadeiras firmes, mesa firme, mesa firme + cadeira, cabo de vassoura.
+ *
+ * ⚠️ NÃO é "peso corporal". `Peso corporal` puro (flexão, barra fixa, paralelas, prancha,
+ * agachamento livre) continua inteiro — peso corporal não é improviso nem é inferior; o que
+ * sai é a IMPROVISAÇÃO DO APARELHO, que na academia tem o equipamento de verdade no lugar.
+ * `Peso corporal / Halteres` também fica: ali a carga externa é alternativa legítima.
+ */
+export function ehImprovisoDomestico(ex: Pick<Exercise, 'local' | 'equipamentoDetalhe'>): boolean {
+  return ex.local === 'casa_sem' && /^Peso corporal \(.*\)$/.test(ex.equipamentoDetalhe ?? '');
+}
+
+/**
+ * O exercício serve à SELEÇÃO AUTOMÁTICA deste equipamento? Filtro do motor quando é ELE que
+ * escolhe — geração, complementares, cobertura, exceções e fallbacks. Na academia exclui o
+ * improviso doméstico; nos demais perfis não tira nada.
+ *
+ * 🔒 Separado de `exercicioDisponivel` de propósito: elegibilidade (o que a pessoa PODE ter
+ * no plano, inclusive por escolha manual) e seleção automática (o que o app escolhe sozinho)
+ * são perguntas diferentes. Juntá-las apagaria do desenho manual um exercício que a pessoa
+ * pôs ali de propósito.
+ */
+export function servePelaSelecaoAutomatica(
+  ex: Pick<Exercise, 'local' | 'equipamentoDetalhe'>,
+  equipamento: EquipamentoDisp,
+): boolean {
+  return equipamento !== 'academia' || !ehImprovisoDomestico(ex);
+}
+
 /* ════════════════════ Predicado de CARGA ════════════════════ */
 
 /**

@@ -157,7 +157,16 @@ describe('🔴 o editor mostra o que o motor explica', () => {
     const r = gerar(p, opcoes);
     expect(r.blocoFoco?.solicitados, 'sem intenção de bloco não há entrega parcial a explicar').toBeGreaterThan(0);
     if ((r.blocoFoco?.adicionais ?? []).length < (r.blocoFoco?.solicitados ?? 0)) {
-      expect(r.avisos.some((a) => /m[áa]ximo do seu n[íi]vel/.test(a))).toBe(true);
+      /**
+       * 🔵 2026-09-19 — a regex passou a aceitar os DOIS tetos declarados. São dois limites
+       * diferentes, com frases diferentes de propósito ("máximo do seu nível" é a semana;
+       * "máximo de um treino só do seu nível" é a sessão), e a entrega parcial pode ser
+       * barrada por qualquer um deles. Neste perfil quem barra hoje é o teto de SESSÃO — pelo
+       * crédito indireto que o peito deposita em ombros — e a explicação continua na tela.
+       * O que o caso cobra não muda: recusa parcial NUNCA fica sem explicação.
+       */
+      expect(r.avisos.some((a) => /m[áa]ximo (do seu n[íi]vel|de um treino s[óo])|nos limites desta semana/.test(a)),
+        `entrega parcial sem explicação: ${r.avisos.join(' | ')}`).toBe(true);
     }
   });
 });

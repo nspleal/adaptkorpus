@@ -70,7 +70,7 @@ exports[`📸 etapa3 — composição seletor histórico > descanso efetivo — 
 exports[`📸 etapa3 — composição seletor histórico > o cap inicial não depende de quais exercícios caíram na sessão 1`] = `
 [
   {
-    "compostos": 4,
+    "compostos": 3,
     "slots": 5,
   },
   {
@@ -78,7 +78,7 @@ exports[`📸 etapa3 — composição seletor histórico > o cap inicial não de
     "slots": 5,
   },
   {
-    "compostos": 4,
+    "compostos": 3,
     "slots": 5,
   },
   {
@@ -177,7 +177,7 @@ exports[`📸 etapa3 — nº de exercícios, seletor histórico > intermediário
   "slots": [
     2,
     2,
-    2,
+    3,
     2,
   ],
   "tempo": 10,

@@ -108,7 +108,15 @@ describe('🔴 ① COSTAS — várias remadas com o trapézio superior sem exerc
      * pode custar tempo no slot dela (senão o corte por tempo come a série que devolveria o
      * crédito, que foi o defeito medido em 12 de 36 perfis antes deste ajuste).
      */
-    expect(credito.get('biceps') ?? 0, 'o bíceps perdeu volume indireto para pagar a cobertura').toBeGreaterThanOrEqual(8);
+    /**
+     * 🔵 REMEDIDO em 2026-09-19 (8 → 7), e NÃO pela troca de cobertura. Com o improviso
+     * doméstico fora da academia, o 4º slot de costas deixou de ser o `e168` "Remada invertida
+     * com pegada supinada" (mesa firme) — que creditava bíceps 0,5 × 2 — e passou a ser o
+     * `e167` "Elevação em Y-T-W de bruços", que não credita bíceps. O par remada↔encolhimento
+     * que este caso existe para provar continua intacto: `e97` entra, `ts` fica coberto e as
+     * costas seguem em 6 (asserção abaixo, inalterada).
+     */
+    expect(credito.get('biceps') ?? 0, 'o bíceps perdeu volume indireto para pagar a cobertura').toBeGreaterThanOrEqual(7);
     expect(credito.get('costas') ?? 0, 'as costas perderam volume direto').toBeGreaterThanOrEqual(6);
   });
 });
