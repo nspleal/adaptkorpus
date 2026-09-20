@@ -122,7 +122,13 @@ describe('🔴 os casos medidos em que o baseline passava do teto', () => {
    */
   const CASOS = [
     { nome: 'casa+halteres/elástico · iniciante/saúde/3d/60min/S5 — costas no teto de 10', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 60, semana: 5, tetoEsperado: 10, pondDepois: 9.5, diretoDepois: 8, podaDiz: /Costas/ },
-    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/75min/S5 — orçamento maior, mesma banda', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 75, semana: 5, tetoEsperado: 10, pondDepois: 9, diretoDepois: 8, podaDiz: /Costas/ },
+    /**
+     * 🔵 9 → 9,5 em 2026-09-20 (4ª volta): a repartição dentro do grupo deixou de sair
+     * uniforme por artefato do round-robin, e a MESMA dose direta (8 séries, inalterada)
+     * passou a render meia ponderada a mais de costas — ainda abaixo do teto de 10, que é o
+     * que este caso existe para cobrar. A poda continua dizendo o que podou.
+     */
+    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/75min/S5 — orçamento maior, mesma banda', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 75, semana: 5, tetoEsperado: 10, pondDepois: 9.5, diretoDepois: 8, podaDiz: /Costas/ },
   ] as const;
 
   it.each(CASOS)('$nome', ({ nivel, obj, dias, tempo, semana, tetoEsperado, pondDepois, diretoDepois, podaDiz }) => {

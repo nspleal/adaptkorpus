@@ -1,8 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {gerarTreino} from './index';
 import {EXERCISES} from '../data/exercises';
-import {creditoPonderadoDaSemana,orcamentoSlotsDoDia} from './alocador';
-import {tetoSeriesPorExercicio} from './trilhos';
+import {creditoPonderadoDaSemana} from './alocador';
 import {diretosDoExercicio} from './cobertura-anatomica';
 import {aplicarExcecaoTrapezio} from './excecao-trapezio-iniciante';
 import type {PerfilTreino,DiaTreino} from './treino-types';
@@ -51,51 +50,41 @@ describe('exceção localizada autorizada: trapézio no iniciante 4d/30min',()=>
   const ss=r.dias.flatMap(d=>d.slots),c=creditoPonderadoDaSemana(ss);
   expect(ss.some(s=>diretosDoExercicio(s.exercicio.id).has('ts'))).toBe(true);
   expect(c.get('ombros')).toBe(6);
+  // 🔵 PISO, não alvo: a 4ª volta levou o bíceps de 2,0 para 2,5 ponderadas neste perfil, pela
+  // repartição dentro do grupo (a série sai da puxada, que não credita ninguém, e vai para a
+  // remada, que credita 0,5). O requisito de ≥ 6 continua PENDENTE — ver o `it.todo` abaixo.
+  // Esta linha impede a REGRESSÃO do que já foi entregue; um conserto que alcance 6 passa nela.
+  expect(c.get('biceps'), 'bíceps regrediu abaixo do que a 4ª volta entregou').toBeGreaterThanOrEqual(2.5);
   expect(r.duracaoDias!.every(d=>d.estadoCalculo==='CALCULADO'&&d.duracaoMaximaEstimadaSegundos!<=1800)).toBe(true);
   const dias=fixture().map(d=>({nome:d.nome,diaId:d.diaId,exercicioIds:d.slots.map(s=>s.exercicio.id)}));
   const m=gerarTreino({...p,rotinaCustom:{origem:'usuario',dias}},{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;
   expect(m.dias.map(d=>d.slots.map(s=>s.exercicio.id))).toEqual(dias.map(d=>d.exercicioIds));
  });
 
- /**
-  * 🔴 A EXIGÊNCIA PEDIDA — bíceps ≥ 6 ponderadas COM exercício direto — E POR QUE ELA NÃO CABE
-  * NESTE PERFIL. Medido em 2026-09-20; nada aqui é estimativa.
+/**
+  * 🔴 A EXIGÊNCIA PEDIDA — bíceps ≥ 6 ponderadas COM exercício direto — CONTINUA PENDENTE.
   *
-  * 🔑 A restrição é de ORÇAMENTO, não de seleção. O perfil tem 4 dias × `orcamentoSlotsDoDia(30)`
-  * = 16 slots, e todos estão ocupados por grupos principais. A única FOLGA estrutural da semana é
-  * um slot: as costas carregam 8 séries diretas em 4 slots quando 3 bastariam (3+3+2, no teto de
-  * séries por exercício do nível). Dando essa folga ao bíceps, ele chega a `sMax` diretas mais o
-  * indireto que as remadas já dão — e isso não alcança 6. Seis exigiriam um SEGUNDO slot, que só
-  * pode sair de um grupo sem folga: a dose dele cairia.
+  * 🔵 2026-09-20 (4ª volta). O caso que ficava aqui — "a restrição medida" — SAIU por ordem do
+  * autor: ele cobrava bíceps EXATAMENTE em 2 ponderadas, folga estrutural EXATAMENTE 1 e todos
+  * os dias com o orçamento cheio, e isso reprovava qualquer melhoria legítima. Os números dele
+  * ficam abaixo como EVIDÊNCIA da candidata `4533310`, não como comportamento obrigatório.
   *
-  * 🔬 As quatro composições medidas nesta rodada (iniciante/academia/massa/4d/30min, semana 3),
-  * todas por varredura de 120 perfis para conferir o efeito colateral:
-  *  | composição                                   | costas | ts | peito | ombros | bíceps | pernas |
-  *  |----------------------------------------------|--------|----|-------|--------|--------|--------|
-  *  | vigente                                      |  9,5   | ✓  |   6   |   6    | 2 (0 diretos) | intactas |
-  *  | piso do pequeno liberado (reserva DF② a 3)    |  8     | ✓  | **3** | **3**  | 5      | intactas |
-  *  | + trava de puxar fiel + uma reserva só        |  9,5   | ✗  |   6   |   6    | 5,5    | intactas |
-  *  | divisão desenhada (sem o ramo `adaptada`)     |  9,5   | ✓  |   8   |   8    | 4,5    | **quadríceps 8→6, glúteos 9→4,5, posterior 9,5→4,5** |
+  * 🔑 O QUE MUDOU NESTA VOLTA, medido: a repartição das séries DENTRO do grupo deixou de sair
+  * uniforme por artefato do round-robin, e o bíceps deste perfil subiu de 2,0 para 2,5
+  * ponderadas na semana 3 — sem exercício direto ainda, e sem que nada mais mudasse.
   *
-  * Nenhuma alcança 6, e cada uma cobra o preço numa coluna protegida. A decisão fica com o
-  * autor: sem mudar o orçamento de 30 min ou o teto de séries por exercício do iniciante, 6
-  * ponderadas de bíceps só existem tirando dose de peito, ombros ou pernas.
+  * 🔬 POR QUE OS 6 NÃO SAEM, medido em 2026-09-20 e reproduzido:
+  *  · 6,0 com direto exige 3 diretas (teto de séries por exercício do iniciante) + 3,0
+  *    indiretas, e as 3,0 indiretas exigem que as DUAS remadas levem 6 das 8 séries de costas;
+  *  · isso cabe em 30 min com os descansos INTACTOS — medido: 1310/1770/1750/1390 s contra
+  *    1800 s — num arranjo de 4+5 slots;
+  *  · mas o arranjo que o motor gera para chegar lá derruba o descanso do dia do piso de
+  *    180 s para 120 s, porque o dia termina com 12 séries (costas 6 + peito 3 + bíceps 3) e
+  *    30 min a 180 s comportam ~10. O autor NÃO autorizou encurtar descanso, e a guarda do
+  *    slot extra do piso DF② devolve o arranjo inteiro por isso.
+  *
+  * 📌 Evidência da candidata `4533310` (NÃO é contrato): 4 dias × `orcamentoSlotsDoDia(30)` = 16
+  * slots, todos ocupados; folga estrutural de 1 slot; bíceps 2,0, todas indiretas.
   */
- it('🔴 a restrição medida: 6 ponderadas de bíceps não cabem em 16 slots de 30 min',()=>{
-  const r=gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana:3}}).rotina!;
-  const ss=r.dias.flatMap(d=>d.slots),c=creditoPonderadoDaSemana(ss);
-  const teto=orcamentoSlotsDoDia(p.tempoPorSessaoMin!),sMax=tetoSeriesPorExercicio(p.nivelExperiencia);
-  // ① o orçamento inteiro está ocupado — não há slot livre para acrescentar nada.
-  expect(r.dias).toHaveLength(4);
-  expect(r.dias.map(d=>d.slots.length),'sobrou slot no dia: a restrição mudou').toEqual([teto,teto,teto,teto]);
-  // ② a FOLGA estrutural da semana: slots além do mínimo que a dose de cada grupo exige.
-  const porGrupo=new Map<string,{slots:number;series:number}>();
-  for(const s of ss){const g=s.exercicio.grupoPrimario!;const v=porGrupo.get(g)??{slots:0,series:0};
-    porGrupo.set(g,{slots:v.slots+1,series:v.series+(s.series??0)});}
-  const folga=[...porGrupo.values()].reduce((n,v)=>n+(v.slots-Math.ceil(v.series/sMax)),0);
-  expect(folga,'a folga estrutural mudou: remeça a restrição').toBe(1);
-  // ③ com a folga inteira o bíceps não chega a 6: um slot no teto do nível + o indireto de hoje.
-  expect(c.get('biceps'),'o bíceps ganhou direto: remeça a restrição').toBe(2);
-  expect(sMax+(c.get('biceps')??0),'6 ponderadas caberiam agora — refaça a distribuição').toBeLessThan(6);
- });
+ it.todo('🔴 PENDENTE (autor 2026-09-20): bíceps ≥ 6 ponderadas COM exercício direto na semana 3, preservando dose, cobertura, funções, descansos e os 30 min');
 });

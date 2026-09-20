@@ -41,7 +41,7 @@ import { preferenciasEfetivas, type PreferenciasTreino } from './preferencias';
 import { aplicarFoco, aplicarFocoCore, compensadoresPossiveis, decidirFoco, focoVigente, maxSemanalSemFoco, mev, ordenarComFoco, tetoPonderadoNaSessao, tetoSemanalCheio, tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao, type DecisaoFoco, FOCO_SEMANAS } from './trilhos';
 import { diagnosticarDia, diretosDoExercicio, otimizarCoberturaAnatomica, tracosMecanicos } from './cobertura-anatomica';
 import { gruposDoDia } from './cobertura-editor';
-import { alocarSemana, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana, type TemplateDia } from './alocador';
+import { alocarSemana, type ArgsAlocacao, creditoPonderadoDaSemana, GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO, orcamentoSlotsDoDia, PEQUENOS_PISO_DIRETO, PEQUENOS_TETO_DIRETO, PEQUENOS_TETO_DIRETO_PRIORIDADES, templatesDaSemana, type TemplateDia } from './alocador';
 import { classificarCoberturaCatalogo, mensagemCoberturaCatalogo } from './cobertura-teto';
 import { creditar, creditoAtual, gruposSemEspaco, MARCA_PODA_SESSAO, MARCA_PODA_TETO, podarExcessoPonderado, podarExcessoPonderadoNaSessao, seriesQueCabemNoTeto, type SlotPonderavel } from './teto-ponderado';
 import { declararExcessoDeSessao, frasesDaExcecao, tentarAlternativasDeSessao, type AlternativaExaminada, type ExcecaoDeSessao } from './excecao-sessao';
@@ -172,6 +172,12 @@ export interface OpcoesSemana {
   budgetSlotsOverride?: number;
   /** Flag estritamente interna: monta uma tentativa resistida, sem finalizar/distribuir cardio. */
   tentativaTemporalInterna?: true;
+  /**
+   * 🔒 Interna, como `budgetSlotsOverride`: concede UM slot além da tabela ao piso DF② de um
+   * grupo pequeno, num dia nomeado. Quem decide o grupo, o dia e a ACEITAÇÃO é a comparação
+   * de planos no fim de `montarRotina`; presente ⇒ já é a tentativa (não recursa).
+   */
+  pisoExtraDF2?: { grupo: GrupoPrimario; diaDoPiso: number; diaExtra: number; vitima: GrupoPrimario; maxDaVitima: number };
 }
 
 /**
@@ -895,7 +901,11 @@ export function montarRotina(
      * invariante, teto ou reserva muda. Ausente/0 ⇒ a alocação canônica de sempre.
      */
     ...(perfil.variacaoTreino ? { variacao: perfil.variacaoTreino } : {}),
+    // 🔵 O slot do piso DF② (2026-09-20): concedido pela comparação de planos no fim desta
+    // função, executado aqui. Ver `pisoExtraDF2` em `SemanaCicloOpcoes` e `pisoExtra` no alocador.
+    ...(semanaCiclo?.pisoExtraDF2 ? { pisoExtra: semanaCiclo.pisoExtraDF2 } : {}),
   };
+  let argsFinais: ArgsAlocacao = argsAloc;
   let diasAlocados = alocarSemana(argsAloc);
   let transferenciaFoco: { de: GrupoPrimario; para: GrupoPrimario } | undefined;
   let relatoTransferenciaFoco = { executada: false, recusadaPeloEquilibrio: false };
@@ -973,9 +983,8 @@ export function montarRotina(
        */
       const transferencia = { de: compensadorValido, para: foco.grupo };
       transferenciaFoco = transferencia;
-      diasAlocados = alocarSemana({
-        ...argsAloc, transferirSlot: transferencia, relatoTransferencia: relatoTransferenciaFoco,
-      });
+      argsFinais = { ...argsAloc, transferirSlot: transferencia, relatoTransferencia: relatoTransferenciaFoco };
+      diasAlocados = alocarSemana(argsFinais);
       // A decisão só é confirmada após a eventual segunda alocação de cobertura.
     }
   }
@@ -994,11 +1003,12 @@ export function montarRotina(
   // obrigatória, refazemos a semana com reserva coverage-first; isso evita reordenar planos já válidos.
   if (!coberturaTemporalCompleta(diasAlocados)) {
     relatoTransferenciaFoco = { executada: false, recusadaPeloEquilibrio: false };
-    diasAlocados = alocarSemana({
+    argsFinais = {
       ...argsAloc,
       ...(transferenciaFoco ? { transferirSlot: transferenciaFoco, relatoTransferencia: relatoTransferenciaFoco } : {}),
       coberturaTemporalObrigatoria: COBERTURA_TEMPORAL_OBRIGATORIA,
-    });
+    };
+    diasAlocados = alocarSemana(argsFinais);
   }
 
   // DF B2: "+1 exercício" descreve uma transferência efetiva na alocação final.
@@ -1961,7 +1971,11 @@ export function montarRotina(
        * fato — o contador vem da sequência, não de uma suposição sobre ela.
        */
       const plural=(n:number,um:string,varios:string)=>n===1?um:varios;
-      if(relatoReducao.series>0)avisos.push(`Para caber em ${perfil.tempoPorSessaoMin} min, reduzimos séries progressivamente, até o piso de 2, em ${relatoReducao.series} ${plural(relatoReducao.series,'exercício','exercícios')}.`);
+      // 🔵 O índice fica guardado: a revalidação depois da poda (abaixo) pode devolver séries
+      // que este aviso diz terem saído, e o motor não pode relatar um corte que desfez.
+      const frasesDeReducaoDeSeries=(n:number)=>`Para caber em ${perfil.tempoPorSessaoMin} min, reduzimos séries progressivamente, até o piso de 2, em ${n} ${plural(n,'exercício','exercícios')}.`;
+      let avisoReducaoSeries=-1;
+      if(relatoReducao.series>0){avisoReducaoSeries=avisos.length;avisos.push(frasesDeReducaoDeSeries(relatoReducao.series));}
       if(relatoReducao.redundantes>0)avisos.push(`Também retiramos ${relatoReducao.redundantes} ${plural(relatoReducao.redundantes,'exercício repetido','exercícios repetidos')} de ${plural(relatoReducao.redundantes,'grupo que continua coberto','grupos que continuam cobertos')} no mesmo dia.`);
       /**
        * 🔵 P-01 — a retirada é NOMEADA. O aviso diz o que saiu e por quê, e nada no plano
@@ -2110,6 +2124,128 @@ export function montarRotina(
         const quantas = podaSessao.podados.reduce((n, p) => n + p.series, 0);
         const nomeados = [...new Set(podaSessao.podados.map(p => ROTULO_GRUPO[p.grupo]))].join(', ');
         avisos.push(`Ajustamos o volume de ${nomeados} ${MARCA_PODA_SESSAO} (${tetoDaSessao} séries por grupo num mesmo dia, somando diretas e indiretas): ${quantas} ${plural(quantas, 'série saiu', 'séries saíram')} ${plural(podaSessao.podados.length, 'do próprio grupo', 'dos próprios grupos')}. O volume da semana continua distribuído nos outros dias.`);
+      }
+      /**
+       * 🔵 A REVALIDAÇÃO DEPOIS DA PODA (decisão do autor, 2026-09-20).
+       *
+       * 🔑 A fase A decide descanso e corte de séries ANTES da poda semanal — e a poda é a
+       * etapa que tira do plano as séries que passavam do teto. Resultado medido: a fase A
+       * mede um dia INFLADO (iniciante/academia/4d/30min, semana 3: costas com 10 séries),
+       * degrada o descanso de 180 s para 120 s e corta uma série por tempo; a poda então
+       * devolve o dia a 8 séries e o impedimento que motivou os dois ajustes deixa de
+       * existir — mas ninguém os revisita. O plano entregue paga por um aperto que já passou.
+       *
+       * 🔒 Ela só DESFAZ, nunca aperta: o descanso pode voltar a um degrau MELHOR (jamais
+       * pior) e as séries voltam no máximo até o número de antes do corte POR TEMPO. Séries
+       * tiradas pela poda de volume não voltam — a causa delas continua de pé, e devolvê-las
+       * seria furar o teto que a poda acabou de fazer valer.
+       *
+       * 🔒 RODA ANTES DO BLOCO DE FOCO, e a ordem foi medida nos dois sentidos. Depois dele,
+       * o resultado passava a depender do tempo que os EXTRAS ocuparam — e o baseline de um
+       * plano COM foco deixava de ser idêntico ao do mesmo plano SEM foco, que é a invariante
+       * dura de D-01/D-02 ("nada do baseline pode ser cortado por causa dos extras"). Aqui a
+       * recuperação acontece no plano sem extras, então os dois caminhos veem o mesmo
+       * baseline; o que o foco encontra depois é o tempo que de fato sobrou.
+       *
+       * 🔒 Cada devolução revalida tudo de novo: a duração do dia pela fórmula canônica, o
+       * teto semanal por grupo e o teto ponderado da sessão. O que não passar nos três fica
+       * como estava.
+       */
+      if(limiteDia!==undefined){
+        /**
+         * 🔒 A ORDEM AQUI É CONTRATO, e vem do aceite 5 ("o orçamento cede descanso, nunca
+         * exercício"): as SÉRIES voltam primeiro, no descanso que o dia já tem, e só um dia
+         * SEM nenhum corte pendente pode recuperar o descanso. Invertido, o plano terminava
+         * com descanso acima do piso E exercício cortado — exatamente o estado que o aceite 5
+         * proíbe, e que a varredura pegou em `descanso-plano`.
+         */
+        let devolvidas=0;
+        for(const d of diasTreino)for(const s of d.slots){
+          if(s.extraDoFoco)continue;
+          const de=s.seriesAntesDoCorteDeTempo;
+          if(de==null)continue;
+          while((s.series??0)<de){
+            const antes=s.series??0;
+            s.series=antes+1;
+            const semana=creditoPonderadoDaSemana(diasTreino.flatMap(x=>x.slots));
+            const sessao=creditoPonderadoDaSemana(d.slots);
+            const estoura=[...semana].some(([g,n])=>n>tetoSemanalGrupo(g))
+              ||(tetoDaSessao!=null&&[...sessao].some(([,n])=>n>tetoDaSessao));
+            if(estoura||!cabeNoDia(d)){s.series=antes;break;}
+          }
+          if((s.series??0)>=de){delete s.seriesAntesDoCorteDeTempo;devolvidas++;}
+        }
+        for(let i=0;i<diasTreino.length;i++){
+          const d=diasTreino[i]!,atual=degradacaoDoDia[i]??0;
+          if(d.slots.some(s=>s.seriesAntesDoCorteDeTempo!=null))continue;
+          for(const deg of [0,1] as const){
+            if(deg>=atual)break;
+            aplicarDescanso(d,deg);
+            if(cabeNoDia(d)){degradacaoDoDia[i]=deg;break;}
+            aplicarDescanso(d,atual);
+          }
+        }
+        // 🔒 O aviso acompanha o plano: se o corte foi todo desfeito, a frase sai.
+        if(devolvidas>0&&avisoReducaoSeries>=0){
+          const restantes=Math.max(0,relatoReducao.series-devolvidas);
+          if(restantes===0)avisos.splice(avisoReducaoSeries,1);
+          else avisos[avisoReducaoSeries]=frasesDeReducaoDeSeries(restantes);
+          relatoReducao.series=restantes;
+        }
+      }
+      /**
+       * 🔵 A REPARTIÇÃO DENTRO DO GRUPO — TROCA GUARDADA (decisão do autor, 2026-09-20).
+       *
+       * 🔑 A MESMA dose direta rende crédito ponderado DIFERENTE conforme em qual exercício
+       * do grupo ela cai. As 8 séries de costas de um iniciante valem 2,0 de bíceps
+       * repartidas 2+2+2+2 entre puxada, remadas e encolhimento, e 3,0 repartidas 1+3+3+1 —
+       * mesma dose, mesmos slots, mesmos alvos, mesmos papéis, mesmo descanso. Quem escolhia
+       * era o `i = 0` do round-robin da rampa: ele começa no primeiro slot e cicla, então a
+       * repartição sai uniforme POR ARTEFATO do ponto de partida. Não há regra de
+       * uniformidade — nenhuma spec, invariante ou doc-comment a pede (auditado 20/09).
+       *
+       * 🔒 TROCA, e não outra ordem na rampa. Reordenar a rampa foi medido primeiro e foi
+       * DESCARTADO: mexer na distribuição antes da fase A muda o custo do dia, e com ele o
+       * degrau de descanso — 137 perfis mudavam, 9 deles com descanso ENCURTADO e 24 com
+       * queda de dose em outro grupo. Aqui a troca acontece depois que descanso e poda já
+       * estão decididos, e cada movimento é aceito só se:
+       *  · doador e receptor estão NO MESMO DIA — o dia não muda de peso, então a troca não
+       *    consome o tempo de mais ninguém (medido: movendo entre dias, ela tomava a folga
+       *    que o bloco de foco usava e o bloco deixava de entregar em todas as semanas);
+       *  · a dose DIRETA do grupo não muda (é a mesma série, noutro exercício do grupo);
+       *  · nenhum grupo perde crédito ponderado e o total sobe;
+       *  · nenhum dia passa do tempo com o descanso que ele já tem — nada é degradado aqui;
+       *  · nenhum teto semanal ou de sessão é ultrapassado.
+       * O que não passar nos quatro é revertido na hora.
+       */
+      if(!rotinaBaseDoDeload&&!semanaCiclo?.retomada){
+        const sMaxTroca=prescricao.seriesPorExercicio.max;
+        const todosSlots=()=>diasTreino.flatMap(d=>d.slots);
+        const soma=(m:Map<GrupoPrimario,number>)=>[...m.values()].reduce((n,v)=>n+v,0);
+        let mudou=true,voltas=0;
+        while(mudou&&voltas<12){
+          mudou=false;voltas++;
+          const antes=creditoPonderadoDaSemana(todosSlots());
+          busca:
+          for(const receptor of todosSlots()){
+            const g=receptor.exercicio.grupoPrimario;
+            if(!g||receptor.extraDoFoco||(receptor.series??0)>=sMaxTroca||secundariosDe(receptor.exercicio).length===0)continue;
+            const diaDoReceptor=diasTreino.find(d=>d.slots.includes(receptor))!;
+            for(const doador of diaDoReceptor.slots){
+              if(doador===receptor||doador.extraDoFoco||doador.exercicio.grupoPrimario!==g)continue;
+              if((doador.series??0)<=Math.max(1,sMinDaSemana))continue;
+              if(secundariosDe(doador.exercicio).length>=secundariosDe(receptor.exercicio).length)continue;
+              doador.series=(doador.series??0)-1;receptor.series=(receptor.series??0)+1;
+              const depois=creditoPonderadoDaSemana(todosSlots());
+              const piorou=[...new Set([...antes.keys(),...depois.keys()])].some(x=>(depois.get(x)??0)<(antes.get(x)??0));
+              const cabe=cabeNoDia(diaDoReceptor);
+              const tetos=[...depois].every(([x,n])=>n<=tetoSemanalGrupo(x))
+                &&(tetoDaSessao==null||diasTreino.every(d=>[...creditoPonderadoDaSemana(d.slots)].every(([,n])=>n<=tetoDaSessao)));
+              if(!piorou&&soma(depois)>soma(antes)&&cabe&&tetos){mudou=true;break busca;}
+              doador.series=(doador.series??0)+1;receptor.series=(receptor.series??0)-1;
+            }
+          }
+        }
       }
       /**
        * 🔵 O QUE SOBROU É A EXCEÇÃO — e ela é DITA antes da confirmação (2026-09-17, 2ª volta).
@@ -3305,7 +3441,7 @@ export function montarRotina(
     });
   }
 
-  const rotina = certificarDuracao(rotinaEstrutural, perfil.nivelExperiencia, limiteCertificacao, automatico);
+  let rotina = certificarDuracao(rotinaEstrutural, perfil.nivelExperiencia, limiteCertificacao, automatico);
 
   // Uma tentativa interna devolve somente o plano resistido refeito; o pai escolhe o terminal e
   // finaliza uma única vez (sem cardio/hash de candidatos intermediários).
@@ -3318,6 +3454,153 @@ export function montarRotina(
     return finalizar(rotina, motivos.length > 0
       ? { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos }
       : { tipo: 'CERTIFICADO', capacidadeTerminal: budgetPorDia });
+  }
+
+  /**
+   * 🔵 O SLOT DO PISO DF② — UM slot além da tabela, decidido por COMPARAÇÃO DE PLANOS
+   * (decisão do autor, 2026-09-20, sobre a viabilidade medida na 4ª volta).
+   *
+   * 🔑 O QUE ELE CONSERTA. `orcamentoSlotsDoDia` é HEURÍSTICA de montagem declarada: a norma
+   * de `duracao-sessao.ts` (2026-08-20) diz que ela *"deixa de certificar que o plano cabe no
+   * tempo — a certificação final é aqui"*. Em agenda curta ela fica apertada o bastante para
+   * deixar um grupo pequeno SEM NENHUM exercício direto na semana, e aí quem nega o piso da
+   * DF② ("≥ 1 exercício direto/semana") é a tabela, não o relógio. Medido no
+   * iniciante/academia/4d/30min: os dois dias superiores precisam de 9 exercícios para o
+   * bíceps ter direto, e 4+4 dá 8 — o bíceps ficava com 2,0 ponderadas, todas indiretas.
+   *
+   * 🔒 AQUI, e não no meio da montagem, porque é AQUI que existem os números que a decisão
+   * precisa. No caminho automático a degradação de descanso roda sobre o dia REAL
+   * (`degradarAteCaber`, séries da rampa), e não sobre a moeda de planejamento — medir a
+   * concessão antes da montagem seria perguntar à estimativa errada: projetando `sMax` em
+   * todo slot, até o dia de 4 que existe hoje "não cabe".
+   *
+   * 🔒 O QUE ELE NÃO É:
+   *  · não é aumento da tabela — `orcamentoSlotsDoDia` não mudou, e o extra é UM, para UM
+   *    grupo, em UM dia da semana;
+   *  · não é condição de perfil — nada aqui olha nível, equipamento, dias ou minutos;
+   *  · não compra tempo: o plano com o slot tem de continuar CERTIFICADO e nenhum descanso,
+   *    em nenhum dia e em nenhuma classe, pode ficar menor do que já era;
+   *  · não cobra de terceiros: se qualquer grupo perder série direta, crédito ponderado ou
+   *    alvo anatômico, a concessão é DEVOLVIDA e vale o plano de antes.
+   *
+   * 🔴 Fora do ciclo normal não roda, pela mesma razão da adição de cobertura de 17/09: na
+   * retomada o volume é cortado de propósito e no deload o plano-base já vem podado ao teto.
+   */
+  const rotinaComPisoDF2 = ((): RotinaSemanal | null => {
+    if (!automatico || !semanaCiclo || semanaCiclo.retomada || deloadAgendado) return null;
+    if (semanaCiclo.budgetSlotsOverride != null || semanaCiclo.tentativaTemporalInterna) return null;
+    if (semanaCiclo.pisoExtraDF2 || perfil.limiteTempoTreino === 'sem_limite' ) return null;
+    const slots = (r: RotinaSemanal) => r.dias.flatMap((d) => d.slots);
+    const diretosDe = (r: RotinaSemanal, g: GrupoPrimario) => slots(r).filter((s) => s.exercicio.grupoPrimario === g);
+    const seriesDe = (r: RotinaSemanal, g: GrupoPrimario) => diretosDe(r, g).reduce((n, s) => n + (s.series ?? 0), 0);
+    const creditoDe = (r: RotinaSemanal) => creditoPonderadoDaSemana(slots(r));
+    const alvosDe = (r: RotinaSemanal) => new Set(slots(r).flatMap((s) => [...diretosDoExercicio(s.exercicio.id)]));
+    const papeisDe = (r: RotinaSemanal) => new Set(slots(r).map((s) => papelReferencia(s.exercicio)).filter((x): x is string => x != null));
+    /**
+     * 🔒 DESCANSO, EXERCÍCIO A EXERCÍCIO — e não o menor da classe no dia. A primeira versão
+     * comparava o mínimo por classe e reprovava arranjos honestos: um exercício NOVO e mais
+     * barato (peso corporal, que não tem o piso documental de 120 s dos compostos com carga)
+     * baixava o mínimo do dia sem encurtar o descanso de ninguém. O que a decisão protege é
+     * o descanso de quem JÁ estava no plano; quem chega traz o seu.
+     */
+    const descansos = (r: RotinaSemanal) => r.dias.map((d) => {
+      const m = new Map<string, number>();
+      for (const s of d.slots) m.set(s.exercicio.id, Math.min(m.get(s.exercicio.id) ?? Infinity, s.descansoSeg ?? 0));
+      return m;
+    });
+    const antesCredito = creditoDe(rotina);
+    // O grupo servido e o MAIS CARENTE: entre os pequenos sem nenhum exercicio direto, o de
+    // menor credito ponderado ja recebido dos vizinhos - triceps com 4,5 de indireto nao
+    // disputa com biceps em 2,0. O desempate final e a ordem da propria DF2.
+    const grupo = GRUPOS_PEQUENOS_PISO
+      .filter((g) => !ehComplementar(g) && diretosDe(rotina, g).length === 0 && pool.some((e) => e.grupoPrimario === g))
+      .sort((a, b) => (antesCredito.get(a) ?? 0) - (antesCredito.get(b) ?? 0)
+        || GRUPOS_PEQUENOS_PISO.indexOf(a) - GRUPOS_PEQUENOS_PISO.indexOf(b))[0];
+    if (!grupo) return null;
+    const gruposVistos = [...new Set(slots(rotina).map((s) => s.exercicio.grupoPrimario).filter((g): g is GrupoPrimario => g != null))];
+    const antesSeries = new Map(gruposVistos.map((g) => [g, seriesDe(rotina, g)] as const));
+    const antesAlvos = alvosDe(rotina);
+    const antesPapeis = papeisDe(rotina);
+    const antesDescansos = descansos(rotina);
+    const antesPadroes = { puxar: slots(rotina).filter((s) => s.padrao === 'puxar').length, empurrar: slots(rotina).filter((s) => s.padrao === 'empurrar').length };
+    /**
+     * 🔒 O DIA SAI DA DURACAO FINAL CALCULADA, nao de uma heuristica: cada arranjo
+     * (dia do piso x dia do slot a mais) e MONTADO por inteiro e medido com a ordem final
+     * dos exercicios - a mesma que o plano entrega. Vence o de menor pior-dia; empate pela
+     * ordem dos indices, para a escolha ser deterministica.
+     */
+    /**
+     * 🔒 O CUSTO DA BUSCA É LIMITADO, e o limite é SÃO: o dia que recebe o slot a mais
+     * precisa, no mínimo, do tempo de execução de um exercício no piso de séries — abaixo
+     * disso nenhum arranjo pode caber, e montar a semana inteira para descobrir isso seria
+     * pagar caro por uma recusa certa. Entre os que passam, os de MAIOR folga primeiro, e no
+     * máximo três arranjos: a ordem é determinística e a escolha final continua sendo a
+     * duração calculada de cada plano montado.
+     */
+    const folgaDoDia = (d: number) => orcamentoSeg - ((rotina.duracaoDias ?? [])[d]?.duracaoMaximaEstimadaSegundos ?? Infinity);
+    const custoMinimoDeUmExercicio = prescricao.seriesPorExercicio.min * TEMPO_EXECUCAO_SERIE_REPS_SEG;
+    const diasComFolga = templates.map((_, d) => d)
+      .filter((d) => folgaDoDia(d) >= custoMinimoDeUmExercicio)
+      .sort((a, b) => folgaDoDia(b) - folgaDoDia(a) || a - b);
+    const diasDoPiso = templates.flatMap((t, d) => t.grupos.includes(grupo) ? [d] : []);
+    let melhor: { rotina: RotinaSemanal; pior: number } | null = null;
+    for (const diaDoPiso of diasDoPiso) {
+      /**
+       * 🔒 A VÍTIMA é o grupo com MAIS slots NESTE dia — o candidato à redistribuição, não
+       * um grupo autorizado a perder. Complementares e o próprio grupo servido ficam fora:
+       * core/panturrilha/antebraço têm reserva própria de 1/dia e não sobram slot para ceder.
+       */
+      const noDia = new Map<GrupoPrimario, number>();
+      for (const sl of rotina.dias[diaDoPiso]?.slots ?? []) {
+        const g2 = sl.exercicio.grupoPrimario;
+        if (g2 && g2 !== grupo && !ehComplementar(g2)) noDia.set(g2, (noDia.get(g2) ?? 0) + 1);
+      }
+      const vitima = [...noDia].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      if (!vitima || vitima[1] < 2) continue;
+      for (const diaExtra of diasComFolga.slice(0, 3)) {
+      const tentativa = montarRotina(
+        prescricao, perfil, exercises, favoritos,
+        { ...semanaCiclo, pisoExtraDF2: { grupo, diaDoPiso, diaExtra, vitima: vitima[0], maxDaVitima: vitima[1] - 1 }, tentativaTemporalInterna: true },
+        preferencias, escolhasExecucao, diasOferecidosCardio,
+      );
+      if (diretosDe(tentativa, grupo).length === 0) continue;
+      if (violacoesDaRealocacao(tentativa).length > 0) continue;
+      const duracoes = tentativa.duracaoDias ?? [];
+      if (duracoes.length !== tentativa.dias.length) continue;
+      if (duracoes.some((d) => d.estadoCalculo !== 'CALCULADO'
+        || (d.duracaoMaximaEstimadaSegundos ?? Infinity) > orcamentoSeg)) continue;
+      const depoisDescansos = descansos(tentativa);
+      if (antesDescansos.some((dia2, i) => [...dia2].some(([id, v]) => {
+        const agora = depoisDescansos[i]?.get(id);
+        return agora != null && agora < v;
+      }))) continue;
+      if (gruposVistos.some((g) => g !== grupo && seriesDe(tentativa, g) < (antesSeries.get(g) ?? 0))) continue;
+      const depoisCredito = creditoDe(tentativa);
+      if ([...antesCredito].some(([g, n]) => g !== grupo && (depoisCredito.get(g) ?? 0) < n)) continue;
+      const depoisAlvos = alvosDe(tentativa);
+      if ([...antesAlvos].some((a) => !depoisAlvos.has(a))) continue;
+      const depoisPapeis = papeisDe(tentativa);
+      if ([...antesPapeis].some((x) => !depoisPapeis.has(x))) continue;
+      const ss = slots(tentativa);
+      if (ss.filter((s) => s.padrao === 'puxar').length < ss.filter((s) => s.padrao === 'empurrar').length) continue;
+      if (ss.filter((s) => s.padrao === 'puxar').length < antesPadroes.puxar) continue;
+      const pior = Math.max(...duracoes.map((d) => d.duracaoMaximaEstimadaSegundos ?? 0));
+      if (!melhor || pior < melhor.pior) melhor = { rotina: tentativa, pior };
+      }
+    }
+    return melhor?.rotina ?? null;
+  })();
+  /**
+   * 🔒 O PLANO ACEITO TRAZ A NARRAÇÃO DELE. `finalizar` monta `avisos` a partir do array
+   * desta montagem, e ele descreve a semana SEM o slot — trocar só o plano faria a tela
+   * dizer "Cobertura direta ausente neste plano: Bíceps" num plano que TEM bíceps direto.
+   * O motor não relata sobre um plano que não é o que ele entrega.
+   */
+  if (rotinaComPisoDF2) {
+    rotina = rotinaComPisoDF2;
+    // 🔒 REPASSE, não família nova: são os avisos que a própria montagem aceita produziu.
+    // (`splice` e não `push` para o tripwire de `veredito-motor` seguir contando FAMÍLIAS.)
+    avisos.splice(0, avisos.length, ...rotinaComPisoDF2.avisos);
   }
 
   if(automatico){
