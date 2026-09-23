@@ -7,15 +7,8 @@ import type { PerfilTreino, RotinaCustom, RotinaSemanal } from './engine/treino-
 import type { OpcoesSemana } from './engine/treino-montador';
 
 const base: PerfilTreino = { pesoKg:80, alturaCm:180, idade:30, flagsSaude:{gestacaoAmamentacao:false,renal:false,cardiaca:false,lesao:false,diabetes:false}, objetivo:'massa',nivelExperiencia:'avancado',equipamento:'academia',diasDisponiveis:3,treinoDias:['seg','ter','qua'],tempoPorSessaoMin:60,limiteTempoTreino:'sem_limite',foco:{grupo:'peito',semana:1} };
-/**
- * 🔵 PERFIL REANCORADO em 2026-09-17. O anterior (avançado, 5 dias, tempo limitado) deixou
- * de entregar o bloco do foco: com a faixa desejada menor o dia fecha antes e o extra não
- * cabe. Sem bloco entregue, TODO este arquivo viraria vácuo — é o que a anti-vacuidade
- * abaixo cobra. O perfil novo (mesmo NÍVEL, 3 dias, sem limite de tempo) entrega 2 + 2 e
- * exercita os mesmos caminhos: extras, cortes por tempo, deload e ida/volta ao editor.
- * 🔒 O nível continua avançado de propósito: os casos com `rotinaCustom` deste arquivo usam
- * exercícios que só o avançado tem liberados (e21), e trocar o nível os apagaria do desenho.
- */
+// O nível avançado mantém e21 elegível nos desenhos manuais.
+// O controle positivo de extras declara seu próprio perfil medido abaixo.
 const gerar = (p: PerfilTreino, semanaCiclo: OpcoesSemana) => gerarTreino(p,{exercises:EXERCISES,semanaCiclo}).rotina!;
 const dose = (r: RotinaSemanal) => r.dias.map(d=>({day:d.diaId,slots:d.slots.map(s=>[s.exercicio.id,s.series])}));
 const abrir = (r:RotinaSemanal,p:PerfilTreino) => doPlano(r.dias,p.treinoDias??[],p.rotinaCustom);
@@ -35,8 +28,13 @@ describe('Transferência do plano ao editor conserva dose e intenção',()=>{
     expect(paraRotinaCustom(abrir(loaded,saved))).toEqual(manual);
   });
   it('anti-vacuidade: extras de duas séries e cortes de uma/duas chegam à prévia',()=>{
-    const r=gerar(base,{semana:1});expect(r.blocoFoco!.adicionais).toHaveLength(2);
+    // Três dias agora usam Upper/Lower. O controle positivo de foco é explícito,
+    // sem mudar o nível avançado dos desenhos manuais dos demais casos.
+    const p: PerfilTreino = {...base,nivelExperiencia:'intermediario',diasDisponiveis:4,treinoDias:['seg','ter','qui','sex'],tempoPorSessaoMin:90};
+    const r=gerar(p,{semana:1});expect(r.blocoFoco!.adicionais).toHaveLength(2);
     expect(r.blocoFoco!.adicionais.map(s=>s.series)).toEqual([2,2]);
+    const salvo = json(paraRotinaCustom(abrir(r,p)));
+    expect(dose(gerar({...p,rotinaCustom:salvo},{semana:1}))).toEqual(dose(r));
     // 🔒 O corte por tempo só existe com limite declarado — o perfil-base agora é `sem_limite`
     // (é o que faz o bloco do foco caber), então o caso do CORTE declara o seu próprio.
     const curto=gerar({...base,limiteTempoTreino:'limitado',tempoPorSessaoMin:20,diasDisponiveis:1,treinoDias:['seg']},{semana:1});

@@ -184,7 +184,7 @@ describe('🔒 o que a explicação não pode custar', () => {
     const avisosMotor = unificarAvisos(custom, avaliacao).avisosMotor;
     // A prévia do DESENHO não corta por tempo — então a frase agregada não está lá, e a
     // explicação por exercício não repete ninguém.
-    expect(avisosMotor.some((a) => a.includes('reduzimos séries progressivamente'))).toBe(false);
+    expect(avisosMotor.some((a) => a.includes('reduzimos séries em'))).toBe(false);
     expect(cortesVigentes(dias, prev).length).toBeGreaterThan(0);
   });
 

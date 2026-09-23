@@ -1,3 +1,4 @@
+import type { ReferenciaDescanso } from './referencia-descanso';
 import type { ReferenciaDose } from './referencia-dose';
 /**
  * Tipos do motor de TREINO (FITT).
@@ -56,6 +57,9 @@ import type { Weekday } from '../semana';
  * `diasAcimaDoLimite` afirmaria excesso onde só há incerteza.
  */
 export type ResultadoGeracaoRotina =
+  | { tipo: 'MINIMOS_NAO_ATENDIDOS'; motivos: string[] }
+  | { tipo: 'TETO_SEMANAL_NAO_ATENDIDO'; motivos: string[] }
+  | { tipo: 'TETO_SESSAO_NAO_ATENDIDO'; motivos: string[] }
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
   | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[]; diasPodemUltrapassar?: number[] }
   | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[]; diasPodemUltrapassar?: number[] }
@@ -92,7 +96,7 @@ export interface RotinaCustom {
   /** Sempre `'usuario'` — o campo existe para o plano dizer de onde veio, sem inferência. */
   origem: 'usuario';
   /** `diaId` explícito passou a ser gravado pelo editor. Ausente só em rotina legada; o montador deriva uma vez da agenda e preserva compatibilidade. */
-  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number>; referenciaDose?: ReferenciaDose }[];
+  dias: { nome: string; diaId?: Weekday; exercicioIds: string[]; seriesPorExercicio?: Record<string, number>; referenciaDose?: ReferenciaDose; referenciaDescanso?: ReferenciaDescanso }[];
 }
 
 /** Vocabulário do gate de treino (sem PISAR — esse é só da dieta). */
@@ -332,6 +336,7 @@ export interface SlotExercicio {
 }
 
 export interface DiaTreino {
+  referenciaDescanso?: ReferenciaDescanso;
   /** Rótulo do dia (ex.: "Full-body", "Upper", "Push"). */
   nome: string;
   /** Dia real da semana. Um treino de força por dia nesta versão; sessão dupla terá identidade própria futura. */
@@ -589,6 +594,9 @@ export interface RotinaSemanal {
     grupos: GrupoPrimario[];
     solicitados: number;
     adicionais: {diaId?: Weekday; exercicioId: string; series: number}[];
+    /** Parcela do foco incorporada a exercícios do baseline; não é slot adicional. */
+    consolidados?: {diaId?: Weekday; exercicioId: string; series: number}[];
+    exerciciosConsolidados?: number;
     adaptado: boolean;
   };
   foco?: {

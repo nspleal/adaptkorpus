@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CardapioItem, PlanoDieta } from '@/lib/engine';
 import type { Food, RecipeMacros } from '@/lib/data/types';
-import { agoraEmMinutos, diaCompleto, linhaDoDia, medidaDoIngrediente, registradas } from '@/lib/dia-da-dieta';
+import { agoraEmMinutos, diaCompleto, linhaDoDia, medidaDoIngrediente, registradas, totaisDosItens, type ItemPorcionado } from '@/lib/dia-da-dieta';
 import { ControleRegistro, MEAL_LABEL, type StatusRefeicao } from './RegistroRefeicao';
 
 /**
@@ -39,7 +39,7 @@ export default function DiaDaDieta({
   itens, totais, plano, foodsById, logs, notes, trocados, dataHoje,
   onStatus, onNote, onTrocar, onPorcao, onDetalhe, onCompras, notaCardapio,
 }: {
-  itens: CardapioItem[];
+  itens: ItemPorcionado[];
   totais: RecipeMacros | null;
   plano: PlanoDieta;
   foodsById: Map<string, Food>;
@@ -68,6 +68,7 @@ export default function DiaDaDieta({
   const linhas = useMemo(() => linhaDoDia(refeicoes, logs, agoraMin), [refeicoes, logs, agoraMin]);
   const feitas = registradas(refeicoes, logs);
   const completo = diaCompleto(refeicoes, logs);
+  const totaisAtuais = totais ?? totaisDosItens(itens);
 
   if (itens.length === 0) {
     return <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)' }}>{notaCardapio ?? 'Sem cardápio para as restrições atuais.'}</p>;
@@ -75,7 +76,7 @@ export default function DiaDaDieta({
 
   return (
     <div style={{ animation: `evkPop .45s ${EASE}` }}>
-      <CabecalhoDoDia dataHoje={dataHoje} feitas={feitas} total={itens.length} kcal={totais?.kcal ?? plano.kcalAlvo} macros={plano.macros} />
+      <CabecalhoDoDia dataHoje={dataHoje} feitas={feitas} total={itens.length} totais={totaisAtuais} plano={plano} />
 
       {/* Duas colunas no desktop (`dia-dieta-desktop`, 1280px): linha do dia à esquerda,
           o que estiver aberto à direita. No celular vira uma coluna só. */}
@@ -110,7 +111,7 @@ export default function DiaDaDieta({
         <RefeicaoGuiada
           item={itens[aberta]}
           foodsById={foodsById}
-          porcentagem={trocados.has(`p${aberta}`) ? Math.round(itens[aberta].escala * 100) : null}
+          porcentagem={trocados.has(`p${aberta}`) ? itens[aberta].porcentagemEscolhida ?? 100 : null}
           status={logs[itens[aberta].refeicao] ?? null}
           note={notes[itens[aberta].refeicao] ?? ''}
           onStatus={(s) => onStatus(itens[aberta]!.refeicao, s)}
@@ -133,9 +134,11 @@ export default function DiaDaDieta({
  * 🔒 Trava de copy 3: caloria é "estimativa de referência" / "seu ponto de partida", nunca
  * "meta exata".
  */
-function CabecalhoDoDia({ dataHoje, feitas, total, kcal, macros }: {
-  dataHoje: string; feitas: number; total: number; kcal: number; macros: PlanoDieta['macros'];
+function CabecalhoDoDia({ dataHoje, feitas, total, totais, plano }: {
+  dataHoje: string; feitas: number; total: number; totais: RecipeMacros; plano: PlanoDieta;
 }) {
+  const macros = totais;
+  const foraDaJanela = totais.kcal < plano.janela.minKcal - 1e-6 || totais.kcal > plano.janela.maxKcal + 1e-6;
   const g = macros.proteinaG + macros.carboidratoG + macros.gorduraG;
   const pct = (v: number) => (g > 0 ? (v / g) * 100 : 0);
   return (
@@ -145,10 +148,12 @@ function CabecalhoDoDia({ dataHoje, feitas, total, kcal, macros }: {
         <div style={{ fontSize: '.85rem', fontWeight: 600, color: 'rgba(234,229,219,.7)' }} aria-live="polite">{feitas} de {total} registradas</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 4 }}>
-        <span style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.02em', color: NEON }}>~{r0(kcal).toLocaleString('pt-BR')}</span>
-        <span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.6)' }}>kcal · seu ponto de partida</span>
+        <span style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.02em', color: NEON }}>~{r0(totais.kcal).toLocaleString('pt-BR')}</span>
+        <span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.6)' }}>kcal · cardápio atual</span>
       </div>
-      <p style={{ margin: '0 0 16px', fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Estimativa de referência — é um guia, não uma meta exata.</p>
+      <p style={{ margin: '0 0 16px', fontSize: '.85rem', color: 'rgba(234,229,219,.55)' }}>Referência calculada do plano: ~{r0(plano.kcalAlvo).toLocaleString('pt-BR')} kcal · P {r0(plano.macros.proteinaG)} g · C {r0(plano.macros.carboidratoG)} g · G {r0(plano.macros.gorduraG)} g. É um guia, não uma meta exata.</p>
+      {foraDaJanela && <p role="status" style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)' }}>O cardápio atual está fora da janela original de {r0(plano.janela.minKcal)}–{r0(plano.janela.maxKcal)} kcal. As trocas equivalentes consideram o dia atual.</p>}
+      {totais.proteinaG < plano.macros.proteinaPisoG - 1e-6 && <p role="status" style={{ fontSize: '.85rem', color: 'rgba(234,229,219,.8)' }}>O cardápio atual fornece {totais.proteinaG.toFixed(1)} g de proteína, abaixo do piso calculado de {plano.macros.proteinaPisoG.toFixed(1)} g. Esta composição não atende esse requisito.</p>}
       <div style={{ display: 'flex', gap: 10 }}>
         <BarraMacro nome="Proteína" g={r0(macros.proteinaG)} pct={pct(macros.proteinaG)} cor={FOLHA} />
         <BarraMacro nome="Carbo" g={r0(macros.carboidratoG)} pct={pct(macros.carboidratoG)} cor="rgba(189,255,0,.62)" />
@@ -248,8 +253,7 @@ function EncerramentoCalmo() {
   return (
     <div style={{ marginTop: 18, background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 20px' }}>
       <p style={{ margin: 0, fontSize: '.95rem', lineHeight: 1.6, color: 'rgba(234,229,219,.72)' }}>
-        Você registrou as {' '}
-        <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>quatro refeições</strong>. Constância, não perfeição.
+        Você registrou todas as refeições de hoje. Constância, não perfeição.
       </p>
     </div>
   );
@@ -346,7 +350,7 @@ export function RefeicaoGuiada({
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           <span style={{ fontSize: '1.15rem', fontWeight: 700, letterSpacing: '-.01em' }}>{item.prato.nome}</span>
-          {porcentagem != null && porcentagem !== 100 && (
+          {porcentagem != null && (
             <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#0D2818', background: NEON, borderRadius: 7, padding: '3px 8px' }}>{porcentagem}% da porção</span>
           )}
         </div>

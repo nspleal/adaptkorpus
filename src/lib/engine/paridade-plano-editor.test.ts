@@ -16,6 +16,8 @@
  * seria SALVO.
  */
 import { describe, expect, it } from 'vitest';
+import { doPlano, paraRotinaCustom } from '@/components/painel/EditorTreino';
+import { rotinaCustomSchema, rotinaCustomHidratacaoSchema } from '@/lib/validation/perfil-resumo';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
@@ -34,22 +36,10 @@ const montar = (p: PerfilTreino, semana: SemanaCiclo = 3, extra: Record<string, 
   { semana, feedbackGrupos: new Map(), ...extra },
 );
 
-/**
- * Exatamente o que `Painel.preverPlano` monta: os IDs e as séries do plano exibido viram o
- * desenho. Descanso NÃO viaja (`paraRotinaCustom` não o carrega) — é o motor que recalcula, e
- * é justamente esse recálculo que precisa bater.
- */
-const comoOEditorEnvia = (r: RotinaSemanal): RotinaCustom => ({
-  origem: 'usuario',
-  dias: r.dias.map((d) => ({
-    nome: d.nome,
-    ...(d.diaId ? { diaId: d.diaId } : {}),
-    exercicioIds: d.slots.map((s) => s.exercicio.id),
-    seriesPorExercicio: Object.fromEntries(
-      d.slots.filter((s) => s.series != null).map((s) => [s.exercicio.id, s.seriesAntesDoDeload ?? s.series!]),
-    ),
-  })),
-});
+/** Percorre o editor real e as duas bordas do desenho persistido. */
+const comoOEditorEnvia = (r: RotinaSemanal): RotinaCustom => rotinaCustomHidratacaoSchema.parse(
+  JSON.parse(JSON.stringify(rotinaCustomSchema.parse(paraRotinaCustom(doPlano(r.dias, []))))),
+);
 
 const foto = (r: RotinaSemanal | null) => (r?.dias ?? []).map((d) => ({
   nome: d.nome,
@@ -117,5 +107,47 @@ describe('② plano e prévia do editor são o mesmo treino', () => {
       const pesados = r.dias.flatMap((d) => d.slots.filter((s) => s.exercicio.tipo === 'forca_hipertrofia' && s.padrao !== 'isolado' && s.padrao !== 'core'));
       for (const s of pesados) expect(s.descansoSeg ?? 0).toBeGreaterThanOrEqual(120);
     }
+  });
+});
+
+
+describe('descansos ajustados: edição e persistência', () => {
+  it.each([1, 2, 3, 4, 5, 6] as const)('30 min, semana %s: salvar e reabrir preserva dose, descanso e duração', semana => {
+    const p = perfil({ nivelExperiencia: 'iniciante', tempoPorSessaoMin: 30, divisaoPreferida: 'superior-inferior', treinoDias: ['seg', 'ter', 'qui', 'sex'] });
+    const inicial = montar(p, semana)!;
+    expect(inicial.resultadoGeracao?.tipo).toBe('CERTIFICADO');
+    const salvo = comoOEditorEnvia(inicial);
+    expect(salvo.dias.every(d => d.referenciaDescanso)).toBe(true);
+    const recarregado = montar({ ...p, rotinaCustom: salvo }, semana)!;
+    const reaberto = paraRotinaCustom(doPlano(recarregado.dias, [], salvo));
+    const novamente = montar({ ...p, rotinaCustom: rotinaCustomHidratacaoSchema.parse(JSON.parse(JSON.stringify(reaberto))) }, semana)!;
+    expect(foto(recarregado)).toEqual(foto(inicial));
+    expect(foto(novamente)).toEqual(foto(inicial));
+    const duracao = (r: RotinaSemanal) => r.duracaoResistidaDias?.map(d => [d.duracaoMinimaEstimadaSegundos, d.duracaoMaximaEstimadaSegundos]);
+    expect(duracao(recarregado)).toEqual(duracao(inicial));
+    expect(duracao(novamente)).toEqual(duracao(inicial));
+  });
+
+  it('mudança de semana invalida a fotografia, avisa e usa a política manual sem cortes automáticos', () => {
+    const p = perfil({ nivelExperiencia: 'iniciante', tempoPorSessaoMin: 30, divisaoPreferida: 'superior-inferior' });
+    const salvo = comoOEditorEnvia(montar(p, 3)!);
+    const semReferencia = structuredClone(salvo);
+    semReferencia.dias.forEach(d => { delete d.referenciaDescanso; });
+    const alterado = montar({ ...p, rotinaCustom: salvo }, 4)!;
+    const manual = montar({ ...p, rotinaCustom: semReferencia }, 4)!;
+    expect(alterado.avisos.some(a => a.includes('contexto mudou'))).toBe(true);
+    expect(foto(alterado)).toEqual(foto(manual));
+    expect(alterado.dias.map(d => d.slots.map(s => s.exercicio.id))).toEqual(salvo.dias.map(d => d.exercicioIds));
+  });
+
+  it('alteração explícita de séries invalida o dia e não é sobrescrita pela fotografia', () => {
+    const p = perfil({ nivelExperiencia: 'iniciante', tempoPorSessaoMin: 30, divisaoPreferida: 'superior-inferior' });
+    const salvo = comoOEditorEnvia(montar(p, 3)!);
+    const dia = salvo.dias[0]!; const id = dia.exercicioIds[0]!;
+    dia.seriesPorExercicio![id] = 10;
+    const alterado = montar({ ...p, rotinaCustom: salvo }, 3)!;
+    expect(alterado.dias[0]!.slots.find(s => s.exercicio.id === id)?.series).toBe(10);
+    expect(alterado.avisos.some(a => a.includes('contexto mudou'))).toBe(true);
+    expect(alterado.resultadoGeracao?.tipo).not.toBe('CERTIFICADO');
   });
 });

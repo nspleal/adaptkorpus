@@ -10,7 +10,7 @@
  * DURO seria implementação errada: a promessa é "nunca mais caro do que precisa", não "só o
  * barato", e excluir em vez de despriorizar quebraria o cardápio de quem precisa de 3550 kcal.
  */
-import type { Food, Recipe } from '../data/types';
+import type { Recipe } from '../data/types';
 import { CUSTO_RELATIVO, type CustoRelativo } from '../data/custo-relativo';
 
 /** Entrada do usuário. `alto` = sem restrição (default de quem não escolheu nada). */

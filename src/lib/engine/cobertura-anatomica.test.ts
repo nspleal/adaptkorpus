@@ -472,6 +472,15 @@ describe('④ a troca é conservativa: o esqueleto do plano não se move', () =>
 
   it.each(GRADE)('$nome — o plano final continua certificado e nunca acima do limite', ({ over, semana, extra }) => {
     const r = plano(perfil(over), semana ?? 3, extra ?? {});
+    if (over.equipamento === 'casa' && over.equipamentosCasa?.length === 0) {
+      // Decisão 20/09: ausência de exercício obrigatório não recebe certificação.
+      expect(poolDe(perfil(over)).some(e => e.grupoPrimario === 'biceps')).toBe(false);
+      expect(r.dias.flatMap(d => d.slots).some(s => s.exercicio.grupoPrimario === 'biceps')).toBe(false);
+      expect(r.resultadoGeracao?.tipo).toBe('MINIMOS_NAO_ATENDIDOS');
+      if (r.resultadoGeracao?.tipo === 'MINIMOS_NAO_ATENDIDOS') expect(r.resultadoGeracao.motivos.join(' ')).toContain('Bíceps');
+      expect(r.duracaoDias).toBeUndefined();
+      return;
+    }
     expect(r.duracaoDias).toBeDefined();
     for (const d of r.duracaoDias!) {
       expect(d.estadoCalculo, JSON.stringify(over)).toBe('CALCULADO');

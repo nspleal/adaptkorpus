@@ -169,7 +169,8 @@ describe('Semana normal · o caso medido na prévia não se move', () => {
     // Historical CP19 allocation: [[7,24],[7,21],[7,28],[9,26],[2,8]], total 107.
     // The editor contract is exact identity of EVERY current slot, below.
     expect(r.dias).toHaveLength(5);
-    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(32);
+    // Mínimos por sessão autorizados em 20/09: composição medida de 33 slots; paridade integral abaixo.
+    expect(r.dias.flatMap((d) => d.slots)).toHaveLength(33);
     expect(r.dias[0]!.slots.find((s) => s.exercicio.id === 'e130')?.series).toBe(3);
     // Os dois adicionais do foco moram na quinta, com 2 séries cada.
     expect(r.dias[3]!.slots.slice(0, 2).map((s) => [s.exercicio.id, s.series]))

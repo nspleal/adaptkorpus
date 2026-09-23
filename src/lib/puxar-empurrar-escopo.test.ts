@@ -29,12 +29,13 @@ import type { PadraoMovimento } from './data/types';
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] as const;
 
+// Controle positivo medido em 20/09: avançado/4d/90min/S5. Três dias usam Upper/Lower.
 const perfil = (over: Record<string, unknown> = {}): PerfilResumo => ({
   sexo: 'masculino', pesoKg: 80, alturaCm: 180, idade: 30, nivelAtividade: 'moderado',
   objetivo: 'massa', flagsSaude: SEM, alergenos: [], preferencia: null, naoCurto: [],
   pratosCansados: [], favoritos: [], nivelExperiencia: 'avancado', equipamento: 'academia',
-  equipamentosCasa: [], diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite',
-  treinoDias: DIAS.slice(0, 3), ...over,
+  equipamentosCasa: [], diasDisponiveis: 4, tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
+  treinoDias: DIAS.slice(0, 4), ...over,
 }) as unknown as PerfilResumo;
 
 const rotina = (p: PerfilResumo, opcoes: unknown): RotinaSemanal =>
@@ -52,9 +53,9 @@ const paraEditor = (r: RotinaSemanal): DiaDoEditor[] => r.dias.map((d) => ({
 
 const avaliar = (r: RotinaSemanal, over: Record<string, unknown> = {}) => avaliarSemana(paraEditor(r), {
   nivel: (over.nivelExperiencia as string) ?? 'avancado', objetivo: (over.objetivo as string) ?? 'massa',
-  tempoPorSessaoMin: (over.tempoPorSessaoMin as number) ?? 75,
+  tempoPorSessaoMin: (over.tempoPorSessaoMin as number) ?? 90,
   limiteTempoTreino: (over.limiteTempoTreino as string) ?? 'sem_limite',
-  treinoDias: (over.treinoDias as string[]) ?? DIAS.slice(0, 3), semana: 5,
+  treinoDias: (over.treinoDias as string[]) ?? DIAS.slice(0, 4), semana: 5,
   faixaSemanal: r.faixaVolumeSemana, tetoVolumeSemana: r.tetoVolumeSemana, faseVolume: r.faseVolume,
 } as never);
 
@@ -73,7 +74,7 @@ const OPC = { semanaCiclo: { semana: 5 } };
 describe('🔴 o caso medido: baseline equilibrado, extras do foco desequilibram', () => {
   const r = () => rotina(perfil(FOCO), OPC);
 
-  it('anti-vacuidade: o plano ENTREGUE tem mesmo 7 empurrar × 5 puxar, e os extras são do foco', () => {
+  it('anti-vacuidade: os extras do foco desequilibram o plano inteiro, não o baseline', () => {
     const p = r();
     // 🔵 6 × 4 desde 2026-09-17 (era 7 × 5): com a faixa desejada menor o alocador dá menos
     // slots. O que o caso mede — plano desequilibrado, baseline equilibrado — é o mesmo.
@@ -167,7 +168,7 @@ describe('🔒 a isenção vale SÓ para esta comparação', () => {
   });
 
   it('os extras continuam respeitando o equipamento do perfil', () => {
-    const p = rotina(perfil({ ...FOCO, equipamento: 'nenhum', treinoDias: DIAS.slice(0, 3) }), OPC);
+    const p = rotina(perfil({ ...FOCO, equipamento: 'nenhum', treinoDias: DIAS.slice(0, 4) }), OPC);
     for (const d of p.dias) for (const s of d.slots) expect(s.exercicio.local).toBe('casa_sem');
   });
 
@@ -215,7 +216,7 @@ describe('🔴 abrir "Montar meu treino" não muda o veredito da mesma semana', 
    */
   const abrirNoEditor = () => {
     const auto = rotina(perfil(FOCO), OPC);
-    const editaveis = doPlano(auto.dias, DIAS.slice(0, 3), undefined, undefined);
+    const editaveis = doPlano(auto.dias, DIAS.slice(0, 4), undefined, undefined);
     const extras = editaveis.flatMap((d) => d.extrasDoFoco ?? []);
     const prev = rotina(perfil({ ...FOCO, rotinaCustom: paraRotinaCustom(editaveis) }), OPC);
     const dias: DiaDoEditor[] = prev.dias.map((d) => ({
@@ -224,14 +225,14 @@ describe('🔴 abrir "Montar meu treino" não muda o veredito da mesma semana', 
       extraDoFoco: d.slots.map((s) => extras.includes(s.exercicio.id)),
     }));
     return { prev, extras, avaliacao: avaliarSemana(dias, {
-      nivel: 'avancado', objetivo: 'massa', tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite',
-      treinoDias: DIAS.slice(0, 3), semana: 5, faixaSemanal: prev.faixaVolumeSemana, faseVolume: prev.faseVolume,
+      nivel: 'avancado', objetivo: 'massa', tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
+      treinoDias: DIAS.slice(0, 4), semana: 5, faixaSemanal: prev.faixaVolumeSemana, faseVolume: prev.faseVolume,
     } as never) };
   };
 
   it('`doPlano` carrega a procedência do plano de origem', () => {
     const auto = rotina(perfil(FOCO), OPC);
-    const editaveis = doPlano(auto.dias, DIAS.slice(0, 3), undefined, undefined);
+    const editaveis = doPlano(auto.dias, DIAS.slice(0, 4), undefined, undefined);
     const extras = editaveis.flatMap((d) => d.extrasDoFoco ?? []);
     expect(extras.length, 'a procedência não chegou ao editor').toBeGreaterThan(0);
     const publicados = new Set((auto.blocoFoco?.adicionais ?? []).map((a) => a.exercicioId));

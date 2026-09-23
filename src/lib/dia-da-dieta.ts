@@ -15,6 +15,30 @@
  */
 
 import type { StatusRefeicao } from '@/components/painel/RegistroRefeicao';
+import { macrosDePrato } from '@/lib/data/nutrition';
+import { ESCALA_PORCAO } from '@/lib/engine/constants';
+import type { Food, RecipeMacros } from '@/lib/data/types';
+import type { CardapioItem } from '@/lib/engine/assembler';
+
+/** A porcentagem é relativa à porção sugerida deste prato neste dia. */
+export type ItemPorcionado = CardapioItem & { escalaSugerida?: number; porcentagemEscolhida?: number };
+
+export function escolherPorcao(item: ItemPorcionado, porcentagem: number, foodsById: ReadonlyMap<string, Food>): ItemPorcionado | null {
+  const escalaSugerida = item.escalaSugerida ?? item.escala;
+  const escala = escalaSugerida * porcentagem / 100;
+  if (escala < ESCALA_PORCAO.min || escala > ESCALA_PORCAO.max) return null;
+  const base = macrosDePrato(item.prato, foodsById);
+  return { ...item, escalaSugerida, porcentagemEscolhida: porcentagem, escala,
+    macros: { kcal: base.kcal * escala, proteinaG: base.proteinaG * escala,
+      carboidratoG: base.carboidratoG * escala, gorduraG: base.gorduraG * escala } };
+}
+
+export function totaisDosItens(itens: readonly CardapioItem[]): RecipeMacros {
+  return itens.reduce((t, item) => ({ kcal: t.kcal + item.macros.kcal,
+    proteinaG: t.proteinaG + item.macros.proteinaG, carboidratoG: t.carboidratoG + item.macros.carboidratoG,
+    gorduraG: t.gorduraG + item.macros.gorduraG }), { kcal: 0, proteinaG: 0, carboidratoG: 0, gorduraG: 0 });
+}
+
 
 /** Ordem cronológica canônica dos slots (a mesma do cardápio). */
 export const ORDEM_REFEICOES: readonly string[] = ['cafe', 'almoco', 'lanche', 'jantar'];

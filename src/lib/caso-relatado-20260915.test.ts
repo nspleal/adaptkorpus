@@ -94,25 +94,17 @@ describe('🔴 o caso relatado — os seis números da captura', () => {
     expect(placarDe(telaMontarMeuTreino().avaliacao)).toMatchObject(CAPTURA);
   });
 
-  /**
-   * 🔵 ESTE CASO É O EXEMPLO LITERAL DA DECISÃO DE 2026-09-17.
-   *
-   * ⛔️ O que a tela dizia: *"Peito está acima do volume máximo do seu nível (17 contra 16
-   * séries)"*. Com a tabela nova, 17 está acima do MÁXIMO AUTOMÁTICO (16) e ABAIXO do teto
-   * cheio (19) — e a decisão é explícita: *"não afirmar que ultrapassou o teto"*. A linha
-   * passa a ser orientação, com os dois números, e some do bloco de risco.
-   *
-   * 🔵 Duas linhas NOVAS aparecem, do teto por sessão (12 ponderadas por grupo num dia), que
-   * não existia antes: peito e ombros somam 13 cada um em um único treino do desenho.
-   *
-   * 🔵 E `Costas 12` saiu dos déficits: o piso da faixa desejada caiu de 13 para 10.
-   */
-  it('as linhas do crítico saem com o texto e a ordem da decisão de 2026-09-17', () => {
+  // Decisão de 17/09: peito 17 ultrapassa o automático (16), mas não o teto (19).
+  // O desenho manual permanece intacto. Os avisos por sessão usam a política atual.
+  // Teto por sessão também diagnostica os demais grupos; não muda o desenho manual.
+  it('o crítico mantém a orientação de peito e informa os quatro excessos por sessão', () => {
     const { avaliacao } = telaMontarMeuTreino();
     expect([...avaliacao.avisos, ...avaliacao.recomendacoes].map((x) => x.texto)).toEqual([
       'Peito está com 17 séries nesta semana: acima das 16 que o app usa quando monta sozinho, e ainda dentro do teto de 19. Se a escolha foi sua, ela vale — só acompanhe como você recupera.',
       'Peito soma 13 séries em Peito + Tríceps — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
+      'Bíceps soma 14 séries em Costas + Bíceps — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
       'Ombros soma 13 séries em Ombros + Braços — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
+      'Panturrilhas soma 16 séries em Complementares — acima das 12 por grupo num mesmo treino, contando o trabalho indireto. Distribuir parte delas em outro dia costuma caber melhor na recuperação.',
       'Tente trocar 1 exercício de peito por 1 de posterior — assim a semana fica mais equilibrada entre os grupos.',
       'Posterior está abaixo da faixa mínima desta semana (4 de 10 séries).',
       'Glúteos está abaixo da faixa mínima desta semana (4 de 10 séries).',
@@ -178,8 +170,8 @@ describe('🔒 o candidato NÃO mexe no desenho salvo para esconder o excesso', 
     expect(linha!.texto).toContain('16');
     expect(linha!.texto).toContain('19');
     expect(linha!.severidade, 'orientação, não risco — e nada trava').toBe('recomendacao');
-    // 🔒 E o teto por SESSÃO, que o desenho fura em dois dias, continua sendo risco.
-    expect(avaliacao.avisos.filter((a) => a.codigo === 'acima_do_maximo_na_sessao')).toHaveLength(2);
+    // Teto por sessão: peito, bíceps, ombros e panturrilha, com as séries manuais intactas.
+    expect(avaliacao.avisos.filter((a) => a.codigo === 'acima_do_maximo_na_sessao')).toHaveLength(4);
   });
 });
 

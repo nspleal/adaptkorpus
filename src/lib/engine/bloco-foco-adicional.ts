@@ -3,6 +3,7 @@ import type {Exercise,GrupoPrimario} from '../data/types';
 import {ORDEM_SEMANA,type Weekday} from '../semana';
 import {secundariosDe} from './secundarios';
 import type {DiaTreino,SlotExercicio} from './treino-types';
+import {MINIMOS_TEMPO,tipoSessaoTemporal} from './adequacao-tempo-politica';
 
 /** Autor14/09: adição ao baseline, não transferência. Pool já elegível no montador.
  * Séries/descanso/hold são materializados pelo chamador, na autoridade existente.
@@ -21,9 +22,12 @@ export function adicionarBlocoFoco(
  const consecutivo=(a:Weekday,b:Weekday)=>{const delta=Math.abs(ORDEM_SEMANA.indexOf(a)-ORDEM_SEMANA.indexOf(b));return delta===1||delta===6;};
  // Um dia conserva um direto por grupo, salvo o segundo costas já validado no baseline.
  if(agenda.length===1)for(const d of dias){const vistos=new Map<GrupoPrimario,number>();d.slots=d.slots.filter(s=>{const g=s.exercicio.grupoPrimario;if(!g||(vistos.get(g)??0)>=(g==='costas'?2:1))return false;vistos.set(g,(vistos.get(g)??0)+1);return true;});}
- const admiteComplementar=(d:DiaTreino,g:GrupoPrimario)=>{
-  if(!ehComplementar(g))return true;
+ const admiteGrupo=(d:DiaTreino,g:GrupoPrimario)=>{
   const gs=d.slots.map(s=>s.exercicio.grupoPrimario).filter((x):x is GrupoPrimario=>x!=null);
+  if(!ehComplementar(g)){
+   const tipo=tipoSessaoTemporal(d.nome,gs,dias.map(x=>x.nome));
+   return tipo!=='upper'&&tipo!=='lower'||g in MINIMOS_TEMPO[tipo];
+  }
   const dedicado=ehDiaDisponivel(gs);
   const local=g==='panturrilha'?ehDiaDePernas(gs):dedicado||gs.some(x=>['peito','costas','ombros','biceps','triceps'].includes(x));
   return local&&(dedicado||!gs.some(ehComplementar));
@@ -34,13 +38,13 @@ export function adicionarBlocoFoco(
   if(agenda.length===1)destino=dias[0];
   else if(grupos.length>1)destino=existentes[0]; // agregado:1 por componente no recorte correspondente
   else if(existentes.length>=2)destino=existentes[1];
-  if(destino&&!admiteComplementar(destino,g))destino=undefined;
+  if(destino&&!admiteGrupo(destino,g))destino=undefined;
   if(!destino){
-   const compativeis=dias.filter(d=>admiteComplementar(d,g)&&!tem(d,g)&&d.diaId&&!existentes.some(e=>e.diaId&&consecutivo(d.diaId!,e.diaId)));
+   const compativeis=dias.filter(d=>admiteGrupo(d,g)&&!tem(d,g)&&d.diaId&&!existentes.some(e=>e.diaId&&consecutivo(d.diaId!,e.diaId)));
    const afinidade=(d:DiaTreino)=>d.slots.filter(s=>secundariosDe(s.exercicio).includes(g)||pool.some(e=>e.grupoPrimario===g&&secundariosDe(e).includes(s.exercicio.grupoPrimario!))).length;
    destino=compativeis.sort((a,b)=>(a.slots.length===0?-1:b.slots.length===0?1:afinidade(b)-afinidade(a)))[0];
   }
-  if(!destino){destino=existentes.find(d=>admiteComplementar(d,g));if(destino)adaptados.push(g);}
+  if(!destino){destino=existentes.find(d=>admiteGrupo(d,g));if(destino)adaptados.push(g);}
   if(!destino){solicitados+=agenda.length===1?1:grupos.length>1?1:2;faltantes.push(g);continue;}
   const quantidade=agenda.length===1?Math.max(0,2-destino.slots.filter(s=>s.exercicio.grupoPrimario===g).length):grupos.length>1?1:2;
   solicitados+=quantidade;

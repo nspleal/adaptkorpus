@@ -52,7 +52,8 @@ describe('D7 — o primeiro carregamento hidrata pela MESMA porta do servidor', 
     // O diagnóstico media só `montar()`; `recarregarVersaoSalva()` tinha o MESMO fallback.
     expect(codigo, 'montar() sumiu de app/page.tsx — a varredura perdeu o alvo').toMatch(/function montar\(/);
     expect(codigo, 'recarregarVersaoSalva() sumiu').toMatch(/async function recarregarVersaoSalva\(/);
-    expect((codigo.match(/opcoesDeEntradaPlano\(/g) ?? []).length).toBe(2);
+    // Montar, recarregar e agora verificar ANTES de persistir usam a mesma porta.
+    expect((codigo.match(/opcoesDeEntradaPlano\(/g) ?? []).length).toBe(3);
   });
 
   it('nenhum call site monta opções sem semanaCiclo (o fallback v1 saiu dos DOIS)', () => {

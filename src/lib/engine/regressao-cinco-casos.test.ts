@@ -17,6 +17,7 @@ import { gerarTreino } from './index';
 import { orcamentoSlotsDoDia } from './alocador';
 import { avaliarDuracaoResistida } from './duracao-plano';
 import { descansoDoExercicio } from './descanso';
+import { tipoSessaoTemporal } from './adequacao-tempo-politica';
 import { rirAlvoDaSemana } from './treino-mesociclo';
 import { prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
@@ -162,9 +163,11 @@ describe('C1 §8.3 · os CINCO CASOS ORIGINAIS do diagnóstico (antes 44f0ee0 ×
     const dur=avaliarDuracaoResistida(historicos,m.perfil.nivelExperiencia,m.orcamentoSeg,true);
     expect(dur.estadoCalculo).toBe('CALCULADO');expect(dur.estadoLimite).toBe('DENTRO_DO_LIMITE');
     expect(m.dur.estadoCalculo).toBe('CALCULADO');expect(m.dur.estadoLimite).toBe('DENTRO_DO_LIMITE');
-    // Current loaded compounds use the canonical heavy-strength rest authority.
+    // FB/UL pode chegar a 60 s pela decisão de 20/09; segmentadas preservam
+    // a autoridade de descanso de força. A convergência temporal segue acima.
+    const tipo=tipoSessaoTemporal(m.dia.nome,m.dia.slots.map(s=>s.exercicio.grupoPrimario!),m.rot.dias.map(d=>d.nome));
     for(const sl of m.dia.slots){
-      const piso=descansoDoExercicio({exercicio:sl.exercicio,rirAlvo:3,modoForca:true,degradacao:2});
+      const piso=tipo==='segmentada'?descansoDoExercicio({exercicio:sl.exercicio,rirAlvo:3,modoForca:true,degradacao:2}):60;
       if(piso!=null)expect(sl.descansoSeg!,sl.exercicio.id).toBeGreaterThanOrEqual(piso);
     }
   });

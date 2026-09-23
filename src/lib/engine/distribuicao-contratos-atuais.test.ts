@@ -100,6 +100,11 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
  const entregueDe=(r:ReturnType<typeof run>)=>(r.blocoFoco?.adicionais??[]).reduce((n,x)=>n+x.series,0);
  const P_SEM_LIMITE:PerfilTreino={...base,divisaoPreferida:'superior-inferior',limiteTempoTreino:'sem_limite'};
  const P_LIMITADO:PerfilTreino={...base,divisaoPreferida:'superior-inferior',tempoPorSessaoMin:60,limiteTempoTreino:'limitado'};
+ // UL permanece como controle de conservação. Prioridades/90 min entrega
+ // extras estáveis durante o ciclo e exercita o ganho real nas duas modalidades.
+ const positivo=(limiteTempoTreino:PerfilTreino['limiteTempoTreino']):PerfilTreino=>({
+  ...base,divisaoPreferida:'prioridades',tempoPorSessaoMin:90,limiteTempoTreino,
+ });
  /** A propriedade, medida numa semana: terceiros intactos e focado = baseline + o declarado. */
  const semCompensacao=(p:PerfilTreino,semana:SemanaCiclo)=>{
   const a=run(p,semana),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
@@ -113,32 +118,23 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   semCompensacao(P_SEM_LIMITE,semana);
  });
  it('anti-vacuidade: em alguma das semanas o bloco realmente entrega (sem_limite)',()=>{
-  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(P_SEM_LIMITE,s),0),
+  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(positivo('sem_limite'),s),0),
    'nenhuma semana entregou bloco — as igualdades acima seriam triviais').toBeGreaterThan(0);
  });
- it('🔒 e quando o bloco é recusado, é porque um teto morde — não porque sumiu',()=>{
-  const recusadas=([1,4,5] as const).filter(s=>entregueDe(run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},s))===0);
-  for(const semana of recusadas){
-   const b=run({...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}},semana);
-   const teto=b.faixaVolumeSemana!.max;
-   const ponderado=creditoPonderadoDaSemana(b.dias.flatMap(d=>d.slots)).get('peito')??0;
-   /**
-    * 🔵 2026-09-19 — a asserção passou a cobrir os DOIS tetos que a recusa pode ter, porque
-    * a própria regex de aviso logo abaixo já aceitava os dois desde sempre:
-    *  ① o grupo FOCADO no topo da faixa semanal; ou
-    *  ② um TERCEIRO grupo no teto de sessão (12 ponderadas num mesmo dia) — o caso medido
-    *    nesta correção, em que somar peito levaria OMBROS acima do teto do dia pelo crédito
-    *    indireto. Antes o número casava por acidente (peito estava em 14), e a exclusão do
-    *    improviso doméstico na academia desfez a coincidência.
-    * O que continua cobrado é o essencial: recusa SEMPRE tem um teto que a explica — nunca
-    * "o bloco sumiu".
-    */
-   const tetoDaSessao=b.tetoVolumeSemana?.sessao;
-   const noTetoDaSessao=tetoDaSessao!=null&&b.dias.some(d=>[...creditoPonderadoDaSemana(d.slots).values()].some(v=>v>=tetoDaSessao));
-   expect(ponderado>teto-1||noTetoDaSessao,`S${semana}: bloco recusado sem nenhum teto no limite (peito ${ponderado}/${teto})`).toBe(true);
-   expect(ponderado).toBeLessThanOrEqual(b.tetoVolumeSemana!.cheio);
-   expect(b.avisos.some(a=>/(extras não couberam no tempo disponível|j[áa] est[áa] n[oa] m[áa]ximo|nos limites desta semana|levaria .* acima d[oa] m[áa]ximo|levaria .* acima dos limites)/.test(a)),`S${semana}: recusa sem explicação na tela`).toBe(true);
-  }
+ it('extras inviáveis em uma semana não são prometidos nas demais semanas do ciclo',()=>{
+  const p:PerfilTreino={...P_SEM_LIMITE,foco:{grupo:'peito',compensa:'triceps',semana:1}};
+  const propostas=([1,2,3,4,5] as const).map(semana=>
+   gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana,planejamentoCicloInterno:true}}).rotina!);
+  // A S1 isolada entrega; na S3 o crédito indireto de tríceps impede o extra.
+  expect(entregueDe(propostas[0]!)).toBeGreaterThan(0);
+  expect(entregueDe(propostas[2]!)).toBe(0);
+  expect(creditoPonderadoDaSemana(propostas[2]!.dias.flatMap(d=>d.slots)).get('triceps'))
+   .toBe(propostas[2]!.tetoVolumeSemana!.semFoco);
+  expect(propostas[2]!.avisos.join(' ')).toMatch(/somar Peito aqui levaria Tríceps acima/);
+  const final=run(p,1);
+  expect(entregueDe(final)).toBe(0);
+  expect(final.avisos.join(' ')).toContain('não permaneceram viáveis nas cinco semanas');
+  expect(gruposDe(final)).toEqual(gruposDe(run(P_SEM_LIMITE,1)));
  });
  /**
   * 🔴 L-01 (revisão independente 15/09) — a MESMA propriedade com tempo LIMITADO de 60 min,
@@ -149,7 +145,7 @@ describe('rodada2: avisos e conservação sem autoridade estrutural duplicada',(
   semCompensacao(P_LIMITADO,semana);
  });
  it('anti-vacuidade: em alguma das semanas o bloco realmente entrega (LIMITADO)',()=>{
-  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(P_LIMITADO,s),0),
+  expect(([1,4,5] as const).reduce((n,s)=>n+semCompensacao(positivo('limitado'),s),0),
    'nenhuma semana entregou bloco — as igualdades acima seriam triviais').toBeGreaterThan(0);
  });
 });

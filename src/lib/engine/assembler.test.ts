@@ -62,12 +62,14 @@ describe('montador de cardápio (Bloco B v0)', () => {
     expect(r.nota).toContain('nenhum alérgeno foi afrouxado');
   });
 
-  it('escolhe o cardápio dentro da janela com menor desvio calórico', () => {
+  it('escolhe dentro da janela e sinaliza quando a proteína permanece abaixo do piso', () => {
     const r = montarCardapioDia(plano(), recipes, foodsById, {
       alergenos: ['origem_animal'],
       preferencia: null,
     });
-    expect(r.status).toBe('ok');
+    expect(r.status).toBe('abaixo_piso_proteina');
+    expect(Math.round(r.totais.proteinaG)).toBeLessThan(50);
+    expect(r.nota).toContain('abaixo do piso');
     expect(r.totais.kcal).toBeGreaterThanOrEqual(800);
     expect(r.totais.kcal).toBeLessThanOrEqual(1000);
   });

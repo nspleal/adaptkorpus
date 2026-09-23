@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { gerarTreino } from './index';
 import { EXERCISES } from '../data/exercises';
-import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, altaExigenciaDocumental } from './descanso';
+import { classeDeDescanso, DESCANSO_PISO_DURO_SEG } from './descanso';
 import { dispensarGruposPorTempo } from './ajuste-tempo-estrutura';
 import { avaliarDuracaoResistida } from './duracao-plano';
 import { GRUPOS_DISPENSAVEIS_FULLBODY_CURTO, GRUPOS_GRANDES, GRUPOS_PEQUENOS_PISO } from './alocador';
@@ -143,7 +143,7 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
 
   it('no plano real a retirada acontece, é nomeada e preserva os grupos principais', () => {
     const plano = gerar(curto);
-    const aviso = plano.avisos.find((a) => a.startsWith('Para caber em') && a.includes('nesta sessão única'));
+    const aviso = plano.avisos.find((a) => a.startsWith('Para adequar as sessões') && a.includes('retiramos exercícios complementares'));
     expect(aviso, 'a retirada não foi nomeada em nenhum aviso').toBeTruthy();
     expect(diretos(plano, 'core'), 'core sobreviveu: o caso deixou de exercer a regra').toBe(0);
     // Core was omitted by the one-complementary policy, not removed by temporal dispensing.
@@ -151,7 +151,6 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
     expect(aviso).toContain('Panturrilhas');
     // Os demais grupos mantêm o único exercício — a política antiga continua valendo para eles.
     for (const g of GRUPOS_GRANDES) {
-      if (GRUPOS_DISPENSAVEIS_FULLBODY_CURTO.includes(g)) continue; // 🔵 17/09: glúteos entrou na lista
       expect(diretos(plano, g), `${g} perdeu o único exercício`).toBeGreaterThanOrEqual(1);
     }
     for (const g of GRUPOS_PEQUENOS_PISO) {
@@ -167,7 +166,8 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
   });
 
   it('quando nem assim cabe, o veredito é INCOMPATIVEL — sem certificado falso', () => {
-    const plano = gerar(curto);
+    // Mantém 20 min nos demais testes; 10 min ainda excede o piso obrigatório.
+    const plano = gerar({ ...curto, tempoPorSessaoMin: 10 });
     expect(plano.resultadoGeracao?.tipo).toBe('INCOMPATIVEL');
     // …e a frase não pode afirmar que nada foi cortado, porque foi.
     expect(plano.avisos.some((a) => /preservamos o único exercício de cada grupo\.$/.test(a)),
@@ -181,9 +181,8 @@ describe('P-01 — full-body curto: dispensa ordenada, e só até caber', () => 
       for (const d of plano.dias) for (const s of d.slots) {
         if (s.descansoSeg == null) continue;
         expect(s.descansoSeg, `${s.exercicio.id} abaixo do piso duro`).toBeGreaterThanOrEqual(DESCANSO_PISO_DURO_SEG);
-        if (altaExigenciaDocumental(s.exercicio)) {
-          expect(s.descansoSeg, `${s.exercicio.id} é documental e ficou abaixo de 120 s`).toBeGreaterThanOrEqual(120);
-        }
+        // Autorização 20/09: FB pode chegar a 60 s depois de retirar complementares.
+        expect(s.descansoSeg).toBeGreaterThanOrEqual(60);
       }
     }
   });

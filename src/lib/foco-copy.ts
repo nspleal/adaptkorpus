@@ -34,7 +34,8 @@ export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | 
   if (bloco) {
     const grupos = bloco.grupos.map(g => ROTULO_GRUPO[g] ?? g).join(' e ');
     const n = bloco.adicionais.length;
-    if (n === 0) return `${grupos} em foco: não foi possível acrescentar exercícios neste plano. Confira os limites indicados.`;
+    const seriesConsolidadas = (bloco.consolidados ?? []).reduce((total, a) => total + a.series, 0);
+    if (n === 0 && seriesConsolidadas === 0) return `${grupos} em foco: não foi possível acrescentar exercícios neste plano. Confira os limites indicados.`;
     /**
      * 🔴 Revisão independente 15/09 — A FRASE CONTA O QUE SOBREVIVEU, NÃO A INTENÇÃO.
      * Ela dizia "2 exercícios adicionais, 4 séries" mesmo quando o corte temporal já
@@ -42,8 +43,11 @@ export function fraseDoFoco(rotina: RotinaSemanal | null | undefined): string | 
      * grupo era zero. `solicitados` × `adicionais` separa intenção de entrega.
      */
     const series = bloco.adicionais.reduce((total, a) => total + a.series, 0);
-    const parcial = bloco.solicitados > n ? ` Coube ${n} de ${bloco.solicitados}; o resto não entrou pelo tempo disponível.` : '';
-    return `${grupos} em foco: ${n} exercício${n === 1 ? '' : 's'} ${n === 1 ? 'adicional' : 'adicionais'} no plano, com ${series} séries ao todo.${parcial}`;
+    const atendidos = n + (bloco.exerciciosConsolidados ?? 0);
+    const parcial = bloco.solicitados > atendidos ? ' Parte do bloco não entrou pelos limites indicados no plano.' : '';
+    const doseConsolidada = seriesConsolidadas > 0 ? `${seriesConsolidadas} série(s) adicionais nos exercícios existentes` : '';
+    if (n === 0) return `${grupos} em foco: ${doseConsolidada}.${parcial}`;
+    return `${grupos} em foco: ${n} exercício${n === 1 ? '' : 's'} ${n === 1 ? 'adicional' : 'adicionais'} no plano, com ${series} séries ao todo.${doseConsolidada ? ` Mais ${doseConsolidada}.` : ''}${parcial}`;
   }
   const f = rotina?.foco;
   if (!f) return null;

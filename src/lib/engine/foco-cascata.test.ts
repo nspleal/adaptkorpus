@@ -12,8 +12,6 @@ import type { GrupoPrimario } from '../data/types';
 const SMAX = 4;
 /** Grande com folga: 3 slots (capacidade 12), 11 séries hoje. */
 const grandeComFolga = { slots: 3, series: 11, tetoSeries: 16, tetoSlots: 6 };
-/** Grande saturado: 3 slots, 12 séries = 3 × 4. Foi o caso de `costas` na medição. */
-const grandeSaturado = { slots: 3, series: 12, tetoSeries: 16, tetoSlots: 6 };
 /** Pequeno saturado: 1 slot, 4 séries. Foi o caso de `panturrilha`. */
 const pequenoSaturado = { slots: 1, series: 4, tetoSeries: 8, tetoSlots: 2 };
 const compensadorFolgado = { slots: 4, series: 15, pisoSeries: 8, pisoSlots: 1 };

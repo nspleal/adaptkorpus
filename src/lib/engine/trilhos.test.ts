@@ -280,8 +280,9 @@ describe('🔒 o foco chega ao PLANO', () => {
      * SELETOR HISTÓRICO já chega ao topo na semana 2 e o bloco fica vazio ali. A semana 1
      * ainda tem folga nos dois seletores, e a identidade volta a ter conteúdo.
      */
-    const sem = plano(perfil({ limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }), 1);
-    const com = plano({ ...comFoco, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 75 }, 1);
+    const controle = { nivelExperiencia: 'iniciante' as const, diasDisponiveis: 5, treinoDias: ['seg','ter','qua','qui','sex'] as const, limiteTempoTreino: 'limitado' as const, tempoPorSessaoMin: 60 };
+    const sem = plano(perfil({ ...controle, treinoDias: [...controle.treinoDias] }), 1);
+    const com = plano({ ...comFoco, ...controle, treinoDias: [...controle.treinoDias] }, 1);
     const entregue = com.blocoFoco?.adicionais.reduce((n, a) => n + a.series, 0) ?? 0;
     expect(entregue, 'bloco vazio — a identidade seria trivial').toBeGreaterThan(0);
     expect(soma(com)).toBe(soma(sem) + entregue);

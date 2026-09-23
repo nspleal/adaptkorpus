@@ -1,5 +1,12 @@
 # Política de volume da hipertrofia + cobertura muscular no editor
 
+> **Decisão posterior, candidata local — 20/09/2026:** em full body e upper/lower,
+> a faixa desejada não é teto duro. A tabela e seu escopo estão em
+> [Adequação automática](./adequacao-tempo-e-tetos-2026-09-20.md#faixa-e-teto-em-upperlower-e-full-body--aprovação-de-2009).
+> No intermediário, alvo até 14 e máximo sem foco 16. Esta decisão substitui a
+> interpretação contrária nesse escopo; não altera os números da tabela abaixo
+> nem constitui nova publicação. O restante deste relatório preserva o histórico.
+
 ## Retificação final do autor — 17/09/2026
 
 O autor autorizou corrigir este relatório e publicar o candidato de código

@@ -62,8 +62,10 @@ describe('REGRESSÃO D13 · a semana de deload precisa reduzir o volume entregue
     });
   }
 
-  it('varredura: nenhum perfil pode ter volume de deload >= volume da rampa', () => {
+  it('varredura: deload reduz quando há séries removíveis e nunca aumenta no piso', () => {
     const violacoes: string[] = [];
+    let noPiso = 0;
+    let comReducao = 0;
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const)
       for (const obj of ['emagrecimento', 'massa', 'saude'] as const)
         for (const eq of ['academia', 'casa', 'nenhum'] as const)
@@ -75,10 +77,17 @@ describe('REGRESSÃO D13 · a semana de deload precisa reduzir o volume entregue
                 tempoPorSessaoMin: t, diasDisponiveis: d, treinoDias: diasPadrao(d) as Weekday[],
               });
               const s5 = volumeSemanal(p, 5); const s6 = volumeSemanal(p, 6);
-              if (s5.series > 0 && s6.series >= s5.series) {
+              // Decisão do autor em 20/09: uma série obrigatória não pode ser
+              // zerada para produzir uma redução artificial no deload.
+              if (s5.series > 0 && s5.series === s5.slots) noPiso++;
+              if (s6.series < s5.series) comReducao++;
+              if (s5.series > 0 && (s6.series > s5.series
+                || (s5.series > s5.slots && s6.series >= s5.series))) {
                 violacoes.push(`${nivel}/${obj}/${eq}/${t}min/${d}d S5=${s5.series} S6=${s6.series}`);
               }
             }
-    expect(violacoes, `perfis sem redução no deload:\n${violacoes.join('\n')}`).toEqual([]);
+    expect(noPiso, 'a exceção exige casos reais no piso').toBeGreaterThan(0);
+    expect(comReducao, 'o piso não pode virar isenção geral de deload').toBeGreaterThan(0);
+    expect(violacoes, `perfis sem redução exigível no deload:\n${violacoes.join('\n')}`).toEqual([]);
   }, 300000);
 });

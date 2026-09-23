@@ -99,36 +99,12 @@ const porSlot = (r: RotinaSemanal) =>
 
 // ── 1. Os casos NOMEADOS da varredura ────────────────────────────────────────
 describe('🔴 os casos medidos em que o baseline passava do teto', () => {
-  /**
-   * Cada linha é uma célula da varredura das 3 888 em que o baseline SOZINHO passava do MRV
-   * ponderado antes da correção. `pondDepois`/`diretoDepois` são o resultado medido DEPOIS,
-   * anotados para que uma regressão futura apareça como número, não como sensação.
-   */
-  /**
-   * 🔵 NÚMEROS REMEDIDOS SOB A TABELA NOVA (2026-09-17). A redação anterior era:
-   *   · avançado/massa/3d/75min/S5 — teto 20 · costas 20 ponderadas · 18 diretas;
-   *   · avançado/saúde/3d/45min/S3 — teto 12 · costas 12 · 10;
-   *   · iniciante/massa/3d/45min/S6 — teto 7 · costas 7 · 7.
-   * O que mudou e por quê: em HIPERTROFIA a faixa desejada caiu (12–18 no avançado) e o teto
-   * operacional subiu para 18, então a célula de massa deixou de encostar no teto; a de SAÚDE
-   * não mudou nada, porque a política daquele objetivo não foi tocada.
-   */
-  /**
-   * 🔵 CÉLULAS REMEDIDAS em 2026-09-19 (ver a nota de `celula`): as duas de academia deixaram
-   * de encostar no teto — costas passou a fechar em 10 com teto 12, e o caso não seria mais
-   * sobre a poda. As duas abaixo vieram da varredura desta correção (96 células ainda podam;
-   * estas são as que a poda NOMEIA Costas) e continuam medindo exatamente o mesmo: teto
-   * publicado, ponderado depois, direto depois, ninguém acima do teto e a poda DITA.
-   */
+  // Com UL alternado, S5 tem dois Upper: costas soma 10 diretas/ponderadas.
+  // A poda medida agora atua em braços, não em costas. Os tetos não mudaram.
+  // Sonda instrumentada em LIMPEZA-PENDENCIAS-4/sonda-contratos.json.
   const CASOS = [
-    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/60min/S5 — costas no teto de 10', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 60, semana: 5, tetoEsperado: 10, pondDepois: 9.5, diretoDepois: 8, podaDiz: /Costas/ },
-    /**
-     * 🔵 9 → 9,5 em 2026-09-20 (4ª volta): a repartição dentro do grupo deixou de sair
-     * uniforme por artefato do round-robin, e a MESMA dose direta (8 séries, inalterada)
-     * passou a render meia ponderada a mais de costas — ainda abaixo do teto de 10, que é o
-     * que este caso existe para cobrar. A poda continua dizendo o que podou.
-     */
-    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/75min/S5 — orçamento maior, mesma banda', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 75, semana: 5, tetoEsperado: 10, pondDepois: 9.5, diretoDepois: 8, podaDiz: /Costas/ },
+    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/60min/S5 — costas no teto, poda de tríceps', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 60, semana: 5, tetoEsperado: 10, pondDepois: 10, diretoDepois: 10, podaDiz: /Tríceps/ },
+    { nome: 'casa+halteres/elástico · iniciante/saúde/3d/75min/S5 — costas no teto, poda de braços', nivel: 'iniciante', obj: 'saude', dias: 3, tempo: 75, semana: 5, tetoEsperado: 10, pondDepois: 10, diretoDepois: 10, podaDiz: /Bíceps.*Tríceps/ },
   ] as const;
 
   it.each(CASOS)('$nome', ({ nivel, obj, dias, tempo, semana, tetoEsperado, pondDepois, diretoDepois, podaDiz }) => {
@@ -213,7 +189,6 @@ describe('🔒 nenhum grande acima do teto — varredura', () => {
 // ── 3. O foco e o baseline não pagam um pelo outro ───────────────────────────
 describe('🔒 o baseline corrigido é preservado quando o foco entra', () => {
   const OVER = { nivelExperiencia: 'avancado', diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', treinoDias: DIAS.slice(0, 3) };
-  const sem = () => rotina(perfil(OVER), { semanaCiclo: { semana: 5 } });
   const com = () => rotina(perfil({ ...OVER, foco: { grupo: 'peito', compensa: 'ombros', semana: 5 } }), { semanaCiclo: { semana: 5 } });
 
   /**
@@ -222,14 +197,16 @@ describe('🔒 o baseline corrigido é preservado quando o foco entra', () => {
    * 2026-07-31: *"quem já está no topo não ganha volume; ganha ORDEM"*). O que não pode
    * mudar é QUAL exercício está lá e com QUANTAS séries — é isso que D-01/D-02 protegem.
    */
-  it('os slots do baseline saem idênticos com e sem foco (o extra não retira volume de ninguém)', () => {
-    const a = sem();
-    const b = com();
-    const extras = new Set((b.blocoFoco?.adicionais ?? []).map((x) => x.exercicioId));
-    // ⚠️ ANTI-VACUIDADE: sem extras entregues, a comparação abaixo compara o plano consigo.
-    expect(extras.size, 'o cenário precisa entregar bloco adicional').toBeGreaterThan(0);
-    const soBaseline = (r: RotinaSemanal) => r.dias.map((d) => `${d.diaId}:${d.slots
-      .filter((s) => !extras.has(s.exercicio.id)).map((s) => `${s.exercicio.id}x${s.series}`).sort().join(',')}`);
+  it.each([
+    {nome:'UL de três dias',over:OVER,exigeExtra:false},
+    {nome:'Prioridades com extra estável',over:{...OVER,nivelExperiencia:'intermediario',diasDisponiveis:4,treinoDias:DIAS.slice(0,4),divisaoPreferida:'prioridades',tempoPorSessaoMin:90},exigeExtra:true},
+  ])('$nome: o foco preserva os slots e a dose do baseline',({over,exigeExtra})=>{
+    const a=rotina(perfil(over),{semanaCiclo:{semana:5}});
+    const b=rotina(perfil({...over,foco:{grupo:'peito',compensa:'ombros',semana:5}}),{semanaCiclo:{semana:5}});
+    const extras=new Set((b.blocoFoco?.adicionais??[]).map(x=>x.exercicioId));
+    if(exigeExtra)expect(extras.size,'o controle positivo precisa entregar').toBeGreaterThan(0);
+    const soBaseline=(r:RotinaSemanal)=>r.dias.map(d=>d.diaId+':'+d.slots
+      .filter(s=>!extras.has(s.exercicio.id)).map(s=>s.exercicio.id+'x'+s.series).sort().join(','));
     expect(soBaseline(b)).toEqual(soBaseline(a));
   });
 

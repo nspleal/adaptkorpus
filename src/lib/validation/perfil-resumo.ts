@@ -48,6 +48,14 @@ const referenciaDoseSchema = z.object({
   escolhas: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
 }).optional().catch(undefined);
 
+const referenciaDescansoSchema = z.object({
+  versao: z.literal(1), contexto: z.string().max(16000), diaId: z.string().max(3),
+  minimos: z.record(grupoPrimario, z.number().int().min(0).max(3)).optional(),
+  escolhas: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)),
+  slots: z.array(z.object({ id: z.string().max(24), series: z.number().int().min(1).max(SERIES_MANUAIS_MAX),
+    descansoSeg: z.number().int().min(0).max(600) })).max(20),
+}).optional().catch(undefined);
+
 export const rotinaCustomSchema = z.object({
   origem: z.literal('usuario'),
   dias: z.array(z.object({
@@ -56,6 +64,7 @@ export const rotinaCustomSchema = z.object({
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
     referenciaDose: referenciaDoseSchema,
+    referenciaDescanso: referenciaDescansoSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number().int().min(1).max(SERIES_MANUAIS_MAX)).optional(),
   })).max(7),
 }).superRefine((rotina, ctx) => {
@@ -86,6 +95,7 @@ export const rotinaCustomHidratacaoSchema = z.object({
     diaId: z.enum(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']).optional(),
     exercicioIds: z.array(z.string().max(24)).max(20),
     referenciaDose: referenciaDoseSchema,
+    referenciaDescanso: referenciaDescansoSchema,
     seriesPorExercicio: z.record(z.string().max(24), z.number()).optional(),
   })).max(7),
 });

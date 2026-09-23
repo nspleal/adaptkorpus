@@ -6,7 +6,7 @@
  *  · cobertura: com ≥ 2 dias, NENHUM dos 12 grupos fica a zero ponderado;
  *  · 1 dia é o limite estrutural declarado (6–7 slots não cobrem 12 grupos) — os zeros
  *    existem, são ≤ 3 e ficam DECLARADOS aqui em vez de escondidos na média;
- *  · o teto de slots segue a tabela f(tempo) — nenhum dia acima do orçamento;
+ *  · os mínimos podem exceder o orçamento inicial de slots, nunca o tempo medido;
  *  · a inversão morreu (iniciante ≤ intermediário ≤ avançado — prova fina no
  *    alocador.test.ts; aqui o smoke da grade completa).
  */
@@ -15,6 +15,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './alocador';
+import { avaliarDuracaoResistida } from './duracao-plano';
 import { adicoesComplementaresViaveis } from './__fixtures__/complementares-viabilidade';
 import { EXERCISES } from '../data/exercises';
 import type { PerfilTreino } from './treino-types';
@@ -44,7 +45,14 @@ const ausenciaJustificada = (r: ReturnType<typeof montar>, p: PerfilTreino, g: s
   if (g === 'lombar' && r.dias.some(d=>d.slots.some(s=>s.exercicio.grupoPrimario==='core'))) return false;
   const rotulo = alvo === 'core' ? 'Core' : alvo === 'panturrilha' ? 'Panturrilhas' : 'Antebraço';
   expect(r.avisos.some(a=>a.startsWith(`${rotulo} não entrou neste plano:`))).toBe(true);
-  expect(adicoesComplementaresViaveis(r,p,alvo as 'core'|'panturrilha'|'antebraco'), `omissão corrigível de ${g}: ${JSON.stringify(p)}`).toEqual([]);
+  // Autor 20/09: uma adição precisa permanecer no mesmo dia nas cinco semanas.
+  // Folga isolada na S3 não autoriza introduzir e depois retirar o exercício.
+  const alternativas=([1,2,3,4,5] as const).map(semana=>{
+    const ciclo=montarRotina(prescreverTreino(p,avaliarGateTreino(p)),p,EXERCISES,new Set(),{semana});
+    return adicoesComplementaresViaveis(ciclo,p,alvo as 'core'|'panturrilha'|'antebraco');
+  });
+  const estaveis=alternativas[0]!.filter(x=>alternativas.every(a=>a.includes(x)));
+  expect(estaveis, `omissão corrigível no ciclo de ${g}: ${JSON.stringify(p)}`).toEqual([]);
   return true;
 };
 const rotina = (nivel: PerfilTreino['nivelExperiencia'], dias: number, tempo: number) => montar(perfil(nivel, dias, tempo));
@@ -76,29 +84,28 @@ describe('🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderad
     }
   });
 
-  it('nenhum dia passa do orçamento f(tempo), na grade inteira', () => {
+  it('nenhum dia excede o tempo real para impor os mínimos, na grade inteira', () => {
     for (const nivel of ['iniciante', 'intermediario', 'avancado'] as const) {
       for (const dias of [1, 2, 3, 4, 5, 6]) {
         for (const tempo of [60, 180]) {
           const r = rotina(nivel, dias, tempo);
           for (const d of r.dias) {
-            expect(d.slots.length, `${nivel}/${dias}d/${tempo}min · ${d.nome}`).toBeLessThanOrEqual(dias===1?10:orcamentoSlotsDoDia(tempo));
+            const medido = avaliarDuracaoResistida(d.slots, nivel, tempo * 60);
+            expect(medido.estadoCalculo).toBe('CALCULADO');
+            expect(medido.duracaoMaximaEstimadaSegundos, `${nivel}/${dias}d/${tempo}min · ${d.nome}`).toBeLessThanOrEqual(tempo * 60);
           }
         }
       }
     }
   });
 
-  /**
-   * 🔗 Âncora contra a medição de 2026-08-12 (relatorio-medicao-v3): o perfil da queixa
-   * (int/massa/4d/60min) tinha 14 slots e 55 séries; o v4 entrega 24 slots. O par
-   * discriminante da leva inteira, gravado como número.
-   */
-  it('int/massa/4d/60min: 24 slots onde havia 14', () => {
+  it('int/massa/4d/60min entrega todos os grupos obrigatórios, sem quota de slots', () => {
     const r = rotina('intermediario', 4, 60);
-    // 2026-09-19: sob o seletor histórico (U/L ×2) o dia de pernas passou a ter um só
-    // complementar (panturrilha OU core) — 23. No seletor atual continuam 24.
-    expect(r.dias.reduce((n, d) => n + d.slots.length, 0)).toBe(process.env.ADAPT_TEST_SELETOR_ATUAL === '0' ? 23 : 24);
+    // Decisões de 20/09: mínimos dependem da divisão; contagem total não é meta.
+    expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
+    expect(r.dias).toHaveLength(4);
+    for (const g of ['peito', 'costas', 'ombros', 'biceps', 'triceps', 'quadriceps', 'posterior', 'gluteos'])
+      expect(r.dias.some(d => d.slots.some(s => s.exercicio.grupoPrimario === g)), g).toBe(true);
   });
 });
 

@@ -58,6 +58,11 @@ export function vereditoDoPlano(
   const rg: ResultadoGeracaoRotina | undefined = rotina?.resultadoGeracao;
   if (!rotina || !rg) return null;
   switch (rg.tipo) {
+    case 'TETO_SEMANAL_NAO_ATENDIDO':
+    case 'TETO_SESSAO_NAO_ATENDIDO':
+    case 'MINIMOS_NAO_ATENDIDOS':
+      return { tom: 'bloqueio', titulo: 'A geração do treino não foi concluída.',
+        detalhe: rg.motivos.join(' ') };
     case 'CERTIFICADO':
       if(rotina.limiteTempoTreino==='sem_limite')return {tom:'ok',titulo:'Plano calculado sem limite de tempo por sessão.',detalhe:'O tempo livre não acrescenta exercícios ao plano.'};
       return {
@@ -101,11 +106,9 @@ export function vereditoDoPlano(
     /**
      * 🔴 P-01 (revisão independente 15/09) — O QUE ESTE ESTADO É, E O QUE ELE NÃO É.
      *
-     * `bloqueio` aqui é TOM DE AVISO, não impedimento: o plano continua listado, o dia
-     * continua selecionável e a sessão continua podendo ser iniciada e registrada
-     * (`AvisosMotor` só pinta a faixa; `TreinoTab` renderiza os dias do mesmo jeito).
-     * A frase tinha de dizer isso e oferecer os caminhos reais — sem prometer que algum
-     * deles faz o treino caber, porque o motor não mediu nenhum deles.
+     * Decisão de 20/09: uma nova geração incompatível não é aceita. A proposta
+     * permanece diagnosticável, mas os pontos de aplicação preservam o plano salvo.
+     * As alternativas abaixo não prometem um resultado que ainda não foi calculado.
      *
      * O que NÃO se faz para sair daqui: afrouxar o limite escolhido, o piso de descanso
      * ou a cobertura aprovada. Qualquer mudança nessas três políticas é decisão do autor.
@@ -115,7 +118,7 @@ export function vereditoDoPlano(
         tom: 'bloqueio',
         titulo: `Não encontramos uma versão com a cobertura exigida dentro do limite de tempo para sessões de ${tempoPorSessaoMin} min.`,
         detalhe: [
-          `O plano continua aqui para consultar, iniciar e registrar — o que não dá para afirmar é que ele caiba em ${tempoPorSessaoMin} min.`,
+          `Esta proposta não foi aceita para sessões de ${tempoPorSessaoMin} min. O último plano salvo, se existir, deve ser preservado até uma geração válida.`,
           rotina.limiteTempoTreino === 'sem_limite'
             ? 'Você já está sem limite de tempo por sessão, então o que falta é exercício elegível: confira os avisos de cobertura e equipamento.'
             : 'Três caminhos abrem espaço, e nenhum deles garante que caiba: aumentar o tempo por sessão, espalhar o treino por mais dias da semana, ou escolher 75+ (sem limite de tempo por sessão).',

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { montarRotina } from './treino-montador';
+import { gerarTreino } from './index';
 import { prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
-import { altaExigenciaDocumental, classeDeDescanso, PISO_DEGRADACAO } from './descanso';
+import { tipoSessaoTemporal, PRINCIPAIS_TEMPO } from './adequacao-tempo-politica';
+import { altaExigenciaDocumental, classeDeDescanso } from './descanso';
 import { EXERCISES } from '../data/exercises';
 import type { PerfilTreino } from './treino-types';
 
@@ -27,6 +29,22 @@ import type { PerfilTreino } from './treino-types';
 
 const SEM = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 
+it('avisa descanso encurtado pelo foco somente quando um descanso realmente diminui', () => {
+  const comum = {pesoKg:80,alturaCm:178,idade:30,objetivo:'massa' as const,equipamento:'academia' as const,
+    limiteTempoTreino:'limitado' as const,tempoPorSessaoMin:45,flagsSaude:SEM};
+  const semReducao = gerarTreino({...comum,nivelExperiencia:'iniciante',diasDisponiveis:4,
+    treinoDias:['seg','ter','qua','qui'],foco:{grupo:'costas',semana:1}},
+    {exercises:EXERCISES,semanaCiclo:{semana:5}}).rotina!;
+  expect(semReducao.blocoFoco!.adicionais.length).toBeGreaterThan(0);
+  expect(semReducao.dias.flatMap(d=>d.slots).find(s=>s.extraDoFoco)!.descansoSeg).toBe(180);
+  expect(semReducao.avisos.some(a=>a.includes('descanso de'))).toBe(false);
+  const comReducao = gerarTreino({...comum,nivelExperiencia:'avancado',diasDisponiveis:6,
+    treinoDias:['seg','ter','qua','qui','sex','sab'],focoAgregado:{grupo:'bracos',semana:1}},
+    {exercises:EXERCISES,semanaCiclo:{semana:5}}).rotina!;
+  expect(comReducao.dias.flatMap(d=>d.slots).some(s=>s.extraDoFoco&&s.descansoSeg===60)).toBe(true);
+  expect(comReducao.avisos.some(a=>a.includes('descanso de'))).toBe(true);
+});
+
 function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
   return {
     sexo: 'masculino', pesoKg: 80, alturaCm: 180, idade: 30, nivelAtividade: 'moderado',
@@ -43,8 +61,11 @@ function plano(s: number, over: Partial<PerfilTreino> = {}) {
   const r = montarRotina(presc, p, EXERCISES, new Set(), { semana: s as never });
   return r.dias.map((d) => ({
     nome: d.nome,
+    semana: s,
+    tipo: tipoSessaoTemporal(d.nome, d.slots.flatMap(sl => sl.exercicio.grupoPrimario ? [sl.exercicio.grupoPrimario] : []), r.dias.map(d => d.nome)),
     slots: d.slots.map((sl) => ({
       id: sl.exercicio.id,
+      principal: PRINCIPAIS_TEMPO.includes(sl.exercicio.grupoPrimario!),
       complementar: ['core','panturrilha','antebraco'].includes(sl.exercicio.grupoPrimario??''),
       classe: classeDeDescanso(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
       exigente: altaExigenciaDocumental(EXERCISES.find((e) => e.id === sl.exercicio.id)!),
@@ -86,17 +107,18 @@ describe('🔒 aceite 2 — o descanso do PLANO varia ao longo do mesociclo', ()
   });
 
   it('a posição na faixa segue o RIR-alvo da semana, classe a classe', () => {
-    // Composto 120–180 · Isolado/core 60–120 (spec §🕐, tabela das classes).
-    const porSemana = (s: number) => {
-      const slots = plano(s, { tempoPorSessaoMin: 120 }).flatMap((d) => d.slots);
-      return {
-        composto: [...new Set(slots.filter((x) => x.classe === 'COMPOSTO').map((x) => x.descansoSeg))].sort((a, b) => (a ?? 0) - (b ?? 0)),
-        isolado: [...new Set(slots.filter((x) => x.classe === 'ISOLADO').map((x) => x.descansoSeg))],
-      };
-    };
-    expect(porSemana(1)).toEqual({ composto: [120,180], isolado: [60] });   // RIR 3 → piso
-    expect(porSemana(3)).toEqual({ composto: [150,180], isolado: [90] });   // RIR 2 → meio
-    expect(porSemana(5)).toEqual({ composto: [180], isolado: [120] });  // RIR 1 → topo
+    // Mede cada classe efetivamente presente; a seleção não precisa produzir todos
+    // os subtipos de composto em cada semana para provar o transporte do RIR.
+    for (const semana of [1, 3, 5]) {
+      const slots = plano(semana, { tempoPorSessaoMin: 120 }).flatMap(d => d.slots);
+      expect(slots.some(s => s.classe === 'COMPOSTO')).toBe(true);
+      expect(slots.some(s => s.classe === 'ISOLADO')).toBe(true);
+      for (const s of slots) {
+        const esperado = s.classe === 'ISOLADO' ? ({ 1: 60, 3: 90, 5: 120 }[semana])
+          : s.exigente ? 180 : ({ 1: 120, 3: 150, 5: 180 }[semana]);
+        expect(s.descansoSeg, `${semana}/${s.id}`).toBe(esperado);
+      }
+    }
   });
 });
 
@@ -142,8 +164,15 @@ describe('🔒 aceite 5 — o orçamento cede descanso, nunca exercício', () =>
         if (!dia.slots.some(s=>s.cortouTempo&&!s.complementar)) { semReducao++; continue; }
         comReducao++;
         const compostos=dia.slots.filter(s=>s.classe==='COMPOSTO');
-        const acimaDoPiso=compostos.filter(s=>(s.descansoSeg??0)>(s.exigente?120:PISO_DEGRADACAO.COMPOSTO));
-        expect(acimaDoPiso.map(s=>`${s.id}@${s.descansoSeg}`),`${tempoPorSessaoMin}/${dia.nome}: corte antes do piso`).toEqual([]);
+        // Nicolas: segmentadas preservam descansos; FB/UL cedem até 60 s antes das séries.
+        for (const s of compostos) {
+          if (dia.tipo === 'segmentada' && !s.principal) {
+            expect(s.descansoSeg).toBeGreaterThanOrEqual(s.exigente ? 120 : 90);
+            continue;
+          }
+          const esperado = dia.tipo === 'segmentada' ? (s.exigente ? 180 : ({ 1: 120, 3: 150, 5: 180 }[dia.semana])) : 60;
+          expect(s.descansoSeg, `${tempoPorSessaoMin}/${dia.nome}/${s.id}`).toBe(esperado);
+        }
       }
     }
     expect(comReducao, 'nenhum orçamento cedeu séries: a implicação não foi exercida').toBeGreaterThan(0);

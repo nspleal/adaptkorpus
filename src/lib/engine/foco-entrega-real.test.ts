@@ -67,8 +67,12 @@ const SEMANAS_COM_DELTA: SemanaCiclo[] = [2, 3];
 
 describe('Adição14/09 — entrega sem compensação, nos dois seletores', () => {
   for (const semana of SEMANAS_COM_DELTA) {
-    const sem = plano(perfil(), semana);
-    const com = plano(perfil({ foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), semana);
+    // UL alternado em três dias já não comporta o mesmo extra em ambas as
+    // paridades. Prioridades explícita exercita a adição nos dois seletores,
+    // com a mesma divisão no baseline e no foco; as três igualdades ficam.
+    const base = perfil({ diasDisponiveis: 4, divisaoPreferida: 'prioridades', tempoPorSessaoMin: 90 });
+    const sem = plano(base, semana);
+    const com = plano({ ...base, foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }, semana);
     const a = porGrupo(sem); const b = porGrupo(com);
 
     it(`semana ${semana} · ① séries(${FOCADO}) SOBE`, () => {
@@ -142,8 +146,8 @@ describe('Adição14/09 — entrega sem compensação, nos dois seletores', () =
       });
     }
     it('anti-vacuidade: neste perfil o bloco de 60 min realmente chega ao plano', () => {
-      // Mantidos os cinco pares originais acima; este controle exige entrega real.
-      const com = plano(base60({nivelExperiencia:'iniciante',diasDisponiveis:3,treinoDias:['seg','qua','sex'], foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), 3);
+      // Mantidos os cinco pares originais acima. Controle estável S1–S5 medido em prova112: 5 dias, +2 séries declaradas.
+      const com = plano(base60({nivelExperiencia:'iniciante',diasDisponiveis:5,treinoDias:['seg','ter','qua','qui','sex'], foco: { grupo: FOCADO, compensa: COMPENSA, semana: 1 } }), 3);
       expect((com.blocoFoco?.adicionais ?? []).length, 'bloco vazio nas cinco semanas: a identidade seria trivial').toBeGreaterThan(0);
     });
   });

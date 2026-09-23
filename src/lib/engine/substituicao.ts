@@ -53,9 +53,9 @@ function subtrair(a: RecipeMacros, b: RecipeMacros): RecipeMacros {
 
 /**
  * Substitui um prato no mesmo slot. Função PURA e determinística.
- * Filtros DUROS: alérgeno · identidade · slot · janela de kcal do dia · piso de proteína do dia.
+ * Filtros DUROS: alérgeno · identidade · slot · janela original ou equivalência ao dia já editado · proteína sem piora.
  * Ordena por MENOR DESVIO calórico do prato trocado (estrita) → proteína → tipo → carbo/gord → id.
- * Gosto é relaxável (fallback). Nunca relaxa alérgeno/identidade/janela/piso.
+ * Gosto é relaxável (fallback). Nunca relaxa alérgeno/identidade/limites de escala.
  */
 export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
   // Contribuição do prato trocado JÁ escalada (a porção que ele ocupa no dia).
@@ -63,7 +63,10 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
   const xm = escalarMacros(macrosDePrato(p.pratoAtual, p.foodsById), escalaAtual);
   const diaSemX = subtrair(p.totaisDiaAtual, xm);
   const pisoProteinaDia = p.plano.macros.proteinaPisoG;
+  // Déficit já presente no dia editado não pode piorar; o piso do plano permanece intacto.
+  const minimoNaTroca = Math.min(pisoProteinaDia, p.totaisDiaAtual.proteinaG);
   const { minKcal, maxKcal } = p.plano.janela;
+  const diaJaFora = p.totaisDiaAtual.kcal < minKcal - EPS || p.totaisDiaAtual.kcal > maxKcal + EPS;
 
   const excluirPratos = new Set(p.gosto?.excluirPratoIds ?? []);
   const excluirAlimentos = new Set(p.gosto?.excluirAlimentoIds ?? []);
@@ -75,10 +78,10 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
     diaNew: RecipeMacros;
   }
 
-  // Filtros DUROS (segurança/identidade/slot/janela/piso) — nunca relaxados.
+  // Filtros DUROS (segurança/identidade/slot/energia/proteína) — nunca relaxados.
   // ESCALA: o prato novo é escalado à EQUIVALÊNCIA CALÓRICA do trocado (spec dieta:
   // "mínimo = equivalência calórica"), dentro da faixa realista (ESCALA_PORCAO), para
-  // manter o dia dentro da janela.
+  // preservar a energia do dia já editado quando ele saiu da janela original.
   const duros: Cand[] = [];
   for (const y of p.recipes) {
     if (y.id === p.pratoAtual.id) continue;
@@ -90,8 +93,10 @@ export function substituirPrato(p: PedidoSubPrato): ResultadoSubPrato {
     const escala = clamp(xm.kcal / ymBase.kcal, ESCALA_PORCAO.min, ESCALA_PORCAO.max);
     const ym = escalarMacros(ymBase, escala);
     const diaNew = somar(diaSemX, ym);
-    if (diaNew.kcal < minKcal - EPS || diaNew.kcal > maxKcal + EPS) continue;
-    if (diaNew.proteinaG < pisoProteinaDia - EPS) continue;
+    if (diaJaFora
+      ? Math.abs(diaNew.kcal - p.totaisDiaAtual.kcal) > EPS
+      : diaNew.kcal < minKcal - EPS || diaNew.kcal > maxKcal + EPS) continue;
+    if (diaNew.proteinaG < minimoNaTroca - EPS) continue;
     duros.push({ y, escala, ym, diaNew });
   }
 

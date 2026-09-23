@@ -79,7 +79,7 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     // SER-4: mesma entrada de 10 min pode caber no seletor histórico; conferir o teto real.
     const excede = r.rotina!.duracaoDias!.some(d=>(d.duracaoMaximaEstimadaSegundos??0)>600);
     expect(rg.tipo).toBe(excede?'INCOMPATIVEL':'CERTIFICADO');
-    expect(r.rotina!.avisos.some(a=>a.includes('reduzimos séries progressivamente'))).toBe(true);
+    expect(r.rotina!.avisos.some(a=>a.includes('reduzimos séries em'))).toBe(true);
   });
 
   /**
@@ -103,21 +103,20 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     const entregues = rotina.dias.flatMap((d) => d.slots).map((s) => s.exercicio.grupoPrimario);
     expect(rotina.resultadoGeracao).toEqual({ tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: entregues.length });
     expect(rotina.duracaoIncompativel).toBe(true);
-    // 🔵 17/09: a lista dispensável passou a incluir GLÚTEOS. Aos 10 min a sequência a
-    // percorre inteira (nada faz caber), então saem core, panturrilha e glúteos — antebraço
-    // não está entre os dez e é pulado —, e restam 7 dos 10 grupos.
-    for (const g of ['core', 'panturrilha', 'gluteos'] as const) {
+    // Decisão posterior de 20/09: glúteos é obrigatório no full-body.
+    // Nenhum dos oito grupos obrigatórios pode ser zerado para caber.
+    for (const g of ['core', 'panturrilha'] as const) {
       expect(entregues, `${g} sobreviveu: o caso deixou de exercer a regra`).not.toContain(g);
     }
-    expect(new Set(entregues).size).toBe(7);
+    expect(new Set(entregues).size).toBe(8);
     // …e nenhum grupo FORA da lista perdeu o seu único exercício.
-    for (const g of ['peito', 'costas', 'quadriceps', 'posterior', 'ombros', 'biceps', 'triceps'] as const) {
+    for (const g of ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros', 'biceps', 'triceps'] as const) {
       expect(entregues, `${g} perdeu o único exercício`).toContain(g);
     }
     // Core não foi alocado: a política de um complementar escolheu panturrilha.
-    // A dispensa temporal continua exercida por panturrilha e glúteos, com nomes.
+    // A retirada temporal é exercida por panturrilha; glúteos permanece obrigatório.
     expect(rotina.avisos.some(a => a.startsWith('Core não entrou neste plano:'))).toBe(true);
-    expect(rotina.avisos.some(a => a.startsWith('Para caber em') && a.includes('Panturrilhas') && a.includes('Glúteos')),
+    expect(rotina.avisos.some(a => a.startsWith('Para adequar as sessões') && a.includes('Panturrilhas') && !a.includes('Glúteos')),
       'a retirada temporal não foi nomeada').toBe(true);
   });
 
@@ -218,8 +217,8 @@ describe('C1.1 · resultadoGeracao — os QUATRO estados propagam pelo caminho p
     expect(rot.resultadoGeracao?.tipo).toBe('CERTIFICADO');
     expect(rot.duracaoDias!.every(d=>(d.duracaoMaximaEstimadaSegundos??0)<=3000)).toBe(true);
     expect(rot.dias.some(d=>d.slots.length>0)).toBe(true);
-    // Compostos de massa começam a 120 s na semana 1; 90 s só ocorre após degradação.
-    expect(rot.dias.flatMap((d) => d.slots).some((s) => s.descansoSeg === 90)).toBe(true);
+    // Compostos começam a 120 s na S1; a nova política reduz só o necessário, até 60 s.
+    expect(rot.dias.flatMap((d) => d.slots).some((s) => s.descansoSeg != null && s.descansoSeg >= 60 && s.descansoSeg < 120)).toBe(true);
     expect(Math.max(...rot.duracaoResistidaDias!.map((d) => d.duracaoMaximaEstimadaSegundos ?? 0)))
       .toBeLessThanOrEqual(50 * 60);
   });
@@ -324,7 +323,7 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
 
   it('cardio qualitativo oferecido permanece explícito como NAO_AVALIADO, sem inventar duração', () => {
     const rot = gerarTreino(
-      perfilTreino({ objetivo: 'massa', diasDisponiveis: 6 }),
+      perfilTreino({ objetivo: 'massa', diasDisponiveis: 6, treinoDias: ['seg','ter','qua','qui'], limiteTempoTreino: 'sem_limite' }),
       { exercises: EXERCISES, semanaCiclo: { semana: 1 }, diasOferecidosCardio: [4, 5] },
     ).rotina!;
     expect(rot.cardio.tipo).toBe('sessoes_moderadas');
@@ -363,9 +362,9 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
   });
 
   it('a duração FINAL soma o cardio no dia misto e mede o bloco isolado no destino', () => {
-    // 🔵 20/09: o dia 2 (qua) TEM musculação e o 4 (sex) não — é o par misto × puro que o
-    // caso exige. Antes bastava oferecer 3 e 4 porque o corte por teto deixava o 3 com treino.
-    const rot = gerar([2, 4]);
+    // 20/09: quarta ficou sem folga após os mínimos novos; segunda ainda recebe
+    // cardio próprio e sexta é destino puro. A prova continua pela soma real das durações.
+    const rot = gerar([0, 4]);
     const finais = rot.planoFinalPorDia ?? [];
     const mistos = finais.filter((d) => d.tipo === 'TREINO_E_CARDIO');
     const puros = finais.filter((d) => d.tipo === 'CARDIO');

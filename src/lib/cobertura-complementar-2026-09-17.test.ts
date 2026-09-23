@@ -23,7 +23,7 @@ import { gerarTreino } from './engine';
 import { poolElegivel } from './engine';
 import { EXERCISES } from './data/exercises';
 import { coberturaDoDia } from './engine/cobertura-editor';
-import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './engine/alocador';
+import { creditoPonderadoDaSemana } from './engine/alocador';
 import { alvosDesejadosDoDia, diretosDoExercicio, tracosMecanicos } from './engine/cobertura-anatomica';
 import { avaliarDuracaoResistida } from './engine/duracao-plano';
 import { pendentesParaTela } from './cobertura-pendente-copy';
@@ -236,16 +236,15 @@ describe('🔒 o que a correção NÃO pode ter custado', () => {
           tempoPorSessaoMin, limiteTempoTreino: 'limitado',
         }));
 
-  it('nenhum dia passa do orçamento de slots nem do tempo escolhido', () => {
+  it('nenhum dia passa do tempo escolhido ao preservar os mínimos aprovados', () => {
     const fora: string[] = [];
     let medidos = 0;
     for (const p of GRADE) {
       const r = gerar(p);
-      const teto = orcamentoSlotsDoDia(p.tempoPorSessaoMin!);
       for (const d of r.dias) {
         medidos += 1;
-        if (d.slots.length > teto) fora.push(`${p.nivelExperiencia}/${p.diasDisponiveis}d/${p.tempoPorSessaoMin} ${d.nome}: ${d.slots.length} > ${teto}`);
         const dur = avaliarDuracaoResistida(d.slots, p.nivelExperiencia, p.tempoPorSessaoMin! * 60);
+        expect(dur.estadoCalculo).toBe('CALCULADO');
         if (dur.estadoCalculo === 'CALCULADO'
           && (dur.duracaoMaximaEstimadaSegundos ?? 0) > p.tempoPorSessaoMin! * 60) {
           fora.push(`${p.nivelExperiencia}/${p.diasDisponiveis}d/${p.tempoPorSessaoMin} ${d.nome}: ${dur.duracaoMaximaEstimadaSegundos}s`);
@@ -296,7 +295,8 @@ describe('🔒 o que a correção NÃO pode ter custado', () => {
         const lost=before.porGrupo[g].filter(a=>!after.has(a as never));if(!lost.length)continue;
         const ss=r.dias.flatMap(d=>d.slots).filter(s=>s.exercicio.grupoPrimario===g);
         if(!ss.length){
-          expect(adicoesComplementaresViaveis(r,p,g),`${id}: ${g} omitido com adicao viavel`).toEqual([]);
+          const viaveis=([1,2,3,4,5] as const).map(semana=>adicoesComplementaresViaveis(gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!,p,g));
+          expect(viaveis[0]!.filter(x=>viaveis.every(v=>v.includes(x))),`${id}: ${g} omitido com adição estável viável nas cinco semanas`).toEqual([]);
           const label=g==='core'?'Core':g==='panturrilha'?'Panturrilhas':'Antebra';
           expect(r.avisos.some(a=>a.startsWith(label)&&a.includes('não entrou')),`${id}: omissao silenciosa`).toBe(true);
         }else for(const a of lost)expect(r.coberturaAnatomica?.some(c=>c.naoIdentificados.some(n=>n.alvo===a)),`${id}: lacuna ${a} silenciosa`).toBe(true);

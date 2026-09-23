@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { gerarTreino } from './index';
 import { EXERCISES } from '../data/exercises';
 import { creditoPonderadoDaSemana } from './alocador';
-import { diretosDoExercicio } from './cobertura-anatomica';
+import { diretosDoExercicio, tracosMecanicos } from './cobertura-anatomica';
+import { maxSemanalSemFoco } from './trilhos';
 import type { PerfilTreino } from './treino-types';
 
 /**
@@ -34,31 +35,46 @@ const plano = (p: PerfilTreino, semana: 1 | 3 | 5) => gerarTreino(p, { exercises
 
 describe('repartição dentro do grupo: mesma dose, mais cobertura ponderada', () => {
   /**
-   * 🔴 O CUSTO DECLARADO DA 3ª VOLTA FOI PAGO. Recuperar o trapézio custava 0,5 ponderada de
-   * bíceps INDIRETO nos perfis de iniciante/academia com 6 e 7 dias, na semana de topo da banda:
-   * o encolhimento entrava e tirava a série da REMADA (que credita bíceps a 0,5) em vez da
-   * puxada (que não credita ninguém). Com a troca, a série volta para a remada — e o bíceps
-   * termina ACIMA do valor que a 2ª volta tinha (9,5), não apenas empatado.
+   * Os pisos de 9,5 para bíceps e 10 para costas eram fotografias de uma composição antiga,
+   * não mínimos da política vigente. Em S5, a dose direta, os alvos, as funções, os tetos e
+   * o tempo continuam protegidos; o máximo semanal de 10 não é uma meta a preencher.
    */
+  const conferirProtecoes = (p: PerfilTreino) => {
+    const r = plano(p, 5);
+    const ss = r.dias.flatMap((d) => d.slots);
+    const c = creditoPonderadoDaSemana(ss);
+    const seriesDiretas = (grupo: string) => ss.reduce((n, s) => n + (s.exercicio.grupoPrimario === grupo ? s.series ?? 0 : 0), 0);
+    expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
+    expect(seriesDiretas('biceps'), 'séries diretas de bíceps').toBe(6);
+    expect(seriesDiretas('costas'), 'séries diretas de costas').toBe(8);
+    expect(ss.some((s) => diretosDoExercicio(s.exercicio.id).has('ts')), 'trapézio perdido').toBe(true);
+    for (const d of r.dias.filter((dia) => dia.slots.some((s) => s.exercicio.grupoPrimario === 'costas'))) {
+      const tracos = d.slots.flatMap((s) => [...tracosMecanicos(s.exercicio.id)]);
+      expect(tracos, `${d.nome}: puxada perdida`).toContain('acao:puxada_vertical');
+      expect(tracos, `${d.nome}: remada perdida`).toContain('acao:remada');
+    }
+    for (const [grupo, dose] of c) expect(dose, `${grupo}: teto semanal`).toBeLessThanOrEqual(maxSemanalSemFoco(p.nivelExperiencia, p.objetivo));
+    for (const d of r.dias) for (const [grupo, dose] of creditoPonderadoDaSemana(d.slots)) {
+      expect(dose, `${d.nome}/${grupo}: teto da sessão`).toBeLessThanOrEqual(12);
+    }
+    expect(r.duracaoDias?.length).toBe(r.dias.length);
+    for (const d of r.duracaoDias ?? []) {
+      expect(d.estadoCalculo).toBe('CALCULADO');
+      expect(d.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(p.tempoPorSessaoMin * 60);
+    }
+    return c;
+  };
+
   it.each([
     { diasDisponiveis: 6, tempoPorSessaoMin: 45 },
     { diasDisponiveis: 6, tempoPorSessaoMin: 60 },
     { diasDisponiveis: 6, tempoPorSessaoMin: 75 },
-  ])('6 dias: o trapézio não custa mais 0,5 de bíceps (%j)', (over) => {
-    const p = perfil(over);
-    const r = plano(p, 5);
-    const ss = r.dias.flatMap((d) => d.slots);
-    const c = creditoPonderadoDaSemana(ss);
-    expect(ss.some((s) => diretosDoExercicio(s.exercicio.id).has('ts')), 'trapézio perdido').toBe(true);
-    expect(c.get('biceps'), 'bíceps abaixo do que havia antes da recuperação do trapézio').toBeGreaterThanOrEqual(9.5);
-    expect(c.get('costas'), 'costas cedeu para pagar o bíceps').toBeGreaterThanOrEqual(9.5);
+  ])('6 dias: dose direta, funções, cobertura, tempo e tetos preservados (%j)', (over) => {
+    conferirProtecoes(perfil(over));
   });
 
-  it('7 dias: idem, sem ceder costas', () => {
-    const r = plano(perfil({ diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] }), 5);
-    const c = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-    expect(c.get('biceps')).toBeGreaterThanOrEqual(9.5);
-    expect(c.get('costas')).toBeGreaterThanOrEqual(10);
+  it('7 dias: dose direta e funções preservadas sem tratar o teto de costas como piso', () => {
+    conferirProtecoes(perfil({ diasDisponiveis: 7, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] }));
   });
 
   /**

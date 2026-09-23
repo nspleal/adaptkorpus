@@ -27,7 +27,7 @@
 import type { Exercise, GrupoPrimario, PadraoMovimento } from '../data/types';
 import type { DivisaoPreferida, NivelExperiencia } from './treino-types';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
-import { ehComplementar, ehDiaDisponivel, ehReferencia, funcaoDe, rankReferencia, papelReferencia } from './selecao-referencia';
+import { ehComplementar, ehDiaDePernas, ehDiaDisponivel, ehReferencia, funcaoDe, rankReferencia, papelReferencia } from './selecao-referencia';
 import { ehBilateral } from '../data/lateralidade';
 
 /** DF②: quem é banda, quem é piso, quem é só-indireto. */
@@ -116,14 +116,10 @@ const PRIORIDADES_4: TemplateDia[] = [
   { nome: 'Braços + Core', grupos: ['biceps', 'triceps', 'core'] },
 ];
 
-function templatesAuto(diasForca: number, nivel: NivelExperiencia): { split: string; dias: TemplateDia[] } {
+function templatesAuto(diasForca: number): { split: string; dias: TemplateDia[] } {
   switch (diasForca) {
     case 1: return { split: 'Full-body', dias: [{ ...FULL_A, nome: 'Full-body' }] };
     case 2: return { split: 'Full-body ×2', dias: [FULL_A, FULL_B] };
-    case 3:
-      return nivel === 'iniciante'
-        ? { split: 'Full-body ×3', dias: [FULL_A, FULL_B, FULL_C] }
-        : { split: 'Upper / Lower / Full', dias: [{ ...UPPER_A, nome: 'Upper' }, { ...LOWER_A, nome: 'Lower' }, { ...FULL_C, nome: 'Full-body' }] };
     case 4: return { split: 'Upper / Lower ×2', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B] };
     case 5: return { split: 'PPL + Upper/Lower', dias: [{ ...PUSH_A, nome: 'Push' }, { ...PULL_A, nome: 'Pull' }, { ...LEGS_A, nome: 'Legs' }, { nome: 'Upper', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] }, { nome: 'Lower', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] }] };
     case 6: return { split: 'Push / Pull / Legs ×2', dias: [PUSH_A, PULL_A, LEGS_A, PUSH_B, PULL_B, LEGS_B] };
@@ -153,7 +149,6 @@ function templatesAuto(diasForca: number, nivel: NivelExperiencia): { split: str
 function templatesSupInf(diasForca: number): { split: string; dias: TemplateDia[] } | null {
   switch (diasForca) {
     case 2: return { split: 'Upper / Lower', dias: [{ ...UPPER_A, nome: 'Upper' }, { ...LOWER_A, nome: 'Lower' }] };
-    case 3: return { split: 'Upper / Lower / Full', dias: [{ ...UPPER_A, nome: 'Upper' }, { ...LOWER_A, nome: 'Lower' }, { ...FULL_C, nome: 'Full-body' }] };
     case 4: return { split: 'Upper / Lower ×2', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B] };
     case 5: return { split: 'Upper / Lower ×2 + Full', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, { ...FULL_C, nome: 'Full-body' }] };
     case 6: return { split: 'Upper / Lower ×3', dias: [UPPER_A, LOWER_A, UPPER_B, LOWER_B, { nome: 'Upper C', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] }, { nome: 'Lower C', grupos: ['quadriceps', 'posterior', 'gluteos', 'panturrilha', 'core'] }] };
@@ -167,9 +162,17 @@ function templatesSupInf(diasForca: number): { split: string; dias: TemplateDia[
 /** Os templates da semana pela divisão escolhida (DF③). `auto` = padrão por dias. */
 export function templatesDaSemana(
   diasForca: number,
-  nivel: NivelExperiencia,
+  _nivel: NivelExperiencia,
   divisao: DivisaoPreferida = 'auto',
+  semana = 1,
 ): { split: string; dias: TemplateDia[] } {
+  // Autor, 20/09: três dias alternam Upper/Lower em todos os níveis.
+  if (diasForca === 3) {
+    const upper = { ...UPPER_A, grupos: [...UPPER_A.grupos, 'triceps' as const] };
+    return semana % 2 === 0
+      ? { split: 'Lower / Upper / Lower', dias: [LOWER_A, upper, LOWER_B] }
+      : { split: 'Upper / Lower / Upper', dias: [upper, LOWER_A, { ...upper, nome: UPPER_B.nome }] };
+  }
   if (divisao === 'superior-inferior') {
     const t = templatesSupInf(diasForca);
     if (t) return t;
@@ -179,7 +182,7 @@ export function templatesDaSemana(
     // como derivação futura — sem template travado, não se inventa um).
     if (diasForca === 4) return { split: 'Prioridades (4 dias)', dias: PRIORIDADES_4 };
   }
-  return templatesAuto(diasForca, nivel);
+  return templatesAuto(diasForca);
 }
 
 // ── O alocador ───────────────────────────────────────────────────────────────
@@ -221,21 +224,6 @@ export interface ArgsAlocacao {
   pisoPonderado?: number;
   /** Slots que cabem no dia (f do tempo por sessão). */
   budgetPorDia: number;
-  /**
-   * 🔵 O SLOT DO PISO DF② (decisão do autor, 2026-09-20) — UM slot além da tabela, e só ele.
-   *
-   * `orcamentoSlotsDoDia` é HEURÍSTICA de montagem declarada: `duracao-sessao.ts` diz, na
-   * norma de 2026-08-20, que ela *"deixa de certificar que o plano cabe no tempo — a
-   * certificação final é aqui"*. Quando a tabela é curta o bastante para deixar um grupo
-   * pequeno SEM NENHUM exercício direto na semana inteira, é a heurística, e não o relógio,
-   * que está negando o piso da DF② ("≥ 1 exercício direto/semana").
-   *
-   * 🔒 Aqui o alocador só EXECUTA a concessão: quem a decide, mede o efeito e a devolve
-   * quando o dia não cabe é o montador — nada nesta função olha para duração. O slot extra é
-   * exclusivo do `grupo` nomeado (reservado no passo 1b); nenhum outro passo o alcança,
-   * porque `reservasDoDia` o retira da capacidade das rodadas de déficit.
-   */
-  pisoExtra?: { grupo: GrupoPrimario; diaDoPiso: number; diaExtra: number; vitima: GrupoPrimario; maxDaVitima: number };
   /**
    * 🔒 Degrau ② da cascata do foco (DF 2026-08-14): UM slot sai do compensador e entra no
    * focado, **dentro de um dia que os dois dividem** — slots não atravessam dias. Quem decide
@@ -321,14 +309,6 @@ const RESERVA_MINIMO_GRANDES = 3;
  */
 export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   const { templates, budgetPorDia: budgetBase, pool, favoritos, alvoPonderado, seriesPlanejamento } = args;
-  /**
-   * 🔒 O slot extra do piso DF② só existe DEPOIS de ser concedido no passo 1b, e só no dia
-   * que o recebeu: os passos anteriores (cobertura temporal, core) leem `budgetBase`, como
-   * sempre leram. `budgetMaximo` é só o número de rodadas do passo 2.
-   */
-  let diaComPisoExtra: number | null = null;
-  const budgetPorDia = (d: number) => budgetBase + (d === diaComPisoExtra ? 1 : 0);
-  const budgetMaximo = budgetBase + (args.pisoExtra ? 1 : 0);
 
   // Pools por grupo. 🔒 Padrão 'cardio' fica FORA dos slots de força (como sempre ficou:
   // o alocador velho nunca listava 'cardio' nos templates; o e151 pliométrico continua
@@ -570,25 +550,14 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     // sem esta checagem aqui, a reserva do piso furava o teto dos pequenos.
     if ((slotsDiretos.get(g) ?? 0) >= args.tetoSlotsSemana(g)) return false;
     /**
-     * 🔵 A VÍTIMA DO PISO DF② (decisão do autor, 2026-09-20) — quem cede o slot ao piso do
-     * grupo pequeno é o grupo com MAIS slots naquele dia, e não quem a ordem do déficit
-     * expulsaria (que é justamente quem tem MENOS). É a doutrina que o passo 5 já usa para a
-     * invariante da dobradiça: *"a vítima: o slot do grupo mais coberto"*.
-     *
-     * 🔒 Ter mais slots NÃO é permissão para perder dose: o slot cedido aqui volta ao mesmo
-     * grupo em `diaExtra`, e o montador devolve o arranjo inteiro se qualquer grupo terminar
-     * com menos série direta, crédito, alvo, função ou sessão. Aqui isto só escolhe o
-     * candidato à redistribuição.
-     */
-    if (args.pisoExtra && diaIdx === args.pisoExtra.diaDoPiso && g === args.pisoExtra.vitima
-      && noDiaDoGrupo(diaIdx, g) >= args.pisoExtra.maxDaVitima) return false;
-    /**
      * 🔵 TETOS POR DIA (decisão do autor, 2026-09-19), pela mesma porta única:
      *  · um complementar (core/panturrilha/antebraço) entra UMA vez por dia, e o dia que não
      *    é dedicado a eles comporta no máximo UM complementar — panturrilha no dia de pernas
      *    conta como o complementar desse dia.
      */
     if (ehComplementar(g)) {
+      // O template pode prever pernas sem haver exercício elegível no catálogo.
+      if (g === 'panturrilha' && !ehDiaDePernas(dias[diaIdx]!.slots.map(s => s.grupo))) return false;
       if (noDiaDoGrupo(diaIdx, g) >= 1) return false;
       if (!ehDiaDisponivel(templates[diaIdx]!.grupos)
         && dias[diaIdx]!.slots.some((s) => ehComplementar(s.grupo))) return false;
@@ -655,7 +624,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     if ([...contaPadrao].some(([p, n]) => n > 0 && (p === padrao || (padrao === 'agachar' && p === 'dobradica_quadril')))) continue;
     reservar:
     for (let d = 0; d < templates.length; d += 1) {
-      if (dias[d]!.slots.length >= budgetPorDia(d)) continue;
+      if (dias[d]!.slots.length >= budgetBase) continue;
       for (const g of templates[d]!.grupos) {
         if (g === 'core' || !temPool(g)) continue;
         const e = escolher(g, usadosPorDia[d]!, { exigir: (x) => correspondeCobertura(padrao, x) && cabeNoPisoDoDia(d, x) });
@@ -674,7 +643,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * em vez de refém da disputa de déficit.
    */
   const reservadosCore = new Set(
-    diasComGrupoNoTemplate('core').filter((d) => dias[d]!.slots.length < budgetPorDia(d)).slice(0, args.coreMax),
+    diasComGrupoNoTemplate('core').filter((d) => dias[d]!.slots.length < budgetBase).slice(0, args.coreMax),
   );
 
   /**
@@ -700,31 +669,9 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       // 🔒 O `- PEQUENOS_PISO_DIRETO` é o piso da DF② entrando na conta pelo NOME. Era um
       // `- 1` cravado, com a constante da spec órfã ao lado: dois lugares para o mesmo
       // número, e nada obrigando os dois a concordarem (auditoria 2026-08-14).
-      .filter(({ d, ocupadas }) => budgetPorDia(d) - ocupadas - PEQUENOS_PISO_DIRETO >= minimoGrandesDoDia(d))
+      .filter(({ d, ocupadas }) => budgetBase - ocupadas - PEQUENOS_PISO_DIRETO >= minimoGrandesDoDia(d))
       .sort((a, b) => a.ocupadas - b.ocupadas || a.d - b.d);
-    let alvo = candidatosDia[0];
-    /**
-     * 🔵 O SLOT DO PISO DF② ENTRA AQUI, e só quando o piso ficaria SEM NENHUM dia. A tabela
-     * de slots já recusou todos os dias deste grupo — é ela, não o tempo, que está negando
-     * "≥ 1 exercício direto/semana". O montador já decidiu qual grupo e qual dia, e é ele que
-     * devolve a concessão se a duração certificada do dia subir de degrau.
-     */
-    if (!alvo && args.pisoExtra?.grupo === g) {
-      /**
-       * 🔒 O slot a mais da semana vai para `diaExtra`, que pode NÃO ser o dia do piso: quem
-       * escolhe os dois é o montador, pela duração final calculada de cada arranjo. O dia que
-       * hospeda o grupo pequeno costuma ser o mais caro em descanso, e pôr o slot a mais no
-       * dia barato é o que faz a semana caber sem encurtar descanso de ninguém.
-       */
-      const d = args.pisoExtra.diaDoPiso;
-      const ocupadas = dias[d]!.slots.length + (reservaPequeno.get(d)?.length ?? 0);
-      diaComPisoExtra = args.pisoExtra.diaExtra;
-      if (templates[d]?.grupos.includes(g) && budgetPorDia(d) - ocupadas - PEQUENOS_PISO_DIRETO >= RESERVA_MINIMO_GRANDES) {
-        alvo = { d, ocupadas };
-      } else {
-        diaComPisoExtra = null;
-      }
-    }
+    const alvo = candidatosDia[0];
     if (!alvo) continue;
     reservaPequeno.set(alvo.d, [...(reservaPequeno.get(alvo.d) ?? []), g]);
   }
@@ -760,7 +707,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       // Só reserva onde ainda sobra orçamento para os grandes do dia — mesma regra do 1b:
       // em tempo curto a reserva cede ao tempo, nunca o contrário.
       const ocupadas = dias[d]!.slots.length + (reservaPequeno.get(d)?.length ?? 0);
-      if (budgetPorDia(d) - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
+      if (budgetBase - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
       reservaPuxar.add(d);
     }
   }
@@ -783,7 +730,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   for(const g of args.prioritarios??[])for(const d of diasComGrupoNoTemplate(g)){
     if(g==='core'||dias[d]!.slots.some(s=>s.grupo===g))continue;
     const reservadas=reservaPequeno.get(d)?.filter(x=>x!==g).length??0;
-    if(dias[d]!.slots.length+reservadas>=budgetPorDia(d))continue;
+    if(dias[d]!.slots.length+reservadas>=budgetBase)continue;
     if(colocar(d,g,usadosPorDia[d]!))reservaPequeno.set(d,(reservaPequeno.get(d)??[]).filter(x=>x!==g));
   }
 
@@ -809,8 +756,8 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       if (!disponivel && (reservadosCore.has(d) || (reservaComplementar.get(d)?.length ?? 0) > 0)) continue;
       const ocupadas = dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0)
         + (reservaPequeno.get(d)?.length ?? 0) + (reservaComplementar.get(d)?.length ?? 0);
-      if (!disponivel && budgetPorDia(d) - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
-      if (disponivel && ocupadas >= budgetPorDia(d)) continue;
+      if (!disponivel && budgetBase - ocupadas - 1 < RESERVA_MINIMO_GRANDES) continue;
+      if (disponivel && ocupadas >= budgetBase) continue;
       reservaComplementar.set(d, [...(reservaComplementar.get(d) ?? []), g]);
     }
   }
@@ -833,9 +780,9 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   // ── Passo 2: rodadas — cada dia recebe 1 slot por vez, pelo MAIOR déficit ──
   // Round-robin entre os dias (e não dia a dia até encher) para a trava do empurrar
   // enxergar a semana inteira: o puxar do dia de Pull libera o empurrar do dia de Push.
-  for (let rodada = 0; rodada < budgetMaximo; rodada += 1) {
+  for (let rodada = 0; rodada < budgetBase; rodada += 1) {
     for (const d of ordemRodada) {
-      const cap = budgetPorDia(d) - reservasDoDia(d);
+      const cap = budgetBase - reservasDoDia(d);
       if (dias[d]!.slots.length >= cap) continue;
       if (args.preencherAteOrcamento) {
         /**
@@ -928,13 +875,13 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
     && !dias[d]!.slots.some((s) => !ehComplementar(s.grupo));
   for (const [d, gs] of reservaComplementar) {
     if (semPrincipal(d)) continue;
-    for (const g of gs) if (dias[d]!.slots.length < budgetPorDia(d)) colocar(d, g, usadosPorDia[d]!);
+    for (const g of gs) if (dias[d]!.slots.length < budgetBase) colocar(d, g, usadosPorDia[d]!);
   }
   for (let d = 0; d < templates.length; d += 1) {
     if (semPrincipal(d)) continue;
     for (const g of templates[d]!.grupos) {
       if (!ehComplementar(g) || g === 'core') continue;
-      if (dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) >= budgetPorDia(d)) break;
+      if (dias[d]!.slots.length + (reservadosCore.has(d) ? 1 : 0) >= budgetBase) break;
       colocar(d, g, usadosPorDia[d]!);
     }
   }
@@ -949,7 +896,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   };
   for (const d of reservadosCore) {
     if (coreSlots() >= args.coreMax) break;
-    if (semPrincipal(d) || dias[d]!.slots.length >= budgetPorDia(d)) continue;
+    if (semPrincipal(d) || dias[d]!.slots.length >= budgetBase) continue;
     if (!ehDiaDisponivel(templates[d]!.grupos) && dias[d]!.slots.some(s => ehComplementar(s.grupo))) continue;
     const e = escolher('core', usadosPorDia[d]!, { prefira: prefiraCore() });
     if (!e) continue;
@@ -972,7 +919,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
       for (const d of diasComGrupoNoTemplate(gDob)) {
         const e = escolher(gDob, usadosPorDia[d]!, { prefira: (x) => x.padraoMovimento === 'dobradica_quadril' });
         if (!e || e.padraoMovimento !== 'dobradica_quadril') continue;
-        if (dias[d]!.slots.length < budgetPorDia(d)) {
+        if (dias[d]!.slots.length < budgetBase) {
           if (!cabeNoPisoDoDia(d, e)) continue;
           registrar(d, gDob, e, usadosPorDia[d]!);
           break busca;
@@ -1001,7 +948,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
   // Decisão 34: completar uma sessão do foco curta só com grupo ainda descoberto,
   // deficitário e compatível. Sem repetir variantes para gastar todo o orçamento.
   for(let d=0;d<dias.length;d++)for(const g of args.complementosPorDia?.[d]??[]){
-    if(dias[d]!.slots.length>=budgetPorDia(d))break;
+    if(dias[d]!.slots.length>=budgetBase)break;
     if((slotsDiretos.get(g)??0)>0||!podeReceber(g))continue;
     colocar(d,g,usadosPorDia[d]!);
   }
@@ -1176,7 +1123,7 @@ export function alocarSemana(args: ArgsAlocacao): DiaAlocado[] {
    * vazio no fim: orçamento pedido menos entregue.
    */
   for (let d = 0; d < dias.length; d += 1) {
-    const falta = Math.max(0, budgetPorDia(d) - dias[d]!.slots.length);
+    const falta = Math.max(0, budgetBase - dias[d]!.slots.length);
     dias[d]!.naoPreenchidos = falta;
     if (falta === 0) continue;
     /**

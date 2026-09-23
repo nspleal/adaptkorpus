@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { recomputarPlano } from './plano';
 import { poolElegivel } from './engine/treino-montador';
-import { orcamentoSlotsDoDia } from './engine/alocador';
+import { avaliarDuracaoResistida } from './engine/duracao-plano';
 import { EXERCISES_SEED } from './data/seed';
 import {
   aplicarPropostaSobre, assinaturaDasEntradas, assinaturaDoTreino, atualizarDesenho,
@@ -126,7 +126,7 @@ describe('🔁 GERAR — variedade só entre alternativas VÁLIDAS', () => {
     expect(p.rotina.dias.flatMap((d) => d.slots.map((s) => s.exercicio.id))).not.toContain(ELEG_A);
   });
 
-  it('a variação não muda o NÚMERO de dias, e nenhum dia passa do orçamento de slots', () => {
+  it('a variação não muda o NÚMERO de dias, e nenhum dia passa do tempo medido', () => {
     const antes = rotinaDe(PERFIL);
     const p = propor('gerar')!;
     expect(p.rotina.dias.length).toBe(antes.length);
@@ -134,10 +134,13 @@ describe('🔁 GERAR — variedade só entre alternativas VÁLIDAS', () => {
      * 🔵 2026-09-19: o NÚMERO de slots de um dia pode mudar com a variação — outro exercício
      * carrega outro crédito indireto, e o alocador por déficit para noutro ponto. É o que
      * `variacao-montagem.test.ts` já registrava como consequência medida; aqui o que se fixa é
-     * que nenhum dia passa do orçamento f(tempo) e que a diferença fica em UM slot.
+     * que nenhum dia passa do tempo medido e que a diferença fica em UM slot.
+     * O orçamento inicial de slots não pode retirar os mínimos aprovados em 20/09.
      */
     for (const [i, d] of p.rotina.dias.entries()) {
-      expect(d.slots.length).toBeLessThanOrEqual(orcamentoSlotsDoDia(PERFIL.tempoPorSessaoMin));
+      const medido = avaliarDuracaoResistida(d.slots, PERFIL.nivelExperiencia, PERFIL.tempoPorSessaoMin * 60);
+      expect(medido.estadoCalculo).toBe('CALCULADO');
+      expect(medido.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(PERFIL.tempoPorSessaoMin * 60);
       expect(Math.abs(d.slots.length - antes[i]!.slots.length)).toBeLessThanOrEqual(1);
     }
   });

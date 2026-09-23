@@ -85,16 +85,14 @@ describe('🔒 DF② — edição manual de séries; reps e RIR permanecem autom
     expect(/setReps|setRir/i.test(editor), 'apareceu estado de prescrição no editor').toBe(false);
   });
 
-  it('não persiste descanso nem prescrição completa', () => {
+  it('persiste a referência contextual autorizada, sem tornar reps/RIR editáveis', () => {
     expect(editor).toMatch(/exercicioIds: d\.exercicios\.map\(\(e\) => e\.id\)/);
-    // 🔑 Nada de séries/descanso no que vai para o perfil — senão a pessoa congela fora dos
-    // consertos futuros do motor (a lição do v3 · Bloco A).
-    // ⚠️ Janela COLADA no corpo da função (até o `}` que a fecha): 500 chars soltos
-    // entravam na assinatura do componente e davam falso positivo — âncora larga, o erro
-    // que esta suíte já pagou antes.
     const i = editor.indexOf('export function paraRotinaCustom');
     const corpo = editor.slice(i, editor.indexOf('\n}', i));
-    expect(/\bseries\b|descanso/i.test(corpo), 'a persistência passou a guardar prescrição').toBe(false);
+    // Decisão de 20/09: descanso do automático atravessa a persistência com contexto.
+    // Paridade e invalidação são exercitadas pelo motor em paridade-plano-editor.test.ts.
+    expect(corpo).toContain('referenciaDescanso: d.referenciaDescanso');
+    expect(/\breps\b|\brir\b/i.test(corpo)).toBe(false);
   });
 
   /**

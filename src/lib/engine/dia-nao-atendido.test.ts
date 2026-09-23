@@ -44,7 +44,8 @@ const base = (o: Partial<PerfilTreino> = {}): PerfilTreino => ({
   diasDisponiveis: 5, treinoDias: diasPadrao(5) as Weekday[],
   equipamento: 'casa', equipamentosCasa: [], tempoPorSessaoMin: 20, ...o,
 });
-/** O seletor histórico (fixture `selecao-etapa1`) ainda produz o caso original da auditoria. */
+/** Um dia vazio em cada seletor. A identificação por dia preserva as outras quatro
+ * sessões: os valores anteriores (0/3) incluíam a perda indevida por índice compactado. */
 const HISTORICO_CASO = HISTORICO
   ? { nome: 'Push', diasEntregues: 4, diasAgenda: 5 }
   : { nome: 'Ombros + Braços', diasEntregues: 4, diasAgenda: 5 };
@@ -136,7 +137,7 @@ describe('D14 · sem redistribuição silenciosa e sem exercício incompatível'
     expect(r.diasCardio.length).toBe(r.diasCardioRecuperacao);
     // A agenda pedida tinha só dias de força; o dia sem exercício não foi convertido em nada.
     expect(r.diasCardioRecuperacao).toBe(0);
-    expect(r.diasNaoAtendidos!.length).toBe(1);
+    expect(r.diasNaoAtendidos!.length).toBe(HISTORICO_CASO.diasAgenda-HISTORICO_CASO.diasEntregues);
   });
 
   it('os dias entregues continuam dentro do equipamento declarado', () => {

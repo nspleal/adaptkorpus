@@ -1,3 +1,5 @@
+import { avaliarDuracaoResistida } from './duracao-plano';
+import { GRUPOS_COM_FAIXA_SEMANAL } from './grupos-volume';
 import { adicoesComplementaresViaveis } from './__fixtures__/complementares-viabilidade';
 /**
  * 🔢 v4 — ACEITES DA LEVA B (handoff-motor-volume-v4-2026-08-12), medidos no plano.
@@ -11,7 +13,7 @@ import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
 import { creditoPonderadoDaSemana, orcamentoSlotsDoDia, GRUPOS_PEQUENOS_PISO, PEQUENOS_PISO_DIRETO } from './alocador';
-import { faixaSemanal, maxSemanalSemFoco, mev } from './trilhos';
+import { faixaSemanal, maxSemanalSemFoco, mev, tetoSeriesGrupoNaSessao } from './trilhos';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, SemanaCiclo } from './treino-types';
@@ -44,23 +46,15 @@ describe('🔴 aceite B — int/massa/4d/60min (o perfil da medição de 2026-08
   const slots = r.dias.flatMap((d) => d.slots);
   const ponderado = creditoPonderadoDaSemana(slots);
 
-  /**
-   * 🔵 REMEDIDO em 2026-09-17. A redação anterior era «24 ± 2 slots/semana · ≥ 5 por dia»,
-   * ancorada na faixa desejada de 13–16. Com a faixa nova (10–14) o alocador para antes: ele
-   * dá slot a quem tem DÉFICIT e nunca preenche o dia só para ocupar tempo — é a regra
-   * "máximo permitido não é meta". Medido: 20 slots, com um dia de 4.
-   *
-   * ⚠️ O par discriminante do aceite B continua de pé: o alocador VELHO emitia 14 slots fixos
-   * e 7 de 12 grupos com zero. 20 > 14, e a asserção abaixo falharia contra ele.
-   */
-  it('~5–6 exercícios/sessão · 18–26 slots/semana (antes: 14 fixos)', () => {
-    // 🔵 A faixa abraça os DOIS seletores que este arquivo roda: 20 no atual, 24 no histórico.
-    const total = slots.length;
-    expect(total).toBeGreaterThanOrEqual(18);
-    expect(total).toBeLessThanOrEqual(26);
-    // Sem quota por sessão: a prioridade dos principais pode deixar só ombros+core.
-    // A quantidade semanal discriminante e a cobertura por grupo continuam cobradas.
-    expect(r.dias.every(d=>d.slots.length>0)).toBe(true);
+  it('entrega os dias e grupos dentro do tempo, sem quota arbitrária de slots', () => {
+    expect(r.resultadoGeracao).toMatchObject({tipo:'CERTIFICADO'});
+    expect(r.dias).toHaveLength(4);
+    for(const d of r.dias){
+      expect(d.slots.length).toBeGreaterThan(0);
+      expect(avaliarDuracaoResistida(d.slots,'intermediario').duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(3600);
+    }
+    for(const g of ['peito','costas','quadriceps','posterior','gluteos','ombros','biceps','triceps'])
+      expect(slots.some(s=>s.exercicio.grupoPrimario===g),g).toBe(true);
   });
 
   it('peito E costas na faixa DESEJADA do nível, em contagem ponderada (semana 5)', () => {
@@ -176,60 +170,26 @@ describe('🔒 guard de cobertura — a pergunta que o motor nunca fez agora tem
   });
 });
 
-/**
- * 🔒 A INVERSÃO MORRE — e a régua passou a ser a certa em 2026-09-20.
- *
- * 🔴 O que este teste existe para impedir: um nível mais alto receber MENOS TREINO. Até
- * 19/09 ele media isso pela contagem de SLOTS, e funcionava por um motivo que deixou de valer:
- * a agenda do iniciante era cortada no teto de 3 sessões, então ele nunca somava muitos slots.
- * Com a decisão do autor de 20/09 (todo dia marcado vira sessão), um iniciante de 4 dias passa
- * a ter 4 sessões — e slot deixa de ser proxy de treino, porque ele faz 3 séries por exercício
- * e o intermediário faz 4: medido, `4d/60min` dá 24 slots ao iniciante contra 23 ao
- * intermediário, e 62 séries contra 84.
- *
- * 🔵 A correção é de RÉGUA, não de exigência, e cada metade fica com a sua:
- *  ① iniciante × intermediário — eles NÃO compartilham `seriesPorExercicio.max` (3 contra 4),
- *    então contar slots comparava coisas diferentes. A régua passa a ser a DOSE (séries de
- *    trabalho na semana), que é o que "menos treino" quer dizer. Vale nas 12 células varridas;
- *  ② intermediário × avançado — a série por exercício É a mesma, então slot continua sendo
- *    proxy legítimo e a asserção original segue palavra por palavra.
- *
- * 📌 ACHADO SEPARADO, REPRODUZIDO NA BASE PUBLICADA (2026-09-20, 3ª volta). Em `3d/45min` o
- * intermediário entrega MAIS ponderadas que o avançado. A 2ª volta classificou isso como
- * preexistente por um argumento fraco (desligar as trocas de 20/09 não mudava o número); a
- * prova agora é direta: o MESMO caso, com as MESMAS entradas e a MESMA métrica (soma de
- * `creditoPonderadoDaSemana`, `plano(perfil({nivel, diasDisponiveis: 3, tempoPorSessaoMin: 45}))`,
- * semana 5), medido num worktree de `d43376ce` — o merge do PR #19, que é o que está em produção:
- *
- *   |            | base `d43376ce` | candidata |
- *   |------------|-----------------|-----------|
- *   | `3d/45min` | int 86 × av 84,5 ← invertido | int 84 × av 83 ← invertido |
- *   | `3d/90min` | int 110 × av 106 ← invertido | int 108 × av 104,5 ← invertido |
- *
- * As duas células já estavam invertidas em produção; a candidata não as introduz e estreita um
- * pouco a distância (1,5 → 1,0 e 4 → 3,5). Em três dias a agenda nunca foi cortada por teto de
- * nível, então a decisão de 20/09 não toca este caso. Fica como ACHADO — corrigi-lo é outra
- * rodada, e a régua antiga (contagem de slots) não o enxergava.
- */
-describe('🔒 a inversão morre: o nível nunca DIMINUI o treino', () => {
-  it('em 3–6 dias · 45/60/90 min, a DOSE semanal cresce com o nível', () => {
-    for (const dias of [3, 4, 5, 6]) {
-      for (const tempo of [45, 60, 90]) {
-        const medir = (nivel: PerfilTreino['nivelExperiencia']) => {
-          const r = plano(perfil({ nivelExperiencia: nivel, diasDisponiveis: dias, tempoPorSessaoMin: tempo }));
-          const slots = r.dias.flatMap((d) => d.slots);
-          const cred = creditoPonderadoDaSemana(slots);
-          return { slots: slots.length, series: slots.reduce((n, s) => n + (s.series ?? 0), 0),
-            credito: [...cred.values()].reduce((n, v) => n + v, 0) };
-        };
-        const [i, m, a] = [medir('iniciante'), medir('intermediario'), medir('avancado')];
-        // ① Iniciante × intermediário: a régua é a DOSE — eles não compartilham a série por
-        //    exercício (3 contra 4), então contar slots comparava coisas diferentes.
-        expect(i.series, `${dias}d/${tempo}min: iniciante ${i.series} > intermediário ${m.series} séries`).toBeLessThanOrEqual(m.series);
-        // ② Intermediário × avançado: a série por exercício É a mesma (4), então aqui slot
-        //    continua sendo proxy legítimo de treino — e a asserção original segue intacta.
-        expect(m.slots, `${dias}d/${tempo}min: intermediário ${m.slots} > avançado ${a.slots} slots`).toBeLessThanOrEqual(a.slots);
-        expect(i.slots, `${dias}d/${tempo}min: iniciante sem slots`).toBeGreaterThan(0);
+// Nicolas, 20/09: totais podem diferir entre níveis. A régua é por grupo/nível,
+// preservando limites; quantidade de exercícios não substitui dose.
+describe('dose por grupo e nível', () => {
+  it('3–6 dias, 45/60/90 min: séries, créditos e duração respeitam a prescrição', () => {
+    for(const dias of [3,4,5,6])for(const tempo of [45,60,90])
+    for(const nivel of ['iniciante','intermediario','avancado'] as const){
+      const p=perfil({nivelExperiencia:nivel,diasDisponiveis:dias,tempoPorSessaoMin:tempo});
+      const r=plano(p),presc=prescreverTreino(p,avaliarGateTreino(p));
+      const cred=creditoPonderadoDaSemana(r.dias.flatMap(d=>d.slots));
+      const ctx=`${nivel}/${dias}d/${tempo}`;
+      expect(r.resultadoGeracao,ctx).toMatchObject({tipo:'CERTIFICADO'});
+      expect(r.dias,ctx).toHaveLength(dias);
+      for(const g of GRUPOS_COM_FAIXA_SEMANAL){
+        expect(cred.get(g)??0,`${ctx}/${g}`).toBeLessThanOrEqual(maxSemanalSemFoco(nivel,'massa'));
+        expect(r.dias.some(d=>d.slots.some(s=>s.exercicio.grupoPrimario===g)),`${ctx}/${g} sem direto`).toBe(true);
+      }
+      for(const d of r.dias){
+        expect(avaliarDuracaoResistida(d.slots,nivel).duracaoMaximaEstimadaSegundos,ctx).toBeLessThanOrEqual(tempo*60);
+        for(const v of creditoPonderadoDaSemana(d.slots).values())expect(v,ctx).toBeLessThanOrEqual(tetoSeriesGrupoNaSessao(nivel,'massa'));
+        for(const slot of d.slots){expect(slot.series,ctx).toBeGreaterThanOrEqual(1);expect(slot.series,ctx).toBeLessThanOrEqual(presc.seriesPorExercicio.max);}
       }
     }
   });
@@ -251,7 +211,11 @@ describe('🔒 DF② — bíceps, tríceps e panturrilha têm piso DIRETO na sem
       const diretos = (g: string) => r.dias.flatMap((d) => d.slots).filter((s) => s.exercicio.grupoPrimario === g).length;
       for (const g of GRUPOS_PEQUENOS_PISO) {
         if (g==='panturrilha' && diretos(g)===0) {
-          expect(adicoesComplementaresViaveis(r,perfil({diasDisponiveis:dias,tempoPorSessaoMin:60}),g), `${dias}d: omissão corrigível`).toEqual([]);
+          // A adição tem de caber em todas as repetições da mesma composição.
+          const p=perfil({diasDisponiveis:dias,tempoPorSessaoMin:60});
+          const semanas=dias===3?[1,3,5] as const:[1,2,3,4,5] as const;
+          const alternativas=semanas.map(s=>adicoesComplementaresViaveis(plano(p,s),p,g));
+          expect(alternativas[0]!.filter(x=>alternativas.every(a=>a.includes(x))), `${dias}d: omissão corrigível no ciclo`).toEqual([]);
           expect(r.avisos.some(a=>a.startsWith('Panturrilhas não entrou'))).toBe(true);
         } else expect(diretos(g), `${dias}d/60min: ${g} com ${diretos(g)} slot(s) diretos`).toBeGreaterThanOrEqual(PEQUENOS_PISO_DIRETO);
       }

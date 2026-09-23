@@ -113,7 +113,7 @@ describe('🔴 o caso relatado — Prioridades 4d, intermediário, 75+ , foco ag
     }
     // Não retirar principal: os sete slots principais continuam ali; a panturrilha SOMA o oitavo.
     const pernas = dia(r, 'Pernas');
-    expect(pernas.slots.filter(s => !ehComplementar(s.exercicio.grupoPrimario))).toHaveLength(7);
+    expect(pernas.slots.filter(s => !ehComplementar(s.exercicio.grupoPrimario))).toHaveLength(8);
     expect(grupoDe(pernas, 'panturrilha')).toHaveLength(1);
     expect(r.avisos.some(a => a.startsWith('Panturrilhas não entrou'))).toBe(false);
     expect(grupoDe(dia(r, 'Costas + Bíceps'), 'antebraco')).toHaveLength(1);

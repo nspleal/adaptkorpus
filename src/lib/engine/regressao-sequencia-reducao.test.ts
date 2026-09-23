@@ -162,14 +162,14 @@ describe('E5 — dispensa na ordem aprovada, pulando ausentes', () => {
     expect(r.avisos.some((a) => a.startsWith('Para caber em') && a.includes('nesta sessão única')),
       'o aviso da exceção do full-body apareceu numa divisão de vários dias').toBe(false);
     // Anti-vacuidade: o caso realmente aperta — há dia acima do limite.
-    expect(r.avisos.some(a=>a.includes('reduzimos séries progressivamente')), 'SER-4 deve atuar no caso limitado').toBe(true);
+    expect(r.avisos.some(a=>a.includes('reduzimos séries em')), 'SER-4 deve atuar no caso limitado').toBe(true);
     expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
   });
 });
 
 describe('Persistindo o excesso: cortes mantidos, duração dita, sem falso certificado', () => {
-  // SER-4 faz o caso original de 30 min caber; 20 min mantém a prova de excesso residual.
-  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg'] });
+  // Política de 20/09 faz 20 min caber; 10 min prova o excesso residual sem apagar os casos de 20/30.
+  const curto = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 10, treinoDias: ['seg'] });
 
   it('as reduções FICAM mesmo sem serem suficientes', () => {
     const r = gerar(curto);
@@ -200,7 +200,7 @@ describe('Persistindo o excesso: cortes mantidos, duração dita, sem falso cert
 
   it('a comunicação não se repete por exercício nem por dia', () => {
     const r = gerar(perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg', 'ter', 'qui', 'sex'] }));
-    for (const marca of ['reduzimos séries progressivamente', 'ficaram com 1 série', 'exercícios repetidos', 'a estimativa ainda passa']) {
+    for (const marca of ['reduzimos séries em', 'desses exercícios estão com 1 série', 'exercícios repetidos', 'a estimativa ainda passa']) {
       const n = r.avisos.filter((a) => a.includes(marca)).length;
       expect(n, `a mensagem «${marca}» saiu ${n} vezes`).toBeLessThanOrEqual(1);
     }
@@ -211,12 +211,12 @@ describe('Escopo: 75+ e deload', () => {
   it('75+ explicitamente sem limite não reduz nada', () => {
     const base = perfil({ nivelExperiencia: 'avancado', treinoDias: ['seg'], tempoPorSessaoMin: 75 });
     const semLimite = gerar({ ...base, limiteTempoTreino: 'sem_limite' });
-    for (const marca of ['reduzimos séries progressivamente', 'ficaram com 1 série', 'ficou sem exercício direto']) {
+    for (const marca of ['reduzimos séries em', 'desses exercícios estão com 1 série', 'retiramos exercícios complementares']) {
       expect(semLimite.avisos.some((a) => a.includes(marca)), `75+ sofreu ${marca}`).toBe(false);
     }
     // Anti-vacuidade: o MESMO perfil com limite sofre os ajustes.
     const limitado = gerar({ ...base, limiteTempoTreino: 'limitado', tempoPorSessaoMin: 30 });
-    expect(limitado.avisos.some((a) => a.includes('ficaram com 1 série') || a.includes('ficou sem exercício direto')),
+    expect(limitado.avisos.some((a) => a.includes('reduzimos séries em') || a.includes('desses exercícios estão com 1 série') || a.includes('retiramos exercícios complementares')),
       'o perfil de controle não sofre ajuste: a comparação é vácua').toBe(true);
   });
 
@@ -252,7 +252,7 @@ describe('Baseline diante do foco, e duração sobre a ORDEM FINAL', () => {
 
   it('a sequência não sacrifica o baseline para acomodar extras, em tempo limitado', () => {
     let comExtra = 0;
-    for (const tempo of [30, 45, 60] as const) {
+    for (const tempo of [30, 45, 60, 90] as const) {
       for (const g of ['peito', 'costas', 'biceps'] as const) {
         const p = perfil({ nivelExperiencia: 'intermediario', tempoPorSessaoMin: tempo, treinoDias: ['seg', 'qua', 'sex'] });
         const sem = gerar(p);
@@ -265,7 +265,7 @@ describe('Baseline diante do foco, e duração sobre a ORDEM FINAL', () => {
   });
 
   it('a duração publicada é a da ordem ENTREGUE (R-00 revalidado)', () => {
-    for (const tempo of [30, 45, 60] as const) {
+    for (const tempo of [30, 45, 60, 90] as const) {
       const p = perfil({ nivelExperiencia: 'iniciante', tempoPorSessaoMin: tempo, treinoDias: ['seg', 'qui'] });
       const sem = gerar(p);
       const com = gerar({ ...p, foco: { grupo: 'costas', compensa: 'peito', semana: 1 } });

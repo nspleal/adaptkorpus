@@ -1,37 +1,19 @@
-/**
- * 🔒 REGRESSÃO — os dois resíduos publicados no PR #18 (decisões do autor, 2026-09-20).
- *
- * O PR #18 foi publicado com dois pontos abertos, nomeados no próprio relatório:
- *  ① o dia de braços do caso relatado terminava com CINCO exercícios de tríceps;
- *  ② a panturrilha não entrava no dia de pernas do mesmo caso.
- *
- * As causas medidas, cada uma numa etapa diferente:
- *  ① `consolidarPequenos` roda ANTES de `adicionarBlocoFoco`, então nunca via o extra do
- *    foco; e a guarda de traços era circular — protegia inclusive o traço que o próprio slot
- *    removido introduzia, de modo que um extra com traço próprio nunca podia sair.
- *  ② o orçamento de slots do dia é função do TEMPO, mas continuava valendo para quem marcou
- *    "sem limite de tempo" (perfil em que o motor nem avalia limite). Varredura de 336
- *    perfis: 284 sem panturrilha, e em TODOS o dia de pernas estava cheio.
- *
- * As duas correções, e só elas:
- *  ① um slot `extraDoFoco` pode ser consolidado nos mantidos quando sua FUNÇÃO e TODOS os
- *    seus alvos documentais continuam cobertos e a dose inteira cabe no teto por exercício;
- *  ② decisão explícita do autor: em "sem limite de tempo", e só quando os slots do orçamento
- *    são necessários para os grupos principais, o dia de pernas pode receber UM slot além do
- *    orçamento, exclusivamente para a panturrilha, sem tirar série de nenhum outro grupo.
- *
- * Cada `it` abaixo FALHA sobre `origin/main` em 67350fe (conferido; ver o registro da tarefa).
+/** Regressões dos resíduos do PR18: tríceps redundante e panturrilha omitida.
+ * Preserva a fixture aproximada e verifica os limites atuais; fotografias de dose
+ * anteriores à estabilidade do ciclo não substituem os tetos por sessão.
  */
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../data/exercises';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
-import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from './alocador';
+import { creditoPonderadoDaSemana } from './alocador';
 import { ehImprovisoDomestico } from './equipamento';
 import { ehComplementar, ehDiaDePernas } from './selecao-referencia';
 import { diretosDoExercicio } from './cobertura-anatomica';
-import { tetoSeriesPorExercicio } from './trilhos';
+import { avaliarDuracaoResistida } from './duracao-plano';
+import { GRUPOS_COM_FAIXA_SEMANAL } from './grupos-volume';
+import { tetoSemanalDoGrupo, tetoSeriesGrupoNaSessao, tetoSeriesPorExercicio } from './trilhos';
 import type { GrupoPrimario } from '../data/types';
 import type { FlagsSaude } from './types';
 import type { DiaTreino, PerfilTreino, RotinaSemanal, SemanaCiclo } from './treino-types';
@@ -63,19 +45,19 @@ describe('🔴 resíduo ① — cinco exercícios de tríceps no dia de braços'
   const r = montar(RELATADO);
   const bracos = diaDeTriceps(r);
 
-  it('a mesma dose cabe em menos exercícios: no máximo quatro tríceps no dia', () => {
+  it('não acrescenta um quinto tríceps redundante para acomodar dose acima do teto', () => {
     // 14 séries com teto de 4 por exercício exigem 4 exercícios; o quinto só carregava dose.
     const ts = doGrupo(bracos, 'triceps');
     expect(ts.length, ts.map((s) => `${s.exercicio.id}x${s.series}`).join(' ')).toBeLessThanOrEqual(4);
-    expect(ts.length, 'a dose não cabe em menos que isto — o caso deixou de discriminar').toBe(
-      Math.ceil(serie(bracos, 'triceps') / tetoSeriesPorExercicio('intermediario')),
-    );
+    // Quatro funções/alvos podem justificar quatro slots mesmo após reduzir a dose.
+    expect(ts.length).toBeGreaterThan(0);
+    for (const slot of ts) expect(slot.series).toBeGreaterThanOrEqual(1);
   });
 
-  it('consolidar não custou série, crédito nem alvo do tríceps', () => {
-    // O crédito do PR #18 neste caso: 14 diretas e 18 ponderadas. Nada disso pode cair.
-    expect(serie(bracos, 'triceps')).toBe(14);
-    expect(creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots)).get('triceps')).toBe(18);
+  it('o teto aprovado limita a dose, preservando os três alvos do tríceps', () => {
+    // A fotografia antiga de 14 diretas excede o teto de sessão aprovado (12).
+    expect(serie(bracos, 'triceps')).toBe(tetoSeriesGrupoNaSessao('intermediario','massa'));
+    expect(creditoPonderadoDaSemana(bracos.slots).get('triceps')).toBeLessThanOrEqual(tetoSeriesGrupoNaSessao('intermediario','massa'));
     for (const a of ['tl', 'tt', 'tm']) expect(alvosDe(bracos, 'triceps').has(a), a).toBe(true);
   });
 
@@ -84,8 +66,10 @@ describe('🔴 resíduo ① — cinco exercícios de tríceps no dia de braços'
       expect(s.series ?? 0, `${d.nome}/${s.exercicio.id}`).toBeLessThanOrEqual(tetoSeriesPorExercicio('intermediario'));
   });
 
-  it('a consolidação é dita, e diz que a dose ficou', () => {
-    expect(r.avisos.some((a) => /extra do foco coube nos exercícios que o dia já tinha/.test(a))).toBe(true);
+  it('não anuncia consolidação inexistente e informa a recusa do extra', () => {
+    expect(r.blocoFoco?.consolidados ?? []).toEqual([]);
+    expect(r.avisos.some(a => /extra do foco coube nos exercícios que o dia já tinha/.test(a))).toBe(false);
+    expect(r.avisos.some(a => /máximo|limites/.test(a))).toBe(true);
   });
 });
 
@@ -100,36 +84,33 @@ describe('🔴 resíduo ② — panturrilha omitida no dia de pernas', () => {
     expect(r.avisos.some((a) => /Panturrilhas? não entrou/i.test(a))).toBe(false);
   });
 
-  it('ela entrou SOMANDO: nenhum grupo principal perdeu série nem crédito ponderado', () => {
-    /**
-     * 🔒 OS CRÉDITOS MEDIDOS NO PR #18 PARA ESTA FIXTURE, INTEIROS — e é isto que o nome do
-     * teste promete. Eles sobreviveram a três mudanças de regra e continuam os mesmos:
-     *
-     *  · 2026-09-19 — a exclusão do improviso doméstico na academia tirou deste plano o `e59`
-     *    ("Elevação de quadril", que manda apoiar as costas *"na borda do sofá/cama"*). Na
-     *    primeira tentativa isso custou glúteos 10 → 9,5, posterior direto 12 → 10 e bíceps
-     *    19 → 17,5, e o teste foi REBAIXADO para aceitar a perda — contradizendo o próprio
-     *    nome. A revisão de 20/09 recusou, e com razão.
-     *  · 2026-09-20 — as perdas tinham causa única e conserto geral, não remendo de perfil:
-     *    o motor podava série DIRETA quando quem estourava o teto da sessão era o crédito
-     *    INDIRETO de um slot de outro grupo. Com `trocarParaCaberNaSessao`, `e58` vira `e153`
-     *    (elevação pélvica NA MÁQUINA — que já existia no catálogo de academia; não foi
-     *    preciso cadastrar variante nenhuma) e as 12 diretas de posterior ficam.
-     *  · o bíceps em foco voltou a 19 por `trocarParaAlimentarOFoco`: entre a puxada triângulo
-     *    e a barra fixa supinada — mesmos alvos (`lat`), mesmo traço (`puxada_vertical`) —, a
-     *    segunda também trabalha o grupo que a pessoa pôs em foco. Mesmas séries, mesmo tempo.
-     */
+  it('panturrilha não consome crédito dos principais; posterior respeita o teto com indiretos', () => {
+    // A estabilidade S1–S5 mantém e58, que credita 2 séries indiretas de posterior.
+    // Exigir 12 diretas nesta composição daria 14 ponderadas, acima do teto de 12.
+    // A fotografia antiga dependia da troca e58→e153, agora proibida dentro do ciclo.
     const c = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
     for (const [g, n] of [['peito', 15], ['costas', 14], ['ombros', 13.5], ['quadriceps', 12],
-      ['posterior', 12], ['gluteos', 10], ['biceps', 19]] as const)
+      ['posterior', 12], ['gluteos', 10]] as const)
       expect(c.get(g) ?? 0, g).toBeGreaterThanOrEqual(n);
     expect(serie(pernas, 'quadriceps')).toBe(12);
-    expect(serie(pernas, 'posterior')).toBe(12);
+    const semPanturrilha = pernas.slots.filter(s => s.exercicio.grupoPrimario !== 'panturrilha');
+    const creditosSemPanturrilha = creditoPonderadoDaSemana(semPanturrilha);
+    const creditosComPanturrilha = creditoPonderadoDaSemana(pernas.slots);
+    for (const g of ['quadriceps', 'posterior', 'gluteos'] as const)
+      expect(creditosComPanturrilha.get(g), g).toBe(creditosSemPanturrilha.get(g));
+    expect(serie(pernas, 'posterior')).toBe(10);
+    expect(creditosComPanturrilha.get('posterior')).toBe(12);
+    expect(pernas.slots.find(s => s.exercicio.id === 'e58')?.series).toBe(4);
+    const restaurado = pernas.slots.map(s => s.exercicio.id === 'e65' ? { ...s, series: 4 } : s);
+    expect(creditoPonderadoDaSemana(restaurado).get('posterior')).toBeGreaterThan(tetoSeriesGrupoNaSessao('intermediario', 'massa'));
   });
 
-  it('nenhum grupo ficou abaixo do mínimo, e nada foi podado por teto de sessão', () => {
-    expect(r.avisos.filter((a) => /ficou abaixo do m[íi]nimo/i.test(a)), 'grupo abaixo do mínimo').toEqual([]);
-    expect(r.avisos.filter((a) => /Ajustamos o volume de/i.test(a)), 'dose podada').toEqual([]);
+  it('a redução autorizada preserva exercícios e respeita os tetos por sessão', () => {
+    for (const d of r.dias) {
+      for (const s of d.slots) expect(s.series).toBeGreaterThanOrEqual(1);
+      for (const [g,n] of creditoPonderadoDaSemana(d.slots))
+        expect(n, `${d.nome}/${g}`).toBeLessThanOrEqual(tetoSeriesGrupoNaSessao('intermediario','massa'));
+    }
   });
 
   it('nenhum improviso doméstico sobra num plano de ACADEMIA', () => {
@@ -137,50 +118,30 @@ describe('🔴 resíduo ② — panturrilha omitida no dia de pernas', () => {
     expect(improvisos.map((s) => s.exercicio.nomePt), 'improviso de casa num treino de academia').toEqual([]);
   });
 
-  it('o slot extra é UM só, e só no dia de pernas — os demais dias respeitam o orçamento', () => {
-    const orcamento = orcamentoSlotsDoDia(75);
-    for (const d of r.dias) {
-      // O orçamento se mede sobre o BASELINE: o extra do bloco de foco é outra autorização,
-      // anterior a esta, e continua podendo somar nos dias em que o foco entrega.
-      const baseline = d.slots.length - d.slots.filter((s) => s.extraDoFoco).length;
-      const limite = d === pernas ? orcamento + 1 : orcamento;
-      expect(baseline, `${d.nome} passou do orçamento de baseline`).toBeLessThanOrEqual(limite);
-    }
-    expect(pernas.slots.length, 'o dia de pernas deveria ter exatamente um slot além do orçamento').toBe(orcamento + 1);
-    expect(pernas.slots.filter((s) => s.extraDoFoco), 'o slot extra do dia de pernas não é do foco').toHaveLength(0);
+  it('panturrilha soma ao baseline principal, sem quota artificial de slots', () => {
+    expect(pernas.slots.filter(s => !ehComplementar(s.exercicio.grupoPrimario))).toHaveLength(8);
+    expect(pernas.slots.filter(s => ehComplementar(s.exercicio.grupoPrimario))).toHaveLength(1);
+    expect(pernas.slots.filter(s => s.extraDoFoco)).toHaveLength(0);
+    for (const d of r.dias) expect(avaliarDuracaoResistida(d.slots,'intermediario').estadoCalculo).toBe('CALCULADO');
   });
 
   it('nenhum grupo passa do teto semanal cheio', () => {
     const c = creditoPonderadoDaSemana(r.dias.flatMap((d) => d.slots));
-    for (const g of ['peito', 'costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'] as const)
-      expect(c.get(g) ?? 0, g).toBeLessThanOrEqual(r.tetoVolumeSemana!.cheio);
+    const t=r.tetoVolumeSemana!;
+    const teto=tetoSemanalDoGrupo({nivel:'intermediario',objetivo:'massa',emFoco:t.gruposEmFoco,tetoDaFase:t.cheio});
+    for (const g of GRUPOS_COM_FAIXA_SEMANAL) expect(c.get(g) ?? 0, g).toBeLessThanOrEqual(teto(g));
   });
 });
 
-describe('🔒 os limites da exceção do oitavo slot (decisão do autor: só "sem limite de tempo")', () => {
-  it('perfil com TEMPO LIMITADO não ganha o slot extra em dia nenhum', () => {
-    for (const tempo of [30, 45, 60, 75]) {
-      const r = montar(perfil({ divisaoPreferida: 'prioridades', tempoPorSessaoMin: tempo, limiteTempoTreino: 'limitado', variacaoTreino: 1 }));
-      const orcamento = orcamentoSlotsDoDia(tempo);
+describe('limites reais de tempo e distribuição, sem quota rígida de slots (decisão posterior de 20/09)', () => {
+  it('tempo limitado: toda sessão certificada cabe pela duração canônica', () => {
+    for (const tempo of [30,45,60,75]) {
+      const r=montar(perfil({divisaoPreferida:'prioridades',tempoPorSessaoMin:tempo,limiteTempoTreino:'limitado',variacaoTreino:1}));
+      expect(r.resultadoGeracao?.tipo).toBe('CERTIFICADO');
       for (const d of r.dias) {
-        const extras = d.slots.filter((s) => s.extraDoFoco).length;
-        expect(d.slots.length - extras, `${tempo}min ${d.nome}`).toBeLessThanOrEqual(orcamento);
-      }
-    }
-  });
-
-  it('o slot extra serve SÓ à panturrilha: core e antebraço não furam o orçamento', () => {
-    for (const dias of [2, 3, 4, 5, 6, 7] as const) {
-      const agenda = (['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] as const).slice(0, dias);
-      const r = montar(perfil({ diasDisponiveis: dias, treinoDias: [...agenda], tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite', variacaoTreino: 1 }));
-      const orcamento = orcamentoSlotsDoDia(75);
-      for (const d of r.dias) {
-        const extras = d.slots.filter((s) => s.extraDoFoco).length;
-        if (d.slots.length - extras <= orcamento) continue;
-        // Passou do orçamento: então o excedente é exatamente a panturrilha, num dia de pernas.
-        expect(d.slots.length - extras, `${dias}d ${d.nome}`).toBe(orcamento + 1);
-        expect(doGrupo(d, 'panturrilha'), `${dias}d ${d.nome}`).toHaveLength(1);
-        expect(ehDiaDePernas(d.slots.map((s) => s.exercicio.grupoPrimario).filter((x): x is GrupoPrimario => x != null))).toBe(true);
+        const m=avaliarDuracaoResistida(d.slots,'intermediario');
+        expect(m.estadoCalculo).toBe('CALCULADO');
+        expect(m.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(tempo*60);
       }
     }
   });

@@ -29,8 +29,9 @@
  * PURO e determinístico: sem relógio, sem rede, sem estado global.
  */
 import type { Exercise, GrupoPrimario } from '../data/types';
-import { ehReferencia, rankReferencia } from './selecao-referencia';
+import { ehReferencia, rankReferencia, funcaoDe, papelReferencia } from './selecao-referencia';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
+import { GRUPOS_COM_FAIXA_SEMANAL } from './grupos-volume';
 import { diretosDoExercicio, mesmoCustoDeSlot } from './cobertura-anatomica';
 import { PESO_SECUNDARIO, secundariosDe } from './secundarios';
 import type { SlotPonderavel, TetoPorGrupo } from './teto-ponderado';
@@ -48,7 +49,8 @@ export type MotivoAlternativa =
   | 'sem_outro_dia_com_o_grupo'
   | 'dia_de_destino_sem_espaco'
   | 'dia_de_destino_sem_tempo'
-  | 'todos_os_slots_no_piso';
+  | 'todos_os_slots_no_piso'
+  | 'candidato_perde_funcao_ou_alvo';
 
 export type TipoAlternativa = 'troca_de_exercicio' | 'mudanca_de_dia' | 'reducao_de_series';
 
@@ -143,6 +145,8 @@ function acimaDoTeto<S extends SlotPonderavel>(
 }
 
 export interface ArgsTentativa<S extends SlotPonderavel> {
+  /** A tentativa semanal usa os mesmos filtros, sem deslocar séries entre dias. */
+  escopo?: 'sessao' | 'semana';
   dias: readonly DiaComSlots<S>[];
   /** O teto por sessão em vigor (12 em hipertrofia). */
   teto: number;
@@ -209,7 +213,13 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
     alternativas.set(chave, lista);
   };
 
-  for (const { dia, grupo } of acimaDoTeto(dias, teto)) {
+  const escopoSemanal = args.escopo === 'semana';
+  const creditoInicial = creditoPonderadoDaSemana(dias.flatMap(d => d.slots));
+  const excessos = escopoSemanal
+    ? GRUPOS_COM_FAIXA_SEMANAL.filter(g => (creditoInicial.get(g) ?? 0) > tetoDe(tetoSemanal, g))
+      .flatMap(grupo => dias.map((_, dia) => ({ dia, grupo })))
+    : acimaDoTeto(dias, teto);
+  for (const { dia, grupo } of excessos) {
     const slots = dias[dia]!.slots;
     /**
      * 🔒 Só os slots INDIRETOS entram na troca. Trocar um slot DIRETO por outro do mesmo
@@ -221,7 +231,8 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
       .sort((a, b) => (b.series ?? 0) - (a.series ?? 0) || porId(a.exercicio, b.exercicio));
 
     for (const slot of doadores) {
-      if ((creditoPonderadoDaSemana(slots).get(grupo) ?? 0) <= teto) break;
+      if ((creditoPonderadoDaSemana(escopoSemanal ? dias.flatMap(d => d.slots) : slots).get(grupo) ?? 0)
+        <= (escopoSemanal ? tetoDe(tetoSemanal, grupo) : teto)) break;
       if (!trocavel(slot)) {
         registrar(dia, grupo, { tipo: 'troca_de_exercicio', slot: slot.exercicio.id, aceita: false, motivo: 'slot_escolhido_pela_pessoa' });
         continue;
@@ -256,8 +267,22 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
       for (const cand of candidatos) {
         const rejeitar = (motivo: MotivoAlternativa) =>
           registrar(dia, grupo, { tipo: 'troca_de_exercicio', slot: antigo.id, candidato: cand.id, aceita: false, motivo });
-        if (usados.has(cand.id)) { rejeitar('candidato_ja_esta_no_plano'); continue; }
+        // O automático já reutiliza exercícios em dias distintos. No reparo semanal,
+        // duplicidade é proibida na sessão, sem bloquear uma opção usada em outro dia.
+        if (escopoSemanal ? slots.some(s => s.exercicio.id === cand.id) : usados.has(cand.id)) {
+          rejeitar('candidato_ja_esta_no_plano'); continue;
+        }
         if (creditoPorSerie(cand, grupo) >= creditoPorSerie(antigo, grupo)) { rejeitar('candidato_credita_o_mesmo_grupo'); continue; }
+        if (escopoSemanal) {
+          const papel = papelReferencia(antigo) ?? funcaoDe(antigo);
+          const outros = dias.flatMap(d => d.slots).filter(s => s !== slot);
+          const mantemFuncao = (papelReferencia(cand) ?? funcaoDe(cand)) === papel
+            || outros.some(s => (papelReferencia(s.exercicio) ?? funcaoDe(s.exercicio)) === papel);
+          const alvosMantidos = new Set([...diretosDoExercicio(cand.id), ...outros.flatMap(s => [...diretosDoExercicio(s.exercicio.id)])]);
+          if (!mantemFuncao || [...diretosDoExercicio(antigo.id)].some(a => !alvosMantidos.has(a))) {
+            rejeitar('candidato_perde_funcao_ou_alvo'); continue;
+          }
+        }
         if (!mesmoCustoDeSlot(antigo, cand)) {
           const simulado = slots.map((s) => (s === slot ? { ...s, exercicio: cand } : s));
           if (!args.aceitaOutroCusto?.(dia, simulado)) { rejeitar('candidato_com_outro_custo_de_tempo'); continue; }
@@ -268,10 +293,10 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
         slot.exercicio = cand;
         const semanaDepois = creditoPonderadoDaSemana(dias.flatMap((d) => d.slots));
         const diaDepois = creditoPonderadoDaSemana(slots);
-        const estouraSemana = GRUPOS_GRANDES.some((g) =>
+        const estouraSemana = GRUPOS_COM_FAIXA_SEMANAL.some((g) =>
           (semanaDepois.get(g) ?? 0) > tetoDe(tetoSemanal, g)
           && (semanaDepois.get(g) ?? 0) > (semanaAntes.get(g) ?? 0));
-        const estouraODia = GRUPOS_GRANDES.some((g) =>
+        const estouraODia = [...diaDepois.keys()].some((g) =>
           g !== grupo && (diaDepois.get(g) ?? 0) > teto && (diaDepois.get(g) ?? 0) > (diaAntes.get(g) ?? 0));
         if (estouraSemana || estouraODia) { slot.exercicio = antigo; rejeitar('candidato_estoura_outro_limite'); continue; }
         const piso = args.pisoSemanal;
@@ -289,6 +314,7 @@ export function tentarAlternativasDeSessao<S extends SlotPonderavel>(
       }
     }
 
+    if (escopoSemanal) continue; // Mudar de dia não reduz crédito semanal.
     /**
      * 🔒 A MUDANÇA DE DIA — examinada, e recusada por uma razão concreta e medida.
      *

@@ -2,7 +2,7 @@ import type { GrupoPrimario } from '../../data/types';
 import type { PerfilTreino, RotinaSemanal, SlotExercicio } from '../treino-types';
 import { EXERCISES } from '../../data/exercises';
 import { poolElegivel } from '../treino-montador';
-import { creditoPonderadoDaSemana, orcamentoSlotsDoDia } from '../alocador';
+import { creditoPonderadoDaSemana } from '../alocador';
 import { descansoDoExercicio } from '../descanso';
 import { avaliarDuracaoResistida } from '../duracao-plano';
 import { faixaSegundos, repUnitDe } from '../isometricos';
@@ -21,7 +21,6 @@ export function adicoesComplementaresViaveis(r: RotinaSemanal, p: PerfilTreino, 
     const local=g==='panturrilha' ? gs.some(x=>['quadriceps','posterior','gluteos'].includes(x??''))
       : dedicado || gs.some(x=>['peito','costas','ombros','biceps','triceps'].includes(x??''));
     if(!local || gs.includes(g) || (!dedicado&&gs.some(x=>comp.includes(x??''))))continue;
-    if(d.slots.length>=orcamentoSlotsDoDia(p.limiteTempoTreino==='sem_limite'?75:p.tempoPorSessaoMin))continue;
     for(const e of pool){
       // Usa o piso de duas séries e o menor descanso canônico; se até aqui não cabe,
       // uma dose maior com os mesmos exercícios não salva a adição.

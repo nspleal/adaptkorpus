@@ -17,6 +17,7 @@ import { registrarEvento } from '@/lib/metricas/registrar';
 import { resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
 import { hojeISO, lerPesos } from '@/lib/treino-historico';
 import { normalizarEntradaPlanoVisivel, opcoesDeEntradaPlano, type EntradaPlanoVisivel } from '@/lib/plano-cas-comando';
+import { impedimentosDaGeracao } from '@/lib/geracao-treino-aceitavel';
 import { ROTULOS_CAMPOS_PERFIL } from '@/lib/validation/perfil-resumo';
 import { EVENTO_PLANO_ATUALIZADO, reconciliarConfirmacaoLocal, revisaoRemotaMaisNova } from '@/lib/persistencia/sincronizacao-plano';
 
@@ -56,6 +57,7 @@ export default function AppPage() {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [perfilSuspenso, setPerfilSuspenso] = useState<PerfilResumo | null>(null);
   const [pronto, setPronto] = useState(false);
+  const [geracaoImpedida, setGeracaoImpedida] = useState<string[] | null>(null);
   const [pendenciaPersistencia, setPendenciaPersistencia] = useState<PendenciaPersistencia | null>(null);
   const [painelEpoch, setPainelEpoch] = useState(0);
   const revisaoRef = useRef(0);
@@ -112,6 +114,14 @@ export default function AppPage() {
        */
       const opcoes = opcoesDeEntradaPlano(entradaPlano ?? normalizarEntradaPlanoVisivel(perfil, { pesoEfetivoKg }));
       const { dieta, treino } = recomputarPlano(perfil, opcoes);
+      const impedimentos = perfil.rotinaCustom ? [] : impedimentosDaGeracao(treino);
+      if (impedimentos.length) {
+        setGeracaoImpedida(impedimentos);
+        setPronto(true);
+        return; // mantém perfil/entrada salvos; não expõe proposta rejeitada como plano vigente.
+      }
+      setGeracaoImpedida(null);
+      if (supabaseConfigurado()) salvarSessao(perfil, entradaPlano);
       // 🔒 Cofre, DF 2026-07-27: gate ROTEAR NÃO é mais um beco sem saída. O painel monta em
       // MODO DIÁRIO (registra, não recebe prescrição). Antes daqui o ROTEAR caía no
       // `limparSessao()` abaixo e era chutado de volta ao onboarding — o defeito vivo.
@@ -154,9 +164,6 @@ export default function AppPage() {
       if (doServidor && doServidor !== 'sem_perfil') {
         // 🔒 D11 — perfil do servidor ilegível NÃO sobrescreve o cache local: o cache pode ser
         // a última cópia boa, e trocá-la por dado corrompido é perda, não sincronização.
-        if (!doServidor.perfil.camposInvalidos?.length) {
-          salvarSessao(doServidor.perfil, doServidor.entradaPlano); // cache local (2º device ganha os dados na hora)
-        }
         montar(doServidor.perfil, doServidor.revision, doServidor.entradaPlano);
         return;
       }
@@ -237,6 +244,9 @@ export default function AppPage() {
    * dispositivo, ela PARA: somente um clique explícito pode recarregar ou recomputar e tentar.
    */
   function persistirMudanca(perfil: PerfilResumo, entrada: EntradaPlanoVisivel) {
+    const impedimentos = perfil.rotinaCustom ? [] : impedimentosDaGeracao(recomputarPlano(perfil, opcoesDeEntradaPlano(entrada)).treino);
+    if (impedimentos.length) { setGeracaoImpedida(impedimentos); return; }
+    setGeracaoImpedida(null);
     salvarSessao(perfil, entrada); // local-first preserva também a fotografia certificada offline.
     filaDeGravacaoRef.current = filaDeGravacaoRef.current.catch(() => undefined).then(async () => {
       if (bloqueadoPorConflitoRef.current) {
@@ -271,10 +281,6 @@ export default function AppPage() {
     if (!servidor || servidor === 'sem_perfil') return;
     // 🔒 D11 — mesma regra do mount: versão ilegível não vira cache nem plano.
     if (servidor.perfil.camposInvalidos?.length) { setPerfilSuspenso(servidor.perfil); setPendenciaPersistencia(null); return; }
-    salvarSessao(servidor.perfil, servidor.entradaPlano);
-    revisaoRef.current = servidor.revision;
-    revisaoRemotaPendenteRef.current = null;
-    bloqueadoPorConflitoRef.current = false;
     // Snapshot legado sem C1 ainda pode ser recarregado: aplica o mesmo peso resolvido do
     // mount, nunca volta silenciosamente ao peso cru só neste caminho de conflito.
     const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: servidor.perfil, pesos: lerPesos(), hojeISO: hojeISO() });
@@ -283,6 +289,13 @@ export default function AppPage() {
     // semana 1 e o peso resolvido continua entrando por cima.
     const opcoes = opcoesDeEntradaPlano(servidor.entradaPlano ?? normalizarEntradaPlanoVisivel(servidor.perfil, { pesoEfetivoKg }));
     const { dieta, treino } = recomputarPlano(servidor.perfil, opcoes);
+    const impedimentos = servidor.perfil.rotinaCustom ? [] : impedimentosDaGeracao(treino);
+    if (impedimentos.length) { setGeracaoImpedida(impedimentos); return; }
+    setGeracaoImpedida(null);
+    salvarSessao(servidor.perfil, servidor.entradaPlano);
+    revisaoRef.current = servidor.revision;
+    revisaoRemotaPendenteRef.current = null;
+    bloqueadoPorConflitoRef.current = false;
     setEstado({ perfil: servidor.perfil, dieta, treino, revision: servidor.revision, ...(servidor.entradaPlano ? { entradaPlano: servidor.entradaPlano } : {}) });
     // O Painel guarda estados locais para edição; recarregar é uma escolha explícita de trocar
     // esses estados pelo servidor, portanto ele recebe uma nova instância só neste caminho.
@@ -312,11 +325,21 @@ export default function AppPage() {
 
   if (!pronto) return <Splash />;
   if (perfilSuspenso) return <PerfilPrecisaDeCorrecao perfil={perfilSuspenso} onCorrigir={() => router.push('/onboarding?corrigir=1')} />;
+  if (!estado && geracaoImpedida) return <section role="alert" style={{ padding: 24 }}>
+    <h1>A nova geração não foi concluída</h1>
+    <p>Os dados salvos foram preservados. Não foi possível reconstruir um plano válido com estas escolhas; nenhuma proposta nova foi salva.</p>
+    <ul>{geracaoImpedida.map((m, i) => <li key={i}>{m}</li>)}</ul>
+    <button type="button" onClick={() => router.push('/onboarding?corrigir=1')}>Rever escolhas</button>
+  </section>;
   if (!estado) return <Splash />;
 
   return (
     <div className="ak-app-interactions">
       <VigiaSessao />
+      {geracaoImpedida && <section role="alert" style={{ padding: 16 }}>
+        <strong>A nova geração não foi salva. O plano anterior foi preservado.</strong>
+        <ul>{geracaoImpedida.map((m, i) => <li key={i}>{m}</li>)}</ul>
+      </section>}
       {/* 🔒 O convite vive AQUI, na área logada — nunca na landing (beta por allowlist). */}
       <ConviteInstalar />
       {pendenciaPersistencia && (

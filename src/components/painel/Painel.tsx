@@ -10,6 +10,8 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, useRe
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { listarSubstituicoesPrato, listarSubstituicoesExercicio } from '@/lib/engine';
+import { ESCALA_PORCAO } from '@/lib/engine/constants';
+import { escolherPorcao, totaisDosItens, type ItemPorcionado } from '@/lib/dia-da-dieta';
 import type { FlagsSaude } from '@/lib/engine';
 import type { RotinaSemanal } from '@/lib/engine/treino-types';
 import type { Orcamento } from '@/lib/engine/orcamento';
@@ -53,6 +55,9 @@ import { sessaoDeHojeIdx, weekdayHojeIdx } from '@/lib/semana';
 import SessaoTreino, { type ResumoSessao } from './SessaoTreino';
 import SuaSemana from './SuaSemana';
 import AvisosMotor from './AvisosMotor';
+import { vereditoDoPlano } from '@/lib/veredito-motor';
+import { compararRecalculoTreino } from '@/lib/comparar-recalculo-treino';
+import { impedimentosDaGeracao } from '@/lib/geracao-treino-aceitavel';
 import AvisosHidratacao from './AvisosHidratacao';
 import { chaveSessao } from '@/lib/treino-historico';
 import OfertaCardio from './OfertaCardio';
@@ -188,10 +193,6 @@ const kicker: CSSProperties = { fontSize: '.76rem', fontWeight: 600, letterSpaci
 const pill: CSSProperties = { fontSize: '.84rem', color: 'rgba(234,229,219,.8)', background: 'rgba(234,229,219,.06)', borderRadius: 8, padding: '6px 11px' };
 const sec: CSSProperties = { animation: `evkPop .45s ${EASE}` };
 
-function escalar(m: RecipeMacros, s: number): RecipeMacros {
-  return { kcal: m.kcal * s, proteinaG: m.proteinaG * s, carboidratoG: m.carboidratoG * s, gorduraG: m.gorduraG * s };
-}
-
 // Data curta pt-BR ('28 jun') p/ sessões manuais — determinística, sem locale do ambiente.
 const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 function fmtDataCurta(dataISO: string): string {
@@ -206,7 +207,7 @@ type Feedback = 'facil' | 'na_medida' | 'dificil';
 interface OpcaoPrato { prato: CardapioItem['prato']; escala: number; macros: RecipeMacros; diaNew: RecipeMacros }
 type Modal =
   | { tipo: 'prato'; idx: number; base: string; opcoes: OpcaoPrato[]; excl: string[] }
-  | { tipo: 'porcao'; idx: number; base: string }
+  | { tipo: 'porcao'; idx: number; base: string; escalaSugerida: number }
   | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
@@ -278,7 +279,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [editando, setEditando] = useState(false);
   const [detalhe, setDetalhe] = useState<{ tipo: 'prato'; idx: number } | { tipo: 'ex'; d: number; s: number } | null>(null);
   const [detalheSessao, setDetalheSessao] = useState<SessaoLog | null>(null);
-  const [cardItens, setCardItens] = useState<CardapioItem[]>(dieta.cardapio?.itens ?? []);
+  const [cardItens, setCardItens] = useState<ItemPorcionado[]>(dieta.cardapio?.itens ?? []);
   const [cardTotais, setCardTotais] = useState<RecipeMacros | null>(dieta.cardapio?.totais ?? null);
   const [rotinaDias, setRotinaDias] = useState<DiaTreino[]>(treino.rotina?.dias ?? []);
   const [trocados, setTrocados] = useState<Set<string>>(new Set());
@@ -470,6 +471,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }, []);
   // Edição que cai em zona clínica (ROTEAR) → tela de encaminhamento, sem aplicar o plano.
   const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
+  const [geracaoRecusada, setGeracaoRecusada] = useState<string[] | null>(null);
+  const [recalculoPendente, setRecalculoPendente] = useState<{ perfil: PerfilResumo; assinatura: string; diferencas: string[]; avisos: string[] } | null>(null);
+  function aceitarGeracao(novo: ResultadoTreino): boolean {
+    const motivos=impedimentosDaGeracao(novo);
+    if(motivos.length) {
+      setGeracaoRecusada(motivos);
+      setEditando(false);
+      return false;
+    }
+    setGeracaoRecusada(null);
+    return true;
+  }
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
   const registro = useRegistro();
   // Refeições do dia = slots distintos do cardápio, na ordem em que aparecem. Em MODO DIÁRIO
@@ -536,9 +549,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const atual = new Set(perfil.favoritos ?? []);
     if (atual.has(id)) atual.delete(id); else atual.add(id);
     const novo = { ...perfil, favoritos: [...atual] };
+    const { treino: nt } = recomputarPlano(novo, opcoesDoPlano());
+    if (!aceitarGeracao(nt)) return;
     setPerfil(novo);
     notificarPerfil(novo);
-    const { treino: nt } = recomputarPlano(novo, opcoesDoPlano());
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []); // os cartões leem rotinaDias (badge/slots re-montados)
   }
@@ -619,7 +633,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // Editar perfil → recalcular: roda o motor determinístico real com o novo perfil
   // (gate de saúde + dieta + treino), igual ao onboarding. Sem IA, mesmo input → mesma saída.
   // Persiste o novo perfil na sessão (onPerfilChange) para o reload refletir a edição.
-  function recalcular(novo: PerfilResumo) {
+  function recalcular(novo: PerfilResumo, assinaturaConfirmada?: string) {
     /**
      * 💰 Leva H — o evento do ORÇAMENTO, na VIRADA do estado (não a cada render, não a cada
      * salvamento). Sem ele a adoção da feature é impossível de ler. Payload = só o valor
@@ -674,11 +688,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     // 65 com três pesagens em 61,4 continuava com o plano em 61,4, sem nenhuma saída.
     // 🔴 O que a reancoragem NÃO faz: encurtar a carência do gate. Quem está em faixa
     // protetiva continua nela pelos 14 dias — digitar um número não abre o portão.
-    if (novo.pesoKg !== perfil.pesoKg) reancorarPesoDoPlanoLocal(novo.pesoKg, dia);
-    const pesoEfetivoKg = resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: dia });
-    setPesoMotorKg(pesoEfetivoKg);
-    pesoAplicadoRef.current = pesoEfetivoKg; // já aplicado aqui — o efeito não repete
+    const pesoEfetivoKg = novo.pesoKg !== perfil.pesoKg ? novo.pesoKg
+      : resolverPesoDoPlanoLocal({ perfil: novo, pesos, hojeISO: dia });
     const { dieta: nd, treino: nt } = recomputarPlano(novo, opcoesDoPlano({ pesoEfetivoKg }));
+    if (!aceitarGeracao(nt)) return;
     // Fail-safe clínico (cofre, princípio 4 — gate-de-saude-adaptkorpus): se a edição cair em
     // ROTEAR (ex.: IMC < 16) o motor NÃO gera plano. Não persistimos nem substituímos o plano
     // válido atual — mostramos o encaminhamento e deixamos revisar ou manter o plano de antes.
@@ -688,6 +701,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       window.scrollTo(0, 0);
       return;
     }
+    if (perfil.rotinaCustom?.dias.some(d => d.referenciaDescanso)) {
+      const diferencas = compararRecalculoTreino(treino.rotina, nt.rotina);
+      const assinatura = JSON.stringify({ perfil: novo, dias: nt.rotina.dias, duracao: nt.rotina.duracaoResistidaDias });
+      if (diferencas.length && assinatura !== assinaturaConfirmada) {
+        const veredito = vereditoDoPlano(nt.rotina, novo.tempoPorSessaoMin);
+        setRecalculoPendente({ perfil: novo, assinatura, diferencas, avisos: [...(veredito ? [veredito.titulo, ...(veredito.detalhe ? [veredito.detalhe] : [])] : []), ...nt.rotina.avisos] });
+        setEditando(false);
+        return;
+      }
+    }
+    setRecalculoPendente(null);
     /**
      * 🔴 TELEMETRIA HONESTA DO FOCO — leva A2 do v4 (handoff-motor-volume-v4-2026-08-12).
      *
@@ -705,6 +729,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         setAvisoFoco(null);
       }
     }
+    if (novo.pesoKg !== perfil.pesoKg) reancorarPesoDoPlanoLocal(novo.pesoKg, dia);
+    setPesoMotorKg(pesoEfetivoKg);
+    pesoAplicadoRef.current = pesoEfetivoKg;
     setEncaminhamento(null);
     notificarPerfil(novo, { pesoEfetivoKg });
     setPerfil(novo);
@@ -795,13 +822,18 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     if (n.length) setModal({ ...modal, opcoes: n, excl });
   };
   function aplicarPrato(idx: number, o: OpcaoPrato) {
-    const novos = cardItens.slice(); novos[idx] = { refeicao: cardItens[idx]!.refeicao, prato: o.prato, escala: o.escala, macros: o.macros };
-    setCardItens(novos); setCardTotais(o.diaNew); marcar(`p${idx}`); setModal(null);
+    const novos = cardItens.slice(); novos[idx] = { refeicao: cardItens[idx]!.refeicao, prato: o.prato, escala: o.escala, macros: o.macros, escalaSugerida: o.escala, porcentagemEscolhida: 100 };
+    setCardItens(novos); setCardTotais(totaisDosItens(novos)); marcar(`p${idx}`); setModal(null);
+  }
+  function abrirPorcao(idx: number) {
+    const item = cardItens[idx]!;
+    setModal({ tipo: 'porcao', idx, base: item.prato.nome, escalaSugerida: item.escalaSugerida ?? item.escala });
   }
   function aplicarPorcao(idx: number, f: number) {
-    const item = cardItens[idx]!; const nm = escalar(item.macros, f); const novos = cardItens.slice();
-    novos[idx] = { ...item, escala: item.escala * f, macros: nm }; setCardItens(novos);
-    setCardTotais((prev) => prev ? { kcal: prev.kcal - item.macros.kcal + nm.kcal, proteinaG: prev.proteinaG - item.macros.proteinaG + nm.proteinaG, carboidratoG: prev.carboidratoG - item.macros.carboidratoG + nm.carboidratoG, gorduraG: prev.gorduraG - item.macros.gorduraG + nm.gorduraG } : prev);
+    const novo = escolherPorcao(cardItens[idx]!, f * 100, FOODS_BY_ID_SEED);
+    if (!novo) return;
+    const novos = cardItens.slice(); novos[idx] = novo;
+    setCardItens(novos); setCardTotais(totaisDosItens(novos));
     marcar(`p${idx}`); setModal(null);
   }
   function gerarOpcoesEx(d: number, s: number, excluir: string[]): Exercise[] {
@@ -854,9 +886,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         trocas: [...prefsAtuais.trocas.filter((t) => t.de !== deId), { de: deId, para: ex.id }],
       },
     };
+    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+    if (!aceitarGeracao(nt)) return;
     setPerfil(novoPerfil);
     notificarPerfil(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     /**
@@ -896,9 +929,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         banidos: [...new Set([...prefsAtuais.banidos, id])],
       },
     };
+    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+    if (!aceitarGeracao(nt)) return;
     setPerfil(novoPerfil);
     notificarPerfil(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setBanimentoTexto('Combinado — ele sai do seu plano. Se mudar de ideia, dá para trazer de volta em Editar perfil.');
@@ -915,9 +949,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       ...perfil,
       preferencias: { ...prefsAtuais, banidos: prefsAtuais.banidos.filter((x) => x !== id) },
     };
+    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+    if (!aceitarGeracao(nt)) return;
     setPerfil(novoPerfil);
     notificarPerfil(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
   }
@@ -946,9 +981,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       avisos_ativos: avaliacao.avisos.length,
     });
     const novoPerfil = { ...perfil, rotinaCustom };
+    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+    // Avisos do desenho manual não autorizam cortes nem bloqueio de sua intenção.
     setPerfil(novoPerfil);
     notificarPerfil(novoPerfil);
-    const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     setEditorDias(null);
@@ -1000,6 +1036,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       duracaoSegPorDia: (nt.rotina?.duracaoResistidaDias ?? []).map((r) =>
         (r.estadoCalculo === 'CALCULADO' && r.duracaoMinimaEstimadaSegundos != null
           ? r.duracaoMinimaEstimadaSegundos : null)),
+      duracaoMaxSegPorDia: (nt.rotina?.duracaoResistidaDias ?? []).map((r) =>
+        r.estadoCalculo === 'CALCULADO' ? r.duracaoMaximaEstimadaSegundos ?? null : null),
       excedeTempoPorDia: (nt.rotina?.duracaoResistidaDias ?? []).map((r) =>
         r.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL'),
       ...(nt.rotina?.fatosCobertura ? { fatosCobertura: nt.rotina.fatosCobertura } : {}),
@@ -1146,9 +1184,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setAplicandoProposta(true);
     try {
       const novoPerfil = aplicarPropostaSobre(atual, aplicada);
+      const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
+      if (!aceitarGeracao(nt)) return;
       setPerfil(novoPerfil);
       notificarPerfil(novoPerfil);
-      const { treino: nt } = recomputarPlano(novoPerfil, opcoesDoPlano());
       setTreino(nt);
       setRotinaDias(nt.rotina?.dias ?? []);
       setProposta(null);
@@ -1516,6 +1555,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const igual = ancora === perfil.mesocicloInicio
       && deloadAte === perfil.deloadAte;
     if (igual) return;
+    // A cópia do automático precisa revisar também a mudança de contexto do ciclo.
+    // O efeito abaixo submete a âncora junto do recálculo, antes de persistir.
+    if (perfil.rotinaCustom?.dias.some(d => d.referenciaDescanso)) return;
     const novo = {
       ...perfil,
       mesocicloInicio: ancora,
@@ -1530,6 +1572,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   // cada registro — troca manual de exercício não é clobrada no meio do uso).
   useEffect(() => {
     const { treino: nt } = recomputarPlano(perfil, opcoesDoPlano());
+    if (!aceitarGeracao(nt)) return;
+    if (perfil.rotinaCustom?.dias.some(d => d.referenciaDescanso)) {
+      const ancora = ciclo.novaAncoraISO ?? perfil.mesocicloInicio;
+      const deloadAte = ciclo.novoDeloadAteISO ?? perfil.deloadAte;
+      const mudouContexto = ancora !== perfil.mesocicloInicio || deloadAte !== perfil.deloadAte;
+      if (mudouContexto || compararRecalculoTreino(treino.rotina, nt.rotina).length) {
+        recalcular({ ...perfil, ...(ancora ? { mesocicloInicio: ancora } : {}), ...(deloadAte ? { deloadAte } : {}) });
+        return;
+      }
+    }
     setTreino(nt);
     setRotinaDias(nt.rotina?.dias ?? []);
     certificarEntradaDinamica(perfil);
@@ -1774,6 +1826,20 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       </header>
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1080, margin: '0 auto', padding: '36px 22px 90px' }}>
+        {recalculoPendente && <section role="region" aria-label="Prévia do recálculo" style={{ ...cardSoft, padding: 20, marginBottom: 20 }}>
+          <h2>Confira o treino antes de salvar o perfil</h2>
+          <p>O recálculo mudou estes valores. O perfil e o plano salvos ainda não foram substituídos.</p>
+          <ul>{recalculoPendente.diferencas.map((d, i) => <li key={i}>{d}</li>)}</ul>
+          {recalculoPendente.avisos.length > 0 && <details open><summary>Avisos e limites</summary><ul>{recalculoPendente.avisos.map((a, i) => <li key={i}>{a}</li>)}</ul></details>}
+          <button type="button" onClick={() => setRecalculoPendente(null)}>Manter perfil e plano salvos</button>
+          <button type="button" onClick={() => recalcular(recalculoPendente.perfil, recalculoPendente.assinatura)}>Salvar alterações revisadas</button>
+        </section>}
+        {geracaoRecusada && <section role="alert" style={{ ...cardSoft, padding: 20, marginBottom: 20 }}>
+          <strong>A geração do treino não foi concluída.</strong>
+          <p>{treino.rotina ? 'O plano anterior foi mantido.' : 'Nenhum novo plano foi aceito.'} Confira os impedimentos:</p>
+          <ul>{geracaoRecusada.map(m=><li key={m}>{m}</li>)}</ul>
+          <button type="button" onClick={()=>{setGeracaoRecusada(null);setEditando(true);}}>Revisar escolhas</button>
+        </section>}
         {/* Contador de treinos (chama dos 4 marcos) — PRIMEIRO elemento da Hoje, acima da
             saudação (handoff §Posição). Substitui o indicador de marco 7/30 que ficava abaixo. */}
         {!vista && aba === 'hoje' && <ContadorTreinos dias={diasTreinados} celebrarToken={celebrarToken} modoDiario={modoDiario} />}
@@ -1888,8 +1954,9 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
                           <OfertaCardio
               value={diasOferecidosCardio}
               onChange={(proximaOferta) => {
-                setDiasOferecidosCardio(proximaOferta);
                 const { treino: nt } = recomputarPlano(perfil, opcoesDoPlano({ diasOferecidosCardio: proximaOferta }));
+                if (!aceitarGeracao(nt)) return;
+                setDiasOferecidosCardio(proximaOferta);
                 setTreino(nt);
                 setRotinaDias(nt.rotina?.dias ?? []);
                 notificarPerfil(perfil, { diasOferecidosCardio: proximaOferta });
@@ -1926,7 +1993,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             <BibliotecaPratos opcoes={() => gerarOpcoesPrato(idx, [], RECIPES_SEED.length)} onEscolher={o => { const atual = gerarOpcoesPrato(idx, [], RECIPES_SEED.length).find(x => x.prato.id === o.prato.id); if (atual) aplicarPrato(idx, atual); }} />
           </details>)}
         </details>}
-        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={(idx) => setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome })} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
+        {!vista && aba === 'dieta' && !modoDiario && <DietaTab dieta={dieta} itens={cardItens} totais={cardTotais} trocados={trocados} logs={registro.logs} notes={registro.notes} dataHoje={dataHoje} onStatus={registro.setStatus} onNote={registro.setNote} onTrocar={abrirTrocaPrato} onPorcao={abrirPorcao} onCompras={() => setVista('compras')} onDetalhe={(idx) => setDetalhe({ tipo: 'prato', idx })} descanso={pratosDescanso} onTrazerDeVolta={trazerDeVoltaPrato} orcamento={perfil.orcamento ?? null} onOrcamento={mudarOrcamento} />}
         {!vista && aba === 'progresso' && (
           <Progresso resumo={resumoPeso} treinos={sessoesTreino(sessoes).length || Object.keys(feedback).length} onRegistrar={registrarPeso} avisoPeso={avisoPeso} modoDiario={modoDiario} notaPesoPlano={notaPesoPlano}>
             {/* Frequência por grupo (Leva 2 · Bloco 2) — aba Progresso, como o design pede.
@@ -1977,7 +2044,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
         />
       )}
       {detalhe?.tipo === 'prato' && cardItens[detalhe.idx] && (
-        <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); setModal({ tipo: 'porcao', idx, base: cardItens[idx]!.prato.nome }); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
+        <DetalhePrato item={cardItens[detalhe.idx]!} foodsById={FOODS_BY_ID_SEED} onFechar={() => setDetalhe(null)} onTrocar={() => { const idx = detalhe.idx; setDetalhe(null); abrirTrocaPrato(idx); }} onPorcao={() => { const idx = detalhe.idx; setDetalhe(null); abrirPorcao(idx); }} onCansei={() => cansarDoPrato(cardItens[detalhe.idx]!.prato.id)} />
       )}
       {detalhe?.tipo === 'ex' && rotinaDias[detalhe.d]?.slots[detalhe.s] && (
         <DetalheExercicio
@@ -2044,7 +2111,7 @@ function CartaoRetomada({ estado }: { estado: EstadoRetomada }) {
 
 /* ════════════════════ Hoje ════════════════════ */
 
-function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, avisoPeso, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
+export function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, avisoPeso, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
   mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => { tipo: string } | void;
   avisoPeso?: string | null;
@@ -2057,8 +2124,10 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
   retomada?: EstadoRetomada | null;
 }) {
   const plano = dieta.plano!;
-  const kcal = r0(cardTotais?.kcal ?? plano.kcalAlvo);
-  const totK = plano.macros.kcalProteina + plano.macros.kcalCarboidrato + plano.macros.kcalGordura || 1;
+  const kcal = cardTotais ? r0(cardTotais.kcal) : null;
+  const totG = cardTotais ? cardTotais.proteinaG + cardTotais.carboidratoG + cardTotais.gorduraG : 0;
+  const pctMacro = (g: number) => Math.round(g / (totG || 1) * 100);
+  const foraDaJanela = cardTotais != null && (cardTotais.kcal < plano.janela.minKcal - 1e-6 || cardTotais.kcal > plano.janela.maxKcal + 1e-6);
   // Confirmação do sinal de fadiga (tom acolhedor, SEM vermelho — fadiga ≠ dor/lesão).
   const [fadigaOpen, setFadigaOpen] = useState(false);
   return (
@@ -2085,7 +2154,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
               </span>
             </div>
             <div style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: '-.02em', marginBottom: 6 }}>{dia.nome}</div>
-            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload && !retomada ? ' · séries reduzidas esta semana' : ''}</div>
+            <div style={{ color: 'rgba(234,229,219,.6)', fontSize: '.95rem', marginBottom: 22 }}>{dia.slots.length} exercícios{deload && !retomada ? ' · semana de alívio; confira as séries' : ''}</div>
             {retomada && <CartaoRetomada estado={retomada} />}
             {/* Entrada A1 do registro manual (handoff): botão ao lado de "Começar treino". */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -2122,14 +2191,18 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
         )}
         <div style={gradCard}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}><span style={kicker}>Dieta de hoje</span></div>
-          <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>Seu ponto de partida</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 18 }}><span style={{ fontSize: '2rem', fontWeight: 800, color: '#BDFF00', letterSpacing: '-.02em' }}>{kcal}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>kcal</span></div>
+          <div style={{ fontSize: '.8rem', color: 'rgba(234,229,219,.5)', marginBottom: 2 }}>Cardápio atual</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 18 }}><span style={{ fontSize: '2rem', fontWeight: 800, color: '#BDFF00', letterSpacing: '-.02em' }}>{kcal ?? '—'}</span><span style={{ fontSize: '.95rem', color: 'rgba(234,229,219,.55)' }}>{kcal == null ? 'sem cardápio' : 'kcal dos alimentos'}</span></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 14 }}>
-            <Barra nome="Proteína" g={r0(plano.macros.proteinaG)} pct={Math.round(plano.macros.kcalProteina / totK * 100)} cor="#BDFF00" />
-            <Barra nome="Carboidrato" g={r0(plano.macros.carboidratoG)} pct={Math.round(plano.macros.kcalCarboidrato / totK * 100)} cor="#16A34A" />
-            <Barra nome="Gordura" g={r0(plano.macros.gorduraG)} pct={Math.round(plano.macros.kcalGordura / totK * 100)} cor="rgba(234,229,219,.4)" />
+            {cardTotais && <>
+              <Barra nome="Proteína" g={r0(cardTotais.proteinaG)} pct={pctMacro(cardTotais.proteinaG)} cor="#BDFF00" />
+              <Barra nome="Carboidrato" g={r0(cardTotais.carboidratoG)} pct={pctMacro(cardTotais.carboidratoG)} cor="#16A34A" />
+              <Barra nome="Gordura" g={r0(cardTotais.gorduraG)} pct={pctMacro(cardTotais.gorduraG)} cor="rgba(234,229,219,.4)" />
+            </>}
           </div>
-          <p style={{ margin: 0, fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>É um guia, não uma meta exata.</p>
+          <p style={{ margin: 0, fontSize: '.82rem', color: 'rgba(234,229,219,.5)' }}>Referência calculada do plano: ~{r0(plano.kcalAlvo)} kcal · P {r0(plano.macros.proteinaG)} g · C {r0(plano.macros.carboidratoG)} g · G {r0(plano.macros.gorduraG)} g. É um guia, não uma meta exata.</p>
+          {foraDaJanela && <p role="status" style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)' }}>O cardápio atual está fora da janela original de {r0(plano.janela.minKcal)}–{r0(plano.janela.maxKcal)} kcal. As trocas equivalentes consideram o dia atual.</p>}
+          {cardTotais && cardTotais.proteinaG < plano.macros.proteinaPisoG - 1e-6 && <p role="status" style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)' }}>O cardápio atual fornece {cardTotais.proteinaG.toFixed(1)} g de proteína, abaixo do piso calculado de {plano.macros.proteinaPisoG.toFixed(1)} g. Esta composição não atende esse requisito.</p>}
         </div>
       </div>
       <RegistrarPesoRow onRegistrar={onRegistrar} aviso={avisoPeso} />
@@ -2425,7 +2498,7 @@ function TreinoTab({ dias, prescricao, treinoNome, trocados, feedback, progresso
 /* ════════════════════ Dieta ════════════════════ */
 
 function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onStatus, onNote, onTrocar, onPorcao, onCompras, onDetalhe, descanso, onTrazerDeVolta, orcamento, onOrcamento }: {
-  dieta: ResultadoMotor; itens: CardapioItem[]; totais: RecipeMacros | null; trocados: Set<string>;
+  dieta: ResultadoMotor; itens: ItemPorcionado[]; totais: RecipeMacros | null; trocados: Set<string>;
   logs: Record<string, StatusRefeicao>; notes: Record<string, string>; dataHoje: string;
   onStatus: (id: string, s: StatusRefeicao) => void; onNote: (id: string, txt: string) => void;
   onTrocar: (idx: number) => void; onPorcao: (idx: number) => void; onCompras: () => void; onDetalhe: (idx: number) => void;
@@ -2738,10 +2811,10 @@ function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato,
     // Só oferece "gerar mais" quando veio um lote cheio (3) — se veio menos, o pool elegível
     // já se esgotou (poucos pratos cabem na janela do dia para este slot/dieta).
     const n = modal.opcoes.length; showMore = n >= 3; onMore = onMaisPrato;
-    const equil = 'que mantêm o equilíbrio do dia (equivalência calórica)';
+    const equil = 'caloricamente equivalentes ao prato atual';
     sub = n >= 3 ? `Três opções ${equil}. Não gostou? Gere mais.`
       : n === 2 ? `Duas opções ${equil}.`
-      : n === 1 ? `Uma opção que mantém o equilíbrio do dia (equivalência calórica).`
+      : n === 1 ? `Uma opção caloricamente equivalente ao prato atual.`
       : '';
     modal.opcoes.forEach((o) => opcoes.push({ chave: o.prato.id, nome: o.prato.nome, detalhe: `${r0(o.macros.kcal)} kcal · ${r0(o.macros.proteinaG)} g prot`, onClick: () => onAplicarPrato(modal.idx, o) }));
   } else if (modal.tipo === 'exercicio') {
@@ -2751,8 +2824,9 @@ function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato,
       : '';
     modal.opcoes.forEach((ex) => opcoes.push({ chave: ex.id, nome: ex.nomePt, detalhe: `${ex.grupoMuscular}${ex.equipamentoDetalhe ? ` · ${ex.equipamentoDetalhe}` : ''}`, onClick: () => onAplicarEx(modal.d, modal.s, ex) }));
   } else {
-    titulo = 'Editar porção'; sub = 'Ajuste a quantidade do prato — a estimativa de referência acompanha.';
-    PORCOES.forEach((p) => opcoes.push({ chave: String(p.f), nome: `${p.r}${p.f === 1 ? ' (padrão)' : ''}`, onClick: () => onAplicarPorcao(modal.idx, p.f) }));
+    titulo = 'Editar porção'; sub = 'Ajuste a quantidade do prato — os valores do cardápio acompanham.';
+    PORCOES.filter((p) => modal.escalaSugerida * p.f >= ESCALA_PORCAO.min && modal.escalaSugerida * p.f <= ESCALA_PORCAO.max)
+      .forEach((p) => opcoes.push({ chave: String(p.f), nome: `${p.r}${p.f === 1 ? ' (padrão)' : ''}`, onClick: () => onAplicarPorcao(modal.idx, p.f) }));
   }
   return (
     <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(7,18,11,.66)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
@@ -2772,7 +2846,9 @@ function ModalTroca({ modal, recusaTexto, onFechar, onAplicarPrato, onMaisPrato,
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: showMore ? 14 : 0 }}>
           {/* Vazio honesto (DF 2026-07-04): com o filtro duro de preservação, um movimento único
               no seu equipamento não tem troca equivalente — sinalizamos em vez de inventar. */}
-          {opcoes.length === 0 && <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>Não achei uma troca equivalente para este exercício com o seu equipamento — melhor manter do que trocar por algo que trabalha outra coisa.</p>}
+          {opcoes.length === 0 && <p style={{ fontSize: '.9rem', color: 'rgba(234,229,219,.6)', lineHeight: 1.5 }}>{modal.tipo === 'prato'
+            ? 'Não achei uma troca calórica equivalente para este prato que preserve suas restrições e a proteína do dia. O prato atual foi mantido.'
+            : 'Não achei uma troca equivalente para este exercício com o seu equipamento — melhor manter do que trocar por algo que trabalha outra coisa.'}</p>}
           {opcoes.map((o) => (
             <button key={o.chave} onClick={o.onClick} className="modal-opt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', borderRadius: 14, padding: '15px 17px', color: '#EAE5DB', cursor: 'pointer' }}>
               <span><span style={{ display: 'block', fontSize: '1rem', fontWeight: 600 }}>{o.nome}</span>{o.detalhe && <span style={{ display: 'block', fontSize: '.78rem', color: 'rgba(234,229,219,.55)', marginTop: 2 }}>{o.detalhe}</span>}</span>

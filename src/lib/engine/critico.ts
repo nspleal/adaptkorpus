@@ -20,7 +20,8 @@
 import type { Exercise, GrupoPrimario } from '../data/types';
 import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './treino-types';
 import type { Objetivo } from './types';
-import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
+import { creditoPonderadoDaSemana } from './alocador';
+import { GRUPOS_COM_FAIXA_SEMANAL } from './grupos-volume';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, maxSemanalSemFoco, mev, mrv, tetoPonderadoNaSessao } from './trilhos';
 import { avaliarDuracaoFinalDoDia } from './duracao-plano';
 import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
@@ -88,21 +89,23 @@ export interface LinhaPlacar {
   indireto: number;
   status: StatusGrupo;
   /**
-   * O grupo tem faixa semanal de referência? Só os GRANDES têm (DF②). Sem faixa, `mev`,
-   * `mrv` e `maxAutomatico` ficam ausentes e a linha diz "sem faixa de referência".
+   * O grupo tem faixa semanal de referência? Só os GRANDES têm (DF②);
+   * bíceps/tríceps têm somente teto, sem MEV ou recomendação de aumento.
    */
   temFaixa: boolean;
+  /** Limite superior independente da existência de mínimo semanal. */
+  temTeto?: boolean;
   /** Piso de aviso (MEV) — o mínimo da faixa DESEJADA desta semana. Ausente sem faixa. */
   mev?: number;
   /**
    * Teto semanal CHEIO deste grupo. 🔴 `acima_mrv` é medido contra ELE — é o limite de
    * verdade. O grupo em foco já vem com o teto cheio; os demais também o carregam aqui, para
-   * a tela poder dizer o quanto ainda falta até o limite real. Ausente sem faixa.
+   * a tela poder dizer o quanto ainda falta até o limite real. Ausente sem teto.
    */
   mrv?: number;
   /**
    * 🔵 Máximo que o app usa SOZINHO neste grupo (teto cheio − 3, salvo foco). Passar daqui
-   * não é passar do teto: é sair do que a montagem automática faria. Ausente sem faixa.
+   * não é passar do teto: é sair do que a montagem automática faria. Ausente sem teto.
    */
   maxAutomatico?: number;
 }
@@ -113,7 +116,7 @@ export interface LinhaPlacar {
  * (`GrupoPrimario`), não uma seleção: um grupo com zero também aparece, com zero.
  */
 export const GRUPOS_DO_PLACAR: readonly GrupoPrimario[] = [
-  ...GRUPOS_GRANDES, 'biceps', 'triceps', 'antebraco', 'core', 'panturrilha', 'lombar',
+  ...GRUPOS_COM_FAIXA_SEMANAL, 'antebraco', 'core', 'panturrilha', 'lombar',
 ];
 
 export type SeveridadeAviso = 'recomendacao' | 'risco';
@@ -302,7 +305,7 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
     const v = arred(ponderado.get(g) ?? 0);
     const dir = arred(direto.get(g) ?? 0);
     const ind = arred(v - dir);
-    if (!(GRUPOS_GRANDES as readonly string[]).includes(g)) {
+    if (!(GRUPOS_COM_FAIXA_SEMANAL as readonly string[]).includes(g)) {
       return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status: 'sem_referencia' as const, temFaixa: false };
     }
     /**
@@ -310,6 +313,11 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
      * ele as duas linhas coincidem — não existe zona intermediária num grupo focado.
      */
     const maxAutomatico = emFoco.has(g) ? tetos.cheio : tetos.semFoco;
+    if (g === 'biceps' || g === 'triceps') {
+      const status: StatusGrupo = v > tetos.cheio ? 'acima_mrv'
+        : v > maxAutomatico ? 'acima_do_automatico' : 'sem_referencia';
+      return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status, temFaixa: false, temTeto: true, mrv: tetos.cheio, maxAutomatico };
+    }
     const status: StatusGrupo = v <= 0
       ? 'sem_estimulo'
       : v < piso
@@ -319,7 +327,7 @@ export function placarDaSemana(dias: readonly DiaDoEditor[], ctx: ContextoCritic
           : v > maxAutomatico
             ? 'acima_do_automatico'
             : 'na_banda';
-    return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status, temFaixa: true, mev: piso, mrv: tetos.cheio, maxAutomatico };
+    return { grupo: g, rotulo: rotulo(g), ponderado: v, direto: dir, indireto: ind, status, temFaixa: true, temTeto: true, mev: piso, mrv: tetos.cheio, maxAutomatico };
   });
 }
 
@@ -365,7 +373,7 @@ export function recomendacoes(placar: readonly LinhaPlacar[], semana?: number, f
    * déficit, e sugerir remanejar exercício durante a recuperação é o conselho oposto ao da fase.
    */
   const abaixo = fase === 'normal'
-    ? [...placar].filter((l) => l.status === 'abaixo_mev' || l.status === 'sem_estimulo')
+    ? [...placar].filter((l) => l.temFaixa && (l.status === 'abaixo_mev' || l.status === 'sem_estimulo'))
       .sort((a, b) => a.ponderado - b.ponderado)
     : [];
 
@@ -472,7 +480,7 @@ export function avisos(
     if (tetoSessao != null) dias.forEach((d, i) => {
       const slots = d.exercicios.map((e, k) => ({ exercicio: e, series: d.series?.[k] ?? ctx.seriesPadrao ?? 1 }));
       const noDia = creditoPonderadoDaSemana(slots);
-      for (const g of GRUPOS_GRANDES) {
+      for (const g of noDia.keys()) {
         const v = Math.round((noDia.get(g) ?? 0) * 10) / 10;
         if (v <= tetoSessao) continue;
         itens.push({

@@ -6,7 +6,7 @@ import type { GrupoPrimario } from '../data/types';
 import type { PerfilTreino } from './treino-types';
 
 const base: PerfilTreino = { pesoKg: 80, alturaCm: 180, idade: 30, flagsSaude: { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false }, objetivo: 'massa', nivelExperiencia: 'avancado', equipamento: 'academia', diasDisponiveis: 3, tempoPorSessaoMin: 60 };
-function gerar(agenda: Weekday[], override: Partial<PerfilTreino> = {}, semana: 1 | 5 | 6 = 1) {
+function gerar(agenda: Weekday[], override: Partial<PerfilTreino> = {}, semana: 1 | 2 | 5 | 6 = 1) {
   return gerarTreino({ ...base, ...override, treinoDias: agenda, diasDisponiveis: agenda.length }, { exercises: EXERCISES, favoritos: new Set(['e1', 'e74']), semanaCiclo: { semana } }).rotina!;
 }
 
@@ -16,12 +16,18 @@ describe('decisões 13/09: resultado do motor com catálogo real', () => {
       const agenda = ORDEM_SEMANA.filter((_, i) => mask & (1 << i));
       for (const nivelExperiencia of ['iniciante', 'avancado'] as const) {
         const r = gerar(agenda, { nivelExperiencia, foco: { grupo: 'ombros', compensa: 'peito', semana: 1 } });
+        if(agenda.length===3 && agenda.includes('dom') && agenda.includes('seg')){
+          const seguinte=gerar(agenda,{nivelExperiencia,foco:{grupo:'ombros',compensa:'peito',semana:1}},2);
+          const domingo=r.dias.find(d=>d.diaId==='dom')!;
+          const segunda=seguinte.dias.find(d=>d.diaId==='seg')!;
+          expect(domingo.slots.filter(s=>segunda.slots.some(t=>t.exercicio.grupoPrimario===s.exercicio.grupoPrimario)).map(s=>s.exercicio.grupoPrimario),JSON.stringify({agenda,nivelExperiencia,domingo:domingo.nome,segunda:segunda.nome})).toEqual([]);
+        }
         for (const a of r.dias) {
           expect(agenda).toContain(a.diaId);
           for (const b of r.dias) {
             if (a === b) continue;
             const distancia = Math.abs(ORDEM_SEMANA.indexOf(a.diaId!) - ORDEM_SEMANA.indexOf(b.diaId!));
-            if (distancia !== 1 && distancia !== 6) continue;
+            if (distancia !== 1 && (distancia !== 6 || agenda.length === 3)) continue;
             const grupos = new Set(a.slots.map(s => s.exercicio.grupoPrimario));
             expect(b.slots.filter(s => grupos.has(s.exercicio.grupoPrimario)), JSON.stringify({ agenda, nivelExperiencia, a: a.nome, b: b.nome })).toEqual([]);
           }
@@ -63,7 +69,7 @@ describe('decisões 13/09: resultado do motor com catálogo real', () => {
       const r = gerar(agenda, { ...foco, equipamento, tempoPorSessaoMin, preferencias: { banidos: ['e1'], trocas: [] } });
       for (const a of r.dias) for (const b of r.dias) {
         const delta = Math.abs(ORDEM_SEMANA.indexOf(a.diaId!) - ORDEM_SEMANA.indexOf(b.diaId!));
-        if (delta === 1 || delta === 6) expect(a.slots.some(s => b.slots.some(t => t.exercicio.grupoPrimario === s.exercicio.grupoPrimario))).toBe(false);
+        if (delta === 1 || (delta === 6 && agenda.length !== 3)) expect(a.slots.some(s => b.slots.some(t => t.exercicio.grupoPrimario === s.exercicio.grupoPrimario))).toBe(false);
       }
       expect(r.dias.flatMap(d => d.slots).some(s => s.exercicio.id === 'e1')).toBe(false);
       if (equipamento === 'nenhum' || tempoPorSessaoMin === 20) expect(r.avisos.length).toBeGreaterThan(0);

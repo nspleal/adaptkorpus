@@ -362,8 +362,17 @@ describe('Retomada · transferência de dose entre plano e editor', () => {
     // Regressão R4: atravessar a fronteira não pode promover o pedido alheio recusado.
     it('ao sair de acima do teto, a redução preserva os outros slots', () => {
       const CTX: OpcoesSemana = { semana: 3, retomada: { semana: 1, fator: 0.35, volumeReferencia: 16 } };
-      const auto = gerar(P_CASA, CTX);
-      const fonte = mapaDe(gerar(P_CASA, { semana: 1 }));
+      // O desenho é a entrada desta regressão. Não depender de o automático
+      // ainda escolher os mesmos dois exercícios no mesmo dia da semana.
+      const auto: RotinaSemanal = { ...gerar(P_CASA, CTX), dias: [{
+        nome: 'Peito', diaId: 'qua', slots: ['e1', 'e55'].map(id => {
+          const exercicio = EXERCISES.find(e => e.id === id)!;
+          return { exercicio, padrao: exercicio.padraoMovimento };
+        }),
+      }] };
+      // Pedido manual explícito acima da cota (3 + 3 para alvo 5): não depende
+      // de a seleção automática atual continuar fornecendo exatamente esse pedido.
+      const fonte: Mapa = { qua: { e1: 3, e55: 3 } };
       const cota = porSlot(gerar(com(P_CASA, desenho(auto, {})), CTX));
       const antes = porSlot(gerar(com(P_CASA, desenho(auto, fonte)), CTX));
       // 2026-09-19: neste plano os dois peitos moram na quarta (e1 e e55); o par medido é e1 × e55.

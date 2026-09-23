@@ -53,16 +53,18 @@ describe('Foco adicional: plano e relato final',()=>{
   */
  it('tempo LIMITADO: baseline intacto e ganho igual ao bloco entregue',()=>{
   let comBloco=0,semBloco=0;
-  for(const tempoPorSessaoMin of [45,60]){
+  // Mantém os dois casos antigos e acrescenta a agenda de quatro dias,
+  // que exerce extras reais sob os mínimos novos (prova externa 45).
+  for(const diasDisponiveis of [3,4]) for(const tempoPorSessaoMin of [45,60]){
    for(const grupo of ['peito','ombros','triceps','biceps','costas'] as const){
-    const p={...perfil,tempoPorSessaoMin,limiteTempoTreino:'limitado' as const,foco:{grupo,semana:1}};
+    const p={...perfil,diasDisponiveis,tempoPorSessaoMin,limiteTempoTreino:'limitado' as const,foco:{grupo,semana:1}};
     const r=montarRotina(prescreverTreino(p,avaliarGateTreino(p)),p,EXERCISES,new Set(),{semana:3});
     const neutro={...p,foco:undefined};
     const b=montarRotina(prescreverTreino(neutro,avaliarGateTreino(neutro)),neutro,EXERCISES,new Set(),{semana:3});
     const assinatura=(x:typeof r)=>x.dias.flatMap(d=>d.slots.filter(s=>s.exercicio.grupoPrimario!==grupo).map(s=>`${d.diaId}:${s.exercicio.id}:${s.series}`)).sort();
     expect(assinatura(r),`foco ${grupo} @${tempoPorSessaoMin}`).toEqual(assinatura(b));
     const serie=(x:typeof r)=>x.dias.flatMap(d=>d.slots).filter(s=>s.exercicio.grupoPrimario===grupo).reduce((n,s)=>n+(s.series??0),0);
-    const entregue=(r.blocoFoco?.adicionais??[]).reduce((n,a)=>n+a.series,0);
+    const entregue=[...(r.blocoFoco?.adicionais??[]),...(r.blocoFoco?.consolidados??[])].reduce((n,a)=>n+a.series,0);
     expect(serie(r)-serie(b),`foco ${grupo} @${tempoPorSessaoMin}: ganho ≠ bloco declarado`).toBe(entregue);
     if(entregue>0)comBloco+=1;else semBloco+=1;
    }

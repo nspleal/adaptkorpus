@@ -30,6 +30,7 @@ const supino = EXERCISES.find((e) => e.id === 'e1')!;
 
 const GRID: Array<Partial<PerfilTreino>> = [
   // SER-4: manter ramo incompatível sem remover os casos originais que passaram a caber.
+  { tempoPorSessaoMin:10, diasDisponiveis:1, treinoDias:['seg'], nivelExperiencia:'avancado' },
   { tempoPorSessaoMin:20, diasDisponiveis:1, treinoDias:['seg'], nivelExperiencia:'avancado' },
   {},
   { tempoPorSessaoMin: 30 },
@@ -126,8 +127,14 @@ describe('C1 gerador · a alavanca de redução preserva invariantes (§7.7)', (
     // Autor 19/09: redução não retira principal para impor core.
     if (!reduzido.dias.some(d => d.slots.some(s => s.exercicio.grupoPrimario === 'core'))) {
       expect(reduzido.avisos.some(a => a.startsWith('Core não entrou'))).toBe(true);
-      // Neste perfil todas as sessões atingem o orçamento solicitado de três slots.
-      expect(reduzido.dias.every(d => d.slots.length === 3)).toBe(true);
+      // O orçamento inicial não pode remover os mínimos obrigatórios aprovados.
+      expect(reduzido.dias.some(d => d.slots.length > 3)).toBe(true);
+      expect(reduzido.resultadoGeracao?.tipo).toBe('CERTIFICADO');
+      for (const d of reduzido.dias) {
+        const medido = avaliarDuracaoResistida(d.slots, p.nivelExperiencia, 3600);
+        expect(medido.estadoCalculo).toBe('CALCULADO');
+        expect(medido.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(3600);
+      }
     }
   });
 });

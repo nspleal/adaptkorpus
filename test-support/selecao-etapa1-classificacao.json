@@ -10,12 +10,6 @@
           "classificacao": "fotografia_historica_com_prova_sucessora",
           "motivo": "Comparação entre auto sem/com foco agora pode mudar a divisão. Não é a mesma operação de cascata numérica. Conservação e nenhum terceiro debitado seguem exigidos em divisão explícita estável; não se afirma equivalência entre estruturas distintas.",
           "sucessor": "distribuicao-etapa2: cascata na divisão explícita estável; distribuicao-contratos-atuais: cascata de delta zero"
-        },
-        {
-          "nome": "🔒 a inversão morre: o nível nunca DIMINUI o treino em 3–6 dias · 45/60/90 min, a DOSE semanal cresce com o nível",
-          "classificacao": "criterio_estrutural_substituido",
-          "motivo": "Monotonicidade universal da contagem de slots por nível era propriedade dos templates antigos; decisões condicionais de distribuição não estabelecem quota crescente de exercícios. Pisos e tetos quantitativos não foram alterados.",
-          "sucessor": "distribuicao-etapa2: possibilidades na saída final; matriz de agendas"
         }
       ]
     },
@@ -89,12 +83,6 @@
       "arquivo": "src/lib/engine/grade-cobertura.test.ts",
       "historicos": [
         {
-          "nome": "🔴 grade 3 níveis × 6 dias × {60, 180} min — cobertura ponderada int/massa/4d/60min: 24 slots onde havia 14",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "24 slots e nome Push A são fotografias. Grade de cobertura ponderada, orçamento e equipamento segue executada; sucessor exige aviso de sessão curta pelo nome real.",
-          "sucessor": "distribuicao-contratos-atuais: casa restrita; demais testes da grade no seletor atual"
-        },
-        {
           "nome": "🔴 grade de CASA — o corte é dito, nunca silencioso o caso do autor: casa só-peso/avançado/6d/60min — Push A curto, e o aviso o nomeia",
           "classificacao": "fotografia_historica_com_prova_sucessora",
           "motivo": "24 slots e nome Push A são fotografias. Grade de cobertura ponderada, orçamento e equipamento segue executada; sucessor exige aviso de sessão curta pelo nome real.",
@@ -107,18 +95,6 @@
       "historicos": [
         {
           "nome": "🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composição no mesmo orçamento, o dia carregado de composto degrada e o leve não",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "🔒 degradação e rampa na saída real (buracos achados por mutação) degradação nível 1: o ACESSÓRIO vai ao piso e o COMPOSTO fica intacto",
-          "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
-          "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"
-        },
-        {
-          "nome": "🔒 o orçamento é POR DIA — dias de composição diferente saem diferentes 4d/75min/sem.5: a contagem segue a tabela f(tempo) e a DEGRADAÇÃO varia por dia",
           "classificacao": "fotografia_historica_com_prova_sucessora",
           "motivo": "Snapshots mantêm composições antigas. Provas de degradação são renovadas com anti-vacuidade: dias que degradam e que não degradam; acessório cede enquanto composto mantém >90. Tetos e classes continuam nos demais testes.",
           "sucessor": "distribuicao-contratos-atuais: degradação por composição; demais testes do arquivo no seletor atual"

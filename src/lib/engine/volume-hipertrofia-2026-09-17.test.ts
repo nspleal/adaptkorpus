@@ -23,6 +23,7 @@
  * decisão existe para remover.
  */
 import { describe, expect, it } from 'vitest';
+import { ROTULO_GRUPO } from '../frequencia-grupos';
 import { avaliarGateTreino } from './treino-gate';
 import { prescreverTreino } from './treino';
 import { montarRotina } from './treino-montador';
@@ -33,6 +34,7 @@ import {
 } from './trilhos';
 import { MARGEM_SEM_FOCO, TETO_PONDERADO_SESSAO, TETO_SEMANAL_HIPERTROFIA } from './treino-constants';
 import { MARCA_PODA_TETO } from './teto-ponderado';
+import { tipoSessaoTemporal } from './adequacao-tempo-politica';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
 import type { PerfilTreino, RotinaSemanal, SemanaCiclo } from './treino-types';
@@ -189,10 +191,12 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
     ([20, 45, 75] as const).flatMap((tempo) =>
       (['limitado', 'sem_limite'] as const).map((limite) => ({ nivel, dias, tempo, limite })))));
 
-  it('semana: nenhum grande passa do teto do seu porte, em 1–7 dias, com e sem foco', () => {
+  it('semana: nenhum excesso é aceito; conflitos irredutíveis são recusados e nomeados', () => {
     const fora: string[] = [];
     let medidos = 0;
     let comFocoNaMargem = 0;
+    let recusadosPorTeto = 0;
+    let dentroDoTeto = 0;
     for (const c of CELULAS) for (const semana of [1, 3, 5, 6] as const) for (const foco of [undefined, 'peito'] as const) {
       const p = perfil({
         nivelExperiencia: c.nivel, diasDisponiveis: c.dias, treinoDias: DIAS.slice(0, c.dias),
@@ -203,12 +207,31 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
       try { r = plano(p, semana); } catch { continue; }
       medidos += 1;
       const ruim = acimaNaSemana(r);
-      if (ruim.length) fora.push(`${c.nivel}/${c.dias}d/${c.tempo}min/${c.limite}/S${semana}/${foco ?? 'sem-foco'}: ${ruim.join(', ')}`);
+      if (ruim.length) {
+        // Decisão de 20/09: o piso obrigatório pode impedir o teto. A proposta
+        // permanece mensurável, mas nunca se torna uma geração aceita.
+        const resultado = r.resultadoGeracao;
+        if (resultado?.tipo !== 'TETO_SEMANAL_NAO_ATENDIDO') {
+          fora.push(`${c.nivel}/${c.dias}d/${c.tempo}min/${c.limite}/S${semana}/${foco ?? 'sem-foco'}: ${ruim.join(', ')}`);
+        } else {
+          recusadosPorTeto++;
+          for (const g of GRUPOS_GRANDES.filter(g => (pond(r).get(g) ?? 0) > tetoDoGrupo(r, g))) {
+            expect(resultado.motivos.some(m => m.includes(ROTULO_GRUPO[g] ?? g)
+              && m.includes(`${pond(r).get(g)}`) && m.includes(`${tetoDoGrupo(r, g)}`)), `${g}: diagnóstico do excesso`).toBe(true);
+            expect(r.dias.flatMap(d => d.slots).filter(s => s.exercicio.grupoPrimario === g)
+              .every(s => s.series === 1), `${g}: séries próprias esgotadas antes da recusa`).toBe(true);
+          }
+        }
+      } else dentroDoTeto++;
       // ⚠️ ANTI-VACUIDADE: a margem tem de ser USADA em algum lugar, senão ela é letra morta.
       if (foco && (pond(r).get('peito') ?? 0) > r.tetoVolumeSemana!.semFoco) comFocoNaMargem += 1;
     }
     expect(medidos, 'a varredura não mediu nada').toBeGreaterThan(200);
     expect(fora.slice(0, 10), `${fora.length} planos acima do teto semanal`).toEqual([]);
+    // A composição aprovada pode resolver todos os casos desta grade. O conflito
+    // irredutível é exercitado com entrada controlada em adequacao-teto-semanal.test.ts.
+    expect(recusadosPorTeto + dentroDoTeto).toBe(medidos);
+    expect(dentroDoTeto, 'recusar tudo não satisfaz a política').toBeGreaterThan(200);
     expect(comFocoNaMargem, 'nenhum plano usou a margem do foco — ela virou letra morta').toBeGreaterThan(0);
   }, 600_000);
 
@@ -237,7 +260,7 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
    * Anti-vacuidade dupla: o dia medido ainda TEM o grupo perto do teto (senão o caso
    * degenerou e não prova nada) e a correção que o salvou é NOMEADA no plano.
    */
-  it('a antiga célula de resíduo cabe hoje, e a troca que a resolveu é dita', () => {
+  it('a célula antes resolvida por troca cabe e mantém IDs por alternância', () => {
     /**
      * 🔵 CÉLULA REMEDIDA em 2026-09-19: com o improviso doméstico fora da academia, o avançado
      * 6 d/45 min deixou de ter a TROCA como saída — ele resolve o dia podando série (o aviso
@@ -246,8 +269,10 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
      * sem exceção e sem esvaziar o posterior; esta é a primeira.
      */
     const p = perfil({
-      nivelExperiencia: 'intermediario', diasDisponiveis: 4, treinoDias: DIAS.slice(0, 4),
-      tempoPorSessaoMin: 45, limiteTempoTreino: 'sem_limite', divisaoPreferida: 'superior-inferior',
+      // 20/09: UL distribui posterior 8+8 e já não exerce a troca. O caso
+      // positivo medido em adequacao-trocas-37.json mantém posterior em 12.
+      nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: DIAS.slice(0, 3),
+      tempoPorSessaoMin: 75, limiteTempoTreino: 'sem_limite',
     });
     const r = plano(p, 3);
     expect(acimaNaSessao(r), 'a célula voltou a estourar o teto do dia').toEqual([]);
@@ -255,9 +280,21 @@ describe('🔒 nenhum plano automático nasce acima dos limites', () => {
     // O dia do posterior existe e continua carregado — o caso não degenerou.
     const posteriorPorDia = r.dias.map((_d, i) => pondDoDia(r, i).get('posterior') ?? 0);
     expect(Math.max(...posteriorPorDia), `posterior sumiu do plano: ${posteriorPorDia.join('+')}`).toBeGreaterThanOrEqual(10);
-    expect(r.avisos.some((a) => a.includes('Trocamos')),
-      `a troca não foi dita: ${r.avisos.join(' | ')}`).toBe(true);
+    expect(r.avisos.some((a)=>a.includes('Ajustamos o volume'))).toBe(true);
+    const assinatura=(x:RotinaSemanal)=>x.dias.map(d=>d.slots.map(s=>s.exercicio.id));
+    for(const semana of [1,2,3,4,5] as const){
+      const x=plano(p,semana);expect(assinatura(x)).toEqual(assinatura(plano(p,semana%2===0?2:1)));
+      expect(x.avisos.some(a=>a.startsWith('Trocamos'))).toBe(false);
+      expect(acimaNaSessao(x)).toEqual([]);
+    }
   });
+});
+
+it('a antiga célula UL mantém posterior nos dois dias, sem exigir troca desnecessária', () => {
+  const r = plano(perfil({nivelExperiencia:'intermediario',diasDisponiveis:4,treinoDias:DIAS.slice(0,4),tempoPorSessaoMin:45,limiteTempoTreino:'sem_limite',divisaoPreferida:'superior-inferior'}),3);
+  expect(acimaNaSessao(r)).toEqual([]);
+  expect(r.dias.map((_d,i)=>pondDoDia(r,i).get('posterior')??0).filter(n=>n>0)).toEqual([7,7]); // dose atual após tetos de todos os grupos; não é quota.
+  expect(r.excecoesDeSessao??[]).toEqual([]);
 });
 
 // ── ③b A EXCEÇÃO: quando nada resolve, o motor autoriza E COMUNICA ───────────
@@ -420,9 +457,9 @@ describe('🔒 deload e retomada — um corte só', () => {
 // ── ⑥ MÁXIMO PERMITIDO NÃO É META ───────────────────────────────────────────
 
 describe('🔒 a rampa mira a faixa desejada, nunca o teto', () => {
-  it('sem foco, nenhum grande é empurrado acima do topo da faixa só porque cabe', () => {
+  it('segmentadas sem foco não aumentam a dose só porque há margem', () => {
     let medidos = 0;
-    for (const nivel of NIVEIS) for (const dias of [3, 4, 5] as const) {
+    for (const nivel of NIVEIS) for (const dias of [4, 5] as const) {
       const r = plano(perfil({
         nivelExperiencia: nivel, diasDisponiveis: dias, treinoDias: DIAS.slice(0, dias),
         tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
@@ -443,4 +480,34 @@ describe('🔒 a rampa mira a faixa desejada, nunca o teto', () => {
     }
     expect(medidos, 'a varredura não mediu grupo nenhum').toBeGreaterThan(20);
   }, 300_000);
+
+  it('full body e upper/lower respeitam a tabela aprovada, o foco e o deload', () => {
+    // 20/09: faixa desejada não é teto duro em FB/UL. Não se concede margem
+    // ilimitada, nem a margem de foco aos demais grupos, nem se eleva o deload.
+    for (const nivel of NIVEIS) for (const dias of [1, 2, 3] as const)
+      for (const semana of [1, 5, 6] as const) for (const foco of [false, true]) {
+        const r = plano(perfil({
+          nivelExperiencia: nivel, diasDisponiveis: dias, treinoDias: DIAS.slice(0, dias),
+          tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite',
+          ...(foco ? { foco: { grupo: 'peito', compensa: 'ombros', semana } } : {}),
+        }), semana);
+        const contexto = `${nivel}/${dias}d/S${semana}/foco=${foco}`;
+        const fase = semana === 6 ? r.faixaVolumeSemana!.max : Infinity;
+        expect(r.dias, contexto).toHaveLength(dias);
+        expect(r.dias.every(d => tipoSessaoTemporal(d.nome,
+          d.slots.map(s => s.exercicio.grupoPrimario!), r.dias.map(x => x.nome)) !== 'segmentada'), contexto).toBe(true);
+        expect(r.tetoVolumeSemana!.semFoco, contexto).toBe(Math.min(maxSemanalSemFoco(nivel, 'massa'), fase));
+        expect(r.tetoVolumeSemana!.cheio, contexto).toBe(Math.min(tetoSemanalCheio(nivel, 'massa'), fase));
+        expect(acimaNaSemana(r), contexto).toEqual([]);
+        expect(acimaNaSessao(r), contexto).toEqual([]);
+      }
+  }, 300_000);
+
+  it('upper/lower intermediário pode entregar costas acima do alvo 14 até o teto 16 sem foco', () => {
+    const r = plano(perfil({ diasDisponiveis: 3, treinoDias: DIAS.slice(0, 3),
+      tempoPorSessaoMin: 90, limiteTempoTreino: 'sem_limite' }), 5);
+    expect(pond(r).get('costas')).toBeGreaterThan(faixaSemanal('intermediario', 'massa').max);
+    expect(pond(r).get('costas')).toBeLessThanOrEqual(maxSemanalSemFoco('intermediario', 'massa'));
+    expect(acimaNaSemana(r)).toEqual([]);
+  });
 });

@@ -37,6 +37,9 @@ describe('famílias de equivalência (cofre §Famílias)', () => {
 
   it('familiaDe/mesmaFamilia: membros resolvem; one-offs → null', () => {
     expect(familiaDe('e9')).toBe('supino-horizontal');
+    expect(familiaDe('e120')).toBe('puxada-vertical');
+    expect(mesmaFamilia('e120', 'e49')).toBe(true);
+    expect(mesmaFamilia('e120', 'e45')).toBe(false);
     expect(familiaDe('e116')).toBe('barra-fixa');
     expect(familiaDe('e108')).toBeNull(); // swing — one-off legítimo
     expect(familiaDe('e118')).toBeNull(); // pendura — one-off legítimo

@@ -215,7 +215,7 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
 
   it('/app: mount e recarregamento de conflito usam peso resolvido quando não há snapshot C1', () => {
     const cs = chamadas(APP);
-    expect(cs).toHaveLength(2);
+    expect(cs).toHaveLength(3); // mount, guarda antes de gravar e recarga remota
     for (const c of cs) expect(c, c).toMatch(/opcoes/);
     const src = semComentarios(APP);
     /**
@@ -250,12 +250,13 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
 });
 
 describe('🔒 editar o perfil REANCORA — e o gate não ganha porta dos fundos', () => {
-  it('`recalcular` reancora antes de resolver, e só quando o peso mudou', () => {
+  it('`recalcular` usa o novo peso na prévia e só reancora depois da aceitação', () => {
     const corpo = corpoDe(semComentarios(PAINEL), 'function recalcular(');
     expect(corpo).toMatch(/novo\.pesoKg !== perfil\.pesoKg.*reancorarPesoDoPlanoLocal\(novo\.pesoKg/s);
-    // ORDEM: reancorar tem de vir ANTES de resolver, senão a edição só valeria no próximo
-    // quadro — e o plano dessa tela sairia com o peso antigo.
-    expect(corpo.indexOf('reancorarPesoDoPlanoLocal')).toBeLessThan(corpo.indexOf('resolverPesoDoPlanoLocal'));
+    // A prévia usa o peso digitado sem gravar a âncora antes da confirmação.
+    expect(corpo).toMatch(/const pesoEfetivoKg = novo\.pesoKg !== perfil\.pesoKg \? novo\.pesoKg/);
+    expect(corpo.indexOf('reancorarPesoDoPlanoLocal')).toBeGreaterThan(corpo.indexOf('if (!aceitarGeracao(nt)) return'));
+    expect(corpo.indexOf('reancorarPesoDoPlanoLocal')).toBeGreaterThan(corpo.indexOf('assinatura !== assinaturaConfirmada'));
   });
 
   it('a reancoragem PRESERVA a faixa e o pino (a linha que fecha a porta)', () => {

@@ -5,6 +5,15 @@ import type {DiaTreino} from './treino-types';
 import type {Weekday} from '../semana';
 const dia=(diaId:Weekday,ids:string[]):DiaTreino=>({nome:diaId,diaId,slots:ids.map(id=>{const exercicio=EXERCISES.find(e=>e.id===id)!;return {exercicio,padrao:exercicio.padraoMovimento,series:3,descansoSeg:120};})});
 describe('bloco adicional, preserva baseline e calendário',()=>{
+ it('o foco não converte Lower em superiores nem Upper em pernas para ganhar exposição',()=>{
+  const base=[{...dia('seg',['e16','e80']),nome:'Lower A'}, {...dia('qua',['e9','e11','e19']),nome:'Upper A'}, {...dia('dom',['e16','e80']),nome:'Lower B'}];
+  for(const grupo of ['ombros','quadriceps'] as const){
+   const r=adicionarBlocoFoco(base,['seg','qua','dom'],[grupo],EXERCISES,new Set());
+   expect(r.adicionais.size).toBeGreaterThan(0);
+   for(const d of r.dias.filter(d=>d.slots.some(s=>r.adicionais.has(s))))
+    expect(d.nome.startsWith(grupo==='ombros'?'Upper':'Lower')).toBe(true);
+  }
+ });
  it('duas exposições espaçadas, sem retirar nem alterar baseline',()=>{
   const base=[dia('seg',['e9','e19']),dia('qui',['e16','e17'])];const snapshot=JSON.stringify(base);
   const r=adicionarBlocoFoco(base,['seg','qui'],['peito'],EXERCISES,new Set());

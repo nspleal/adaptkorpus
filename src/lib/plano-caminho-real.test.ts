@@ -111,7 +111,7 @@ describe('Adição14/09 — o foco no caminho real preserva terceiros', () => {
      * intermediário com folga (onde o bloco entra, e o que se cobra é a identidade do ganho).
      */
     const comFolga = (over: Partial<PerfilResumo> = {}) =>
-      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'],
+      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex'],
         tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
     const semF = rotina(comFolga());
     const comF = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));
@@ -184,7 +184,7 @@ describe('🟠 D4 — "Nenhum" volta ao plano base', () => {
     // O perfil avançado deste arquivo fecha no topo da banda e o teto barra o bloco; a
     // sanidade roda num perfil com folga, que é onde "o foco muda o plano" tem de valer.
     const comFolga = (over: Partial<PerfilResumo> = {}) =>
-      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'],
+      perfil({ nivelExperiencia: 'iniciante', diasDisponiveis: 5, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex'],
         tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', ...over } as never);
     const base = rotina(comFolga());
     const com = rotina(comFolga({ foco: { grupo: 'peito', compensa: 'ombros', semana: 1 } } as never));

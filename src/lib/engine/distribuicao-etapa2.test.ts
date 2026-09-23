@@ -17,15 +17,19 @@ const grupos=(r:ReturnType<typeof run>)=>r.dias.map(d=>d.slots.map(s=>s.exercici
  */
 const RECUSA_EXPLICADA=/acima d[oa]s? (m[áa]ximo|limites)|j[áa] est[áa] n[oa]s? (m[áa]ximo|limites)/;
 describe('etapa2: possibilidades na saída final',()=>{
- it('3 sem foco: peito/tríceps, costas/bíceps e pernas com ombros',()=>{
+ it('3 sem foco: Upper/Lower/Upper, sem separar peito e costas',()=>{
   const gs=grupos(run(3));expect(gs.filter(g=>g.includes('quadriceps')||g.includes('posterior'))).toHaveLength(1);
-  expect(gs.some(g=>g.includes('peito')&&g.includes('triceps')&&!g.includes('costas'))).toBe(true);
+  expect(gs.filter(g=>g.includes('peito')&&g.includes('triceps')&&g.includes('costas'))).toHaveLength(2);
   expect(gs.flat()).toContain('ombros');
  });
- it('3 braços: primário e auxiliar juntos, braços antes dos compostos',()=>{
+ it('3 braços: foco preserva Upper/Lower e braços antes dos compostos',()=>{
   const r=run(3,'bracos'),gs=grupos(r);
-  expect(gs.some(g=>g[0]==='biceps'&&g.includes('costas')&&!g.includes('peito'))).toBe(true);
-  expect(gs.some(g=>g[0]==='triceps'&&g.includes('peito')&&!g.includes('costas'))).toBe(true);
+  const superiores=gs.filter(g=>g.includes('peito'));
+  expect(superiores).toHaveLength(2);
+  for(const g of superiores){
+   expect(['biceps','triceps']).toContain(g[0]);
+   expect(g).toEqual(expect.arrayContaining(['costas','biceps','triceps']));
+  }
   expect(gs.flat()).toEqual(expect.arrayContaining(['quadriceps','posterior','ombros']));
  });
  /**
@@ -74,7 +78,14 @@ describe('etapa2: possibilidades na saída final',()=>{
   expect(gs.some(g=>g.includes('costas')&&!g.includes('peito'))).toBe(true);
   expect(gs.flat()).toContain('ombros');
  });
- it.each([3,4,5,6,7])('%i pernas: ênfases distintas no terminal, com derivados preservados',n=>{
+ it('3 pernas: foco conserva o Lower completo e os dois Upper da semana ímpar',()=>{
+  const r=run(3,'pernas'),gs=grupos(r);
+  expect(r.split).toBe('Upper / Lower / Upper');
+  expect(gs.filter(g=>g.includes('peito')&&g.includes('costas'))).toHaveLength(2);
+  expect(gs.filter(g=>g.includes('quadriceps')&&g.includes('posterior')&&g.includes('gluteos'))).toHaveLength(1);
+ });
+ // Em três dias a alternância aprovada substitui as duas ênfases segmentadas.
+ it.each([4,5,6,7])('%i pernas: ênfases distintas no terminal, com derivados preservados',n=>{
   const r=run(n,'pernas'),f=grupos(r);
   // Primários documentais do catálogo; não exige exclusividade anatômica.
   const inferiores=f.filter(g=>g.includes('quadriceps')||g.includes('posterior'));
@@ -95,7 +106,11 @@ describe('etapa2: possibilidades na saída final',()=>{
   const avisou=r.avisos.some(a=>a.startsWith('Mantivemos a distribuição disponível'));
   expect(avisou,`recortes ${separou?'separados':'NÃO separados'}, aviso ${avisou?'presente':'ausente'}`).toBe(!separou);
   expect(f.flat()).toEqual(expect.arrayContaining(['gluteos','ombros','peito','costas']));
-  if(!f.flat().includes('panturrilha'))expect(adicoesComplementaresViaveis(r,{...base,diasDisponiveis:n,treinoDias:agendas[n]},'panturrilha')).toEqual([]);
+  if(!f.flat().includes('panturrilha')){
+    const p:PerfilTreino={...base,diasDisponiveis:n,treinoDias:agendas[n],focoAgregado:{grupo:'pernas',semana:1}};
+    const alternativas=([1,2,3,4,5] as const).map(semana=>adicoesComplementaresViaveis(gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!,p,'panturrilha'));
+    expect(alternativas[0]!.filter(x=>alternativas.every(a=>a.includes(x)))).toEqual([]);
+  }
   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:separou?2:1});
  });
  /**
@@ -173,7 +188,7 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
   const c=creditoPonderadoDaSemana(r.dias.flatMap(d=>d.slots));
   for(const g of ['peito','costas'] as const)expect(c.get(g)).toBeLessThanOrEqual(16);
  });
- it.each([2,3] as const)('adição na divisão explícita estável, semana %i: preservação de terceiros',semana=>{
+ it.each([{semana:2,tempo:45,divisao:'superior-inferior'},{semana:3,tempo:45,divisao:'superior-inferior'},{semana:2,tempo:90,divisao:'superior-inferior'},{semana:3,tempo:90,divisao:'superior-inferior'},{semana:2,tempo:90,divisao:'prioridades'},{semana:3,tempo:90,divisao:'prioridades'}] as const)('adição em $divisao: S$semana, $tempo min, preservação de terceiros',({semana,tempo,divisao})=>{
   // Caminho explícito suportado pelo seletor atual, sem simular o seletor antigo.
   /**
    * 🔵 PERFIL REMEDIDO em 2026-09-19 (exclusão do improviso doméstico na academia): a 75 min
@@ -182,7 +197,7 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
    * entregam o bloco nas DUAS semanas (2 e 3); esta é a mais próxima da anterior, mudando só
    * o tempo por sessão.
    */
-  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:45,limiteTempoTreino:'limitado',divisaoPreferida:'superior-inferior'};
+  const p:PerfilTreino={...base,nivelExperiencia:'intermediario',diasDisponiveis:4,tempoPorSessaoMin:tempo,limiteTempoTreino:'limitado',divisaoPreferida:divisao,treinoDias:['seg','ter','qui','sex']};
   const run=(p:PerfilTreino)=>gerarTreino(p,{exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
   const a=run(p),b=run({...p,foco:{grupo:'peito',compensa:'triceps',semana:1}});
   const totais=(r:typeof a)=>{const m=new Map<string,number>();for(const d of r.dias)for(const s of d.slots){const g=s.exercicio.grupoPrimario!;m.set(g,(m.get(g)??0)+(s.series??0));}return m;};
@@ -191,10 +206,13 @@ describe('rodada2: contratos quantitativos, seletor real',()=>{
   // agora para no MRV (teto duro do cofre), então o delta é 4 onde há folga e menos onde não
   // há — mas continua EXATO, e continua sem cobrar de terceiro nenhum.
   const entregue=(b.blocoFoco?.adicionais??[]).reduce((n,i)=>n+i.series,0);
-  expect(entregue,`S${semana}: bloco vazio — as igualdades abaixo seriam triviais`).toBeGreaterThan(0);
+  // 45 min preserva a reprodução sem folga; 90 min mantém a prova positiva
+  // nas duas semanas, sem alterar as igualdades de terceiros nem os tetos.
+  if(divisao==='prioridades')expect(entregue,`S${semana}: bloco vazio — as igualdades abaixo seriam triviais`).toBeGreaterThan(0);
+  else expect(entregue).toBe(0);
   expect(y.get('peito')).toBe(x.get('peito')!+entregue);
   expect([...y.values()].reduce((a,b)=>a+b,0)).toBe([...x.values()].reduce((a,b)=>a+b,0)+entregue);
-  expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(['peito']);
+  expect([...new Set([...x.keys(),...y.keys()])].filter(g=>x.get(g)!==y.get(g)).sort()).toEqual(entregue>0?['peito']:[]);
   // 🔵 2026-09-17 — o teto do FOCADO é o CHEIO, não o topo da faixa desejada: é exatamente a
   // margem que a decisão deu a ele. `faixaVolumeSemana.max` virou o alvo, e não serve de limite.
   const t=b.tetoVolumeSemana!;

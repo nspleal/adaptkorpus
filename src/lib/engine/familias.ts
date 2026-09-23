@@ -1,7 +1,9 @@
 /**
  * Famílias de equivalência — "mesmo movimento, outro implemento".
  * Fonte TRAVADA: cofre `conceitos/parametros-motor-substituicao-adaptkorpus` §"Famílias
- * de equivalência" (⭐ aprovadas — DF 2026-07-04). 20 famílias, ids verbatim ("eN").
+ * de equivalência" (⭐ aprovadas — DF 2026-07-04). 20 famílias.
+ * Correção 20/09: e120 segue a execução e o mapa anatômico de puxada vertical;
+ * sua inclusão histórica em remada horizontal contradizia ambos.
  *
  * Papel na troca (F.2): rank EXTRA dentro do nível 0 de preservação — candidato da
  * MESMA família rankeia antes do "mesmo grupo+padrão" genérico. Não toca nenhum
@@ -15,8 +17,8 @@ export const FAMILIAS: Readonly<Record<string, readonly string[]>> = {
   'supino-horizontal': ['e15', 'e11', 'e9'],
   'supino-inclinado': ['e12', 'e10'],
   desenvolvimento: ['e43', 'e44', 'e42', 'e41', 'e111', 'e155'],
-  'remada-horizontal': ['e47', 'e48', 'e46', 'e162', 'e120', 'e84', 'e45', 'e154'],
-  'puxada-vertical': ['e49', 'e50', 'e51'],
+  'remada-horizontal': ['e47', 'e48', 'e46', 'e162', 'e84', 'e45', 'e154'],
+  'puxada-vertical': ['e49', 'e50', 'e51', 'e120'],
   'barra-fixa': ['e116', 'e22', 'e21'],
   'agachamento-bilateral': ['e3', 'e33', 'e34', 'e28', 'e141', 'e32', 'e121'],
   afundo: ['e16', 'e160', 'e17', 'e18', 'e79', 'e61', 'e78', 'e143'],

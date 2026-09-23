@@ -45,7 +45,8 @@ describe('placarDaSemana — todos os grupos, zerados inclusive', () => {
     expect(biceps.temFaixa).toBe(false);
     expect(biceps.status).toBe('sem_referencia');
     expect(biceps.mev).toBeUndefined();
-    expect(biceps.mrv).toBeUndefined();
+    expect(biceps.mrv).toBe(19);
+    expect(biceps.temTeto).toBe(true);
     for (const l of placar.filter((x) => !x.temFaixa)) expect(l.status).toBe('sem_referencia');
   });
   it('os grandes continuam avaliados como antes (faixa, teto, máximo automático)', () => {
@@ -54,11 +55,12 @@ describe('placarDaSemana — todos os grupos, zerados inclusive', () => {
     expect(peito.temFaixa).toBe(true);
     expect(peito).toMatchObject({ ponderado: 12, direto: 12, indireto: 0, status: 'na_banda', mev: 10, mrv: 19, maxAutomatico: 16 });
   });
-  it('sem_referencia não gera recomendação nem aviso de volume', () => {
+  it('braços sem mínimo não geram aumento; o teto por sessão continua independente', () => {
     const a = avaliarSemana([diaDe('A', ['e72', 'e74', 'e75', 'e19', 'e67', 'e68', 'e69'])], CTX);
-    for (const item of [...a.recomendacoes, ...a.avisos]) {
+    for (const item of a.recomendacoes) {
       expect(['biceps', 'triceps'].includes(item.fato?.grupo ?? '')).toBe(false);
     }
+    expect(a.avisos.some(i=>i.fato?.grupo==='biceps' && i.fato.escopo==='sessao')).toBe(true);
   });
 });
 
@@ -68,13 +70,13 @@ describe('a frase da semana e o título do chip', () => {
     const frase = fraseDaSemana(placar);
     expect(frase).not.toMatch(/^Sua semana está dentro das faixas/);
     expect(frase).toMatch(/grupos com faixa definida \(Peito, Costas, Quadríceps, Posterior, Glúteos, Ombros\)/);
-    expect(frase).toMatch(/Bíceps, Tríceps, Antebraço, Core, Panturrilhas, Lombar aparecem só com a contagem/);
+    expect(frase).toMatch(/Antebraço, Core, Panturrilhas, Lombar aparecem só com a contagem/);
     expect(frase).toMatch(/não foram avaliados/);
   });
   it('o título separa diretas de crédito indireto e diz quando não há faixa', () => {
     const placar = placarDaSemana([diaDe('A', ['e9', 'e72'])], CTX);
     expect(tituloDaLinha(placar.find((l) => l.grupo === 'peito')!)).toMatch(/4 séries ponderadas \(4 diretas \+ 0 de crédito indireto, já a 0,5\) · faixa 10–16 · teto 19/);
-    expect(tituloDaLinha(placar.find((l) => l.grupo === 'triceps')!)).toMatch(/2 séries ponderadas \(0 diretas \+ 2 de crédito indireto, já a 0,5\) · sem faixa de referência/);
+    expect(tituloDaLinha(placar.find((l) => l.grupo === 'triceps')!)).toMatch(/2 séries ponderadas \(0 diretas \+ 2 de crédito indireto, já a 0,5\) · máximo automático 16 · teto 19 · sem mínimo semanal definido/);
   });
   it('🔒 a tela não afirma mais "Sua semana está dentro das faixas" — e a frase depende só de quem tem faixa', () => {
     const fonte = readFileSync(new URL('../components/painel/EditorTreino.tsx', import.meta.url), 'utf8');

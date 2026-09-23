@@ -56,7 +56,7 @@ export interface RestricoesUsuario {
   orcamento?: Orcamento | null;
 }
 
-export type StatusMontagem = 'ok' | 'fora_da_janela' | 'sem_candidatos';
+export type StatusMontagem = 'ok' | 'abaixo_piso_proteina' | 'fora_da_janela' | 'sem_candidatos';
 
 export interface CardapioItem {
   refeicao: Refeicao;
@@ -230,7 +230,7 @@ export function montarCardapioDia(
      */
     const melhorDe = (b: Melhor | null, ci: number, ai: number, ji: number, li: number, escala: number, dev: number, protDev: number, custo: number): Melhor => {
       if (!b) return { ci, ai, ji, li, escala, dev, protDev, custo, chave: null };
-      if (dev !== b.dev) return dev < b.dev ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
+      if (Math.abs(dev - b.dev) > 1e-6) return dev < b.dev ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
       if (protDev !== b.protDev) return protDev < b.protDev ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
       if (ordenaPorCusto && custo !== b.custo) return custo < b.custo ? { ci, ai, ji, li, escala, dev, protDev, custo, chave: null } : b;
       const chave = chaveDe(ci, ai, ji, li);
@@ -363,6 +363,10 @@ export function montarCardapioDia(
     .sort((x, y) => ordem.indexOf(x.refeicao) - ordem.indexOf(y.refeicao));
 
   if (melhorNaJanela) {
+    if (escolhido.totais.proteinaG < pisoProteina - 1e-6) {
+      return { status: 'abaixo_piso_proteina', itens: itensOrdenados, totais: escolhido.totais, desvioKcal,
+        nota: `O cardápio atual ficou abaixo do piso calculado de proteína (${escolhido.totais.proteinaG.toFixed(1)} de ${pisoProteina.toFixed(1)} g). Esta composição não atende esse requisito.` };
+    }
     return { status: 'ok', itens: itensOrdenados, totais: escolhido.totais, desvioKcal };
   }
   return {

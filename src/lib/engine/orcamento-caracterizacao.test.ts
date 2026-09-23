@@ -1,3 +1,4 @@
+import {adequarInicioFullUpperLower} from './adequacao-tempo-inicial';
 import {avaliarDuracaoResistida} from './duracao-plano';
 import { describe, expect, it, vi } from 'vitest';
 import { avaliarGateTreino } from './treino-gate';
@@ -5,41 +6,19 @@ import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana } from './treino-montador';
 import { EXERCISES } from '../data/exercises';
 import type { FlagsSaude } from './types';
-import type { PerfilTreino } from './treino-types';
+import type { PerfilTreino, SemanaCiclo } from './treino-types';
 import { temCarga } from './equipamento';
 import { classeDeDescanso, descansoDoExercicio } from './descanso';
 
-/**
- * CARACTERIZAÇÃO DO ORÇAMENTO DE TEMPO — escrita ANTES de mexer nele (trava da Leva B).
- *
- * 🔴 Por que existe: a varredura de call sites da Leva A sondou os 7 trilhos e achou **um
- * único ponto sem teste de comportamento** — `treino-montador.ts:176`, onde a banda de
- * volume alimenta `sPlan`, o estimador de quantos exercícios cabem no tempo da sessão.
- * Trocar a banda por `{min:1,max:99}` **sobrevivia à suíte inteira**. E a Leva B mexe
- * exatamente aí: o orçamento passa a **somar descanso item a item** em vez de usar um
- * escalar × total de séries.
- *
- * 🔒 Estes testes NÃO afirmam que os números estão certos — afirmam **o que o estimador faz
- * hoje**. Quando a soma por item entrar, eles mudam **de propósito**, e o diff obriga a
- * explicar cada número que se moveu. Sem esta rede, uma regressão no nº de exercícios por
- * sessão passa batida: *"a sessão não fecha"* é sintoma que só aparece na vida real.
- *
- * ⚠️ Leia o resultado como fotografia, não como spec. Se um número aqui mudar sem que o
- * commit explique por quê, é regressão — não "o teste estava velho".
- *
- * 🔵 FOTOGRAFIA REFEITA EM 2026-09-20, e aqui está o porquê que o comentário acima cobra.
- * As fixtures desta suíte declaram `diasDisponiveis` e não `treinoDias`, então a agenda é
- * `diasPadrao(diasDisponiveis)`. Até 19/09 o motor cortava essa agenda no teto de sessões do
- * nível e o dia excedente virava um dia DEDICADO aos complementares — por isso um iniciante
- * com 4 dias fotografava `[2, 2, 3, 2]`: três sessões e um dia de core/antebraço. Desde a
- * decisão do autor de 20/09 todo dia marcado vira sessão de força, e a mesma fixture fotografa
- * `[2, 3, 3, 3]`: quatro sessões, com a divisão e a distribuição recalculadas.
- *
- * 🔒 O estimador NÃO mudou — nem o `cap()`, nem `sPlan`, nem o divisor. O que mudou foi
- * quantas sessões a agenda produz, que é entrada dele. A rede continua inteira: qualquer
- * número que se mexer daqui para frente sem explicação segue sendo regressão.
+import { MINIMOS_TEMPO, PRINCIPAIS_TEMPO, SECUNDARIOS_TEMPO, tipoSessaoTemporal } from './adequacao-tempo-politica';
+import { creditoPonderadoDaSemana } from './alocador';
+import { tetoPonderadoNaSessao, tetoSemanalDoGrupo, tetoSeriesPorExercicio } from './trilhos';
+import { GRUPOS_COM_FAIXA_SEMANAL } from './grupos-volume';
+/** Orçamento real, conforme decisões de 20/09.
+ * As fotografias de slots foram arquivadas em LIMPEZA-ORCAMENTO-20260920/antes.
+ * Uma quota inicial não pode substituir mínimos, duração real ou limites de volume.
+ * Mesmos eixos da caracterização anterior; assertivas sobre a entrega, sem regravar fotos.
  */
-
 const SEM: FlagsSaude = { gestacaoAmamentacao: false, renal: false, cardiaca: false, lesao: false, diabetes: false };
 
 function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
@@ -50,146 +29,66 @@ function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
   };
 }
 
-/** Rotina com a semana do mesociclo LIGADA — é o ramo `if (semanaCiclo)` que contém `sPlan`. */
+/** Exercita a composição entregue na semana escolhida. */
 function rotinaComCiclo(over: Partial<PerfilTreino> = {}, semana = 1) {
   const p = perfil(over);
   const opc: OpcoesSemana = { semana: semana as OpcoesSemana['semana'], feedbackGrupos: new Map() };
   return montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
 }
 
-/** Nº de slots por dia — a saída observável do `maxExercicios` que `sPlan` produz. */
-const slotsPorDia = (r: ReturnType<typeof rotinaComCiclo>): number[] => r.dias.map((d) => d.slots.length);
+function verificarResultado(r: ReturnType<typeof rotinaComCiclo>, p: PerfilTreino) {
+  const limite = p.tempoPorSessaoMin * 60;
+  const duracoes = r.dias.map(d => avaliarDuracaoResistida(d.slots, p.nivelExperiencia));
+  expect(r.dias).toHaveLength(p.diasDisponiveis);
+  for (const m of duracoes) expect(m.estadoCalculo).toBe('CALCULADO');
+  const excede = duracoes.some(m => m.duracaoMaximaEstimadaSegundos! > limite);
+  expect(r.resultadoGeracao?.tipo).toBe(excede ? 'INCOMPATIVEL' : 'CERTIFICADO');
+  for (const d of r.dias) {
+    expect(d.slots.length).toBeGreaterThan(0);
+    const gs = d.slots.flatMap(s => s.exercicio.grupoPrimario ? [s.exercicio.grupoPrimario] : []);
+    const tipo = tipoSessaoTemporal(d.nome, gs, r.dias.map(x => x.nome));
+    const minimos = tipo === 'segmentada'
+      ? Object.fromEntries([...new Set(gs)].map(g => [g, PRINCIPAIS_TEMPO.includes(g) ? 2 : SECUNDARIOS_TEMPO.includes(g) ? 1 : 0]))
+      : MINIMOS_TEMPO[tipo];
+    for (const [g, minimo] of Object.entries(minimos))
+      expect(gs.filter(x => x === g).length, `${d.nome}/${g}`).toBeGreaterThanOrEqual(minimo);
+    for (const s of d.slots) {
+      expect(s.series).toBeGreaterThanOrEqual(1);
+      expect(s.series).toBeLessThanOrEqual(tetoSeriesPorExercicio(p.nivelExperiencia));
+      expect(s.descansoSeg).toBeGreaterThanOrEqual(60);
+    }
+    const teto = tetoPonderadoNaSessao(p.nivelExperiencia, p.objetivo);
+    if (teto != null) for (const [g, n] of creditoPonderadoDaSemana(d.slots))
+      expect(n, `${d.nome}/${g}`).toBeLessThanOrEqual(teto);
+  }
+  const t = r.tetoVolumeSemana!;
+  const teto = tetoSemanalDoGrupo({ nivel: p.nivelExperiencia, objetivo: p.objetivo, emFoco: t.gruposEmFoco, tetoDaFase: t.cheio });
+  const creditos = creditoPonderadoDaSemana(r.dias.flatMap(d => d.slots));
+  for (const g of GRUPOS_COM_FAIXA_SEMANAL) expect(creditos.get(g) ?? 0, g).toBeLessThanOrEqual(teto(g));
+}
 
-describe(`📸 etapa3 — nº de exercícios, seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
-  /**
-   * O eixo que mais mexe no `cap()`: o tempo por sessão entra no numerador direto.
-   * Objetivo `massa` = descanso composto 90–120 (média 105) → o divisor é `sPlan × 145`.
-   */
-  it.each([30, 45, 60, 75, 90])('massa/intermediário, %i min por sessão', (tempoPorSessaoMin) => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin });
-    expect({ tempo: tempoPorSessaoMin, slots: slotsPorDia(r) }).toMatchSnapshot();
+const casos: { nome: string; over: Partial<PerfilTreino>; semana?: SemanaCiclo }[] = [
+  ...[30,45,60,75,90].map(tempoPorSessaoMin => ({ nome: `intermediário/${tempoPorSessaoMin}min`, over: { tempoPorSessaoMin } })),
+  ...(['massa','emagrecimento','saude'] as const).map(objetivo => ({ nome: `${objetivo}/60min`, over: { objetivo } })),
+  ...(['iniciante','intermediario','avancado'] as const).map(nivelExperiencia => ({ nome: `${nivelExperiencia}/60min`, over: { nivelExperiencia } })),
+  ...([1,3,5,6] as const).map(semana => ({ nome: `ciclo S${semana}`, over: {}, semana })),
+  { nome: 'avançado/5d/30min', over: { nivelExperiencia: 'avancado', diasDisponiveis: 5, tempoPorSessaoMin: 30 } },
+  ...(['iniciante','intermediario'] as const).flatMap(nivelExperiencia => [10,15,20,25].map(tempoPorSessaoMin => ({ nome: `${nivelExperiencia}/${tempoPorSessaoMin}min`, over: { nivelExperiencia, tempoPorSessaoMin } }))),
+  ...(['massa','emagrecimento','saude'] as const).map(objetivo => ({ nome: `iniciante/${objetivo}/12min`, over: { nivelExperiencia: 'iniciante' as const, objetivo, tempoPorSessaoMin: 12 } })),
+  ...[20,60].map(tempoPorSessaoMin => ({ nome: `força/emagrecimento/${tempoPorSessaoMin}min`, over: { objetivo: 'emagrecimento' as const, modoForca: true, tempoPorSessaoMin } })),
+];
+describe('orçamento: mínimos, duração e tetos na entrega', () => {
+  it.each(casos)('$nome', ({ over, semana = 1 }) => verificarResultado(rotinaComCiclo(over, semana), perfil(over)));
+  it('controle positivo: 30 min cabem; 10 min são recusados sem apagar grupos para caber', () => {
+    expect(rotinaComCiclo({ tempoPorSessaoMin: 30 }).resultadoGeracao?.tipo).toBe('CERTIFICADO');
+    expect(rotinaComCiclo({ tempoPorSessaoMin: 10 }).resultadoGeracao?.tipo).toBe('INCOMPATIVEL');
   });
-
-  /**
-   * O objetivo muda `descansoCompostoSeg` (massa 90–120 · saúde e emagrecimento 60–90), que
-   * entra no `restMid` do divisor — e também decide o `elegivel180`.
-   */
-  it.each(['massa', 'emagrecimento', 'saude'] as const)('objetivo %s, 60 min', (objetivo) => {
-    const r = rotinaComCiclo({ objetivo });
-    expect({ objetivo, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  /** O nível muda séries/exercício e a banda de volume — os dois lados do `sPlan`. */
-  it.each(['iniciante', 'intermediario', 'avancado'] as const)('nível %s, 60 min', (nivelExperiencia) => {
-    const r = rotinaComCiclo({ nivelExperiencia });
-    expect({ nivel: nivelExperiencia, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  /** Modo força liga o `elegivel180` mesmo em faixa baixa — outro caminho do `cap()`. */
-  it('modo força ligado (composto a 6RM) — o caminho do teto de 180 s', () => {
-    const r = rotinaComCiclo({ objetivo: 'emagrecimento', modoForca: true });
-    expect(slotsPorDia(r)).toMatchSnapshot();
-  });
-
-  /** A semana do ciclo move o volume-alvo; a 6 é deload. */
-  it.each([1, 3, 5, 6])('semana %i do mesociclo', (semana) => {
-    const r = rotinaComCiclo({}, semana);
-    expect({ semana, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  /** Sessão curta é onde o orçamento morde — e onde a soma por item vai divergir mais. */
-  it('sessão de 30 min, avançado (o caso mais apertado)', () => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 30, nivelExperiencia: 'avancado', diasDisponiveis: 5 });
-    expect(slotsPorDia(r)).toMatchSnapshot();
-  });
-
-  /**
-   * 🔑 A FAIXA ONDE O `cap` REALMENTE MORDE — descoberta por sondagem, não por suposição.
-   *
-   * Nos perfis "normais" o `cap` devolve 6–15 contra 3–4 padrões por dia: ele não limita
-   * nada, e mutações no `sPlan` (banda literal, `restMid` no piso, `elegivel180` sempre
-   * ligado) **sobrevivem por inalcançabilidade**, não por guard fraco. Duas causas medidas:
-   *
-   *  1. `sPlan` **satura em `seriesPorExercicio.max` em 7 dos 9 perfis** — mexer na banda
-   *     não move o resultado porque o `Math.min` já grampeou.
-   *  2. O tempo padrão (60 min) é folgado demais para o cap ser o limitante.
-   *
-   * Só `iniciante` escapa da saturação (`sPlan` 2 < max 3), e só abaixo de ~20 min o cap
-   * passa a mandar. O mínimo aceito pela validação é **10 min** (`perfil-resumo.ts:21`),
-   * então é aqui que a rede tem de existir — senão a Leva B mexe no estimador com a
-   * caracterização toda passando por vacuidade.
-   */
-  it.each([10, 15, 20, 25])('iniciante/massa, %i min — faixa em que o cap LIMITA', (tempoPorSessaoMin) => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin, nivelExperiencia: 'iniciante', objetivo: 'massa' });
-    expect({ tempo: tempoPorSessaoMin, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  it.each([10, 15, 20, 25, 30])('intermediário/massa, %i min — cap limitando com sPlan saturado', (tempoPorSessaoMin) => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin });
-    expect({ tempo: tempoPorSessaoMin, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  it.each(['massa', 'emagrecimento', 'saude'] as const)('iniciante/%s, 12 min — objetivo muda o restMid no divisor', (objetivo) => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 12, nivelExperiencia: 'iniciante', objetivo });
-    expect({ objetivo, slots: slotsPorDia(r) }).toMatchSnapshot();
-  });
-
-  /**
-   * 🔻 ESTE NÚMERO MUDOU DE PROPÓSITO (correção 1.3, 2026-07-31): `[2,2,2,2]` → `[1,1,1,1]`.
-   *
-   * Antes, o orçamento degradava a força pesada de **300 → 90 s (−70 %)** — o oposto do que
-   * a §5.7 manda (3–5 min). Com o piso de 180 s, 20 min só comportam UM exercício, e é a
-   * resposta honesta: quem escolhe força pesada aceita que o descanso é o custo.
-   *
-   * 🟢 Alcance MEDIDO em produção: **zero**. O app oferece 30/45/60/75 min
-   * (`EditarPerfil.tsx:258`); 20 min não é selecionável. Nas durações reais, com e sem modo
-   * força, o nº de exercícios por dia ficou **byte-idêntico** — só os segundos exibidos
-   * mudaram, para cima, onde a §5.7 mandava.
-   */
-  it('modo força em sessão curta — o piso de 180 s da força pesada custa exercício', () => {
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 20, objetivo: 'emagrecimento', modoForca: true });
-    expect(slotsPorDia(r)).toMatchSnapshot();
+  it('mesma entrada produz os mesmos dias, exercícios, séries e descansos', () => {
+    expect(rotinaComCiclo().dias).toEqual(rotinaComCiclo().dias);
   });
 });
 
-describe(`📸 etapa3 — composição seletor ${process.env.ADAPT_TEST_SELETOR_ATUAL === '1' ? 'atual' : 'histórico'}`, () => {
-  /**
-   * 🔑 A contagem INICIAL de slots ainda depende de tempo e volume, antes de existir
-   * uma lista concreta de exercícios. Depois da alocação, o orçamento temporal avalia
-   * cada item pela fórmula canônica — inclusive descanso, isometria e lateralidade.
-   *
-   * Estas fotos distinguem as duas camadas: o cap inicial continua independente da
-   * composição; já o descanso efetivo reage aos exercícios materializados. Assim,
-   * mudanças futuras só podem alterar estes números com uma explicação explícita.
-   */
-  it('o cap inicial não depende de quais exercícios caíram na sessão', () => {
-    // Mesmo perfil, mesma semana → mesma contagem, qualquer que seja a mistura sorteada.
-    const a = rotinaComCiclo({ diasDisponiveis: 4 });
-    const b = rotinaComCiclo({ diasDisponiveis: 4 });
-    expect(slotsPorDia(a)).toEqual(slotsPorDia(b)); // determinismo do motor
-
-    // E a contagem por dia é uniforme dentro da sessão, independentemente da composição:
-    // nenhum dia recebe menos slots por ter mais composto.
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 45 });
-    const porDia = r.dias.map((d) => ({
-      slots: d.slots.length,
-      compostos: d.slots.filter((s) => s.padrao !== 'isolado').length,
-    }));
-    expect(porDia).toMatchSnapshot();
-  });
-
-  /**
-   * 🔑 `descansoCompostoSeg` — o escalar da semana.
-   *
-   * 🔵 REANCORADO pela decisão do autor de 2026-09-16 (P-04). Ele era a FAIXA DA PRESCRIÇÃO
-   * (massa 90–120 · saúde e emagrecimento 60–90) com o teto de 180 s do `elegivel180`, e
-   * portanto podia discordar dos exercícios: no caminho automático a etapa 3 deixou de
-   * aplicar o teto e o campo passou a fotografar uma faixa que nenhum slot tinha. Agora ele
-   * é o min/max dos descansos EFETIVAMENTE prescritos aos compostos do plano.
-   *
-   * 🔒 A fotografia continua sendo fotografia — mas com uma identidade cobrada ANTES dela,
-   * para que o snapshot não possa legitimar qualquer número que venha a sair.
-   */
+describe('resumo dos descansos efetivamente prescritos', () => {
   const faixaObservada = (r: ReturnType<typeof rotinaComCiclo>) => {
     const valores = r.dias.flatMap((d) => d.slots)
       .filter((s) => s.descansoSeg != null && classeDeDescanso(s.exercicio) !== 'ISOLADO' && classeDeDescanso(s.exercicio) !== 'NAO_SE_APLICA')
@@ -201,19 +100,16 @@ describe(`📸 etapa3 — composição seletor ${process.env.ADAPT_TEST_SELETOR_
   it.each(['massa', 'emagrecimento', 'saude'] as const)('descanso efetivo da semana — objetivo %s', (objetivo) => {
     const r = rotinaComCiclo({ objetivo, tempoPorSessaoMin: 90 });
     expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
-    expect({ objetivo, descanso: r.semana?.descansoCompostoSeg }).toMatchSnapshot();
   });
 
-  it.each([30, 60, 90])('descanso efetivo — massa, %i min (o teto de 180 s depende do tempo)', (tempoPorSessaoMin) => {
+  it.each([30, 60, 90])('descanso efetivo — massa, %i min (resumo acompanha os slots)', (tempoPorSessaoMin) => {
     const r = rotinaComCiclo({ tempoPorSessaoMin });
     expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
-    expect({ tempo: tempoPorSessaoMin, descanso: r.semana?.descansoCompostoSeg }).toMatchSnapshot();
   });
 
-  it('descanso efetivo — modo força liga o teto de 180 s em faixa baixa', () => {
+  it('descanso efetivo — modo força usa os valores entregues', () => {
     const r = rotinaComCiclo({ objetivo: 'emagrecimento', modoForca: true, tempoPorSessaoMin: 90 });
     expect(r.semana?.descansoCompostoSeg, 'o resumo não bate com os slots').toEqual(faixaObservada(r));
-    expect(r.semana?.descansoCompostoSeg).toMatchSnapshot();
   });
 
   /**
@@ -234,72 +130,24 @@ describe(`📸 etapa3 — composição seletor ${process.env.ADAPT_TEST_SELETOR_
   });
 });
 
-/**
- * 🟡 SONDAGEM DE ALCANÇABILIDADE — registrada, sem teste (regra "não perseguir placar").
- *
- * A mutação "remover o `Math.max(1, …)` do `cap`" **sobrevive**, e a sondagem diz por quê:
- * o valor 0 só aparece na avaliação de `cap(rest180)` **dentro da guarda**
- * `if (cap(rest180) >= precisaSlots)`, cujo resultado é descartado quando não passa. O que
- * chega a `maxExercicios` é sempre `cap(descansoEfetivo)` com a faixa BASE, e o pior caso
- * medido em todos os perfis com o mínimo aceito pela validação (10 min) é **1**, não 0.
- *
- * Ou seja: o piso é defensivo e hoje **inalcançável**. Escrever teste para ele seria testar
- * código morto para o placar fechar. Fica anotado — se a Leva B mudar o divisor (e ela vai:
- * a soma por item troca `sPlan × descanso` por `Σ descanso do item`), **esta conclusão
- * expira** e o piso pode virar alcançável.
- */
-
-/* ════════════════ PARTE 2 — o comportamento NOVO ════════════════ */
-
 describe('🔒 aceite 5b — a estimativa SOMA por item, e enxerga a composição', () => {
-  /**
-   * O teste que a fórmula antiga não conseguiria passar. Antes, o custo era
-   * `sPlan × (40 + um_descanso)` — igual para qualquer mistura. Agora cada padrão custa o
-   * descanso da SUA classe, então um dia de composto e um de acessório divergem.
-   */
-  /**
-   * 🔻 REESCRITO no v4 (2026-08-13): comparar CUSTO por slot na saída deixou de
-   * discriminar — a degradação por dia aperta justamente o dia caro, igualando os custos
-   * finais (que é o objetivo dela). A prova de que a estimativa enxerga a composição
-   * mudou de face: no MESMO orçamento, o dia carregado de composto DEGRADA o descanso e o
-   * dia leve não. Com a fórmula antiga (um descanso × total), os dois degradariam juntos.
-   * Fixture por sondagem: 4d/75min/semana 5 — Lower A (composto-pesado) cai a 90 s;
-   * Upper A (com isolados) mantém o topo (180 s).
-   */
-  /**
-   * 🔵 FIXTURE REANCORADA em 2026-09-17. Com a faixa desejada de hipertrofia menor, o
-   * 4d/75min passou a caber inteiro e NENHUM dia degrada ali — a fixture deixou de
-   * discriminar. A propriedade não mudou (a estimativa enxerga a composição), então o teste
-   * procura, num punhado de orçamentos, aquele em que a degradação DE FATO varia — e falha
-   * dizendo isso se nenhum variar.
-   */
-  it('no mesmo orçamento, o dia carregado de composto degrada e o leve não', () => {
-    const FIXTURES = [
-      { over: { diasDisponiveis: 3, tempoPorSessaoMin: 75, limiteTempoTreino: 'limitado' as const }, semana: 5 },
-      { over: { diasDisponiveis: 3, tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado' as const }, semana: 5 },
-      { over: { diasDisponiveis: 4, tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado' as const }, semana: 5 },
-      { over: { diasDisponiveis: 4, tempoPorSessaoMin: 75, limiteTempoTreino: 'limitado' as const }, semana: 5 },
-    ];
-    const achados: string[] = [];
-    for (const f of FIXTURES) {
-      const r = rotinaComCiclo(f.over as Partial<PerfilTreino>, f.semana);
-      const compostos = (d: (typeof r.dias)[number]) => d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').length;
-      const descansoComposto = (d: (typeof r.dias)[number]) => {
-        const v = d.slots.filter((s) => s.padrao !== 'isolado' && s.padrao !== 'core').map((s) => s.descansoSeg ?? 0);
-        return v.length ? Math.max(...v) : null;
-      };
-      const comComposto = r.dias.filter((d) => compostos(d) > 0);
-      if (comComposto.length < 2) continue;
-      const ordenados = [...comComposto].sort((a, b) => compostos(b) - compostos(a));
-      const maisComposto = ordenados[0]!;
-      const menosComposto = ordenados[ordenados.length - 1]!;
-      if (compostos(maisComposto) <= compostos(menosComposto)) continue;
-      if (descansoComposto(maisComposto)! < descansoComposto(menosComposto)!) {
-        achados.push(`${f.over.diasDisponiveis}d/${f.over.tempoPorSessaoMin}min: ${descansoComposto(maisComposto)} < ${descansoComposto(menosComposto)}`);
-      }
-    }
-    expect(achados.length,
-      'nenhum orçamento exibiu a degradação por composição — a fórmula deixou de enxergar a composição, ou as fixtures ficaram folgadas demais').toBeGreaterThan(0);
+  it('mesmo número de séries custa mais com compostos; só o dia caro exige redução', () => {
+    // Controle da fórmula com composição explícita: trocar a divisão não muda a prova.
+    const montar = (ids: string[]) => ids.map(id => {
+      const exercicio=EXERCISES.find(e=>e.id===id)!;
+      return {exercicio,padrao:exercicio.padraoMovimento,series:3,
+        descansoSeg:descansoDoExercicio({exercicio,rirAlvo:2,degradacao:0})!};
+    });
+    const caro=montar(['e15','e46']), barato=montar(['e72','e67']);
+    const limite=avaliarDuracaoResistida(barato,'intermediario').duracaoMaximaEstimadaSegundos!;
+    expect(avaliarDuracaoResistida(caro,'intermediario').duracaoMaximaEstimadaSegundos).toBeGreaterThan(limite);
+    const a=adequarInicioFullUpperLower({nome:'Upper',slots:caro},'intermediario',limite);
+    const b=adequarInicioFullUpperLower({nome:'Upper',slots:barato},'intermediario',limite);
+    expect(a.descansos.length).toBeGreaterThan(0);
+    expect(b.descansos).toEqual([]);
+    expect(a.duracao.duracaoMaximaEstimadaSegundos).toBeLessThanOrEqual(limite);
+    expect(a.dia.slots.map(s=>s.series)).toEqual([3,3]);
+    expect(b.dia.slots).toEqual(barato);
   });
 
   it('o custo por slot acompanha a classe (composto ≥ acessório, sempre)', () => {
@@ -344,39 +192,13 @@ describe('🔒 o delta dos 18 `core` na saída REAL', () => {
 });
 
 describe('🔒 degradação e rampa na saída real (buracos achados por mutação)', () => {
-  /**
-   * B4 — a ORDEM da degradação. Sob orçamento apertado, cede ISOLADO até 60 s ANTES de
-   * COMPOSTO, e o composto nunca desce abaixo de 90 s. Invertida, a mutação sobrevivia:
-   * os snapshots contam SLOTS, não os valores de descanso sob degradação.
-   */
-  it('degradação nível 1: o ACESSÓRIO vai ao piso e o COMPOSTO fica intacto', () => {
-    // ⚠️ Fixture RE-SONDADA para o alocador v4 (2026-08-13): com 6–7 slots por dia, os
-    // 45 min passaram a exigir nível 2 em todos os dias e o caso parou de discriminar a
-    // ORDEM. A sondagem nova achou 90 min / semana 5: o Upper A (7 slots) fecha no nível 1
-    // — acessório a 60 s, composto INTACTO no topo (180 s). A ordem invertida rebaixaria o
-    // composto a 90 aqui. Semana 5 põe o RIR em 1, e só aí o acessório vale 120 s pela
-    // faixa: na semana 1 (RIR 3) ele JÁ é 60 s e degradar fica indistinguível.
-    const r = rotinaComCiclo({ tempoPorSessaoMin: 60, nivelExperiencia: 'intermediario' }, 5);
-    const diaDegradado = r.dias.find((d) =>
-      d.slots.some(x=>x.padrao==='isolado'&&x.descansoSeg===60&&descansoDoExercicio({exercicio:x.exercicio,rirAlvo:1,degradacao:0})!>60)
-      &&d.slots.filter(x=>!['isolado','core'].includes(x.padrao)).every(x=>x.descansoSeg===descansoDoExercicio({exercicio:x.exercicio,rirAlvo:1,degradacao:0})));
-    expect(diaDegradado, 'nenhum dia degradou — caso não discriminante').toBeDefined();
-    const comp = diaDegradado!.slots.filter((x) => x.padrao !== 'isolado' && x.padrao !== 'core');
-    expect(comp.length).toBeGreaterThan(0);
-    // A regra 3 concentra o benefício no composto pesado: ele NÃO cede enquanto o
-    // acessório resolver. A ordem invertida rebaixaria o composto a 90 aqui.
-    for (const c of comp) expect(c.descansoSeg!, `composto ${c.exercicio.id}`).toBe(descansoDoExercicio({exercicio:c.exercicio,rirAlvo:1,degradacao:0}));
-  });
-
-  it('degradação nível 2: quando o acessório não basta, o COMPOSTO cede — mas só até 90 s', () => {
+  // FB/UL: piso de 60 s; a ordem e a redução mínima têm controles em adequacao-tempo-inicial.test.ts.
+  it('sessão curta respeita o piso de 60 s, inclusive nos compostos de FB/UL', () => {
     const r = rotinaComCiclo({ tempoPorSessaoMin: 20, nivelExperiencia: 'intermediario' }, 5);
-    const todos = r.dias.flatMap((d) => d.slots);
-    for (const x of todos.filter((y) => y.padrao === 'isolado' || y.padrao === 'core')) {
-      expect(x.descansoSeg!, `acessório ${x.exercicio.id}`).toBe(60);
-    }
-    for (const x of todos.filter((y) => y.padrao !== 'isolado' && y.padrao !== 'core')) {
-      expect(x.descansoSeg!, `composto ${x.exercicio.id}`).toBeGreaterThanOrEqual(90);
-    }
+    const todos = r.dias.flatMap(d => d.slots);
+    expect(todos.length).toBeGreaterThan(0);
+    for (const x of todos) expect(x.descansoSeg!, x.exercicio.id).toBeGreaterThanOrEqual(60);
+
   });
 
   /**
@@ -446,61 +268,16 @@ describe('🔒 degradação e rampa na saída real (buracos achados por mutaçã
   });
 });
 
-describe('🔒 o orçamento é POR DIA — dias de composição diferente saem diferentes', () => {
-  /**
-   * 🔻 REESCRITO para o alocador v4 (2026-08-13). O cap por soma-de-itens morreu de
-   * propósito: o nº de slots vem da tabela f(tempo) do handoff (igual para todos os dias).
-   * O que continua POR DIA — e é o que este teste agora prova — são as DUAS saídas que
-   * dependem da composição do dia:
-   *  · a CONTAGEM ainda difere quando o déficit de um dia se esgota antes do orçamento
-   *    (o dia não é inflado para bater a tabela);
-   *  · a DEGRADAÇÃO é decidida dia a dia: o dia carregado de composto cede descanso, o dia
-   *    que cabe na faixa cheia não cede nada.
-   * Fixture por sondagem: 4 dias / 75 min / semana 5 — Upper A degrada (90 s) e Lower B
-   * fecha inteiro (180 s), com contagens 7/7/7/6.
-   */
-  it('4d/75min/sem.5: a contagem segue a tabela f(tempo) e a DEGRADAÇÃO varia por dia', () => {
+describe('orçamento por dia', () => {
+  it('4d/75min/S5: mínimos e tempo prevalecem sobre a quota inicial de slots', () => {
     const p = perfil({ diasDisponiveis: 4, tempoPorSessaoMin: 75, nivelExperiencia: 'intermediario' });
-    const opc: OpcoesSemana = { semana: 5, feedbackGrupos: new Map() };
-    const r = montarRotina(prescreverTreino(p, avaliarGateTreino(p)), p, EXERCISES, undefined, opc);
-    expect(r.split).toBe('Upper / Lower ×2');
-    // v4: o nº de slots é limitado pela tabela do handoff (75 min → 7) — e um dia PODE
-    // fechar menor quando os déficits do template acabam (o dia não é inflado p/ bater a
-    // tabela; medido: o Lower A fecha em 6 com o teto dos acessórios respeitado).
-    for (const d of r.dias) expect(d.slots.length, d.nome).toBeLessThanOrEqual(7);
-    for (const d of r.dias) expect(d.slots.length, d.nome).toBeGreaterThanOrEqual(5);
-    // …e o que varia POR DIA é a degradação: o dia que não cabe cede descanso, o que cabe
-    // fica no topo da faixa. (Com um nível único para a semana, os dois seriam iguais.)
-    /**
-     * 🔵 2026-09-17 — com a faixa desejada menor, 4d/75min passou a CABER em todos os dias e
-     * nenhum cede descanso. A propriedade "a degradação varia por dia" continua verdadeira e
-     * é medida no caso acima, numa fixture apertada. Aqui ela vira o seu complemento honesto:
-     * quando todos os dias cabem, todos ficam no TOPO da faixa — ninguém cede sem motivo.
-     */
-    // Final fit can be the RESULT of reducing rest, not proof that no reduction occurred.
-    let reduzidos=0,intactos=0;
-    for(const d of r.dias){
-      const normal=d.slots.map(sl=>({...sl,descansoSeg:descansoDoExercicio({exercicio:sl.exercicio,rirAlvo:1,degradacao:0})??0}));
-      const mudou=d.slots.some((sl,i)=>sl.descansoSeg!==normal[i]!.descansoSeg);
-      if(mudou){
-        reduzidos++;
-        expect(avaliarDuracaoResistida(normal,p.nivelExperiencia).duracaoMaximaEstimadaSegundos!,d.nome).toBeGreaterThan(75*60);
-      }else intactos++;
-    }
-    expect(reduzidos).toBeGreaterThan(0);expect(intactos).toBeGreaterThan(0);
+    const r = rotinaComCiclo(p, 5);
+    verificarResultado(r, p);
+    // A poda de volume pode liberar tempo DEPOIS da redução de descanso. A duração
+    // final não prova qual era o custo antes da poda; a redução mínima é testada na unidade.
+
   });
 });
-
-/**
- * 🟡 SONDAGEM — GUARDA DUPLA na rampa, registrada sem teste.
- *
- * "Remover o `semanaRampa != null ? 0 :` do montador" sobrevive, e não é buraco: o laço que
- * calcula `nivelDegradacaoDia` já tem `if (n < alvo && semanaRampa == null)`, então na rampa
- * o nível **nunca sai de 0**. São duas guardas para a mesma regra (o piso do FIT é
- * inviolável) e remover uma deixa a outra. Defense-in-depth deliberada — testar a redundância
- * seria placar. O que importa é o comportamento, e ele TEM teste: "na rampa com tempo curto,
- * ninguém desce do piso do FIT".
- */
 
 // Fotografia/autoridade histórica: o seletor é congelado na etapa 1.
 // As novas divisões reais são cobradas em distribuicao-etapa2.test.ts e na matriz externa.

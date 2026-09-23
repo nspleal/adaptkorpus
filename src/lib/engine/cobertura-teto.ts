@@ -27,7 +27,7 @@ import {
 import { dificuldadesLiberadas, prescreverTreino } from './treino';
 import { avaliarGateTreino } from './treino-gate';
 import { mev, tetoSemanalCheio } from './trilhos';
-import { exercicioDisponivel, EQUIPAMENTOS_CASA, ROTULO_EQUIPAMENTO_CASA } from './equipamento';
+import { exercicioDisponivel, ROTULO_EQUIPAMENTO_CASA } from './equipamento';
 import { ROTULO_GRUPO } from '../frequencia-grupos';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario } from '../data/types';
 import type { NivelExperiencia, PerfilTreino } from './treino-types';

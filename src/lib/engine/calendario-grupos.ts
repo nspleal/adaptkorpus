@@ -15,10 +15,10 @@ export function diasConsecutivos(a: Weekday, b: Weekday): boolean {
  * não pesos fisiológicos: primeiro conflitos do foco, depois os demais conflitos.
  * No máximo 6! ordens, com parada ao achar agenda sem conflito direto.
  */
-function ordenarRecortes(templates:readonly TemplateDia[],agenda:readonly Weekday[],focos:readonly GrupoPrimario[]):readonly TemplateDia[]{
+function ordenarRecortes(templates:readonly TemplateDia[],agenda:readonly Weekday[],focos:readonly GrupoPrimario[],consecutivos=diasConsecutivos):readonly TemplateDia[]{
   const custo=(ts:readonly TemplateDia[])=>{
     let foco=0,total=0;
-    for(let i=0;i<ts.length;i++)for(let j=i+1;j<ts.length;j++)if(diasConsecutivos(agenda[i]!,agenda[j]!))
+    for(let i=0;i<ts.length;i++)for(let j=i+1;j<ts.length;j++)if(consecutivos(agenda[i]!,agenda[j]!))
       for(const g of ts[i]!.grupos)if(ts[j]!.grupos.includes(g)){total++;if(focos.includes(g))foco++;}
     return [foco,total] as const;
   };
@@ -76,14 +76,19 @@ export function distribuirComplementares(
  * O alocador continua sendo a única autoridade de seleção/volume.
  */
 export function distribuirGruposNoCalendario(
-  templates: readonly TemplateDia[], agenda: readonly Weekday[], focos: readonly GrupoPrimario[] = [], minimoCore = 0, preservarRecortes = false,
+  templates: readonly TemplateDia[], agenda: readonly Weekday[], focos: readonly GrupoPrimario[] = [], minimoCore = 0, preservarRecortes = false, alternaSemanas = false,
 ): { dias: TemplateDia[]; limitado: boolean } {
   if (templates.length !== agenda.length) throw new Error('Agenda e templates devem ter o mesmo tamanho.');
-  if(preservarRecortes)templates=ordenarRecortes(templates,agenda,focos);
+  // Na alternância Upper/Lower, domingo e a próxima segunda têm tipos opostos.
+  // A segunda DESTA semana fica seis dias antes de domingo, não um dia depois.
+  const consecutivos = alternaSemanas
+    ? (a:Weekday,b:Weekday)=>Math.abs(ORDEM_SEMANA.indexOf(a)-ORDEM_SEMANA.indexOf(b))===1
+    : diasConsecutivos;
+  if(preservarRecortes)templates=ordenarRecortes(templates,agenda,focos,consecutivos);
   const demandaOriginal = new Map([...new Set(templates.flatMap(t => t.grupos))].map(g => [g, templates.filter(t => t.grupos.includes(g)).length]));
   // Com dois/três dias adjacentes, full-body repetido não cabe. Reutilizamos os
   // recortes superior/inferior e push/pull/pernas antes de ajustar exposições.
-  const adjacente = agenda.some((a, i) => agenda.slice(i + 1).some(b => diasConsecutivos(a, b)));
+  const adjacente = agenda.some((a, i) => agenda.slice(i + 1).some(b => consecutivos(a, b)));
   const temFull = templates.some(t => t.grupos.includes('peito') && t.grupos.includes('quadriceps'));
   if (!preservarRecortes && adjacente && temFull && agenda.length === 2) templates = [
     { nome: 'Superiores', grupos: ['peito', 'costas', 'ombros', 'biceps', 'triceps'] },
@@ -114,7 +119,7 @@ export function distribuirGruposNoCalendario(
       if (indices.length > desejados || indices.some(i => ehDiaDisponivel(templates[i]!.grupos))) continue;
       // Recortes são dos grupos principais; o complementar segue a política própria acima.
       if (preservarRecortes && originais.length > 0 && indices.some(i => !originais.includes(i))) continue;
-      if (indices.some((a, i) => indices.slice(i + 1).some(b => diasConsecutivos(agenda[a]!, agenda[b]!)))) continue;
+      if (indices.some((a, i) => indices.slice(i + 1).some(b => consecutivos(agenda[a]!, agenda[b]!)))) continue;
       candidatos.push(indices);
     }
     candidatos.sort((a, b) => b.length - a.length

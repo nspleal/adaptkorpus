@@ -56,7 +56,8 @@ describe('a refeição guiada não vira ritual cronometrado', () => {
 
   it('o encerramento do dia é calmo — a copy travada do handoff', () => {
     expect(src).toContain('Constância, não perfeição');
-    expect(src).toContain('quatro refeições');
+    expect(src).toContain('Você registrou todas as refeições de hoje. Constância, não perfeição.');
+    expect(src).not.toContain('quatro refeições');
   });
 });
 
@@ -103,9 +104,10 @@ describe('travas de copy do handoff (valem para a peça inteira)', () => {
     expect(src).not.toMatch(/curtir/i);
   });
 
-  it('caloria é "estimativa de referência" / "seu ponto de partida", nunca meta exata', () => {
-    expect(src).toContain('seu ponto de partida');
-    expect(src).toContain('Estimativa de referência — é um guia, não uma meta exata.');
+  it('separa kcal do cardápio atual da referência calculada, sem meta exata', () => {
+    expect(src).toContain('kcal · cardápio atual');
+    expect(src).toContain('Referência calculada do plano:');
+    expect(src).toContain('É um guia, não uma meta exata.');
     expect(src).not.toMatch(/meta (di[áa]ria|exata) de (kcal|caloria)/i);
   });
 

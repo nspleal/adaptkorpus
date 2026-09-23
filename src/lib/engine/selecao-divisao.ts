@@ -28,6 +28,8 @@ export function selecionarDivisao(
   agregado:'bracos'|'pernas'|undefined, retomada:boolean, coreMax?:number,
 ): {split:string;dias:TemplateDia[];intencao?:IntencaoDivisao;preservarRecortes?:boolean;prioritarios?:readonly GrupoPrimario[]} {
   const n=legado.dias.length;
+  // A alternância de três dias já foi resolvida pelo template da semana.
+  if(n===3)return {...legado,preservarRecortes:true};
   const preferencia=perfil.divisaoPreferida??'auto';
   if(preferencia==='superior-inferior'||(preferencia==='prioridades'&&n===4))return legado;
   const individual=focoVigente(perfil.foco)?perfil.foco!.grupo:undefined;
@@ -36,13 +38,10 @@ export function selecionarDivisao(
   let dias:TemplateDia[];
   if(n===1) dias=[superior()];
   else if(n===2) dias=[superior(),pernas()];
-  else if(n===3) dias=[dia('Peito + Tríceps + Ombros','peito','triceps','ombros','core'),costas(),pernas()];
   else if(n===4) dias=[peito(),costas(),pernas(),ombros()];
   else if(n===5) dias=[peito(),costas(),pernas(),dia('Ombros + Braços','ombros','biceps','triceps'),complemento()];
   else dias=[dia('Peito + Tríceps','peito','triceps','core'),costas(),quad(),ombros(),post(),complemento()];
   if(n===1) dias=[dia('Full-body','peito','costas','quadriceps','posterior','ombros','gluteos','biceps','triceps','panturrilha','core')];
-  if(n===3&&foco==='bracos') dias=[dia('Bíceps + Peito + Ombros','biceps','peito','ombros','core'),dia('Tríceps + Costas','triceps','costas'),pernas()];
-  if(n===3&&foco==='pernas')dias=[superior(),quad(),post()];
   if(n>=4&&foco==='bracos') {
     dias=[dia('Peito + Ombros','peito','ombros','core'),dia('Costas','costas'),pernas(),dia('Braços','biceps','triceps')];
     if(n>=5){dias[0]=dia('Peito','peito','core');dias.push(dia('Ombros + complementares','ombros','panturrilha','core'));}
@@ -100,12 +99,12 @@ export function selecionarDivisao(
     const locais=dias.flatMap((d,i)=>d.grupos.includes('core')?[i]:[]).sort((a,b)=>dias[a]!.grupos.length-dias[b]!.grupos.length||a-b).slice(0,coreMax);
     dias=dias.map((d,i)=>locais.includes(i)?d:{...d,grupos:d.grupos.filter(g=>g!=='core')});
   }
-  const adaptada=retomada||(n>2&&perfil.nivelExperiencia==='iniciante');
+  // A divisão automática é comum aos níveis; só a retomada conserva a adaptação.
+  const adaptada=retomada;
   let recortes:GrupoPrimario[][];
   if(n===1)recortes=[['peito','costas','quadriceps','posterior']];
   else if(n===2)recortes=[['peito','costas'],['quadriceps','posterior']];
   else if(foco==='pernas')recortes=[['quadriceps'],['posterior']];
-  else if(n===3&&foco==='bracos')recortes=[['biceps','peito'],['triceps','costas']];
   else if(prioritarios.length)recortes=dias.filter(d=>prioritarios.every(g=>d.grupos.includes(g))).map(()=>[...prioritarios]);
   else recortes=dias.map(d=>d.grupos.filter(g=>['peito','costas','quadriceps','posterior','ombros'].includes(g))).filter(g=>g.length>0);
   if(!recortes.length&&prioritarios.length)recortes=[[...prioritarios]];

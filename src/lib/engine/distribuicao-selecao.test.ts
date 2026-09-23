@@ -1,4 +1,3 @@
-import {verificarImpedimentoRecortes} from './__fixtures__/recortes-viabilidade';
 import {describe,it,expect} from 'vitest';
 import {contarRecortesEntregues} from './selecao-divisao';
 import {gerarTreino} from './index';
@@ -16,19 +15,15 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
   expect(r.dias.filter(pernas)).toHaveLength(1);
   expect(grupos(r.dias.find(d=>!pernas(d))!)).toEqual(expect.arrayContaining(['peito','costas']));
  });
- it('três dias alternados, pernas: superiores completo e duas ênfases inferiores reais',()=>{
-  const r=gerar(['seg','qua','sex'],'pernas');
-  if(r.dias.filter(pernas).length!==2){
-   verificarImpedimentoRecortes(gerar(['seg','qua','sex']),r,7);
-   expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:1,atendida:false});
-   return;
+ it('três dias: foco em pernas preserva a alternância aprovada e os superiores completos',()=>{
+  for(const semana of [1,2] as const){
+   const r=gerarTreino({...base,treinoDias:['seg','qua','sex'],focoAgregado:{grupo:'pernas',semana:1}},
+    {exercises:EXERCISES,semanaCiclo:{semana}}).rotina!;
+   expect(r.dias.filter(pernas)).toHaveLength(semana===1?1:2);
+   for(const d of r.dias.filter(d=>!pernas(d)))
+    expect(grupos(d)).toEqual(expect.arrayContaining(['peito','costas','ombros','biceps','triceps']));
+   expect(r.blocoFoco?.grupos).toEqual(['quadriceps','posterior']);
   }
-  expect(r.dias.filter(pernas)).toHaveLength(2);
-  expect(r.distribuicao).toMatchObject({recortesPlanejados:2,recortesEntregues:2,atendida:true});
-  const upper=r.dias.find(d=>!pernas(d));expect(upper).toBeDefined();
-  expect(grupos(upper!)).toEqual(expect.arrayContaining(['peito','costas']));
-  expect(assinatura(r)).not.toEqual(assinatura(gerar(['seg','qua','sex'])));
-  expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(false);
  });
  it('quatro dias com braços: bloco sem abandonar superiores/pernas/ombros',()=>{
   const r=gerar(['seg','ter','qui','sex'],'bracos');
@@ -39,12 +34,11 @@ describe('DIST-01/02: divisão escolhida e intenção na entrega real',()=>{
   expect(assinatura(r)).not.toEqual(assinatura(gerar(['seg','ter','qui','sex'])));
   expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(false);
  });
- it('consecutivos com pernas: não apaga a limitação da organização original',()=>{
+ it('três dias consecutivos mantêm Upper/Lower/Upper, sem prometer dois dias de pernas',()=>{
   const r=gerar(['seg','ter','qua'],'pernas');
-  expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(true);
-  // Limite de capacidade não pode ser rotulado como limitação do calendário.
-  verificarImpedimentoRecortes(gerar(['seg','ter','qua']),r,7);
-  expect(r.distribuicao).toMatchObject({atendida:false});
+  expect(r.dias.map(d=>d.nome)).toEqual(['Upper A','Lower A','Upper B']);
+  expect(r.dias.filter(pernas)).toHaveLength(1);
+  expect(r.avisos.some(a=>a.startsWith('Distribuição planejada'))).toBe(false);
  });
  it('equipamento impede braços no terminal: um exercício isolado não satisfaz a sessão',()=>{
   const r=gerarTreino({...base,equipamento:'nenhum',treinoDias:['seg','ter','qui','sex'],diasDisponiveis:4,focoAgregado:{grupo:'bracos',semana:1}},{exercises:EXERCISES,semanaCiclo:{semana:1}}).rotina!;

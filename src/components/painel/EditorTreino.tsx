@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { Exercise, GrupoPrimario } from '@/lib/data/types';
+import type { Exercise } from '@/lib/data/types';
 import type { DiaTreino, NivelExperiencia, Objetivo, RotinaCustom } from '@/lib/engine';
 import type { Faixa, FaseVolume, FatoCoberturaGrupo, FatoInvariantePadrao, RotinaSemanal } from '@/lib/engine/treino-types';
 import { avaliarSemana, type Avaliacao, type DiaDoEditor, type ItemCritico, type LinhaPlacar } from '@/lib/engine/critico';
 import { unificarAvisos } from '@/lib/avisos-unificados';
 import { SERIES_MANUAIS_MAX } from '@/lib/engine/treino-constants';
+import type { ReferenciaDescanso } from '@/lib/engine/referencia-descanso';
 import { contextoDaDose, type ReferenciaDose } from '@/lib/engine/referencia-dose';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';
@@ -41,6 +42,7 @@ export interface DiaEditavel {
   exercicios: Exercise[];
   seriesPorExercicio?: Record<string, number>;
   referenciaDose?: ReferenciaDose;
+  referenciaDescanso?: ReferenciaDescanso;
   /**
    * 🔴 O QUE O APP CORTOU POR TEMPO neste dia, por exercício (2026-09-16).
    *
@@ -92,6 +94,7 @@ export interface PrevisaoEditor {
    * Existe para a sugestão de cobertura poder dizer "+X min no dia" com o número do motor.
    */
   duracaoSegPorDia?: readonly (number | null)[];
+  duracaoMaxSegPorDia?: readonly (number | null)[];
   /** O dia excede o tempo por sessão? Veredito do motor (`estadoLimite`), não conta da tela. */
   excedeTempoPorDia?: readonly boolean[];
 }
@@ -105,6 +108,7 @@ export function doPlano(dias: readonly DiaTreino[], treinoDias: readonly Weekday
   const contexto = contextoDaDose(retomada);
   const editaveis: DiaEditavel[] = dias.map((d, i) => ({
     nome: d.nome,
+    ...(d.referenciaDescanso ? { referenciaDescanso: d.referenciaDescanso } : {}),
     // `diaId` é a fonte nova; agenda/posição é apenas compatibilidade para plano legado.
     weekdayIdx: Math.max(0, ORDEM_SEMANA.indexOf(d.diaId ?? treinoDias[i] ?? ORDEM_SEMANA[i % 7]!)),
     exercicios: d.slots.map((s) => s.exercicio),
@@ -160,7 +164,7 @@ export function paraRotinaCustom(dias: readonly DiaEditavel[]): RotinaCustom {
     origem: 'usuario',
     dias: dias
       .filter((d) => d.exercicios.length > 0)
-      .map((d) => ({ ...(d.referenciaDose ? { referenciaDose: d.referenciaDose } : {}), nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id),
+      .map((d) => ({ ...(d.referenciaDescanso ? { referenciaDescanso: d.referenciaDescanso } : {}), ...(d.referenciaDose ? { referenciaDose: d.referenciaDose } : {}), nome: d.nome, diaId: ORDEM_SEMANA[d.weekdayIdx]!, exercicioIds: d.exercicios.map((e) => e.id),
         ...(d.seriesPorExercicio && Object.keys(d.seriesPorExercicio).length ? { seriesPorExercicio: Object.fromEntries(d.exercicios.filter((e) => d.seriesPorExercicio?.[e.id] != null).map((e) => [e.id, d.seriesPorExercicio![e.id]!])) } : {}),
       })),
   };
@@ -320,7 +324,7 @@ export default function EditorTreino({
      */
     // 🔵 2026-09-19: o placar agora tem linha para todo grupo; sem faixa não há teto a passar,
     // e a tela se abstém (`null`) em vez de afirmar "não passa" de uma faixa que não existe.
-    const passaDoSemanal = linhaDepois == null || !linhaDepois.temFaixa
+    const passaDoSemanal = linhaDepois == null || linhaDepois.maxAutomatico == null
       ? null
       : linhaDepois.status === 'acima_mrv'
         ? 'teto' as const
@@ -409,6 +413,17 @@ export default function EditorTreino({
 
 
             <p style={{ color: 'rgba(234,229,219,.8)', fontSize: '.85rem' }}>{d.exercicios.length} exercícios · {d.exercicios.length ? previsto[dias.slice(0, i).filter((dia) => dia.exercicios.length).length]?.series?.reduce<number>((n, s) => n + (s ?? 0), 0) ?? 0 : 0} séries previstas</p>
+            {d.exercicios.length > 0 && <p style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.8)' }}>
+              Duração estimada: {(() => {
+                const indice = dias.slice(0, i).filter(x => x.exercicios.length).length;
+                const min = previsao.duracaoSegPorDia?.[indice];
+                const max = previsao.duracaoMaxSegPorDia?.[indice];
+                if (min == null || max == null) return 'não avaliada';
+                const a = Math.ceil(min / 60), b = Math.ceil(max / 60);
+                return a === b ? `${a} min` : `${a}–${b} min`;
+              })()}
+              {previsao.excedeTempoPorDia?.[dias.slice(0, i).filter(x => x.exercicios.length).length] ? ' — excede o tempo disponível' : ''}
+            </p>}
             {d.exercicios.length === 0 && (
               <p style={{ margin: '0 0 10px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)' }}>Nenhum exercício ainda neste dia.</p>
             )}
@@ -418,6 +433,14 @@ export default function EditorTreino({
                     <div style={{ fontSize: '.94rem', fontWeight: 600 }}>{ex.nomePt}</div>
                     <div style={{ fontSize: '.76rem', color: 'rgba(234,229,219,.5)' }}>{ROTULO_GRUPO[ex.grupoPrimario ?? ''] ?? ex.grupoMuscular}</div>
                   </div>
+                  <span style={{ fontSize: '.76rem', color: 'rgba(234,229,219,.8)' }}>
+                    {(() => {
+                      const atual = previsto[dias.slice(0, i).filter(x => x.exercicios.length).length]?.descansoSeg?.[k];
+                      const anterior = d.referenciaDescanso?.slots.find(s => s.id === ex.id)?.descansoSeg;
+                      return atual == null ? 'Descanso não avaliado' : anterior != null && anterior !== atual
+                        ? `Descanso: ${anterior} → ${atual} s` : `Descanso: ${atual} s`;
+                    })()}
+                  </span>
                   <CampoSeries nome={ex.nomePt} valor={d.seriesPorExercicio?.[ex.id] ?? previsto[dias.slice(0, i).filter((dia) => dia.exercicios.length).length]?.series?.[k] ?? 1} onMudar={(valor) => mut(i, (dia) => ({ ...dia, seriesPorExercicio: { ...dia.seriesPorExercicio, [ex.id]: valor } }))} />
                   <button onClick={() => mut(i, (x) => ({ ...x, exercicios: x.exercicios.filter((_, j) => j !== k) }))} style={btnIcone} aria-label={`Remover ${ex.nomePt}`}>×</button>
                 </>
@@ -542,7 +565,7 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
             {placar.map((l) => (
               <span key={l.grupo} title={tituloDaLinha(l)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '.8rem', fontWeight: 600, border: `1px solid ${corDoStatus(l.status).borda}`, color: corDoStatus(l.status).texto, borderRadius: 999, padding: '5px 10px' }}>
                 {corDoStatus(l.status).marca} {l.rotulo} <span style={{ opacity: 0.7, fontWeight: 500 }}>{l.ponderado}</span>
-                {!l.temFaixa && <span style={{ opacity: 0.55, fontWeight: 500, fontSize: '.72rem' }}>sem faixa</span>}
+                {!l.temFaixa && <span style={{ opacity: 0.55, fontWeight: 500, fontSize: '.72rem' }}>{l.temTeto ? 'somente teto' : 'sem faixa'}</span>}
               </span>
             ))}
           </div>
@@ -567,6 +590,7 @@ export function PainelCritico({ avaliacao, compacto = false }: { avaliacao: Aval
         * afirmar uma avaliação completa que não houve.
         */}
       {!compacto && avisos.length === 0 && recomendacoes.length === 0
+        && !placar.some((l) => l.status === 'acima_mrv' || l.status === 'acima_do_automatico')
         && placar.some((l) => l.temFaixa) && placar.filter((l) => l.temFaixa).every((l) => l.status === 'na_banda') && (
         <p style={{ margin: 0, fontSize: '.86rem', color: 'rgba(234,229,219,.6)' }}>{fraseDaSemana(placar)}</p>
       )}
@@ -664,10 +688,12 @@ function Linha({ item }: { item: ItemCritico }) {
  */
 export function fraseDaSemana(placar: readonly LinhaPlacar[]): string {
   const comFaixa = placar.filter((l) => l.temFaixa);
-  const semFaixa = placar.filter((l) => !l.temFaixa);
+  const somenteTeto = placar.filter((l) => !l.temFaixa && l.temTeto);
+  const semFaixa = placar.filter((l) => !l.temFaixa && !l.temTeto);
   const lista = comFaixa.map((l) => l.rotulo).join(', ');
-  if (semFaixa.length === 0) return `Os grupos com faixa definida (${lista}) estão dentro das faixas do seu nível.`;
-  return `Os grupos com faixa definida (${lista}) estão dentro das faixas do seu nível. ${semFaixa.map((l) => l.rotulo).join(', ')} aparecem só com a contagem: não têm faixa de referência e não foram avaliados.`;
+  return `Os grupos com faixa definida (${lista}) estão dentro das faixas do seu nível.`
+    + (somenteTeto.length ? ` ${somenteTeto.map(l => l.rotulo).join(', ')} têm somente limite superior; nenhum mínimo semanal foi avaliado.` : '')
+    + (semFaixa.length ? ` ${semFaixa.map(l => l.rotulo).join(', ')} aparecem só com a contagem: não têm faixa de referência e não foram avaliados.` : '');
 }
 
 /** O título do chip: a unidade, a decomposição direta/indireta e a faixa (quando existe). */
@@ -675,6 +701,7 @@ export function tituloDaLinha(l: LinhaPlacar): string {
   const conta = `${l.ponderado} séries ponderadas (${l.direto} diretas + ${l.indireto} de crédito indireto, já a 0,5)`;
   return l.temFaixa
     ? `${conta} · faixa ${l.mev}–${l.maxAutomatico} · teto ${l.mrv}`
+    : l.temTeto ? `${conta} · máximo automático ${l.maxAutomatico} · teto ${l.mrv} · sem mínimo semanal definido`
     : `${conta} · sem faixa de referência definida para este grupo`;
 }
 

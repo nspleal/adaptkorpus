@@ -1,3 +1,5 @@
+import {adicionarBlocoFoco} from './bloco-foco-adicional';
+import {poolElegivel} from './treino-montador';
 /**
  * 🔴 REGRESSÕES DA REVISÃO INDEPENDENTE — etapa 3 (parecer de 2026-09-14).
  *
@@ -92,8 +94,9 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
    * teto cheio (12/12) — é o avançado/saúde de 4 dias em 60 min.
    */
   const entrada = perfil({
-    nivelExperiencia: 'avancado', objetivo: 'massa', tempoPorSessaoMin: 45,limiteTempoTreino:'limitado',
-    treinoDias: ['seg', 'qua', 'sex'],
+    // Prova120: quatro dias em prioridades, 90 min LIMITADOS, extra estável S1–S5.
+    nivelExperiencia: 'intermediario', objetivo: 'massa', tempoPorSessaoMin: 90,limiteTempoTreino:'limitado',divisaoPreferida:'prioridades',
+    treinoDias: ['seg', 'ter', 'qui', 'sex'],
   });
   const neutro = gerar(entrada);
   /**
@@ -112,10 +115,18 @@ describe('D-02 — extras de um dia não mexem no corte de outro, e o ganho é r
    * células que ainda põem costas no teto CHEIO com o bloco recusado e o plano idêntico ao
    * neutro; esta é a primeira, e muda só o objetivo.
    */
-  const entradaTeto=perfil({nivelExperiencia:'avancado',objetivo:'emagrecimento',tempoPorSessaoMin:60,treinoDias:['seg','ter','qui','sex']});
+  const entradaTeto=perfil({nivelExperiencia:'intermediario',objetivo:'saude',tempoPorSessaoMin:45,divisaoPreferida:'superior-inferior',treinoDias:['seg','ter','qui','sex']});
   const neutroTeto=gerar(entradaTeto);
   const focoNoTeto = gerar({ ...entradaTeto, foco: { grupo: 'costas', semana: 1 } });
   const comFoco = gerar({ ...entrada, foco: { grupo: 'peito', semana: 1 } });
+
+  it('o antigo caso de três dias continua protegido quando não há espaço para extras',()=>{
+    const p=perfil({nivelExperiencia:'avancado',objetivo:'massa',tempoPorSessaoMin:45,limiteTempoTreino:'limitado',treinoDias:['seg','qua','sex']});
+    const a=gerar(p),b=gerar({...p,foco:{grupo:'peito',semana:1}});
+    expect(b.blocoFoco?.adicionais).toEqual([]);
+    expect(baselineFora(b,'peito')).toEqual(baselineFora(a,'peito'));
+    expect(seriesDe(b,'peito')).toBe(seriesDe(a,'peito'));
+  });
 
   it('anti-vacuidade: o bloco realmente entregou extras neste perfil', () => {
     expect(comFoco.blocoFoco?.adicionais.length, 'sem extras entregues não há o que conferir').toBeGreaterThan(0);
@@ -193,7 +204,7 @@ describe('D-03 — o bloco de empurrar não é recusado para manter igualdade pu
    * entradas. O balanceamento continua exigido do baseline (foco-equilibrio-puxar-empurrar).
    */
   const entrada = perfil({
-    nivelExperiencia: 'iniciante', equipamento: 'casa', tempoPorSessaoMin: 60, treinoDias: ['seg', 'qui'],
+    nivelExperiencia: 'intermediario', equipamento: 'academia', tempoPorSessaoMin: 90,limiteTempoTreino:'limitado', treinoDias: ['seg','ter','qui','sex'],
   });
 
   it('peito (empurrar) recebe o mesmo tamanho de bloco que costas (puxar)', () => {
@@ -210,16 +221,22 @@ describe('D-03 — o bloco de empurrar não é recusado para manter igualdade pu
     expect(baselineFora(peito, 'peito')).toEqual(baselineFora(neutro, 'peito'));
   });
 
-  it('grupos de empurrar e de puxar entregam na mesma proporção na grade curta', () => {
-    const agendas: Weekday[][] = [['dom', 'seg'], ['seg', 'qui'], ['seg', 'qua', 'sex']];
-    const recusados: string[] = [];
-    for (const treinoDias of agendas) for (const grupo of ['peito', 'triceps', 'costas', 'biceps'] as GrupoPrimario[]) {
-      const r = gerar(perfil({ nivelExperiencia: 'iniciante', equipamento: 'casa', tempoPorSessaoMin: 60, treinoDias, foco: { grupo, semana: 1 } }));
-      // Recusa legítima é a de CATÁLOGO (pool elegível esgotado), não a de padrão.
-      const elegiveis = EXERCISES.filter((e) => e.grupoPrimario === grupo).length;
-      if ((r.blocoFoco?.adicionais.length ?? 0) === 0 && elegiveis > 1) recusados.push(`${treinoDias.join('+')}/${grupo}`);
+  it('o padrão de movimento não veta extras no seletor da grade curta', () => {
+    // A presença no catálogo não prova folga de dose/tempo no ciclo. O discriminante
+    // D-03 é o veto assimétrico de padrão: mudá-lo isoladamente não pode liberar extras.
+    const agendas: Weekday[][] = [['dom','seg'],['seg','qui'],['seg','qua','sex']];
+    let comAdicao=0;
+    for(const treinoDias of agendas)for(const grupo of ['peito','triceps','costas','biceps'] as GrupoPrimario[]){
+      const p=perfil({nivelExperiencia:'iniciante',equipamento:'casa',tempoPorSessaoMin:60,treinoDias});
+      const base=gerar(p),pool=poolElegivel(EXERCISES,p,p.preferencias);
+      const foto=JSON.stringify(base.dias);
+      const original=adicionarBlocoFoco(base.dias,treinoDias,[grupo],pool,new Set());
+      const neutro=adicionarBlocoFoco(base.dias,treinoDias,[grupo],pool.map(e=>({...e,padraoMovimento:'isolado' as const})),new Set());
+      expect([...original.adicionais].map(s=>s.exercicio.id)).toEqual([...neutro.adicionais].map(s=>s.exercicio.id));
+      expect(JSON.stringify(base.dias)).toBe(foto);
+      if(original.adicionais.size)comAdicao++;
     }
-    expect(recusados, `bloco recusado sem pool esgotado: ${recusados.join(', ')}`).toEqual([]);
+    expect(comAdicao).toBeGreaterThan(0);
   });
 });
 
@@ -229,23 +246,26 @@ describe('P-01 — INCOMPATIVEL informa o conflito e os caminhos, sem prometer q
    * renderizando os dias. O parecer pediu que a frase dissesse isso e nomeasse as saídas
    * reais — sem afrouxar limite, descanso ou cobertura para fabricar um certificado.
    */
-  const entrada = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 20, treinoDias: ['seg'] });
+  // Com o piso autorizado de 60 s, 20 min já cabe; 10 min preserva o caso incompatível.
+  const entrada = perfil({ nivelExperiencia: 'avancado', tempoPorSessaoMin: 10, treinoDias: ['seg'] });
   const r = gerar(entrada);
 
   it('anti-vacuidade: este perfil realmente cai em INCOMPATIVEL', () => {
     expect(r.resultadoGeracao?.tipo).toBe('INCOMPATIVEL');
   });
 
-  it('o plano continua entregue e utilizável (bloqueio é tom, não impedimento)', () => {
+  it('a proposta permanece mensurável para explicar a incompatibilidade', () => {
     expect(r.dias.length).toBeGreaterThan(0);
     expect(r.dias.every((d) => d.slots.length > 0)).toBe(true);
     expect(r.dias.flatMap((d) => d.slots).every((s) => (s.series ?? 0) > 0)).toBe(true);
   });
 
-  it('a frase diz que dá para usar e lista alternativas, sem garantir que cabe', () => {
+  it('a frase recusa a geração incompatível e lista alternativas sem garantir que caiba', () => {
     const v = vereditoDoPlano(r, entrada.tempoPorSessaoMin)!;
     expect(v.tom).toBe('bloqueio');
-    expect(v.detalhe).toMatch(/consultar, iniciar e registrar/);
+    expect(v.detalhe).toMatch(/não foi aceita/);
+    expect(v.detalhe).toMatch(/último plano salvo/);
+    expect(v.detalhe).not.toMatch(/iniciar e registrar/);
     expect(v.detalhe).toMatch(/nenhum deles garante que caiba/);
     expect(v.detalhe).toMatch(/mais dias/);
     expect(v.detalhe).toMatch(/75\+/);

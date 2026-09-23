@@ -89,11 +89,13 @@ describe('🔒 a classificação histórica casa com testes que existem', () => 
 
   /**
    * 🔒 O NÚMERO, preso. Cada nome histórico vira exatamente um teste PULADO no projeto
-   * `atual:<arquivo>` — é assim que os 23 do rodapé da suíte se explicam. Um a mais ou a
+   * `atual:<arquivo>`. Um a mais ou a
    * menos sem decisão derruba este teste em vez de aparecer só no rodapé.
    */
-  it('os nomes históricos somam 23 — o mesmo número de testes pulados da suíte', () => {
+  it('as 19 exclusões históricas remanescentes estão contabilizadas', () => {
     const total = classificacao.arquivos.reduce((n, a) => n + a.historicos.length, 0);
-    expect(total).toBe(23);
+    // 20/09: duas fotografias substituídas antes, monotonicidade revogada e
+    // quota de slots substituída por cobertura não deixam filtros órfãos.
+    expect(total).toBe(19);
   });
 });

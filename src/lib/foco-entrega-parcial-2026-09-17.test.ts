@@ -47,19 +47,25 @@ const entrega = (r: RotinaSemanal) => {
   return { exercicios: ad.length, series: ad.reduce((n, a) => n + (a.series ?? 0), 0), solicitados: r.blocoFoco?.solicitados ?? 0 };
 };
 
-/** O caso REPRODUZIDO na varredura: entrega parcial com a frase errada. */
-/**
- * 🔵 REANCORADO em 2026-09-19: com a seleção por referência, o caso avançado/6d/45 passou a
- * recusar o bloco inteiro. A entrega PARCIAL viva (1 de 2, o segundo cortado pelo tempo) é o
- * iniciante de 3 dias em 30 min com foco em bíceps.
- */
-// Controle discriminante em CP10: 1 de 2 extras, via porta pública, sem mudar o regime limitado.
+// Controle parcial atual: 1 de 2 extras em Prioridades explícita, 90 min limitados.
 const CASO_PARCIAL = {
-  nivelExperiencia: 'intermediario', diasDisponiveis: 3, treinoDias: ['seg','qua','sex'],
-  tempoPorSessaoMin: 60, limiteTempoTreino: 'limitado', foco: { grupo: 'biceps', compensa: 'peito' },
+  nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg','qua','sex'],
+  divisaoPreferida: 'prioridades',
+  tempoPorSessaoMin: 90, limiteTempoTreino: 'limitado', foco: { grupo: 'peito', compensa: 'ombros' },
 };
 
 describe('🔴 o bloco do foco: entrega parcial não é recusa total', () => {
+  it('extra aparado por volume e depois removido por tempo não é anunciado como entregue', () => {
+    const r = plano({nivelExperiencia:'intermediario',diasDisponiveis:4,
+      treinoDias:['seg','ter','qui','sex'],divisaoPreferida:'superior-inferior',
+      tempoPorSessaoMin:90,limiteTempoTreino:'limitado',foco:{grupo:'peito'}}, 5);
+    expect(r.blocoFoco!.solicitados).toBeGreaterThan(0);
+    expect(r.blocoFoco!.adicionais).toEqual([]);
+    expect(r.blocoFoco!.consolidados ?? []).toEqual([]);
+    expect(r.avisos.join(' ')).toContain('extras não couberam no tempo disponível');
+    expect(r.avisos.join(' ')).not.toContain('entrou com menos séries');
+  });
+
   it('ENTREGA PARCIAL — o caso reproduzido diz quanto entrou, e não diz que não entrou', () => {
     const r = plano(CASO_PARCIAL, 1);
     const e = entrega(r);
@@ -117,29 +123,32 @@ describe('🔴 o bloco do foco: entrega parcial não é recusa total', () => {
     let medidos = 0;
     let comFala = 0;
     let parciais = 0;
+    const verificar = (r: RotinaSemanal, contexto: string) => {
+      medidos += 1;
+      const e = entrega(r);
+      const frase = falaDoBloco(r).join(' | ');
+      if (frase) comFala += 1;
+      if (e.exercicios > 0 && e.exercicios < e.solicitados) parciais += 1;
+      if (/bloco do foco não entrou/.test(frase) && e.exercicios > 0) {
+        fora.push(`${contexto}: entregues=${e.exercicios}`);
+      }
+    };
     for (const objetivo of ['massa', 'emagrecimento'] as const)
       for (const tempo of [45, 60, 75] as const)
         for (const limite of ['limitado', 'sem_limite'] as const)
           for (const semana of [1, 3, 5] as const)
             for (const grupo of ['peito', 'gluteos', 'costas', 'pernas'] as const) {
-              let r: RotinaSemanal;
-              try {
-                r = plano({
+              const r = plano({
                   objetivo, nivelExperiencia: 'avancado', diasDisponiveis: 6,
                   treinoDias: [...DIAS.slice(0, 6)], tempoPorSessaoMin: tempo,
                   limiteTempoTreino: limite, foco: { grupo, compensa: 'ombros' },
                 }, semana);
-              } catch { continue; }
-              medidos += 1;
-              const e = entrega(r);
-              const frase = falaDoBloco(r).join(' | ');
-              if (frase) comFala += 1;
-              if (e.exercicios > 0 && e.exercicios < e.solicitados) parciais += 1;
-              if (/bloco do foco não entrou/.test(frase) && e.exercicios > 0) {
-                fora.push(`${objetivo}/${tempo}min/${limite}/S${semana}/foco=${grupo}: entregues=${e.exercicios}`);
-              }
+              verificar(r, `${objetivo}/${tempo}min/${limite}/S${semana}/foco=${grupo}`);
             }
-    expect(medidos, 'a varredura não mediu nada').toBeGreaterThan(100);
+    // O ciclo estável tornou as 144 células antigas recusas totais. Mantê-las
+    // e incluir o controle parcial já medido, em vez de presumir que entregam.
+    verificar(plano(CASO_PARCIAL, 1), 'controle parcial: Prioridades/90min/S1');
+    expect(medidos, 'todas as células precisam ser avaliadas, sem ignorar exceções').toBe(145);
     expect(comFala, 'nenhuma célula falou do bloco — a invariante não foi exercida').toBeGreaterThan(0);
     expect(parciais, 'nenhuma entrega parcial na grade — o caso não foi exercido').toBeGreaterThan(0);
     expect(fora, `${fora.length} planos dizem que o bloco não entrou enquanto entregam foco`).toEqual([]);

@@ -19,10 +19,6 @@ const porId = (id: string): Exercise => {
 };
 /** Um peitoral que também credita ombros — a ponte do crédito indireto que o defeito ignorava. */
 const peitoComIndireto = EXERCISES.find((e) => e.grupoPrimario === 'peito' && secundariosDe(e).includes('ombros'))!;
-/** Um peitoral sem nenhum secundário GRANDE, para separar direto de indireto. */
-const peitoSemGrandeIndireto = EXERCISES.find(
-  (e) => e.grupoPrimario === 'peito' && !secundariosDe(e).some((g) => ['costas', 'quadriceps', 'posterior', 'gluteos', 'ombros'].includes(g)),
-);
 
 describe('anti-vacuidade — o seed sustenta os casos', () => {
   it('existe peitoral que credita ombros de forma indireta', () => {
@@ -56,10 +52,12 @@ describe('seriesQueCabemNoTeto — o quanto o extra pode somar', () => {
     expect(seriesQueCabemNoTeto(peitoComIndireto, 2, semFolga as never, 16)).toBe(0);
   });
 
-  it('ignora grupos SEM faixa: bíceps/tríceps não têm teto para gastar', () => {
-    if (!peitoSemGrandeIndireto) return; // o seed pode não ter; o caso acima já cobre o essencial
-    const credito = new Map([['triceps', 99]] as const) as Map<never, number>;
-    expect(seriesQueCabemNoTeto(peitoSemGrandeIndireto, 2, credito as never, 16)).toBe(2);
+  it('bíceps/tríceps agora têm teto semanal; indireto também impede o extra', () => {
+    const e = EXERCISES.find(e => e.grupoPrimario === 'peito' && secundariosDe(e).includes('triceps'))!;
+    expect(e).toBeDefined();
+    const credito = new Map([['triceps', 16]] as const);
+    expect(seriesQueCabemNoTeto(e, 2, credito, 16)).toBe(0);
+    expect(seriesQueCabemNoTeto(e, 2, new Map([['triceps', 15.5]]), 16)).toBe(1);
   });
 
   it('`creditar` soma na MESMA moeda de `creditoPonderadoDaSemana`', () => {
@@ -140,7 +138,7 @@ describe('podarExcessoPonderado — o excesso do BASELINE', () => {
    * estourado. Na tela, com peito, costas e ombros a 24 contra 16, `irredutiveis` vinha com
    * peito sozinho. Cada grupo irredutível consome uma volta, e o orçamento tem de contá-las.
    */
-  it('🔴 TRÊS grupos estourados e tudo protegido: os três entram em `irredutiveis`', () => {
+  it('🔴 quatro grupos estourados (incluindo tríceps) e tudo protegido: todos entram em `irredutiveis`', () => {
     const costas = EXERCISES.find((e) => e.grupoPrimario === 'costas')!;
     const ombros = EXERCISES.find((e) => e.grupoPrimario === 'ombros')!;
     const slots = [
@@ -150,7 +148,7 @@ describe('podarExcessoPonderado — o excesso do BASELINE', () => {
     ];
     const r = podarExcessoPonderado(slots, 16, 2, () => false);
     expect(r.podados).toEqual([]);
-    expect([...r.irredutiveis].sort()).toEqual(['costas', 'ombros', 'peito']);
+    expect([...r.irredutiveis].sort()).toEqual(['costas', 'ombros', 'peito', 'triceps']);
   });
 
   it('termina mesmo com entrada absurda (sem laço infinito)', () => {

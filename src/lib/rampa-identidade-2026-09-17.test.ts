@@ -284,12 +284,14 @@ describe('🔒 trocar, remover e inserir devolvem exatamente o que se pediu', ()
   it('trocar a ordem de dois exercícios do dia não muda a dose de nenhum deles', () => {
     const p = perfil();
     const base = gerar(p, opcoes);
+    // Exercita a porta real do editor: a dose automática ajustada acompanha os IDs.
+    // Um desenho legado contendo só IDs não promete reproduzir cortes automáticos de tempo.
     const antes = porSlot(base);
-    const dias = base.dias.map((d, i) => {
-      const ids = d.slots.map((s) => s.exercicio.id);
-      if (i === 0 && ids.length >= 2) [ids[0], ids[1]] = [ids[1]!, ids[0]!];
-      return { nome: d.nome, diaId: d.diaId, exercicioIds: ids };
-    });
+    const editaveis = doPlano(base.dias, p.treinoDias);
+    const exercicios = editaveis[0]!.exercicios;
+    expect(exercicios.length).toBeGreaterThanOrEqual(2);
+    [exercicios[0], exercicios[1]] = [exercicios[1]!, exercicios[0]!];
+    const dias = paraRotinaCustom(editaveis).dias;
     const r = gerar({ ...p, rotinaCustom: { origem: 'usuario', dias } } as PerfilResumo, opcoes);
     expect(porSlot(r), 'a troca de posição mexeu na dose — a repartição voltou a olhar a posição')
       .toEqual(antes);
