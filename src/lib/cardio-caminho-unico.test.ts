@@ -67,8 +67,9 @@ describe('🔒 um único caminho grava cardio', () => {
       .filter(([f, src]) => /tipo:\s*'cardio'/.test(src) && f !== 'src/lib/treino-historico.ts')
       .map(([f]) => f);
     // Anti-vacuidade: se não houver isento nenhum, o critério derivado não provou nada e
-    // este teste passaria de graça. Hoje são o módulo do dia e o `DiaTipo` da semana.
-    expect(isentos.length, 'nenhum isento — o critério ficou sem sujeito').toBeGreaterThanOrEqual(2);
+    // este teste passaria de graça. Hoje é o `DiaTipo` da semana (o módulo do dia perdeu a união
+    // cardio × recuperação em 2026-09-24, com a regra do dia excedente).
+    expect(isentos.length, 'nenhum isento — o critério ficou sem sujeito').toBeGreaterThanOrEqual(1);
     for (const f of isentos) {
       const src = FONTES.find(([n]) => n === f)![1];
       expect(podeGravar(src), `${f} usa o padrão E consegue gravar`).toBe(false);
@@ -175,13 +176,13 @@ describe('pré-preenchimento do item da rotina', () => {
 /**
  * ⚠️ ACHADO (2026-07-28) — a entrada da sessão guiada está PRONTA e DORMENTE.
  *
- * O montador nunca emite slot com `padrao: 'cardio'`: cardio entra como CONTAGEM DE DIAS
- * (`diasCardioRecuperacao` = dias − dias de força), não como item da rotina. Ou seja, o
- * "conta duas vezes" que a DF veio fechar **não era alcançável em produção** — o catálogo
+ * O montador nunca emite slot com `padrao: 'cardio'` dentro de uma sessão de força: o cardio
+ * sai como item próprio (`rotina.diasCardio`), nos dias oferecidos para ele (DEC-007). Ou seja,
+ * o "conta duas vezes" que a DF veio fechar **não é alcançável em produção** — o catálogo
  * tem os 14 exercícios, mas a alocação por padrão nunca os escolhe.
  *
- * O guard fica: quando o "dia excedente → cardio" do Passo 3 virar um dia real da rotina,
- * o caminho único já está no lugar, e este teste avisa na hora em que a premissa mudar.
+ * O guard fica: se um dia o cardio virar slot da sessão de força, o caminho único já está no
+ * lugar, e este teste avisa na hora em que a premissa mudar.
  */
 describe('⚠️ hoje nenhuma rotina gerada tem item de cardio', () => {
   const perfil = (objetivo: 'saude' | 'emagrecimento' | 'massa', diasDisponiveis: number): PerfilTreino => ({

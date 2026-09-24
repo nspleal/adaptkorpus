@@ -90,7 +90,7 @@ export function recomputarPlano(
     // 🧭 O desenho do editor guiado entra como ENTRADA do montador — mesmo trilho dos
     // demais campos do perfil. Ausente = o gerador monta (comportamento de sempre).
     ...(perfil.rotinaCustom ? { rotinaCustom: perfil.rotinaCustom } : {}),
-    // 🏃 C2: a modalidade escolhida alimenta o slot do dia excedente de cardio.
+    // 🏃 C2: a modalidade escolhida alimenta os dias de cardio do plano.
     ...(perfil.cardioFavorito ? { cardioFavorito: perfil.cardioFavorito } : {}),
     // 🔁 A variação aceita em "Gerar novo treino" — entrada do montador, mesmo trilho de
     // `divisaoPreferida`. Sem ela aqui, a proposta aceita morreria no primeiro recompute.

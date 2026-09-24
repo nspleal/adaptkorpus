@@ -87,7 +87,7 @@ export function PorQueOAparelho() {
  * **sem contagem regressiva**. A diretriz de 150 min não some do mundo — ela deixa de ser
  * uma dívida que o app cobra de quem ele não deu os dias.
  */
-function BarraMinutos({ feito, meta, prescrito }: { feito: number; meta: MetaCardio; prescrito?: number }) {
+function BarraMinutos({ feito, meta, prescrito, naRetomada }: { feito: number; meta: MetaCardio; prescrito?: number; naRetomada: boolean }) {
   // O denominador é o PLANO quando ele existe; a meta só sobra como referência da diretriz.
   const base = prescrito != null && prescrito > 0 ? prescrito : meta.alvo;
   const pct = base > 0 ? Math.min(100, (feito / base) * 100) : 0;
@@ -106,7 +106,7 @@ function BarraMinutos({ feito, meta, prescrito }: { feito: number; meta: MetaCar
         <span>{base} (o cardio do seu plano)</span>
         {/* 🔒 300 NÃO é teto: a diretriz reconhece benefício acima disso. Nenhum rótulo o
             chama de máximo, e passar dele não dispara nada. */}
-        {meta.max != null && <span>{meta.max} (faixa recomendada)</span>}
+        {meta.max != null && <span>{meta.max} ({naRetomada ? 'faixa desta semana' : 'faixa recomendada'})</span>}
       </div>
       {/* 🔒 FORMA DE REGISTRO, NÃO DE DÍVIDA. Sem "faltam", sem contagem regressiva e sem
           alvo no futuro da atividade da pessoa: diz o que a semana tem e o que ela registrou. */}
@@ -197,7 +197,9 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
 }) {
   const resumo = resumoCardioSemana(registros);
   const cumprida = metaCumprida(meta, resumo);
-  const rotuloObjetivo = objetivo === 'massa' ? 'Ganho de massa' : objetivo === 'emagrecimento' ? 'Emagrecimento · 150–300 min' : 'Saúde · 150 min';
+  // Na retomada a meta desta semana é menor; o rótulo do objetivo guarda a referência NORMAL.
+  const rotuloObjetivo = objetivo === 'massa' ? 'Ganho de massa'
+    : `${objetivo === 'emagrecimento' ? 'Emagrecimento' : 'Saúde'} · ${retomada ? 'normal ' : ''}${objetivo === 'emagrecimento' ? '150–300' : '150'} min`;
 
   return (
     <section aria-labelledby="evk-cardio-titulo" style={{ marginTop: 26, borderTop: '1px solid rgba(234,229,219,.08)', paddingTop: 22 }}>
@@ -226,7 +228,7 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
               <span style={kicker}>
-                {cumprida ? 'Meta da semana cumprida' : meta.tipo === 'sessoes' ? 'Sessões da semana' : retomada ? 'Meta desta semana' : 'Meta da semana'}
+                {cumprida ? 'Meta da semana cumprida' : meta.tipo === 'sessoes' ? 'Sessões da semana' : retomada ? `Meta desta semana · ${meta.alvo}${meta.max != null ? `–${meta.max}` : ''} min` : 'Meta da semana'}
               </span>
               <span style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.45)' }}>{rotuloObjetivo}</span>
             </div>
@@ -237,10 +239,10 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
                 dívida do app sobre dias que ele não deu**. Vale com qualquer agenda de força:
                 o cardio é independente dela (2026-09-23). Sem "Faltam X", sem tom de falha. */}
             {(!prescritoMin || prescritoMin <= 0) && meta.tipo !== 'sessoes'
-              ? <SemDiaDeCardio />
+              ? <SemDiaDeCardio metaZero={meta.alvo <= 0} />
               : meta.tipo === 'sessoes'
                 ? <BlocosSessoes feitas={resumo.sessoesNaMeta} meta={meta} />
-                : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} prescrito={prescritoMin} />}
+                : <BarraMinutos feito={resumo.minutosNaMeta} meta={meta} prescrito={prescritoMin} naRetomada={retomada != null} />}
             {retomada && (
               <p style={{ ...apoio, margin: '12px 0 0' }}>
                 Sua meta está menor porque você está voltando. Ela sobe junto com o treino e volta ao normal quando a retomada terminar.
@@ -467,17 +469,22 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalida
 
 
 /**
- * 🔒 C3 — o arranjo DESCRITO, quando nenhum dia foi escolhido para o cardio (DF 2026-08-14).
+ * 🔒 C3 — o arranjo DESCRITO quando o plano não prescreve minutos: nenhum dia escolhido para o
+ * cardio (DF 2026-08-14) ou, na retomada com fator 0, meta zero nos dias escolhidos.
  *
  * 🔴 O que esta tela NÃO faz, e é o ponto: não prescreve cardio em dia que a pessoa não
  * ofereceu, não conta quanto "falta" e não culpa a musculação — cardio e força podem dividir o
  * dia (2026-09-23). A ausência de dia é um ARRANJO da pessoa; descrevê-lo é honesto, cobrá-lo
  * seria o app cobrando o que ele mesmo não deu ("ausência não fala").
  */
-function SemDiaDeCardio() {
+function SemDiaDeCardio({ metaZero }: { metaZero: boolean }) {
   return (
     <p style={{ margin: 0, fontSize: '.92rem', lineHeight: 1.6, color: 'rgba(234,229,219,.78)' }}>
-      Nenhum dia está escolhido para a sugestão automática de cardio nesta semana. Se fizer cardio, registre aqui embaixo: entra no seu histórico do mesmo jeito.
+      {/* Fator de retomada 0 (Nicolas, 2026-09-24): os dias escolhidos continuam escolhidos; o
+          que zera é a meta, e é isso que a frase diz. */}
+      {metaZero
+        ? 'Nesta semana a meta de cardio é zero, então o plano não prescreve minutos de cardio.'
+        : 'Nenhum dia está escolhido para a sugestão automática de cardio nesta semana.'} Se fizer cardio, registre aqui embaixo: entra no seu histórico do mesmo jeito.
     </p>
   );
 }

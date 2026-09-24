@@ -5,8 +5,7 @@ import { formatarDuracaoMinutos } from '@/lib/formatar-duracao';
 
 import { useState, type CSSProperties } from 'react';
 import { montarSemana, proximoTreinoIdx, weekdayHojeIdx, type Weekday } from '@/lib/semana';
-import { ROTULO_MODALIDADE } from '@/lib/engine/cardio';
-import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
+import { ROTULO_MODALIDADE, type ModalidadeCardio } from '@/lib/engine/cardio';
 
 /**
  * "Sua semana" (handoff Dias-e-Preferências §5.4) — porte FIEL. Faixa Seg–Dom no topo da
@@ -17,7 +16,7 @@ import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], naoAtendidos = [], onRegistrarCardio }: {
+export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrSessao, onVerDieta, onEditarPerfil, cardioEncerrado = false, diasCardio = [], naoAtendidos = [], onRegistrarCardio }: {
   treinoDias: Weekday[];
   sessoesDias?: readonly (Weekday | undefined)[];
   sessoesNomes: string[];              // nomes das sessões (rotina.dias[].nome), na ordem do motor
@@ -25,11 +24,11 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
   onVerDieta: () => void;
   onEditarPerfil: () => void;
   /**
-   * 🔒 O DIA EXCEDENTE PASSA A TER CONTEÚDO (Leva E, spec §🏃). Vem pronto do motor
-   * (`conteudoDoDiaExcedente`) — a tela não decide entre cardio e recuperação nem calcula
-   * duração: se decidisse aqui, existiriam duas respostas para o que o dia é.
+   * 🔒 Massa com a meta semanal de sessões batida: a semana deixa de sugerir cardio em todos os
+   * dias (Nicolas, 2026-09-24) — o dia que era só de cardio fica em recuperação, o dia misto
+   * fica só com a musculação e o dia de força não atendido volta a "Sem sessão".
    */
-  diaExcedente?: ConteudoDiaExcedente;
+  cardioEncerrado?: boolean;
   /** Dias de cardio EMITIDOS pelo motor — rotulam a faixa e trazem o item do dia. */
   diasCardio?: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[];
   /** Dias de força planejados que o motor declarou não atendidos (`rotina.diasNaoAtendidos`). */
@@ -42,23 +41,17 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
   onRegistrarCardio?: (item?: { modalidade: string; minutos: number | null }) => void;
 }) {
   const hojeIdx = weekdayHojeIdx();
-  // 🔒 O dia de cardio vem do MOTOR (`rotina.diasCardio`). A tela não decide se o excedente
-  // é cardio ou recuperação, nem calcula duração — se decidisse, existiriam duas respostas.
-  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio, sessoesDias, naoAtendidos);
+  // 🔒 O dia de cardio, a modalidade e a duração vêm do MOTOR (`rotina.diasCardio`): a tela não
+  // calcula nada — se calculasse, existiriam duas respostas para o que o dia é.
+  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, cardioEncerrado ? [] : diasCardio, sessoesDias, naoAtendidos)
+    .map((d) => cardioEncerrado && d.tipo === 'descanso' && diasCardio.some((c) => c.diaId === d.weekday)
+      ? { ...d, isTraining: true, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' }
+      : d);
   const [selDay, setSelDay] = useState(hojeIdx);
   const sd = semana[selDay]!;
   const proximo = proximoTreinoIdx(semana, hojeIdx);
-  /** O item de cardio do dia excedente, quando existe. `null` = o dia é recuperação. */
-  /**
-   * O item do dia SELECIONADO. Vem do dia da faixa (`sd.cardio`, emitido pelo motor) e cai
-   * no `diaExcedente` do Painel só quando a faixa não trouxe — é ele que carrega a virada
-   * "massa com sessões batidas → recuperação", que depende do histórico.
-   */
-  const cardio = sd.tipo === 'cardio' && diaExcedente?.tipo === 'cardio'
-    ? { ...diaExcedente, minutos: sd.cardio?.minutos ?? diaExcedente.minutos }
-    : (sd.tipo === 'cardio' && diaExcedente == null && sd.cardio
-      ? { tipo: 'cardio' as const, minutos: sd.cardio.minutos, modalidade: sd.cardio.modalidade as never }
-      : null);
+  /** O item do dia só de cardio SELECIONADO, como o motor o emitiu. Ausente = o dia não é de cardio. */
+  const cardio = sd.tipo === 'cardio' ? sd.cardio : undefined;
   /** Cardio próprio continua depois da musculação e precisa aparecer como parte do mesmo dia. */
   const cardioAposTreino = sd.tipo === 'treino' ? sd.cardio : undefined;
 
@@ -137,18 +130,17 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
               <div style={{ flex: 1, minWidth: 200 }}>
                 {/* 🔒 A FRASE NÃO EXPLICA A FÓRMULA (DF 2026-08-01, teto de 90 min).
                     Ela dizia "a duração é a meta da semana dividida pelos dias de cardio" —
-                    verdade até o teto existir, e FALSA quando ele morde (1 dia excedente:
+                    verdade até o teto existir, e FALSA quando ele morde (1 dia de cardio:
                     a meta é 150, o dia mostra 90). 🔴 E a saída não é "faltam 60 min": isso
                     é alvo no futuro da atividade da pessoa, classes ① e ③ de vazamento.
                     O app mostra O QUE PRESCREVE e não afirma que a semana está coberta —
                     silêncio sobre o resto, não versão adaptada da frase.
-                    🔒 Leva E — o dia excedente deixa de ser só um rótulo. Com meta em
-                    minutos ele traz UM item de cardio (modalidade + duração, ambos do
-                    motor); sem meta em minutos continua sendo recuperação, que não
-                    prescreve nada. O texto do cardio NÃO fala no futuro nem promete
-                    resultado: descreve o item do dia. */}
+                    🔒 O dia só de cardio traz UM item (modalidade + duração, ambos do
+                    motor; meta em sessões = sem duração). A recuperação não prescreve
+                    nada. O texto do cardio NÃO fala no futuro nem promete resultado:
+                    descreve o item do dia. */}
                 <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#16A34A', marginBottom: 6 }}>{`${sd.isToday ? 'Hoje' : cap(sd.full)} · ${cardio ? 'Cardio' : 'Recuperação'}`}</div>
-                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade]} · ${formatarDuracaoMinutos(cardio.minutos)}` : ROTULO_MODALIDADE[cardio.modalidade]) : 'Recuperação ativa'}</h3>
+                <h3 style={{ margin: '0 0 6px', fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-.02em' }}>{cardio ? (cardio.minutos != null ? `${ROTULO_MODALIDADE[cardio.modalidade as ModalidadeCardio]} · ${formatarDuracaoMinutos(cardio.minutos)}` : ROTULO_MODALIDADE[cardio.modalidade as ModalidadeCardio]) : 'Recuperação ativa'}</h3>
                 <p style={{ margin: 0, maxWidth: 520, fontSize: '.95rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>{cardio ? 'Dia ativo de cardio. Pode trocar a modalidade, a intensidade e a duração ao registrar.' : 'Um dia ativo mais leve — cardio leve ou mobilidade. Faz parte do plano: o corpo se fortalece se recuperando entre os treinos de força.'}</p>
               </div>
               {cardio && onRegistrarCardio ? (

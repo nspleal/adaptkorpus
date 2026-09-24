@@ -195,6 +195,6 @@ export function gerarTreino(
 export {
   estadoRetomada, faixaDaPausa, volumeDaRetomada, irvComCarga, irvRespeitaTeto,
   seriesMaxComCarga, seriesMaxSemCarga, tetoSeriesDaRetomada, freqMaxPorGrupo,
-  descansoMinimoSeg, naJanelaFit, rirAlvoDaRetomada, aplicarRetomada, metaCardioDaRetomada,
+  descansoMinimoSeg, naJanelaFit, rirAlvoDaRetomada, aplicarRetomada,
   type EstadoRetomada, type FaixaRetomada,
 } from './treino-retomada';

@@ -13,7 +13,7 @@ import { recomputarPlano } from './plano';
 import { MODALIDADES_CARDIO } from './engine/cardio';
 import type { PerfilResumo } from '@/components/painel/Painel';
 
-/** Perfil com dia excedente: 2 dias de treino oferecidos, 4 disponíveis na agenda. */
+/** Perfil de 4 dias na agenda; os testes oferecem a quinta-feira para cardio. */
 const BASE = {
   sexo: 'masculino', pesoKg: 80, alturaCm: 180, idade: 30,
   nivelAtividade: 'moderado', objetivo: 'emagrecimento', preferencia: null,
@@ -38,13 +38,13 @@ describe('🏃 C2 — o cardio favorito chega ao plano', () => {
     expect(pelaRota().cardioFavorito).toBeUndefined();
   });
 
-  /** 🔑 O EFEITO: o dia excedente sai com a modalidade escolhida, não com o default. */
+  /** 🔑 O EFEITO: o dia de cardio sai com a modalidade escolhida, não com o default. */
   it('o dia de cardio sai com a modalidade escolhida', () => {
     const r = recomputarPlano(pelaRota({ cardioFavorito: 'bike' }), {
       semanaCiclo: { semana: 3 }, diasOferecidosCardio: [3],
     });
     const dias = r.treino.rotina?.diasCardio ?? [];
-    expect(dias.length, 'fixture sem dia excedente — o teste não provaria nada').toBeGreaterThan(0);
+    expect(dias.length, 'fixture sem dia de cardio — o teste não provaria nada').toBeGreaterThan(0);
     expect(dias.every((d) => d.modalidade === 'bike'), `modalidades: ${dias.map((d) => d.modalidade).join(',')}`).toBe(true);
   });
 

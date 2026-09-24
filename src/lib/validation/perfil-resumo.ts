@@ -200,7 +200,7 @@ export const perfilResumoSchema = z.object({
   tecnicasAvancadas: z.boolean().optional(),
   /**
    * 🏃 C2 — a MODALIDADE preferida de cardio. A spec já previa modalidade escolhida (default
-   * caminhada; as 6 do registro) — faltava só o campo. Alimenta o slot do dia excedente.
+   * caminhada; as 6 do registro) — faltava só o campo. Alimenta os dias de cardio do plano.
    */
   cardioFavorito: z.enum(['caminhada', 'corrida', 'bike', 'pular_corda', 'lutas', 'outro']).optional(),
   // 💰 Leva H — teto de custo da dieta. `null` ≡ ausente (sem restrição); o vocabulário é o

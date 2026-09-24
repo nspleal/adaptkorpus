@@ -155,6 +155,17 @@ describe('D5 — a rota e o app devolvem a MESMA rotina para o mesmo perfil', ()
     const rotina = corpo.rotina as { cardioSemana?: { prescritoSegundos: number } };
     expect(rotina.cardioSemana?.prescritoSegundos, 'a oferta de cardio não chegou ao motor').toBeGreaterThan(0);
   });
+
+  it('a rampa de retomada atravessa a rota e reduz o cardio pela fórmula do app, nos limites 0 e 1', async () => {
+    const semanaCiclo = (fator: number) => ({ semana: 1, retomada: { semana: 1, fator, volumeReferencia: 12, exerciciosRecentes: [] } });
+    for (const [fator, porDia] of [[0, 0], [0.5, 40], [1, 75]] as const) {
+      const { status, corpo } = await chamar({ ...perfilCompleto, objetivo: 'saude', diasOferecidosCardio: ['sex', 'dom'], semanaCiclo: semanaCiclo(fator) });
+      expect(status, `fator ${fator}`).toBe(200);
+      const rotina = corpo.rotina as { diasCardio: { diaId: string; minutos: number | null }[] };
+      expect(rotina.diasCardio.map((c) => [c.diaId, c.minutos]), `fator ${fator}`).toEqual(porDia ? [['sex', porDia], ['dom', porDia]] : []);
+    }
+    expect((await chamar({ ...perfilCompleto, semanaCiclo: semanaCiclo(1.2) })).status).toBe(400);
+  });
 });
 
 /* ══════════════════ Compatibilidade e réguas ══════════════════ */

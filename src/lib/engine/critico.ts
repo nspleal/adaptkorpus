@@ -23,7 +23,7 @@ import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, maxSemanalSemFoco, mev, mrv, tetoPonderadoNaSessao } from './trilhos';
 import { VOLUME_NIVEL } from './treino-constants';
-import { metaCardioDaRetomada } from './treino-retomada';
+import { metaCardioComRetomada } from './cardio';
 import { avaliarDuracaoResistida } from './duracao-plano';
 import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
 import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
@@ -635,9 +635,8 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   const duracaoResistidaCritico = rotina.dias.map((d) =>
     avaliarDuracaoResistida(d.slots, ctx.nivel, orcamentoSeg, rotina.limiteTempoEstrito));
   const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-      ? duracaoDoDiaDeCardio(ctx.fatorRetomadaEsperado != null
-        ? metaCardioDaRetomada(rotina.cardio.min, ctx.fatorRetomadaEsperado)
-        : rotina.cardio.min, oferecidos.length) * 60
+      ? duracaoDoDiaDeCardio(metaCardioComRetomada({ tipo: 'minutos', alvo: rotina.cardio.min },
+        ctx.fatorRetomadaEsperado ?? null)!.alvo, oferecidos.length) * 60
     : 0;
   const fatosReconstruidos = fatosInformados
       ? fatosDistribuicaoCardioDaRotina({
