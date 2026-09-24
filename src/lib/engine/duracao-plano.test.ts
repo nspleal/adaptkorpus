@@ -3,7 +3,7 @@
  * hold (nunca 40 s), reps a 40 s, dado ausente ⇒ NAO_AVALIADO (sem 1/90), bilateral por default.
  */
 import { describe, expect, it } from 'vitest';
-import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, itensResistidosDeSlots } from './duracao-plano';
+import { avaliarDuracaoResistida, itensResistidosDeSlots } from './duracao-plano';
 import { EXERCISES } from '../data/exercises';
 import { faixaSegundos } from './isometricos';
 
@@ -46,14 +46,6 @@ describe('C1 adaptador · execução por tipo', () => {
 });
 
 describe('C1 adaptador · dado ausente ⇒ NAO_AVALIADO (sem fallback 1/90)', () => {
-  it.each([-1, 0.5, Number.NaN])('cardio materializado inválido (%s) não é apagado como ausência', (duracaoInvalida) => {
-    const r = avaliarDuracaoFinalDoDia(
-      [{ exercicio: supino, series: 4, descansoSeg: 90 }], 'intermediario', 3600, duracaoInvalida,
-    );
-    expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/CARDIO_DURACAO_INVALIDA/);
-  });
-
   it('série ausente em qualquer slot ⇒ sessão inteira NAO_AVALIADO', () => {
     const r = avaliarDuracaoResistida(
       [{ exercicio: supino, series: 4, descansoSeg: 90 }, { exercicio: supino, descansoSeg: 90 }],

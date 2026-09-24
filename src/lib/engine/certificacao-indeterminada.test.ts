@@ -112,23 +112,26 @@ describe('D12 · a tolerância existente é preservada', () => {
   });
 });
 
-describe('D12 · estado combinado: cardio sem duração + dia que pode estourar', () => {
-  /** Objetivo `massa` prescreve cardio em SESSÕES (sem minutos): o terminal vira NAO_AVALIADO. */
+describe('D12 · cardio sem duração ao lado de dia que pode estourar', () => {
+  /**
+   * Objetivo `massa` prescreve cardio em SESSÕES (sem minutos). Até 2026-09-23 isso tornava o
+   * terminal NAO_AVALIADO; desde a decisão, o tempo é só da musculação e o veredito fala só dela.
+   */
   const rotina = gerar(manual(6, { tempoPorSessaoMin:55, objetivo: 'massa', diasDisponiveis: 2, treinoDias: ['seg', 'qua'] }), 1, ['qua']);
 
-  it('os dois fatos convivem no mesmo terminal — nenhum é suprimido pelo outro', () => {
+  it('o dia incerto continua dito; o cardio sem duração fica no próprio bloco, fora do veredito', () => {
     const rg = rotina.resultadoGeracao!;
-    expect(rg.tipo).toBe('NAO_AVALIADO_ENTREGAVEL');
-    if (rg.tipo !== 'NAO_AVALIADO_ENTREGAVEL') return;
-    expect(rg.motivos).toContain('CARDIO_SEM_DURACAO');
+    expect(rg.tipo).toBe('ENTREGUE_SEM_CERTIFICACAO');
+    if (rg.tipo !== 'ENTREGUE_SEM_CERTIFICACAO') return;
     expect(rg.diasPodemUltrapassar, 'o dia incerto sumiu ao encontrar o cardio').toEqual([0]);
+    expect(rotina.planoFinalPorDia!.find((d) => d.diaId === 'qua')!.cardio).toMatchObject({ minutos: null });
   });
 
-  it('a frase carrega os dois, e nenhum deles vira afirmação de excesso', () => {
+  it('a frase diz a incerteza sem virar afirmação de excesso e sem falar de cardio', () => {
     const v = vereditoDoPlano(rotina, 60)!;
-    expect(v.detalhe).toMatch(/cardio sem duração definida/);
     expect(v.detalhe).toMatch(/pode passar do seu tempo/);
     expect(v.detalhe).not.toMatch(/acima do limite/i);
+    expect(v.detalhe).not.toMatch(/cardio/i);
   });
 });
 

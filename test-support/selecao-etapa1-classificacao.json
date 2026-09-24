@@ -23,28 +23,28 @@
       "arquivo": "src/lib/c1-caminho-publico.test.ts",
       "historicos": [
         {
-          "nome": "C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900) pré-condição: a degradação REAL aconteceu (terminal 60/90/90/60; candidato nível 0 seria 60/120/120/60)",
+          "nome": "C1.1 · fixture 36 — musculação degradada e cardio intacto (900 + 900, nunca cortado) pré-condição: a degradação REAL aconteceu (terminal 60/90/90/60; candidato nível 0 seria 60/120/120/60)",
           "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais, recompõe contratos/blocos/hash e exige discriminação de pré-degradação; não pressupõe mais 2240/2540.",
-          "sucessor": "distribuicao-contratos-atuais: cardio e hash derivam do terminal"
+          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais e, desde 2026-09-23, prova que cardio e hash não dependem do tempo nem da musculação (mesma distribuição em 30/39/45/60 min); não pressupõe mais 2240/2540.",
+          "sucessor": "distribuicao-contratos-atuais: cardio e hash não dependem do tempo nem da musculação terminal (decisão 2026-09-23)"
         },
         {
-          "nome": "C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900) 🔒 EXATO: terminal MAX 2240, sobra 100 ⇒ prescrito 900 · usa 100 · redistribui 800 · descarte 0",
+          "nome": "C1.1 · fixture 36 — musculação degradada e cardio intacto (900 + 900, nunca cortado) 🔒 EXATO: 44 e 45 min ⇒ cardio 900 no dia 0 e 900 no dia 4; o tempo do treino é só o resistido",
           "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais, recompõe contratos/blocos/hash e exige discriminação de pré-degradação; não pressupõe mais 2240/2540.",
-          "sucessor": "distribuicao-contratos-atuais: cardio e hash derivam do terminal"
+          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais e, desde 2026-09-23, prova que cardio e hash não dependem do tempo nem da musculação (mesma distribuição em 30/39/45/60 min); não pressupõe mais 2240/2540.",
+          "sucessor": "distribuicao-contratos-atuais: cardio e hash não dependem do tempo nem da musculação terminal (decisão 2026-09-23)"
         },
         {
-          "nome": "C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900) 🔒 o CANDIDATO intermediário usaria cardio 0 e redistribuiria 900 — e esse resultado está AUSENTE do final",
+          "nome": "C1.1 · fixture 36 — musculação degradada e cardio intacto (900 + 900, nunca cortado) 🔒 o CANDIDATO pré-degradação não deixaria folga — e mesmo assim o cardio é o mesmo",
           "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais, recompõe contratos/blocos/hash e exige discriminação de pré-degradação; não pressupõe mais 2240/2540.",
-          "sucessor": "distribuicao-contratos-atuais: cardio e hash derivam do terminal"
+          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais e, desde 2026-09-23, prova que cardio e hash não dependem do tempo nem da musculação (mesma distribuição em 30/39/45/60 min); não pressupõe mais 2240/2540.",
+          "sucessor": "distribuicao-contratos-atuais: cardio e hash não dependem do tempo nem da musculação terminal (decisão 2026-09-23)"
         },
         {
-          "nome": "C1.1 · fixture 36 EXATA — distribuição somente pós-terminal (0 → 100 → 800, nunca 900) 🔒 contratos, blocos e canonical_input_hash derivam SOMENTE do terminal (recomputação bate byte a byte)",
+          "nome": "C1.1 · fixture 36 — musculação degradada e cardio intacto (900 + 900, nunca cortado) 🔒 blocos e canonical_input_hash derivam só da oferta e da meta (recomputação bate byte a byte)",
           "classificacao": "fotografia_historica_com_prova_sucessora",
-          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais, recompõe contratos/blocos/hash e exige discriminação de pré-degradação; não pressupõe mais 2240/2540.",
-          "sucessor": "distribuicao-contratos-atuais: cardio e hash derivam do terminal"
+          "motivo": "Composição e descansos exatos mudaram. Sucessor usa dias reais e, desde 2026-09-23, prova que cardio e hash não dependem do tempo nem da musculação (mesma distribuição em 30/39/45/60 min); não pressupõe mais 2240/2540.",
+          "sucessor": "distribuicao-contratos-atuais: cardio e hash não dependem do tempo nem da musculação terminal (decisão 2026-09-23)"
         }
       ]
     },

@@ -178,18 +178,16 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     }
   });
 
-  /** 🔒 A meta por dia é o teto desejado; cardio automático adapta-se ao orçamento sem +8 min. */
-  it('a duração é a meta ÷ dias limitada ao tempo disponível — com prova numérica', () => {
+  /** 🔴 2026-09-23 — o tempo do perfil é só da musculação: o único teto do cardio é o próprio (90). */
+  it('a duração é a meta ÷ dias limitada só ao teto próprio do cardio, nunca ao tempo do treino', () => {
     const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 5 });
     const n = r.diasCardio.length;
     expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
     expect(r.cardio.tipo).toBe('minutos_semana');
     // 🔒 A MESMA função do módulo puro — inclusive o teto de 90 (DF 2026-08-01).
     const alvoDoDia = duracaoDoDiaDeCardio((r.cardio as { min: number }).min, n);
-    const esperado = Math.min(alvoDoDia, 60); // destino puro: orçamento integral de 60 min
-    for (const d of r.diasCardio) expect(d.minutos, `${n} dias`).toBe(esperado);
-    expect(alvoDoDia).toBe(90); // discrimina o clamp: sem adaptação seriam 90 min
-    expect(esperado).toBe(60);
+    for (const d of r.diasCardio) expect(d.minutos, `${n} dias`).toBe(alvoDoDia);
+    expect(alvoDoDia).toBe(90); // discrimina: o contrato antigo cortava para os 60 min do treino
   });
 
   /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
@@ -201,8 +199,8 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     expect(c.max).toBe(300);
     const n = r.diasCardio.length;
     const alvoPiso = arredondar5(c.min / n);
-    expect(r.diasCardio[0]!.minutos).toBe(Math.min(alvoPiso, 60));
-    expect(alvoPiso).toBe(75); // a meta desejada excede o orçamento de 60 min
+    expect(r.diasCardio[0]!.minutos).toBe(alvoPiso);
+    expect(alvoPiso).toBe(75); // passa dos 60 min do treino e é entregue inteira
     expect(arredondar5(c.max / n), 'o teto daria o dobro').toBe(arredondar5(c.min / n) * 2);
   });
 
@@ -215,11 +213,9 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     expect(r.diasCardio.every((d) => d.minutos === null && d.duracaoSegundos === undefined)).toBe(true);
     const afetados = r.planoFinalPorDia?.filter((d) => d.cardio) ?? [];
     expect(afetados).toHaveLength(2);
-    expect(afetados.every((d) => d.duracao.estadoCalculo === 'NAO_AVALIADO')).toBe(true);
-    expect(r.resultadoGeracao).toEqual({
-      tipo: 'NAO_AVALIADO_ENTREGAVEL',
-      motivos: expect.arrayContaining(['CARDIO_SEM_DURACAO']),
-    });
+    // 🔴 2026-09-23 — cardio sem duração não torna o TREINO não avaliado: o tempo é só da musculação.
+    expect(afetados.every((d) => d.duracao.estadoCalculo === 'CALCULADO')).toBe(true);
+    expect(r.resultadoGeracao?.tipo).not.toBe('NAO_AVALIADO_ENTREGAVEL');
   });
 
   it('sem dia excedente, nenhum dia de cardio é emitido', () => {

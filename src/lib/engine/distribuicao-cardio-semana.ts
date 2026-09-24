@@ -1,29 +1,23 @@
 /**
- * 🔒 C1 — DISTRIBUIÇÃO SEMANAL DE CARDIO · primitiva canônica única (spec §2/§4, handoff §3/§4.2).
+ * 🔒 C1 — DISTRIBUIÇÃO SEMANAL DE CARDIO · primitiva canônica única (spec §2, handoff §3).
  *
  * `construirDistribuicaoCardioSemana` é a ÚNICA construção; o gerador e o crítico/validador semanal
  * a compartilham. `validarDistribuicaoCardioSemana` CHAMA o construtor e compara EXATAMENTE a
- * distribuição/contratos/blocos observados — não duplica a lógica (§8.1, mutação "validar sem
- * confrontar o construtor"). Ambos consomem `calcularUsosCardioNaOrigem` (fórmula única de uso).
+ * distribuição/blocos observados — não duplica a lógica (§8.1, mutação "validar sem confrontar o
+ * construtor").
  *
- * Duas fases determinísticas sobre o MESMO snapshot (§4):
- *  (1) reserva o uso de TODAS as prescrições nos seus dias de origem, compartilhando a capacidade
- *      por `ordem_prescricao`; (2) só então distribui os saldos para destinos POSTERIORES.
- *  Parcela recebida nunca rouba a capacidade do cardio próprio já prescrito no destino.
+ * 🔴 Decisão do autor (2026-09-23): o tempo do perfil é o orçamento só da musculação. Cada
+ * prescrição de cardio conserva a duração prescrita INTEIRA no seu dia de origem — também no dia
+ * com musculação e também acima do tempo escolhido para o treino. Sem capacidade derivada desse
+ * tempo não há saldo, nem redistribuição a outro dia, nem descarte. O único teto de cardio aprovado
+ * é o por dia (`TETO_MIN_DIA_CARDIO`, DF 2026-08-01), aplicado na prescrição (`duracaoDoDiaDeCardio`).
  *
- * Ordem total canônica de origens e linhagens: `{ordem_no_horizonte(dia_origem), ordem_prescricao,
- * prescricao_id}`. Destino elegível: oferecido, SEM musculação e estritamente posterior à origem no
- * horizonte (sem wrap-around). Consolidação: um único bloco por dia = cardio próprio + recebido.
- * Conservação obrigatória: `prescrita = usada_na_origem + Σ destinos + descartada`.
+ * Ordem total canônica de linhagens: `{ordem_no_horizonte(dia_origem), ordem_prescricao,
+ * prescricao_id}`. Consolidação: um único bloco por dia = soma das prescrições daquele dia.
  *
  * Puro/determinístico: sem rede/relógio/IO. O commit atômico (CAS) mora na camada de persistência.
  */
 import { canonicalInputHash } from './cas';
-import {
-  calcularUsosCardioNaOrigem,
-  capacidadeCardioDoDia,
-  type PrescricaoCardioDia,
-} from './cardio-sessao';
 
 const intSeguro = (n: number): boolean => Number.isSafeInteger(n);
 
@@ -32,22 +26,8 @@ export interface DiaHorizonte {
   diaId: string;
   /** Inteiro seguro `>= 0`, único no horizonte. */
   ordemNoHorizonte: number;
-  /** O usuário ofereceu este dia para receber cardio? Destino exige `true`. */
+  /** O usuário ofereceu este dia para cardio? Prescrição só nasce em dia oferecido. */
   oferecido: boolean;
-}
-
-export interface PlanoResistidoTerminalDia {
-  diaId: string;
-  temMusculacao: boolean;
-  /** MAX_RESISTIDA terminal do dia; `null` ⇒ incalculável (sessão NAO_AVALIADO). */
-  maxResistidaSegundos: number | null;
-}
-
-export interface OrcamentoDia {
-  diaId: string;
-  /** B do dia; `undefined`/`null` ⇒ ausente (destino inelegível; origem vira saldo). */
-  orcamentoSegundos: number | undefined;
-  semLimite?: boolean;
 }
 
 export interface PrescricaoCardioSemana {
@@ -62,24 +42,15 @@ export interface EntradaDistribuicaoSemana {
   expectedRevision: number;
   formulaVersion: string;
   diasHorizonte: readonly DiaHorizonte[];
-  planosResistidosTerminais: readonly PlanoResistidoTerminalDia[];
-  orcamentoPorDia: readonly OrcamentoDia[];
   prescricoesCardio: readonly PrescricaoCardioSemana[];
 }
 
 // ── Saídas ───────────────────────────────────────────────────────────────────
-export interface AlocacaoDestino {
-  diaId: string;
-  segundos: number;
-}
-
 export interface LinhagemParcela {
   prescricaoId: string;
   diaOrigemId: string;
   ordemPrescricao: number;
   segundos: number;
-  /** ORIGEM = cardio próprio do dia; DESTINO = parcela recebida de outra origem. */
-  papel: 'ORIGEM' | 'DESTINO';
 }
 
 export interface BlocoCardioDia {
@@ -89,25 +60,7 @@ export interface BlocoCardioDia {
   linhagens: LinhagemParcela[];
 }
 
-export interface CardioPlanejado {
-  prescricaoId: string;
-  diaOrigemId: string;
-  ordemPrescricao: number;
-  duracaoPrescritaSegundos: number;
-  duracaoUsadaNaSessaoSegundos: number;
-  alocacoesDestino: AlocacaoDestino[];
-  duracaoDescartadaSegundos: number;
-  /** Motivo quando a prescrição é local-inválida/ressalvada (resultado temporal NAO_AVALIADO). */
-  motivos: string[];
-}
-
-export type EstadoDistribuicao = 'CONSTRUIDA' | 'CONSTRUIDA_COM_RESSALVAS' | 'NAO_AVALIADA_ESTRUTURAL';
-
-export interface RessalvaLocal {
-  prescricaoIds: string[];
-  diaIds: string[];
-  motivo: string;
-}
+export type EstadoDistribuicao = 'CONSTRUIDA' | 'NAO_AVALIADA_ESTRUTURAL';
 
 export interface DistribuicaoCardioSemanal {
   estado: EstadoDistribuicao;
@@ -115,10 +68,8 @@ export interface DistribuicaoCardioSemanal {
   expectedRevision: number;
   formulaVersion: string;
   canonicalInputHash: string;
-  contratosPorPrescricao: CardioPlanejado[];
   blocosPorDia: BlocoCardioDia[];
   motivos: string[];
-  ressalvas: RessalvaLocal[];
 }
 
 /** Chave de ordem total canônica (spec §2/§4). */
@@ -127,7 +78,7 @@ function chaveOrdem(ordemHorizonte: number, ordemPrescricao: number, prescricaoI
   return `${pad(ordemHorizonte)}|${pad(ordemPrescricao)}|${prescricaoId}`;
 }
 
-/** Projeção canônica das entradas para o hash (dias/ordens/prescrições ordenados). */
+/** Projeção canônica das entradas para o hash (dias/prescrições ordenados). */
 function projecaoCanonica(e: EntradaDistribuicaoSemana): unknown {
   return {
     aggregateId: e.aggregateId,
@@ -136,12 +87,6 @@ function projecaoCanonica(e: EntradaDistribuicaoSemana): unknown {
     dias: [...e.diasHorizonte]
       .sort((a, b) => a.ordemNoHorizonte - b.ordemNoHorizonte || (a.diaId < b.diaId ? -1 : 1))
       .map((d) => ({ diaId: d.diaId, ordemNoHorizonte: d.ordemNoHorizonte, oferecido: d.oferecido })),
-    planos: [...e.planosResistidosTerminais]
-      .sort((a, b) => (a.diaId < b.diaId ? -1 : 1))
-      .map((p) => ({ diaId: p.diaId, temMusculacao: p.temMusculacao, maxResistidaSegundos: p.maxResistidaSegundos })),
-    orcamentos: [...e.orcamentoPorDia]
-      .sort((a, b) => (a.diaId < b.diaId ? -1 : 1))
-      .map((o) => ({ diaId: o.diaId, orcamentoSegundos: o.orcamentoSegundos ?? null, ...(o.semLimite ? { semLimite: true } : {}) })),
     prescricoes: [...e.prescricoesCardio]
       .sort((a, b) => (a.prescricaoId < b.prescricaoId ? -1 : 1))
       .map((p) => ({
@@ -153,28 +98,18 @@ function projecaoCanonica(e: EntradaDistribuicaoSemana): unknown {
   };
 }
 
-function estrutural(e: EntradaDistribuicaoSemana, hash: string, motivos: string[]): DistribuicaoCardioSemanal {
-  return {
-    estado: 'NAO_AVALIADA_ESTRUTURAL',
-    aggregateId: e.aggregateId,
-    expectedRevision: e.expectedRevision,
-    formulaVersion: e.formulaVersion,
-    canonicalInputHash: hash,
-    contratosPorPrescricao: [],
-    blocosPorDia: [],
-    motivos,
-    ressalvas: [],
-  };
-}
-
 /**
- * 🔒 CONSTRUTOR CANÔNICO. Fail-safe: erro ESTRUTURAL global invalida o agregado inteiro (commit
- * atômico, zero subconjunto); ressalva LOCAL isola a prescrição afetada e segue com as válidas.
+ * 🔒 CONSTRUTOR CANÔNICO. Fail-safe: erro ESTRUTURAL invalida o agregado inteiro (commit atômico,
+ * zero subconjunto). Sem erro, cada prescrição vira, inteira, parte do bloco do seu dia.
  */
 export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana): DistribuicaoCardioSemanal {
   const hash = canonicalInputHash(projecaoCanonica(e));
+  const resultado = (estado: EstadoDistribuicao, blocosPorDia: BlocoCardioDia[], motivos: string[]): DistribuicaoCardioSemanal => ({
+    estado, aggregateId: e.aggregateId, expectedRevision: e.expectedRevision, formulaVersion: e.formulaVersion,
+    canonicalInputHash: hash, blocosPorDia, motivos,
+  });
 
-  // ── Fase 0 — validação ESTRUTURAL global (identidade, ordens, horizonte, hash) ───────────────
+  // ── Validação ESTRUTURAL global (identidade, ordens, horizonte, prescrições) ─────────────────
   const motivosEstruturais: string[] = [];
   if (typeof e.aggregateId !== 'string' || e.aggregateId.length === 0) motivosEstruturais.push('aggregate_id vazio');
   if (typeof e.formulaVersion !== 'string' || e.formulaVersion.length === 0) motivosEstruturais.push('formula_version vazia');
@@ -190,29 +125,6 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
     else if (ordensHorizonte.has(d.ordemNoHorizonte)) motivosEstruturais.push(`ordem_no_horizonte duplicada: ${d.ordemNoHorizonte}`);
     else ordensHorizonte.add(d.ordemNoHorizonte);
     diaPorId.set(d.diaId, d);
-  }
-
-  const planosVistos = new Set<string>();
-  for (const p of e.planosResistidosTerminais) {
-    if (!diaPorId.has(p.diaId)) motivosEstruturais.push(`plano referencia dia fora do horizonte: ${p.diaId}`);
-    if (planosVistos.has(p.diaId)) motivosEstruturais.push(`plano duplicado para dia: ${p.diaId}`);
-    planosVistos.add(p.diaId);
-    if (typeof p.temMusculacao !== 'boolean') motivosEstruturais.push(`tem_musculacao inválido: ${p.diaId}`);
-    if (p.maxResistidaSegundos !== null
-      && (!intSeguro(p.maxResistidaSegundos) || p.maxResistidaSegundos < 0)) {
-      motivosEstruturais.push(`max_resistida inválido: ${p.diaId}`);
-    }
-  }
-
-  const orcamentosVistos = new Set<string>();
-  for (const o of e.orcamentoPorDia) {
-    if (!diaPorId.has(o.diaId)) motivosEstruturais.push(`orçamento referencia dia fora do horizonte: ${o.diaId}`);
-    if (orcamentosVistos.has(o.diaId)) motivosEstruturais.push(`orçamento duplicado para dia: ${o.diaId}`);
-    orcamentosVistos.add(o.diaId);
-    if (o.orcamentoSegundos !== undefined
-      && (!intSeguro(o.orcamentoSegundos) || o.orcamentoSegundos <= 0)) {
-      motivosEstruturais.push(`orçamento inválido: ${o.diaId}`);
-    }
   }
 
   const prescIds = new Set<string>();
@@ -235,188 +147,31 @@ export function construirDistribuicaoCardioSemana(e: EntradaDistribuicaoSemana):
       ordemPorDiaOrigem.set(p.diaOrigemId, set);
     }
   }
-  if (motivosEstruturais.length > 0) return estrutural(e, hash, motivosEstruturais);
+  if (motivosEstruturais.length > 0) return resultado('NAO_AVALIADA_ESTRUTURAL', [], motivosEstruturais);
 
-  const orcPorDia = new Map<string, number | undefined>();
-  for (const o of e.orcamentoPorDia) orcPorDia.set(o.diaId, o.orcamentoSegundos ?? undefined);
-  const planoPorDia = new Map<string, PlanoResistidoTerminalDia>();
-  for (const p of e.planosResistidosTerminais) planoPorDia.set(p.diaId, p);
-
-  const temMusculacao = (diaId: string) => planoPorDia.get(diaId)?.temMusculacao ?? false;
-  const maxResistida = (diaId: string) => planoPorDia.get(diaId)?.maxResistidaSegundos ?? (temMusculacao(diaId) ? null : 0);
+  // ── Blocos consolidados por dia: a prescrição inteira fica no dia de origem ─────────────────
   const ordemDoDia = (diaId: string) => diaPorId.get(diaId)!.ordemNoHorizonte;
-
-  const ressalvas: RessalvaLocal[] = [];
-
-  // ── Fase 1 — reservar o uso de origem de TODAS as prescrições (capacidade compartilhada) ─────
-  // Agrupa prescrições por dia de origem.
-  const prescricoesPorDia = new Map<string, PrescricaoCardioSemana[]>();
+  const chave = (l: LinhagemParcela) => chaveOrdem(ordemDoDia(l.diaOrigemId), l.ordemPrescricao, l.prescricaoId);
+  const porDia = new Map<string, LinhagemParcela[]>();
   for (const p of e.prescricoesCardio) {
-    const arr = prescricoesPorDia.get(p.diaOrigemId) ?? [];
-    arr.push(p);
-    prescricoesPorDia.set(p.diaOrigemId, arr);
+    const linhagens = porDia.get(p.diaOrigemId) ?? [];
+    linhagens.push({ prescricaoId: p.prescricaoId, diaOrigemId: p.diaOrigemId, ordemPrescricao: p.ordemPrescricao, segundos: p.duracaoPrescritaSegundos });
+    porDia.set(p.diaOrigemId, linhagens);
   }
-
-  // Estado por prescrição: uso na origem, saldo, alocações, descarte, motivos.
-  interface EstadoPresc {
-    presc: PrescricaoCardioSemana;
-    usadaOrigem: number;
-    saldo: number;
-    alocacoes: AlocacaoDestino[];
-    descartada: number;
-    motivos: string[];
-  }
-  const estadoPresc = new Map<string, EstadoPresc>();
-  // cardio próprio já usado como origem por dia (base da capacidade residual do destino).
-  const cardioProprioNoDia = new Map<string, number>();
-
-  for (const [diaId, prescs] of prescricoesPorDia) {
-    // Sem limite explícito: atender somente a demanda finita prescrita deste dia.
-    // A soma é demanda, não orçamento artificial ou sentinela de duração.
-    const semLimite=e.orcamentoPorDia.some(o=>o.diaId===diaId&&o.semLimite);
-    const cap = semLimite && (!temMusculacao(diaId)||maxResistida(diaId)!=null)
-      ? {tipo:'CALCULAVEL' as const,segundos:prescs.reduce((n,p)=>n+(Number.isSafeInteger(p.duracaoPrescritaSegundos)&&p.duracaoPrescritaSegundos>0?p.duracaoPrescritaSegundos:0),0)}
-      : capacidadeCardioDoDia({
-      temMusculacao: temMusculacao(diaId),
-      orcamentoSegundos: orcPorDia.get(diaId),
-      maxResistidaSegundos: maxResistida(diaId),
-    });
-    const entradaPrimitiva: PrescricaoCardioDia[] = prescs.map((p) => ({
-      prescricaoId: p.prescricaoId,
-      ordemPrescricao: p.ordemPrescricao,
-      duracaoPrescritaSegundos: p.duracaoPrescritaSegundos,
-    }));
-    const res = calcularUsosCardioNaOrigem(cap, entradaPrimitiva);
-
-    if (cap.tipo === 'INCALCULAVEL') {
-      ressalvas.push({ prescricaoIds: prescs.map((p) => p.prescricaoId), diaIds: [diaId], motivo: `capacidade de origem incalculável (${cap.motivo})` });
-    }
-    cardioProprioNoDia.set(diaId, res.cardioOrigemNoDiaSegundos);
-
-    for (const p of prescs) {
-      const uso = res.usos.find((u) => u.prescricaoId === p.prescricaoId)!;
-      const motivos: string[] = [];
-      if (uso.motivoInvalido) {
-        motivos.push(uso.motivoInvalido);
-        ressalvas.push({ prescricaoIds: [p.prescricaoId], diaIds: [diaId], motivo: `prescrição local inválida: ${uso.motivoInvalido}` });
-      } else if (cap.tipo === 'INCALCULAVEL') {
-        motivos.push(`origem incalculável (${cap.motivo}) — uso 0, saldo preservado`);
-      }
-      estadoPresc.set(p.prescricaoId, {
-        presc: p,
-        usadaOrigem: uso.duracaoUsadaNaSessaoSegundos,
-        // prescrição inválida não gera saldo (não é alocável); as demais viram saldo pelo restante.
-        saldo: uso.motivoInvalido ? 0 : uso.restanteAposOrigemSegundos,
-        alocacoes: [],
-        descartada: 0,
-        motivos,
-      });
-    }
-  }
-
-  // ── Fase 2 — distribuir os saldos para destinos POSTERIORES (ordem total canônica) ───────────
-  // parcelas recebidas por dia (para a capacidade residual e o bloco consolidado).
-  const recebidoNoDia = new Map<string, number>();
-  const origensOrdenadas = [...estadoPresc.values()].sort((a, b) =>
-    chaveOrdem(ordemDoDia(a.presc.diaOrigemId), a.presc.ordemPrescricao, a.presc.prescricaoId) <
-    chaveOrdem(ordemDoDia(b.presc.diaOrigemId), b.presc.ordemPrescricao, b.presc.prescricaoId)
-      ? -1 : 1,
-  );
-
-  // destinos candidatos ordenados cronologicamente.
-  const diasCronologicos = [...e.diasHorizonte].sort((a, b) => a.ordemNoHorizonte - b.ordemNoHorizonte);
-
-  for (const st of origensOrdenadas) {
-    if (st.saldo <= 0) continue;
-    const ordemOrigem = ordemDoDia(st.presc.diaOrigemId);
-    for (const destino of diasCronologicos) {
-      if (st.saldo <= 0) break;
-      if (destino.ordemNoHorizonte <= ordemOrigem) continue; // estritamente posterior; sem wrap
-      if (!destino.oferecido) continue; // só dia oferecido
-      if (temMusculacao(destino.diaId)) continue; // destino não pode conter musculação
-      const b = orcPorDia.get(destino.diaId);
-      const semLimite = e.orcamentoPorDia.some(o => o.diaId === destino.diaId && o.semLimite);
-      if (!semLimite && (b === undefined || !intSeguro(b) || !(b > 0))) continue;
-      const jaNoDia = (cardioProprioNoDia.get(destino.diaId) ?? 0) + (recebidoNoDia.get(destino.diaId) ?? 0);
-      // No modo explícito, recebe somente o saldo finito, sem criar orçamento artificial.
-      const residual = semLimite ? st.saldo : Math.max(b! - jaNoDia, 0);
-      if (residual <= 0) continue;
-      const parcela = Math.min(st.saldo, residual);
-      if (parcela <= 0) continue;
-      st.alocacoes.push({ diaId: destino.diaId, segundos: parcela });
-      st.saldo -= parcela;
-      recebidoNoDia.set(destino.diaId, (recebidoNoDia.get(destino.diaId) ?? 0) + parcela);
-    }
-    // saldo remanescente após esgotar destinos válidos ⇒ descarte.
-    if (st.saldo > 0) {
-      st.descartada = st.saldo;
-      st.saldo = 0;
-    }
-  }
-
-  // ── Contratos por prescrição (conservação obrigatória) ───────────────────────────────────────
-  const contratos: CardioPlanejado[] = origensOrdenadas.map((st) => ({
-    prescricaoId: st.presc.prescricaoId,
-    diaOrigemId: st.presc.diaOrigemId,
-    ordemPrescricao: st.presc.ordemPrescricao,
-    duracaoPrescritaSegundos: st.presc.duracaoPrescritaSegundos,
-    duracaoUsadaNaSessaoSegundos: st.usadaOrigem,
-    alocacoesDestino: st.alocacoes,
-    duracaoDescartadaSegundos: st.descartada,
-    motivos: st.motivos,
-  }));
-
-  // ── Blocos consolidados por dia (1 bloco sse cardio_total_no_dia > 0) ────────────────────────
-  interface Acc { total: number; linhagens: LinhagemParcela[]; }
-  const acc = new Map<string, Acc>();
-  const add = (diaId: string, l: LinhagemParcela) => {
-    const a = acc.get(diaId) ?? { total: 0, linhagens: [] };
-    a.total += l.segundos;
-    a.linhagens.push(l);
-    acc.set(diaId, a);
-  };
-  for (const st of origensOrdenadas) {
-    if (st.usadaOrigem > 0) {
-      add(st.presc.diaOrigemId, {
-        prescricaoId: st.presc.prescricaoId, diaOrigemId: st.presc.diaOrigemId,
-        ordemPrescricao: st.presc.ordemPrescricao, segundos: st.usadaOrigem, papel: 'ORIGEM',
-      });
-    }
-    for (const al of st.alocacoes) {
-      add(al.diaId, {
-        prescricaoId: st.presc.prescricaoId, diaOrigemId: st.presc.diaOrigemId,
-        ordemPrescricao: st.presc.ordemPrescricao, segundos: al.segundos, papel: 'DESTINO',
-      });
-    }
-  }
-  const blocos: BlocoCardioDia[] = [...acc.entries()]
-    .filter(([, a]) => a.total > 0)
-    .map(([diaId, a]) => ({
+  const blocos: BlocoCardioDia[] = [...porDia.entries()]
+    .map(([diaId, linhagens]) => ({
       diaId,
-      duracaoTotalSegundos: a.total,
-      linhagens: a.linhagens.sort((x, y) =>
-        chaveOrdem(ordemDoDia(x.diaOrigemId), x.ordemPrescricao, x.prescricaoId) <
-        chaveOrdem(ordemDoDia(y.diaOrigemId), y.ordemPrescricao, y.prescricaoId) ? -1 : 1),
+      duracaoTotalSegundos: linhagens.reduce((n, l) => n + l.segundos, 0),
+      linhagens: linhagens.sort((x, y) => (chave(x) < chave(y) ? -1 : 1)),
     }))
     .sort((a, b) => ordemDoDia(a.diaId) - ordemDoDia(b.diaId));
 
-  return {
-    estado: ressalvas.length > 0 ? 'CONSTRUIDA_COM_RESSALVAS' : 'CONSTRUIDA',
-    aggregateId: e.aggregateId,
-    expectedRevision: e.expectedRevision,
-    formulaVersion: e.formulaVersion,
-    canonicalInputHash: hash,
-    contratosPorPrescricao: contratos,
-    blocosPorDia: blocos,
-    motivos: [],
-    ressalvas,
-  };
+  return resultado('CONSTRUIDA', blocos, []);
 }
 
 // ── Validação (chama o construtor; não duplica a lógica) ─────────────────────────────────────
 export type ValidacaoDistribuicao =
   | { tipo: 'VALIDA' }
-  | { tipo: 'VALIDA_COM_RESSALVAS'; afetados: string[]; motivos: string[] }
   | { tipo: 'NAO_AVALIADA_ESTRUTURAL'; motivos: string[] };
 
 /** Serialização estável de um agregado observado para comparação exata contra o construtor. */
@@ -428,21 +183,6 @@ function assinaturaDistribuicao(d: DistribuicaoCardioSemanal): string {
     formulaVersion: d.formulaVersion,
     canonicalInputHash: d.canonicalInputHash,
     motivos: d.motivos,
-    ressalvas: [...d.ressalvas]
-      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
-      .map((r) => ({
-        prescricaoIds: [...r.prescricaoIds].sort(),
-        diaIds: [...r.diaIds].sort(),
-        motivo: r.motivo,
-      })),
-    contratos: [...d.contratosPorPrescricao]
-      .sort((a, b) => (a.prescricaoId < b.prescricaoId ? -1 : 1))
-      .map((c) => ({
-        prescricaoId: c.prescricaoId, diaOrigemId: c.diaOrigemId, ordemPrescricao: c.ordemPrescricao,
-        duracaoPrescritaSegundos: c.duracaoPrescritaSegundos, duracaoUsadaNaSessaoSegundos: c.duracaoUsadaNaSessaoSegundos,
-        alocacoesDestino: [...c.alocacoesDestino].sort((x, y) => (x.diaId < y.diaId ? -1 : 1)),
-        duracaoDescartadaSegundos: c.duracaoDescartadaSegundos, motivos: c.motivos,
-      })),
     blocos: [...d.blocosPorDia]
       .sort((a, b) => (a.diaId < b.diaId ? -1 : 1))
       .map((bl) => ({ diaId: bl.diaId, duracaoTotalSegundos: bl.duracaoTotalSegundos, linhagens: bl.linhagens })),
@@ -451,8 +191,8 @@ function assinaturaDistribuicao(d: DistribuicaoCardioSemanal): string {
 
 /**
  * 🔒 O validador RECONSTRÓI a distribuição canônica a partir dos fatos-base (independentes do
- * resultado observado) e compara EXATAMENTE contra o observado. Qualquer divergência de contratos,
- * blocos, identidade ou estado é falha estrutural — nunca se confia no `CardioPlanejado` persistido.
+ * resultado observado) e compara EXATAMENTE contra o observado. Qualquer divergência de blocos,
+ * identidade ou estado é falha estrutural — nunca se confia na distribuição persistida.
  */
 export function validarDistribuicaoCardioSemana(params: {
   fatosBase: EntradaDistribuicaoSemana;
@@ -464,13 +204,6 @@ export function validarDistribuicaoCardioSemana(params: {
   }
   if (assinaturaDistribuicao(canonica) !== assinaturaDistribuicao(params.distribuicaoObservada)) {
     return { tipo: 'NAO_AVALIADA_ESTRUTURAL', motivos: ['distribuição observada diverge do construtor canônico'] };
-  }
-  if (canonica.estado === 'CONSTRUIDA_COM_RESSALVAS') {
-    return {
-      tipo: 'VALIDA_COM_RESSALVAS',
-      afetados: [...new Set(canonica.ressalvas.flatMap((r) => [...r.prescricaoIds, ...r.diaIds]))],
-      motivos: canonica.ressalvas.map((r) => r.motivo),
-    };
   }
   return { tipo: 'VALIDA' };
 }

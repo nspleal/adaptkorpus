@@ -1,8 +1,8 @@
 /**
  * 🔒 C1 — RESULTADO DA GERAÇÃO TEMPORAL + taxonomia do alocador + reduce-to-fit (spec §5/§6, §8).
  *
- * Orquestra o ajuste do plano automático quando ele não cabe no tempo: adapta cardio (fora daqui),
- * degrada descansos e, por fim, REDUZ a quantidade de exercícios reexecutando o alocador INTEIRO —
+ * Orquestra o ajuste do plano automático quando a musculação não cabe no tempo (o cardio nunca
+ * entra nesta conta — decisão de 2026-09-23): degrada descansos e, por fim, REDUZ a quantidade de exercícios reexecutando o alocador INTEIRO —
  * exatamente uma unidade de capacidade por tentativa, reiniciando a escada de descanso no nível
  * original a cada nova capacidade. Puro/determinístico.
  *
@@ -72,7 +72,7 @@ export function avaliarInvariantes(plano: readonly ItemPlanoTemporal[], inv: Inv
   return { ok: violacoes.length === 0, violacoes };
 }
 
-/** Converte o plano em itens de duração canônicos e avalia (origem AUTOMATICO). */
+/** Converte o plano em itens de duração canônicos e avalia. */
 export function avaliarDuracaoDoPlano(plano: readonly ItemPlanoTemporal[], orcamentoSegundos: number | undefined): ResultadoDuracao {
   const itens: ItemDuracao[] = plano.map((i) => ({
     tipo: 'RESISTIDO',
@@ -83,7 +83,7 @@ export function avaliarDuracaoDoPlano(plano: readonly ItemPlanoTemporal[], orcam
     tecnica: i.tecnica ?? { tipo: 'SEM_TECNICA' },
     tecnicasMaterializadas: i.tecnicasMaterializadas,
   }));
-  return avaliarDuracaoSessao({ itens, orcamentoSegundos, origemPlano: 'AUTOMATICO' });
+  return avaliarDuracaoSessao({ itens, orcamentoSegundos });
 }
 
 export type MotivoErroAlocador = 'INVARIANTE_VIOLADO' | 'CAPACIDADE_REPETIDA' | 'CARDINALIDADE_ACIMA_DA_CAPACIDADE';

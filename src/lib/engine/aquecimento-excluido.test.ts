@@ -6,7 +6,7 @@
  * variações e exige resultado IDÊNTICO (deep equal), incluindo `componentes`.
  *
  * 🔴 MUTAÇÃO QUE ESTE TESTE MATA: somar o aquecimento em qualquer componente (execução, descanso,
- * transição, contínuo) ou deixá-lo produzir `NAO_AVALIADO`. Se o aquecimento voltar a entrar na
+ * transição) ou deixá-lo produzir `NAO_AVALIADO`. Se o aquecimento voltar a entrar na
  * duração, os três resultados divergem e o teste morre.
  */
 import { describe, expect, it } from 'vitest';
@@ -47,7 +47,7 @@ describe('C1 fixture 19 · aquecimento não altera faixa nem estado', () => {
   it('nenhum componente absorve o aquecimento', () => {
     expect(positivo.componentes).toEqual(ausente.componentes);
     expect(positivo.componentes).toEqual({
-      execucaoSegundos: 640, descansoSegundos: 900, continuoSegundos: 0,
+      execucaoSegundos: 640, descansoSegundos: 900,
       adicionalTecnicaSegundos: 0, transicaoSegundos: 240,
     });
   });

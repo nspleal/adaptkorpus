@@ -97,7 +97,7 @@ describe('D16 · diferenças legítimas são preservadas', () => {
     const outros = [
       'Atenção: volume de puxar ficou abaixo do de empurrar (alvo: puxar ≥ empurrar).',
       'Atenção: core fora da faixa de 2–3×/semana.',
-      'Cardio: o plano pede 160 min nesta semana e couberam 136 min nos dias que você ofereceu — faltam 24 min.',
+      'O bloco do foco não entrou: os extras não couberam no tempo disponível.',
     ];
     const r = unificarAvisos(rotinaCom([...outros, f.aviso], [f]), avaliacaoCom([itemCritico()]));
     expect(r.avisosMotor).toEqual(outros);

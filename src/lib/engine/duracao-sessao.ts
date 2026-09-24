@@ -14,21 +14,23 @@
  *    ISOMETRIA usa o hold prescrito (proibido substituir por 40 s);
  *  - descanso da sessão = Σ max(S-1,0)·descanso — o descanso APÓS A ÚLTIMA série NÃO conta;
  *  - unilateral executado nos dois lados dobra SOMENTE a execução, nunca o descanso;
- *  - cardio/contínuo usa a duração prescrita, sem descanso fictício de 90 s;
+ *  - 🔴 o CARDIO NÃO ENTRA (decisão do autor 2026-09-23): o tempo do perfil é o orçamento só da
+ *    musculação, mesmo com cardio no mesmo dia. A duração do cardio é a sua própria prescrição
+ *    e não consome, não reduz nem torna incompatível o treino — por isso não há item de cardio;
  *  - faltou dado obrigatório ⇒ `NAO_AVALIADO` (proibidos os fallbacks `série=1`/`descanso=90`);
  *  - a faixa [MIN, MAX] separa transição de descanso: MAX usa como reserva de transição o
  *    descanso do item encerrado, SÓ quando há outro item depois.
  *
- * Fonte normativa: `especificacao-c1-duracao-sessao.md` + overrides 2026-08-20.
+ * Fonte normativa: `especificacao-c1-duracao-sessao.md` + overrides 2026-08-20 + decisão de
+ * 2026-09-23 (`ADENDO-CARDIO-FORA-DO-TEMPO-20260923.md`), que substitui o orçamento compartilhado.
  */
 
 /**
- * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v3` → `tempo-v4`
- * (C1.1-B): os dias do plano final passam a ter identidade real Seg→Dom e o avaliador passa a
- * recusar cardio automático não adaptado, em vez de deixá-lo consumir a tolerância exclusiva da
- * musculação. A versão não pode permanecer silenciosamente igual.
+ * Versão da fórmula — toda avaliação nova a carrega (spec §5.7/§5.8). 🔒 BUMP `tempo-v4` → `tempo-v5`
+ * (2026-09-23): o cardio sai da conta e o limite do dia passa a medir só a musculação. A versão
+ * não pode permanecer silenciosamente igual.
  */
-export const FORMULA_DURACAO_VERSION = 'tempo-v4';
+export const FORMULA_DURACAO_VERSION = 'tempo-v5';
 /** Execução estimada por série de REPETIÇÕES (proxy v1, não medição — calibrável por telemetria). */
 export const TEMPO_EXECUCAO_SERIE_REPS_SEG = 40;
 /** Tolerância absoluta de excesso por sessão (política de produto: +8 min). */
@@ -78,30 +80,15 @@ export interface ItemResistido {
   tecnicasMaterializadas?: readonly AplicacaoTecnica[];
 }
 
-/**
- * Item contínuo/cardio: duração explícita, sem descanso. 🔒 C1 §3.7: é SEMPRE o último item
- * (ou o único). Em posição não final ⇒ NAO_AVALIADO. O deslocamento até o cardio NÃO conta.
- */
-export interface ItemContinuo {
-  tipo: 'CONTINUO';
-  duracaoTotalSegundos: number;
-}
-
-export type ItemDuracao = ItemResistido | ItemContinuo;
+/** A sessão medida só tem itens resistidos: o cardio não é item desta conta (decisão 2026-09-23). */
+export type ItemDuracao = ItemResistido;
 
 export interface EntradaDuracao {
   /** Política14/09: sem os480s de tolerância legada. Não altera a fórmula. */
   limiteEstrito?: boolean;
   itens: readonly ItemDuracao[];
-  /** Orçamento em segundos = tempoPorSessaoMin·60. Ausente ⇒ faixa calcula, mas limite = NAO_AVALIADO. */
+  /** Orçamento da MUSCULAÇÃO em segundos = tempoPorSessaoMin·60. Ausente ⇒ faixa calcula, mas limite = NAO_AVALIADO. */
   orcamentoSegundos?: number;
-  /**
-   * 🔒 C1 §2 — origem OBRIGATÓRIA na semântica: no AUTOMATICO o cardio já foi ADAPTADO ao tempo
-   * (via `calcularUsosCardioNaOrigem`) e nunca é a causa de a sessão cruzar `B`; no EDITADO o
-   * cardio informado é apenas MEDIDO e pode exceder — então só o EDITADO recebe as cláusulas
-   * CARDIO_EXCEDE_TEMPO_DISPONIVEL / CARDIO_PODE_EXCEDER_TEMPO_DISPONIVEL. Default: EDITADO (mede).
-   */
-  origemPlano?: 'AUTOMATICO' | 'EDITADO';
   /**
    * 🔒 C1 §4 / fixture 19 — AQUECIMENTO: ACEITO E DELIBERADAMENTE IGNORADO.
    *
@@ -117,7 +104,6 @@ export interface EntradaDuracao {
 export interface ComponentesDuracao {
   execucaoSegundos: number;
   descansoSegundos: number;
-  continuoSegundos: number;
   adicionalTecnicaSegundos: number;
   transicaoSegundos: number;
 }
@@ -133,8 +119,8 @@ export interface ResultadoDuracao {
   componentes?: ComponentesDuracao;
   /** Por que NÃO há cálculo confiável (HOLD_AUSENTE, domínio inválido, técnica sem contrato…). */
   motivosNaoAvaliados: string[];
-  /** 🔒 C1 — dimensão INDEPENDENTE: o que não pôde ser comparado ao limite (ORCAMENTO_AUSENTE,
-   *  CARDIO_EXCEDE_TEMPO_DISPONIVEL, …). Nunca esconde nem é escondido por `motivosNaoAvaliados`. */
+  /** 🔒 C1 — dimensão INDEPENDENTE: o que não pôde ser comparado ao limite (ORCAMENTO_AUSENTE).
+   *  Nunca esconde nem é escondido por `motivosNaoAvaliados`. */
   motivosLimite: string[];
 }
 
@@ -223,59 +209,40 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
 
   let execucaoSegundos = 0;
   let descansoSegundos = 0;
-  let continuoSegundos = 0;
   let adicionalTecnicaSegundos = 0;
   let transicaoSegundos = 0;
 
   for (let i = 0; i < n; i += 1) {
     const it = itens[i]!;
-    const ehUltimo = i === n - 1;
-
-    if (it.tipo === 'RESISTIDO') {
-      if (!intSeguro(it.series) || !(it.series > 0)) {
-        motivos.push(`item ${i}: series deve ser inteiro seguro > 0`);
-      }
-      if (!intSeguro(it.descansoEntreSeriesSeg) || !(it.descansoEntreSeriesSeg >= 0)) {
-        motivos.push(`item ${i}: descansoEntreSeriesSeg deve ser inteiro seguro >= 0`);
-      }
-      const exSerie = execucaoPorSerie(it, motivos, i);
-      const adic = adicionalTecnica(it.tecnica, it.tecnicasMaterializadas, motivos, i);
-      if (exSerie != null && it.series > 0) execucaoSegundos += it.series * exSerie;
-      if (it.series > 0 && it.descansoEntreSeriesSeg >= 0) {
-        descansoSegundos += Math.max(it.series - 1, 0) * it.descansoEntreSeriesSeg;
-      }
-      if (adic != null) adicionalTecnicaSegundos += adic;
-      // 🔒 C1 §4 — transição = descanso do item ENCERRADO, SÓ quando o próximo é RESISTIDO.
-      // Se o próximo é o cardio final, a passagem NÃO soma deslocamento (transição 0).
-      if (!ehUltimo && itens[i + 1]!.tipo === 'RESISTIDO' && it.descansoEntreSeriesSeg >= 0) {
-        transicaoSegundos += it.descansoEntreSeriesSeg;
-      }
-    } else {
-      // CONTINUO — 🔒 §3.7: sempre o ÚLTIMO item. Em posição não final ⇒ NAO_AVALIADO.
-      if (!ehUltimo) {
-        motivos.push(`item ${i}: cardio/contínuo em posição não final (CARDIO_NAO_FINAL)`);
-      } else if (!intSeguro(it.duracaoTotalSegundos) || !(it.duracaoTotalSegundos > 0)) {
-        motivos.push(`item ${i}: duracaoTotalSegundos deve ser inteiro seguro > 0`);
-      } else {
-        continuoSegundos += it.duracaoTotalSegundos;
-      }
-      // cardio não carrega técnica temporal (contribui 0) e não soma transição posterior.
+    if (!intSeguro(it.series) || !(it.series > 0)) {
+      motivos.push(`item ${i}: series deve ser inteiro seguro > 0`);
+    }
+    if (!intSeguro(it.descansoEntreSeriesSeg) || !(it.descansoEntreSeriesSeg >= 0)) {
+      motivos.push(`item ${i}: descansoEntreSeriesSeg deve ser inteiro seguro >= 0`);
+    }
+    const exSerie = execucaoPorSerie(it, motivos, i);
+    const adic = adicionalTecnica(it.tecnica, it.tecnicasMaterializadas, motivos, i);
+    if (exSerie != null && it.series > 0) execucaoSegundos += it.series * exSerie;
+    if (it.series > 0 && it.descansoEntreSeriesSeg >= 0) {
+      descansoSegundos += Math.max(it.series - 1, 0) * it.descansoEntreSeriesSeg;
+    }
+    if (adic != null) adicionalTecnicaSegundos += adic;
+    // 🔒 C1 §4 — transição = descanso do item ENCERRADO, SÓ quando há outro item depois.
+    if (i < n - 1 && it.descansoEntreSeriesSeg >= 0) {
+      transicaoSegundos += it.descansoEntreSeriesSeg;
     }
   }
 
   if (motivos.length > 0) return naoAvaliado(motivos, orcamentoSegundos, motivosLimite);
 
-  // 🔒 C1 §4 — a faixa RESISTIDA (sem cardio) é a base das capacidades de cardio disponível.
-  const minResistida = execucaoSegundos + descansoSegundos + adicionalTecnicaSegundos;
-  const maxResistida = minResistida + transicaoSegundos;
-  const min = minResistida + continuoSegundos;
-  const max = maxResistida + continuoSegundos;
+  const min = execucaoSegundos + descansoSegundos + adicionalTecnicaSegundos;
+  const max = min + transicaoSegundos;
   // 🔒 total derivado inseguro (overflow) ⇒ NAO_AVALIADO, nunca arredonda em silêncio.
   if (!intSeguro(min) || !intSeguro(max)) {
     return naoAvaliado([`total derivado inseguro (min=${min}, max=${max})`], orcamentoSegundos, motivosLimite);
   }
   const componentes: ComponentesDuracao = {
-    execucaoSegundos, descansoSegundos, continuoSegundos, adicionalTecnicaSegundos, transicaoSegundos,
+    execucaoSegundos, descansoSegundos, adicionalTecnicaSegundos, transicaoSegundos,
   };
 
   // Orçamento ausente: faixa calculável, mas limite indeterminável por falta de referência.
@@ -294,30 +261,8 @@ export function avaliarDuracaoSessao(entrada: EntradaDuracao): ResultadoDuracao 
 
   const limiteOperacional = orcamentoSegundos + (entrada.limiteEstrito ? 0 : TOLERANCIA_EXCESSO_SEG);
 
-  // 🔒 C1.1-B — só musculação pode usar a tolerância de +480. O cardio automático deveria chegar
-  // JÁ adaptado: se chega e empurra MAX acima de B, é falha de fiação, não sessão "na tolerância".
-  // Depois vêm as cláusulas do cardio editado, que mede (mas não bloqueia) a escolha manual.
-  const origem = entrada.origemPlano ?? 'EDITADO';
-  const cardioPrescrito = continuoSegundos;
-  const cardioDisponivelOtimista = Math.max(orcamentoSegundos - minResistida, 0);
-  const cardioDisponivelPessimista = Math.max(orcamentoSegundos - maxResistida, 0);
-
   let estadoLimite: EstadoLimite;
-  if (origem === 'AUTOMATICO' && cardioPrescrito > 0 && max > orcamentoSegundos) {
-    estadoLimite = 'ACIMA_DO_LIMITE_OPERACIONAL';
-    motivosLimite.push('CARDIO_AUTOMATICO_NAO_ADAPTADO');
-  } else if (origem === 'EDITADO' && cardioPrescrito > 0 && cardioPrescrito > cardioDisponivelOtimista) {
-    estadoLimite = 'ACIMA_DO_LIMITE_OPERACIONAL';
-    motivosLimite.push('CARDIO_EXCEDE_TEMPO_DISPONIVEL');
-  } else if (
-    origem === 'EDITADO' &&
-    cardioPrescrito > 0 &&
-    cardioDisponivelPessimista < cardioPrescrito &&
-    cardioPrescrito <= cardioDisponivelOtimista
-  ) {
-    estadoLimite = 'LIMITE_INDETERMINADO';
-    motivosLimite.push('CARDIO_PODE_EXCEDER_TEMPO_DISPONIVEL');
-  } else if (max <= orcamentoSegundos) estadoLimite = 'DENTRO_DO_LIMITE';
+  if (max <= orcamentoSegundos) estadoLimite = 'DENTRO_DO_LIMITE';
   else if (max <= limiteOperacional) estadoLimite = 'DENTRO_DA_TOLERANCIA';
   else if (min > limiteOperacional) estadoLimite = 'ACIMA_DO_LIMITE_OPERACIONAL';
   else estadoLimite = 'LIMITE_INDETERMINADO'; // min <= limiteOperacional < max

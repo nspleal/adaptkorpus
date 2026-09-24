@@ -14,9 +14,8 @@
  *    Certificação lê `slot.holdSeg` exatamente; se ausente, retorna `NAO_AVALIADO`. O piso
  *    `faixaSegundos(id,nivel).min` só serve ao planejamento anterior à materialização, nunca
  *    como fallback da duração certificada.
- *  - **Cardio:** a distribuição semanal materializa, quando houver, um bloco contínuo APÓS a
- *    musculação. Este adaptador o acrescenta ao mesmo dia final para gerador e crítico avaliarem
- *    a mesma duração; não redistribui nem troca cardio de modalidade.
+ *  - **Cardio:** não entra (decisão do autor 2026-09-23). O tempo do perfil é só da musculação;
+ *    o bloco de cardio do dia conserva a própria duração prescrita, fora desta avaliação.
  */
 import {
   avaliarDuracaoSessao, FORMULA_DURACAO_VERSION, TEMPO_EXECUCAO_SERIE_REPS_SEG,
@@ -99,8 +98,8 @@ export function itensResistidosDeSlots(
 }
 
 /**
- * Avalia a duração de uma sessão RESISTIDA (a via do gerador e do crítico). Dado faltante ⇒
- * NAO_AVALIADO estruturado (sem fallback silencioso).
+ * Avalia a duração de uma sessão RESISTIDA — a via única do gerador e do crítico, também para o
+ * dia que tem cardio. Dado faltante ⇒ NAO_AVALIADO estruturado (sem fallback silencioso).
  */
 export function avaliarDuracaoResistida(
   slots: readonly SlotParaDuracao[],
@@ -108,44 +107,18 @@ export function avaliarDuracaoResistida(
   orcamentoSegundos?: number,
   limiteEstrito = false,
 ): ResultadoDuracao {
-  return avaliarDuracaoFinalDoDia(slots, nivel, orcamentoSegundos, 0, false, limiteEstrito);
-}
-
-/**
- * Avalia o DIA FINAL materializado: itens resistidos seguidos de, no máximo, um bloco contínuo.
- * O bloco já chega adaptado/consolidado pela distribuição semanal; esta função não redistribui nem
- * recalcula sua duração. Assim gerador e crítico podem consumir exatamente o mesmo plano final.
- */
-export function avaliarDuracaoFinalDoDia(
-  slots: readonly SlotParaDuracao[],
-  nivel: NivelExperiencia,
-  orcamentoSegundos: number | undefined,
-  cardioMaterializadoSegundos: number,
-  cardioPrescritoSemDuracao = false,
-  limiteEstrito = false,
-): ResultadoDuracao {
   const { itens, faltou } = itensResistidosDeSlots(slots, nivel);
-  const cardioInvalido = cardioMaterializadoSegundos !== 0
-    && (!Number.isSafeInteger(cardioMaterializadoSegundos) || cardioMaterializadoSegundos <= 0);
-  const motivosNaoAvaliados = [
-    ...faltou,
-    ...(cardioPrescritoSemDuracao ? ['CARDIO_DURACAO_AUSENTE'] : []),
-    ...(cardioInvalido ? [`CARDIO_DURACAO_INVALIDA: ${String(cardioMaterializadoSegundos)}`] : []),
-  ];
-  if (motivosNaoAvaliados.length > 0) {
+  if (faltou.length > 0) {
     return {
       estadoCalculo: 'NAO_AVALIADO',
       estadoLimite: 'NAO_AVALIADO',
       orcamentoSegundos,
       formulaVersion: FORMULA_DURACAO_VERSION,
-      motivosNaoAvaliados,
+      motivosNaoAvaliados: faltou,
       // 🔒 C1 — dimensão independente: orçamento ausente registra ORCAMENTO_AUSENTE mesmo aqui,
       // sem esconder HOLD_AUSENTE (fixture 53).
       motivosLimite: orcamentoSegundos === undefined ? ['ORCAMENTO_AUSENTE'] : [],
     };
   }
-  const itensFinais: ItemDuracao[] = cardioMaterializadoSegundos > 0
-    ? [...itens, { tipo: 'CONTINUO', duracaoTotalSegundos: cardioMaterializadoSegundos }]
-    : itens;
-  return avaliarDuracaoSessao({ itens: itensFinais, orcamentoSegundos, origemPlano: 'AUTOMATICO', limiteEstrito });
+  return avaliarDuracaoSessao({ itens, orcamentoSegundos, limiteEstrito });
 }
