@@ -1343,8 +1343,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
      *
      * 🔴 D4 (2026-09-10): isto somava `diasCardio[].minutos` — o ENTREGUE — e chamava de
      * "prescrito". Medido: prescrição de 160 min, entrega de 123, e a barra fechava 123/123.
-     * A prescrição real é `rotina.cardioSemana.prescritoSegundos`; o que falta aparece na
-     * faixa de avisos do motor (`AvisosMotor`), com os três números.
+     * A prescrição real é `rotina.cardioSemana.prescritoSegundos`. Desde 2026-09-23 o cardio
+     * não depende do tempo da musculação e é entregue inteiro nos dias oferecidos.
      */
     prescritoMin: treino.rotina?.cardioSemana
       ? Math.round(treino.rotina.cardioSemana.prescritoSegundos / 60) || undefined

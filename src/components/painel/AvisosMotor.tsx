@@ -34,10 +34,10 @@ export default function AvisosMotor({ rotina, tempoPorSessaoMin, avisos: avisosR
   const veredito = vereditoDoPlano(rotina, tempoPorSessaoMin);
   const avisos = avisosRecebidos ?? rotina?.avisos ?? [];
   /**
-   * ⚠️ A conta do cardio (planejado / entregue / faltante) NÃO é montada aqui. Ela sai do
-   * motor como aviso, e o motor é a única autoridade sobre ela — uma linha própria nesta tela
-   * imprimia os MESMOS três números duas vezes (medido no navegador em 2026-09-10) e seria
-   * exatamente o segundo sistema de avisos que D1 existe para acabar.
+   * ⚠️ A conta do cardio NÃO é montada aqui: o motor é a única autoridade sobre ela — uma
+   * linha própria nesta tela imprimia os MESMOS números duas vezes (medido no navegador em
+   * 2026-09-10) e seria exatamente o segundo sistema de avisos que D1 existe para acabar.
+   * Desde 2026-09-23 o cardio é entregue inteiro nos dias oferecidos: não há falta a avisar.
    */
   if (!veredito && avisos.length === 0) return null;
   const cor = COR[veredito?.tom ?? 'atencao'];

@@ -230,7 +230,6 @@ const FAMILIAS: readonly [string, RegExp, () => RotinaSemanal | null | undefined
   ['equipamento limita o dia', /Seu equipamento dispon[íi]vel limita/, () => gerar({ equipamento: 'casa', equipamentosCasa: [], nivelExperiencia: 'iniciante', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'], tempoPorSessaoMin: 60 })],
   ['dia curto pelo teto semanal', /mais curtos? de prop[óo]sito/, () => gerar({ diasDisponiveis: 6, treinoDias: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'], nivelExperiencia: 'avancado', tempoPorSessaoMin: 90 })],
   ['séries manuais inválidas (D3)', /n[ãa]o [ée] um n[úu]mero inteiro/, () => gerar({ rotinaCustom: { origem: 'usuario', dias: [{ nome: 'A', diaId: 'seg', exercicioIds: ['e1'], seriesPorExercicio: { e1: 0 } }] } })],
-  ['cardio faltante (D4)', /Cardio: o plano pede/, () => gerar({ objetivo: 'emagrecimento', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] }, { diasOferecidosCardio: ['ter', 'qua', 'sex', 'dom'] as readonly Weekday[] })],
   ['dias do desenho acima do teto do nível', /o seu n[íi]vel comporta/, () => gerar({ nivelExperiencia: 'iniciante', rotinaCustom: { origem: 'usuario', dias: (['seg', 'ter', 'qua', 'qui', 'sex'] as const).map((d) => ({ nome: d, diaId: d, exercicioIds: ['e1'] })) } })],
   /**
    * 🔵 2026-09-15 — as três famílias do TETO DURO na conta ponderada. Cada uma foi achada por
@@ -330,7 +329,9 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
     // 50 → 51 em 2026-09-20: o EXTRA DO FOCO consolidado nos exercícios que o dia já tinha
     // (resíduo dos cinco tríceps do PR #18). O ponto é próprio porque o fato é outro: não é a
     // consolidação de braços do baseline, é o extra do bloco cabendo na dose já existente.
-    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(51);
+    // 51 → 50 em 2026-09-23: saiu o aviso de cardio faltante (D4). O cardio não usa mais o
+    // tempo da musculação, então não há corte a declarar.
+    expect(sites, 'um ponto de emissão de aviso entrou (ou saiu) sem caso nesta lista').toBe(50);
     // ≥ porque um dos pontos (o guard de cobertura) emite DUAS mensagens, num ternário.
     expect(FAMILIAS.length, `${sites} pontos de emissão, ${FAMILIAS.length} casos`).toBeGreaterThanOrEqual(sites);
   });
@@ -347,7 +348,7 @@ describe('D1 · B1 — cada família de aviso do montador tem caso e caminho at�
 
 const VEREDITOS: readonly ResultadoGeracaoRotina[] = [
   { tipo: 'CERTIFICADO', capacidadeTerminal: 6 },
-  { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos: ['CARDIO_SEM_DURACAO'] },
+  { tipo: 'NAO_AVALIADO_ENTREGAVEL', motivos: ['slot 0 (e7): HOLD_AUSENTE (isométrico sem hold prescrito no plano)'] },
   { tipo: 'ENTREGUE_SEM_CERTIFICACAO', diasAcimaDoLimite: [0] },
   { tipo: 'INCOMPATIVEL', capacidadeMinimaTestada: 3 },
   { tipo: 'ERRO_ALOCADOR', motivo: 'INVARIANTE_VIOLADO', capacidadeTestada: 4, violacoesInvariantes: ['puxar'] },
@@ -399,17 +400,13 @@ describe('D1 · B2 — os CINCO valores de resultadoGeracao chegam à tela', () 
 /* ══════════════════ D4 — a conta do cardio na tela ══════════════════ */
 
 describe('D1/D4 — a conta do cardio aparece UMA vez, pelo canal do motor', () => {
-  it('os três números chegam à tela como aviso do motor, com planejado, entregue e faltante', () => {
+  it('2026-09-23: o cardio não depende do tempo da musculação, então não há aviso de falta', () => {
     const r = gerar(
       { objetivo: 'emagrecimento', diasDisponiveis: 3, treinoDias: ['seg', 'qua', 'sex'] },
       { diasOferecidosCardio: ['ter', 'qua', 'sex', 'dom'] as readonly Weekday[] },
     )!;
-    const c = r.cardioSemana!;
-    const aviso = r.avisos.find((a) => /Cardio: o plano pede/.test(a))!;
-    expect(aviso, 'a perda não virou aviso').toBeDefined();
-    for (const seg of [c.prescritoSegundos, c.entregueSegundos, c.faltanteSegundos]) {
-      expect(aviso).toContain(String(Math.round(seg / 60)));
-    }
+    expect(r.cardioSemana).toEqual({ prescritoSegundos: 9600 });
+    expect(r.avisos.filter((a) => /Cardio: o plano pede|couberam/.test(a))).toEqual([]);
   });
 
   /**

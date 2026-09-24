@@ -7,8 +7,8 @@
  *   `recomputarPlano({ diasOferecidosCardio })` → motor → distribuição → `canonical_input_hash`.
  *
  * Sem redesign: uma linha de chips Seg..Dom, no estilo inline do Painel. Um dia oferecido COM
- * musculação continua válido (cardio próprio após o treino, adaptado à sobra); parcela
- * REDISTRIBUÍDA nunca cai em dia de treino.
+ * musculação continua válido: o cardio vem após o treino com a própria duração, fora do tempo
+ * da musculação (decisão de 2026-09-23).
  */
 import { alternarDiaOferecidoCardio } from '@/lib/cardio-oferta';
 import { DIA_LABEL, ORDEM_SEMANA, type Weekday } from '@/lib/semana';

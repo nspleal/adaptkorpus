@@ -8,20 +8,20 @@ import type { PerfilResumo } from '@/components/painel/Painel';
 import type { Weekday } from '@/lib/semana';
 
 /**
- * 🔴 D4 + D10 (diagnóstico 2026-09-10, §6.5) — a perda de cardio é DITA, e a política dos
- * blocos curtos fica registrada.
+ * 🔴 Histórico D4 (2026-09-10) → decisão do autor de 2026-09-23.
  *
+ * Em D4 o cardio era cortado pela sobra do orçamento de cada sessão e a perda passou a ser DITA.
  * Medido no SHA `34b2ede`, objetivo `emagrecimento`, treino seg/qua/sex, 60 min:
  *
- * | oferta | prescrito | entregue | perda | aviso |
- * |---|---|---|---|---|
- * | 1 dia  | 5.400 s (90 min) | 3.600 s (60 min) | 30 min | nenhum |
- * | 2 dias | 9.000 s (150 min) | 7.200 s (120 min) | 30 min | nenhum |
- * | 4 dias | 9.600 s (160 min) | 7.380 s (123 min) | 37 min | nenhum |
+ * | oferta | prescrito | entregue (contrato antigo) |
+ * |---|---|---|
+ * | 1 dia  | 5.400 s (90 min) | 3.600 s (60 min) |
+ * | 2 dias | 9.000 s (150 min) | 7.200 s (120 min) |
+ * | 4 dias | 9.600 s (160 min) | 7.380 s (123 min) |
  *
- * A perda **já estava medida** em `duracaoDescartadaSegundos` de cada contrato e nunca virava
- * frase. Pior: o cartão de cardio do Painel chamava de `prescritoMin` a SOMA DO ENTREGUE —
- * a barra fechava em 123/123 enquanto a prescrição era 160.
+ * A decisão de 2026-09-23 remove a causa: o tempo do perfil é só da musculação e o cardio
+ * conserva a duração prescrita. As mesmas ofertas agora entregam o prescrito inteiro, sem aviso
+ * de falta — e o cartão do Painel continua usando a prescrição como denominador.
  */
 
 const base = (o: Record<string, unknown> = {}): PerfilResumo => ({
@@ -36,58 +36,34 @@ const base = (o: Record<string, unknown> = {}): PerfilResumo => ({
 const gerar = (dias: readonly Weekday[], o: Record<string, unknown> = {}) =>
   recomputarPlano(base(o), { semanaCiclo: { semana: 1 }, diasOferecidosCardio: dias }).treino.rotina!;
 
-/** As três ofertas medidas no diagnóstico, pelos mesmos dias. */
-const OFERTAS: readonly [string, readonly Weekday[]][] = [
-  ['1 dia (dom)', ['dom']],
-  ['2 dias (sab, dom)', ['sab', 'dom']],
-  ['4 dias (ter, qua, sex, dom)', ['ter', 'qua', 'sex', 'dom']],
+/** As três ofertas medidas no diagnóstico D4, pelos mesmos dias. */
+const OFERTAS: readonly [string, readonly Weekday[], number][] = [
+  ['1 dia (dom)', ['dom'], 5400],
+  ['2 dias (sab, dom)', ['sab', 'dom'], 9000],
+  ['4 dias (ter, qua, sex, dom)', ['ter', 'qua', 'sex', 'dom'], 9600],
 ];
 
-describe('D4 — planejado, entregue e faltante saem do motor e fecham a conta', () => {
-  it.each(OFERTAS)('%s: o resumo semanal existe e é aritmeticamente coerente', (_nome, dias) => {
+describe('cardio sem perda: o prescrito é entregue inteiro (decisão 2026-09-23)', () => {
+  it.each(OFERTAS)('%s: prescrito = soma dos blocos = medida do D4, sem corte', (_nome, dias, prescrito) => {
     const r = gerar(dias);
-    const c = r.cardioSemana;
-    expect(c, 'a rotina não expõe o resumo semanal de cardio').toBeDefined();
-    expect(c!.prescritoSegundos).toBeGreaterThan(0);
-    expect(c!.entregueSegundos + c!.faltanteSegundos).toBe(c!.prescritoSegundos);
-    // O entregue é exatamente a soma dos blocos que a tela recebe — não um número paralelo.
+    expect(r.cardioSemana).toEqual({ prescritoSegundos: prescrito });
     const somaBlocos = (r.distribuicaoCardio?.blocosPorDia ?? []).reduce((n, b) => n + b.duracaoTotalSegundos, 0);
-    expect(c!.entregueSegundos).toBe(somaBlocos);
+    expect(somaBlocos).toBe(prescrito);
   });
 
-  it('anti-vacuidade: pelo menos uma das ofertas medidas REALMENTE perde minutos', () => {
-    const perdas = OFERTAS.map(([nome, dias]) => [nome, gerar(dias).cardioSemana!.faltanteSegundos] as const);
-    expect(perdas.filter(([, p]) => p > 0).length, `perdas medidas: ${JSON.stringify(perdas)}`).toBeGreaterThan(0);
-  });
-
-  it.each(OFERTAS)('%s: havendo perda, existe aviso que a nomeia com os três números', (_nome, dias) => {
+  it.each(OFERTAS)('%s: nenhum aviso de cardio que "não coube"', (_nome, dias) => {
     const r = gerar(dias);
-    const { prescritoSegundos, entregueSegundos, faltanteSegundos } = r.cardioSemana!;
-    const aviso = r.avisos.find((a) => /cardio/i.test(a) && /faltam|couberam|não coube/i.test(a));
-    if (faltanteSegundos === 0) {
-      expect(aviso, `sem perda, não pode haver aviso de perda: ${aviso}`).toBeUndefined();
-      return;
-    }
-    expect(aviso, `perda de ${faltanteSegundos}s sem aviso: ${JSON.stringify(r.avisos)}`).toBeDefined();
-    for (const n of [prescritoSegundos, entregueSegundos, faltanteSegundos].map((s) => String(Math.round(s / 60)))) {
-      expect(aviso, `o aviso não diz ${n} min`).toContain(n);
-    }
+    expect(r.avisos.filter((a) => /cardio/i.test(a) && /faltam|couberam|não coube/i.test(a))).toEqual([]);
   });
 
-  it('sem dia oferecido não há prescrição, nem perda, nem aviso', () => {
+  it('sem dia oferecido não há prescrição de cardio', () => {
     const r = gerar([]);
-    expect(r.cardioSemana?.prescritoSegundos ?? 0).toBe(0);
-    expect(r.avisos.some((a) => /cardio/i.test(a) && /faltam/i.test(a))).toBe(false);
-  });
-
-  it('o aviso some quando o cardio cabe inteiro (1 dia oferecido e sessão folgada)', () => {
-    const r = gerar(['dom'], { tempoPorSessaoMin: 120 });
-    expect(r.cardioSemana!.faltanteSegundos).toBe(0);
-    expect(r.avisos.some((a) => /cardio/i.test(a) && /faltam/i.test(a))).toBe(false);
+    expect(r.cardioSemana).toBeUndefined();
+    expect(r.distribuicaoCardio?.blocosPorDia).toEqual([]);
   });
 });
 
-describe('D4 — a apresentação preserva a duração calculada (nada é alterado em silêncio)', () => {
+describe('a apresentação preserva a duração calculada (nada é alterado em silêncio)', () => {
   it.each(OFERTAS)('%s: `minutos` e `duracaoSegundos` são o MESMO valor', (_nome, dias) => {
     for (const c of gerar(dias).diasCardio ?? []) {
       if (c.minutos == null) continue;
@@ -103,18 +79,10 @@ describe('D4 — a apresentação preserva a duração calculada (nada é altera
   });
 
   /**
-   * 🏷️ POLÍTICA DE ARREDONDAMENTO, registrada aqui porque o diagnóstico a deixou em aberto.
-   *
-   * A régua "múltiplo de 5, empate para cima, teto 90" (`dia-de-cardio.ts`) é regra de
-   * **PRESCRIÇÃO**: ela decide quanto o app PEDE por dia. Ela continua valendo e é cobrada
-   * abaixo. A parcela efetivamente ENTREGUE num dia é outra coisa: é o que sobra do orçamento
-   * daquela sessão depois da musculação — um limite físico, não uma prescrição. Arredondá-la
-   * para 5 estouraria o orçamento (para cima) ou descartaria minutos que cabiam (para baixo),
-   * e as duas violam a direção "não altere minutos para melhorar a aparência".
-   *
-   * 🔒 Portanto: prescrição arredondada, entrega exata, diferença DITA (bloco acima).
+   * 🏷️ A régua "múltiplo de 5, empate para cima, teto 90" (`dia-de-cardio.ts`, DF 2026-08-01) é
+   * a regra de PRESCRIÇÃO e o único teto aprovado do cardio. O tempo da musculação não é teto.
    */
-  it('a PRESCRIÇÃO por dia continua múltipla de 5 e limitada ao teto', () => {
+  it('a PRESCRIÇÃO por dia continua múltipla de 5 e limitada ao teto próprio do cardio', () => {
     for (const dias of [1, 2, 3, 4, 5, 6, 7]) {
       for (const meta of [150, 160, 200, 300]) {
         const d = duracaoDoDiaDeCardio(meta, dias);
@@ -125,35 +93,24 @@ describe('D4 — a apresentação preserva a duração calculada (nada é altera
     expect(arredondar5(37.5)).toBe(40); // empate para cima, como a regra registrada diz
   });
 
-  it('a ENTREGA de um dia nunca passa do que foi prescrito para ele', () => {
+  it('a ENTREGA de cada dia é EXATAMENTE a prescrição daquele dia', () => {
     for (const [, dias] of OFERTAS) {
       const r = gerar(dias);
       const prescritoPorDia = duracaoDoDiaDeCardio(
         (r.cardio.tipo === 'minutos_semana' ? r.cardio.min : 0), dias.length) * 60;
-      for (const b of r.distribuicaoCardio?.blocosPorDia ?? []) {
-        expect(b.duracaoTotalSegundos, `${b.diaId} recebeu mais do que o dia prescrevia`)
-          .toBeLessThanOrEqual(prescritoPorDia * dias.length);
-      }
+      const blocos = r.distribuicaoCardio?.blocosPorDia ?? [];
+      expect(blocos.map((b) => b.diaId)).toEqual([...dias]);
+      for (const b of blocos) expect(b.duracaoTotalSegundos, b.diaId).toBe(prescritoPorDia);
     }
   });
 });
 
 describe('D10 — política dos blocos curtos: registrada, e sem piso novo', () => {
   /**
-   * 🏷️ DECISÃO REGISTRADA (2026-09-10). Blocos de 10–13 min em dia de musculação **são
-   * mantidos**. Fundamento, na ordem:
-   *
-   *  1. O tamanho isolado não prova defeito — é o que o orçamento daquele dia comportava
-   *     depois da musculação, e o cofre **não registra piso por bloco de cardio**
-   *     (`MATRIZ-REGRAS` §E: "não existe regra registrada").
-   *  2. Descartar o bloco curto não devolve os minutos a lugar nenhum: ele já é uma parcela
-   *     REDISTRIBUÍDA, então descartá-la só AUMENTA a perda semanal — que agora é declarada.
-   *  3. Agrupar exigiria mover cardio para um dia que a pessoa não ofereceu, e isso o motor
-   *     não faz por regra travada.
-   *
-   * Um piso só se justifica com fundamento (fisiológico ou de produto) que hoje não existe
-   * registrado. Este teste trava a ausência: se alguém introduzir um piso, ele cai em
-   * vermelho e a decisão volta à mesa em vez de entrar em silêncio.
+   * 🏷️ DECISÃO REGISTRADA (2026-09-10): o cofre **não registra piso por bloco de cardio**
+   * (`MATRIZ-REGRAS` §E: "não existe regra registrada"). Desde 2026-09-23 um bloco curto só nasce
+   * da própria prescrição (ex.: 7 dias oferecidos ⇒ 20 min), nunca da sobra do treino. Este teste
+   * trava a ausência de piso: se alguém introduzir um, ele cai em vermelho e a decisão volta à mesa.
    */
   it('nenhum piso por bloco existe no código da distribuição de cardio', () => {
     const fonte = ['distribuicao-cardio-semana.ts', 'treino-cardio-semana.ts', 'dia-de-cardio.ts']
@@ -164,11 +121,8 @@ describe('D10 — política dos blocos curtos: registrada, e sem piso novo', () 
       'apareceu um piso por bloco — decisão de produto, não conserto silencioso').toBe(false);
   });
 
-  it('blocos curtos continuam sendo emitidos, e a perda semanal os explica', () => {
-    const r = gerar(['ter', 'qua', 'sex', 'dom']);
-    const blocos = r.distribuicaoCardio?.blocosPorDia ?? [];
-    expect(blocos.length, 'a oferta de 4 dias deixou de produzir blocos').toBeGreaterThan(1);
-    // O que sustenta manter os curtos é a perda estar DITA — sem isso, seriam minutos mudos.
-    expect(r.cardioSemana).toBeDefined();
+  it('a oferta de 7 dias emite 7 blocos de 20 min, sem agrupar nem descartar', () => {
+    const r = gerar(['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']);
+    expect((r.distribuicaoCardio?.blocosPorDia ?? []).map((b) => b.duracaoTotalSegundos)).toEqual(Array(7).fill(1200));
   });
 });

@@ -29,7 +29,7 @@ describe('Revisão final — contratos entre motor, hidratação e tela', () => 
     expect(p.rotinaCustom.dias[0]!.seriesPorExercicio.e5).toBe(99);
   });
 
-  it('cardio sem duração não esconde o dia manual medido acima do limite', () => {
+  it('cardio sem duração não esconde nem entra no veredito do dia manual medido acima do limite', () => {
     const p = { ...perfil, rotinaCustom: { origem: 'usuario' as const, dias: [{
       nome: 'Meu dia', diaId: 'seg' as const, exercicioIds: ['e5', 'e6', 'e9'],
       seriesPorExercicio: { e5: 99, e6: 99, e9: 99 },
@@ -38,7 +38,9 @@ describe('Revisão final — contratos entre motor, hidratação e tela', () => 
     expect(r.duracaoDias!.some(d => d.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL')).toBe(true);
     const texto = vereditoDoPlano(r, 60)!;
     expect(`${texto.titulo} ${texto.detalhe}`).toMatch(/acima|ultrapass|excede/i);
-    expect(`${texto.titulo} ${texto.detalhe}`).toMatch(/cardio/i);
+    // 2026-09-23 — o cardio (sessões, sem minutos) fica no próprio bloco e não entra no veredito do treino.
+    expect(`${texto.titulo} ${texto.detalhe}`).not.toMatch(/cardio/i);
+    expect(r.diasCardio).toEqual([expect.objectContaining({ diaId: 'dom', minutos: null })]);
   });
 
   it('certificação informa a tolerância; não promete caber no orçamento estrito', () => {

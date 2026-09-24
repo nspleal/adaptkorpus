@@ -25,7 +25,7 @@ describe('C1 · constantes únicas e centralizadas', () => {
   it('a constante de execução é 40 e existe só aqui', () => {
     expect(TEMPO_EXECUCAO_SERIE_REPS_SEG).toBe(40);
     expect(TOLERANCIA_EXCESSO_SEG).toBe(480);
-    expect(FORMULA_DURACAO_VERSION).toBe('tempo-v4');
+    expect(FORMULA_DURACAO_VERSION).toBe('tempo-v5');
   });
 });
 
@@ -105,40 +105,6 @@ describe('C1 · unilateralidade (dobra execução, nunca descanso)', () => {
   });
 });
 
-describe('C1 · cardio / duração contínua', () => {
-  it('cardio usa a duração explícita, sem descanso fictício de 90', () => {
-    const r = avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 600 }] });
-    expect(r.duracaoMinimaEstimadaSegundos).toBe(600);
-    expect(r.duracaoMaximaEstimadaSegundos).toBe(600);
-  });
-
-  it('cardio SEM duração → NAO_AVALIADO (nunca 90 s)', () => {
-    const r = avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 0 }] });
-    expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/duracaoTotalSegundos/);
-  });
-
-  it('§3.7 cardio DEVE ser o último — cardio→resistido ⇒ NAO_AVALIADO (CARDIO_NAO_FINAL)', () => {
-    const r = avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 600 }, reps(3, 60)] });
-    expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/CARDIO_NAO_FINAL/);
-  });
-
-  it('§4 a passagem resistido→cardio NÃO soma deslocamento (transição do último resistido = 0)', () => {
-    // reps(3,90) seguido de cardio: exec 120 + descanso 180 + cardio 600 = 900; transição = 0 (próximo é cardio).
-    const r = avaliarDuracaoSessao({ itens: [reps(3, 90), { tipo: 'CONTINUO', duracaoTotalSegundos: 600 }] });
-    expect(r.estadoCalculo).toBe('CALCULADO');
-    expect(r.duracaoMinimaEstimadaSegundos).toBe(900);
-    expect(r.duracaoMaximaEstimadaSegundos).toBe(900); // sem transição para o cardio
-    expect(r.componentes!.transicaoSegundos).toBe(0);
-  });
-
-  it('cardio como ÚLTIMO/único item ⇒ CALCULADO', () => {
-    expect(avaliarDuracaoSessao({ itens: [reps(3, 60), { tipo: 'CONTINUO', duracaoTotalSegundos: 300 }] }).estadoCalculo).toBe('CALCULADO');
-    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: 300 }] }).estadoCalculo).toBe('CALCULADO');
-  });
-});
-
 describe('C1 · dados ausentes / domínios (proibido fallback 1 série / 90 s)', () => {
   it('série <= 0 ou não inteira → NAO_AVALIADO', () => {
     expect(avaliarDuracaoSessao({ itens: [reps(0, 60)] }).estadoCalculo).toBe('NAO_AVALIADO');
@@ -156,11 +122,6 @@ describe('C1 · dados ausentes / domínios (proibido fallback 1 série / 90 s)',
   it('orçamento 0 → NAO_AVALIADO (nunca verde)', () => {
     const r = avaliarDuracaoSessao({ itens: [reps(3, 60)], orcamentoSegundos: 0 });
     expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-  });
-  it('duração contínua negativa → NAO_AVALIADO com o campo', () => {
-    const r = avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: -1 }] });
-    expect(r.estadoCalculo).toBe('NAO_AVALIADO');
-    expect(r.motivosNaoAvaliados.join(' ')).toMatch(/duracaoTotalSegundos/);
   });
   it('NAO_AVALIADO implica estado_limite NAO_AVALIADO e SEM durações', () => {
     const r = avaliarDuracaoSessao({ itens: [reps(0, 60)], orcamentoSegundos: 1800 });
@@ -306,10 +267,6 @@ describe('C1 · motivos_limite independente + domínios inteiros seguros (§2/§
     const iso: ItemDuracao = { tipo: 'RESISTIDO', series: 3, descansoEntreSeriesSeg: 60, execucao: { tipo: 'ISOMETRIA', holdSegundosPorSerie: 90.5 }, tecnica: { tipo: 'SEM_TECNICA' } };
     expect(avaliarDuracaoSessao({ itens: [iso] }).estadoCalculo).toBe('NAO_AVALIADO');
   });
-  it('duração contínua infinita ou insegura ⇒ NAO_AVALIADO', () => {
-    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: Infinity }] }).estadoCalculo).toBe('NAO_AVALIADO');
-    expect(avaliarDuracaoSessao({ itens: [{ tipo: 'CONTINUO', duracaoTotalSegundos: Number.MAX_SAFE_INTEGER + 2 }] }).estadoCalculo).toBe('NAO_AVALIADO');
-  });
   it('série fracionária ⇒ NAO_AVALIADO', () => {
     expect(avaliarDuracaoSessao({ itens: [reps(2.5, 60)] }).estadoCalculo).toBe('NAO_AVALIADO');
   });
@@ -321,7 +278,7 @@ describe('C1 · determinismo e versionamento', () => {
     expect(avaliarDuracaoSessao(entrada)).toEqual(avaliarDuracaoSessao(entrada));
   });
   it('toda avaliação carrega formula_version', () => {
-    expect(avaliarDuracaoSessao({ itens: [reps(3, 60)] }).formulaVersion).toBe('tempo-v4');
-    expect(avaliarDuracaoSessao({ itens: [reps(0, 60)] }).formulaVersion).toBe('tempo-v4');
+    expect(avaliarDuracaoSessao({ itens: [reps(3, 60)] }).formulaVersion).toBe('tempo-v5');
+    expect(avaliarDuracaoSessao({ itens: [reps(0, 60)] }).formulaVersion).toBe('tempo-v5');
   });
 });

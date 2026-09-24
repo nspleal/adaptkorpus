@@ -47,24 +47,16 @@ describe('rodada2: propriedades atuais antes protegidas por fotografias',()=>{
   expect(diferencaPorDia,'composição precisa discriminar degradação').toBe(true);
   expect(acessorioPrimeiro,'degrau 1 precisa ocorrer de fato').toBe(true);
  });
- it('cardio e hash derivam do terminal, com caso discriminante pré-degradação',()=>{
-  let discriminantes=0;
+ it('cardio e hash não dependem do tempo nem da musculação terminal (decisão 2026-09-23)',()=>{
+  const oferta=[0,1,2,3,4];
+  const esperado=distribuirCardioDaRotina({diasOferecidosCardio:oferta,cardioPrescritoPorDiaSegundos:duracaoDoDiaDeCardio(30,oferta.length)*60,aggregateId:'rotina-cardio',expectedRevision:0,formulaVersion:FORMULA_DURACAO_VERSION});
   for(const tempo of [30,39,45,60]){
    const p={...base,diasDisponiveis:5,tempoPorSessaoMin:tempo};
    const presc={...prescreverTreino(p,avaliarGateTreino(p)),seriesPorExercicio:{min:5,max:5},volumePorGrupoSemana:{min:20,max:20},cardio:{tipo:'minutos_semana',min:30,max:30} as const};
-   const oferta=[0,1,2,3,4],B=tempo*60;
    const r=montarRotina(presc,p,EXERCISES,new Set(),{semana:1},p.preferencias,new Map(),oferta);
-   const cfg={diasOferecidosCardio:oferta,orcamentoSegundos:B,cardioPrescritoPorDiaSegundos:duracaoDoDiaDeCardio(30,oferta.length)*60,aggregateId:'rotina-cardio',expectedRevision:0,formulaVersion:FORMULA_DURACAO_VERSION};
-   const final=distribuirCardioDaRotina({...cfg,diasComMusculacao:r.dias.map((d,i)=>({diaId:d.diaId!,duracao:r.duracaoResistidaDias![i]!}))});
-   expect(r.distribuicaoCardio!.canonicalInputHash).toBe(final.canonicalInputHash);
-   expect(r.distribuicaoCardio!.contratosPorPrescricao).toEqual(final.contratosPorPrescricao);
-   expect(r.distribuicaoCardio!.blocosPorDia).toEqual(final.blocosPorDia);
-   const rir=presc.rirAlvoSemana??rirAlvoDaSemana(presc.rir,1);
-   const antes=r.dias.map(d=>avaliarDuracaoResistida(d.slots.map(s=>({...s,descansoSeg:descansoDoExercicio({exercicio:s.exercicio,rirAlvo:rir,modoForca:false,semanaRampa:null,degradacao:0})!})),p.nivelExperiencia,B));
-   const intermediario=distribuirCardioDaRotina({...cfg,diasComMusculacao:r.dias.map((d,i)=>({diaId:d.diaId!,duracao:antes[i]!}))});
-   if(JSON.stringify(intermediario.contratosPorPrescricao)!==JSON.stringify(final.contratosPorPrescricao)){discriminantes++;expect(intermediario.canonicalInputHash).not.toBe(final.canonicalInputHash);}
+   expect(r.distribuicaoCardio,`${tempo} min`).toEqual(esperado);
   }
-  expect(discriminantes).toBeGreaterThan(0);
+  expect(esperado.blocosPorDia.map(b=>b.duracaoTotalSegundos)).toEqual(Array(5).fill(300));
  });
 });
 

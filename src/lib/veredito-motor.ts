@@ -63,7 +63,7 @@ export function vereditoDoPlano(
       return {
         tom: 'ok',
         titulo: 'A duração calculada está dentro dos limites do app.',
-        detalhe: rotina.limiteTempoTreino==='limitado' ? `Referência: ${tempoPorSessaoMin} min por sessão.` : `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais; essa tolerância não vale para acrescentar cardio automático.`,
+        detalhe: rotina.limiteTempoTreino==='limitado' ? `Referência: ${tempoPorSessaoMin} min por sessão.` : `Referência: ${tempoPorSessaoMin} min por sessão. A musculação admite até ${TOLERANCIA_EXCESSO_SEG / 60} min adicionais.`,
       };
     case 'NAO_AVALIADO_ENTREGAVEL':
       return {
@@ -72,9 +72,7 @@ export function vereditoDoPlano(
         // Os motivos são códigos do motor; mostrá-los crus seria jargão, escondê-los seria
         // recusa silenciosa. Vão como detalhe, do jeito que o motor os nomeou.
         detalhe: [
-          rg.motivos.length > 0 ? `Motivos: ${rg.motivos.map(m => m === 'CARDIO_SEM_DURACAO' ? 'cardio sem duração definida' : m).join(', ')}.` : '',
-          rg.diasAcimaDoLimite?.length ? `Acima do limite de tempo: ${nomesDosDias(rotina, rg.diasAcimaDoLimite)}.` : '',
-          rg.diasPodemUltrapassar?.length ? `${podeUltrapassar(rotina, rg.diasPodemUltrapassar)}.` : '',
+          rg.motivos.length > 0 ? `Motivos: ${rg.motivos.join(', ')}.` : '',
         ].filter(Boolean).join(' ') || undefined,
       };
     /**

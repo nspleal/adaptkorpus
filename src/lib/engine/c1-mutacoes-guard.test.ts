@@ -75,20 +75,20 @@ describe('C1 mutações 34/35/36 · bloco zero, prescricao_id e ordem_prescricao
   const entrada = (over: Partial<EntradaDistribuicaoSemana>): EntradaDistribuicaoSemana => ({
     aggregateId: 'u1:semana', expectedRevision: 0, formulaVersion: 'tempo-v2',
     diasHorizonte: [{ diaId: 'seg', ordemNoHorizonte: 0, oferecido: true }],
-    planosResistidosTerminais: [], orcamentoPorDia: [{ diaId: 'seg', orcamentoSegundos: 3600 }],
     prescricoesCardio: [], ...over,
   });
 
-  it('mutação 34: soma ZERO no dia NÃO materializa bloco (e todo bloco = soma da linhagem)', () => {
+  it('mutação 34: dia sem prescrição NÃO materializa bloco, prescrição 0 é estrutural e todo bloco = soma da linhagem', () => {
+    expect(construirDistribuicaoCardioSemana(entrada({})).blocosPorDia).toHaveLength(0);
+    const zero = construirDistribuicaoCardioSemana(entrada({
+      prescricoesCardio: [{ prescricaoId: 'p1', diaOrigemId: 'seg', ordemPrescricao: 0, duracaoPrescritaSegundos: 0 }],
+    }));
+    expect(zero.estado).toBe('NAO_AVALIADA_ESTRUTURAL');
+    expect(zero.blocosPorDia).toHaveLength(0); // 🔴 duração 0 nunca vira bloco
     const d = construirDistribuicaoCardioSemana(entrada({
-      diasHorizonte: [{ diaId: 'seg', ordemNoHorizonte: 0, oferecido: true }],
-      // musculação ocupa TODO o orçamento ⇒ capacidade 0 ⇒ uso 0 e nenhum destino posterior.
-      planosResistidosTerminais: [{ diaId: 'seg', temMusculacao: true, maxResistidaSegundos: 3600 }],
       prescricoesCardio: [{ prescricaoId: 'p1', diaOrigemId: 'seg', ordemPrescricao: 0, duracaoPrescritaSegundos: 900 }],
     }));
-    expect(d.contratosPorPrescricao[0]!.duracaoUsadaNaSessaoSegundos).toBe(0);
-    expect(d.blocosPorDia).toHaveLength(0); // 🔴 duração 0 nunca vira ItemContinuo
-    // e onde há bloco, a duração é EXATAMENTE a soma da linhagem.
+    expect(d.blocosPorDia.map((b) => b.duracaoTotalSegundos)).toEqual([900]);
     for (const b of d.blocosPorDia) expect(b.linhagens.reduce((s, l) => s + l.segundos, 0)).toBe(b.duracaoTotalSegundos);
   });
 
@@ -98,7 +98,6 @@ describe('C1 mutações 34/35/36 · bloco zero, prescricao_id e ordem_prescricao
         { diaId: 'seg', ordemNoHorizonte: 0, oferecido: true },
         { diaId: 'qua', ordemNoHorizonte: 1, oferecido: true },
       ],
-      orcamentoPorDia: [{ diaId: 'seg', orcamentoSegundos: 3600 }, { diaId: 'qua', orcamentoSegundos: 3600 }],
       prescricoesCardio: [
         { prescricaoId: 'DUP', diaOrigemId: 'seg', ordemPrescricao: 0, duracaoPrescritaSegundos: 600 },
         { prescricaoId: 'DUP', diaOrigemId: 'qua', ordemPrescricao: 0, duracaoPrescritaSegundos: 600 },
@@ -106,7 +105,6 @@ describe('C1 mutações 34/35/36 · bloco zero, prescricao_id e ordem_prescricao
     }));
     expect(d.estado).toBe('NAO_AVALIADA_ESTRUTURAL');
     expect(d.motivos.join(' ')).toMatch(/prescricao_id duplicado/);
-    expect(d.contratosPorPrescricao).toHaveLength(0);
     expect(d.blocosPorDia).toHaveLength(0);
   });
 
@@ -119,6 +117,6 @@ describe('C1 mutações 34/35/36 · bloco zero, prescricao_id e ordem_prescricao
     }));
     expect(d.estado).toBe('NAO_AVALIADA_ESTRUTURAL');
     expect(d.motivos.join(' ')).toMatch(/ordem_prescricao duplicada/);
-    expect(d.contratosPorPrescricao).toHaveLength(0);
+    expect(d.blocosPorDia).toHaveLength(0);
   });
 });

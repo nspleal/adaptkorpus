@@ -57,7 +57,7 @@ import type { Weekday } from '../semana';
  */
 export type ResultadoGeracaoRotina =
   | { tipo: 'CERTIFICADO'; capacidadeTerminal: number }
-  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[]; diasAcimaDoLimite?: number[]; diasPodemUltrapassar?: number[] }
+  | { tipo: 'NAO_AVALIADO_ENTREGAVEL'; motivos: string[] }
   | { tipo: 'ENTREGUE_SEM_CERTIFICACAO'; diasAcimaDoLimite: number[]; diasPodemUltrapassar?: number[] }
   | { tipo: 'INCOMPATIVEL'; capacidadeMinimaTestada: number }
   | {
@@ -449,7 +449,7 @@ export interface DiaCardio {
   ordemNoHorizonte?: number;
   /** Duração exata materializada. `minutos` é somente a projeção de apresentação. */
   duracaoSegundos?: number;
-  /** Proveniência das parcelas consolidadas no único bloco do dia. */
+  /** Prescrições consolidadas no único bloco do dia (todas originadas neste dia). */
   linhagens?: readonly LinhagemParcela[];
 }
 
@@ -462,7 +462,7 @@ export interface PlanoFinalDia {
   treinoIdx?: number;
   /** Bloco contínuo positivo ou item qualitativo explícito (`minutos:null`, duração ausente). */
   cardio?: DiaCardio;
-  /** Avaliação canônica do dia inteiro, inclusive cardio materializado. */
+  /** Avaliação canônica da musculação do dia; o cardio guarda a própria duração (decisão 2026-09-23). */
   duracao: ResultadoDuracao;
 }
 
@@ -609,10 +609,11 @@ export interface RotinaSemanal {
   /**
    * 🔒 C1 — CERTIFICAÇÃO de duração do plano gerado, uma entrada por dia de força, pela fórmula
    * canônica (`avaliarDuracaoSessao`). A autoridade sobre "cabe no tempo?" é ESTA, não a tabela
-   * de slots. Ausente em chamadas v1 sem séries/descanso materializados. Apresentação = C4.
+   * de slots. Mede só a musculação: o cardio do dia não entra (decisão de 2026-09-23).
+   * Ausente em chamadas v1 sem séries/descanso materializados. Apresentação = C4.
    */
   duracaoDias?: ResultadoDuracao[];
-  /** Faixa somente resistida, congelada antes da distribuição; insumo da capacidade de cardio. */
+  /** Faixa resistida certificada antes da finalização (a que o reduce-to-fit mediu). */
   duracaoResistidaDias?: ResultadoDuracao[];
   /**
    * 🔒 C1 (override do autor 2026-08-20) — nem o menor plano com cobertura coube no tempo: o
@@ -627,29 +628,21 @@ export interface RotinaSemanal {
   resultadoGeracao?: ResultadoGeracaoRotina;
   /**
    * 🔒 C1 (autor 2026-08-21) — DISTRIBUIÇÃO SEMANAL DE CARDIO nos dias OFERECIDOS pelo usuário,
-   * materializada pela primitiva canônica (`construirDistribuicaoCardioSemana`): contratos por
-   * prescrição (prescrito/usado/destinos/descarte) + blocos por dia + hash canônico das entradas
-   * (inclusive os dias oferecidos). Não substitui `diasCardio` (visão de UI existente); é a visão
+   * materializada pela primitiva canônica (`construirDistribuicaoCardioSemana`): blocos por dia,
+   * cada um com a duração prescrita inteira, + hash canônico das entradas (inclusive os dias
+   * oferecidos). Não substitui `diasCardio` (visão de UI existente); é a visão
    * C1-canônica, auditável e determinística. Ausente em chamadas sem semana/oferta de cardio.
    */
   distribuicaoCardio?: DistribuicaoCardioSemanal;
   /** Fatos independentes usados pelo crítico para reconstruir e validar a distribuição observada. */
   fatosDistribuicaoCardio?: EntradaDistribuicaoSemana;
   /**
-   * 🔴 D4 (2026-09-10) — PLANEJADO, ENTREGUE e FALTANTE da semana de cardio, em segundos.
-   *
-   * A perda já era medida (`duracaoDescartadaSegundos` por contrato) e nunca virava número
-   * legível nem frase: a meta caía abaixo do piso semanal em silêncio, e o cartão do Painel
-   * chamava de "prescrito" a soma do ENTREGUE — a barra fechava 123/123 com prescrição de 160.
-   *
-   * `faltante = max(0, prescrito − entregue)` fecha a conta por construção. O detalhe por
-   * prescrição continua em `distribuicaoCardio.contratosPorPrescricao[].duracaoDescartadaSegundos`.
-   * Ausente quando a meta não é em minutos (massa) ou nenhum dia foi oferecido.
+   * PRESCRIÇÃO da semana de cardio, em segundos (a meta que o cartão do Painel mostra). Desde
+   * 2026-09-23 o cardio não depende do tempo da musculação, então o prescrito é entregue inteiro
+   * nos dias oferecidos. Ausente quando a meta não é em minutos (massa) ou nenhum dia foi oferecido.
    */
   cardioSemana?: {
     prescritoSegundos: number;
-    entregueSegundos: number;
-    faltanteSegundos: number;
   };
   /**
    * 🔒 C1.1-D F19 — diferença factual entre o baseline e o plano terminal: slots removidos,

@@ -73,15 +73,11 @@ export {
   type ResultadoDuracao, type EntradaDuracao, type ItemDuracao, type EstadoLimite, type EstadoCalculo,
 } from './duracao-sessao';
 
-// --- C1 · cardio (primitiva única) + distribuição semanal + geração temporal ---
-export {
-  calcularUsosCardioNaOrigem, capacidadeCardioDoDia,
-  type CapacidadeCardio, type PrescricaoCardioDia, type UsoCardioOrigem,
-} from './cardio-sessao';
+// --- C1 · distribuição semanal de cardio + geração temporal ---
 export {
   construirDistribuicaoCardioSemana, validarDistribuicaoCardioSemana,
   type EntradaDistribuicaoSemana, type DistribuicaoCardioSemanal, type EstadoDistribuicao,
-  type CardioPlanejado, type BlocoCardioDia, type ValidacaoDistribuicao,
+  type BlocoCardioDia, type ValidacaoDistribuicao,
 } from './distribuicao-cardio-semana';
 export {
   classificarTentativa, gerarPlanoTemporal, avaliarInvariantes, avaliarDuracaoDoPlano, fatosReducao,

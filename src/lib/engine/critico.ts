@@ -22,7 +22,7 @@ import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './trein
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, maxSemanalSemFoco, mev, mrv, tetoPonderadoNaSessao } from './trilhos';
-import { avaliarDuracaoFinalDoDia } from './duracao-plano';
+import { avaliarDuracaoResistida } from './duracao-plano';
 import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
 import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
 import { duracaoDoDiaDeCardio } from './dia-de-cardio';
@@ -44,8 +44,6 @@ export interface DiaDoEditor {
   descansoSeg?: readonly (number | undefined)[];
   /** 🔒 C1: HOLD (s) por exercício isométrico, transportado do motor. Ausente num isométrico ⇒ NAO_AVALIADO. */
   holdSeg?: readonly (number | undefined)[];
-  /** Bloco contínuo FINAL do dia automático; ausente/0 no plano editado ou sem cardio. */
-  cardioSegundos?: number;
   /**
    * 🔒 PROCEDÊNCIA por exercício: veio do BLOCO ADICIONAL do foco (decisão do autor,
    * 2026-09-16). Transportada do slot (`SlotExercicio.extraDoFoco`), que a recebeu do Set
@@ -486,13 +484,14 @@ export function avisos(
   }
 
   // ③ Sessão estourando o tempo — pela FÓRMULA CANÔNICA C1 (`avaliarDuracaoResistida`), a
-  //    MESMA do gerador, sobre o plano final (séries e descanso REAIS por slot). 🔒 Sem
+  //    MESMA do gerador, sobre o plano final (séries e descanso REAIS por slot). O tempo do
+  //    perfil é só da musculação: o cardio do dia não entra (decisão de 2026-09-23). 🔒 Sem
   //    fallback silencioso 1 série / 90 s: faltou dado ⇒ NAO_AVALIADO e o crítico NÃO afirma
   //    que cabe. O editor é SOFT — isto informa, nunca trava (DF①).
   const orcamentoSeg = ctx.limiteTempoTreino==='sem_limite'?undefined:ctx.tempoPorSessaoMin * 60;
   dias.forEach((d, i) => {
     const slots = d.exercicios.map((ex, k) => ({ exercicio: ex, series: d.series?.[k], descansoSeg: d.descansoSeg?.[k], holdSeg: d.holdSeg?.[k] }));
-    const r = avaliarDuracaoFinalDoDia(slots, ctx.nivel, orcamentoSeg, d.cardioSegundos ?? 0);
+    const r = avaliarDuracaoResistida(slots, ctx.nivel, orcamentoSeg);
     if (orcamentoSeg!==undefined && r.estadoCalculo === 'CALCULADO' && r.estadoLimite !== 'DENTRO_DO_LIMITE') {
       const min = Math.round(r.duracaoMaximaEstimadaSegundos! / 60);
       itens.push({
@@ -617,19 +616,13 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     motivosEstruturais.push('oferta de cardio dos fatos diverge da entrada externa');
   }
   const duracaoResistidaCritico = rotina.dias.map((d) =>
-    avaliarDuracaoFinalDoDia(d.slots, ctx.nivel, orcamentoSeg, 0, false, rotina.limiteTempoEstrito));
+    avaliarDuracaoResistida(d.slots, ctx.nivel, orcamentoSeg, rotina.limiteTempoEstrito));
   const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
       ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
     : 0;
   const fatosReconstruidos = fatosInformados
       ? fatosDistribuicaoCardioDaRotina({
-        diasComMusculacao: diasForcaEsperados.map((diaId, treinoIdx) => ({
-          diaId,
-          duracao: duracaoResistidaCritico[treinoIdx]!,
-        })),
         diasOferecidosCardio: oferecidos,
-        orcamentoSegundos: orcamentoSeg,
-    ...(ctx.limiteTempoTreino==='sem_limite'?{semLimite:true}:{}),
         cardioPrescritoPorDiaSegundos,
         aggregateId: 'rotina-cardio', expectedRevision: 0,
         formulaVersion: FORMULA_DURACAO_VERSION,
@@ -645,8 +638,7 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
       motivosEstruturais.push(...validacao.motivos.map((m) => `distribuição inválida: ${m}`));
     }
   }
-  const forcaEsperada = fatosReconstruidos?.planosResistidosTerminais.filter((p) => p.temMusculacao).length
-    ?? rotina.diasForcaAgendados;
+  const forcaEsperada = fatosReconstruidos ? diasForcaEsperados.length : rotina.diasForcaAgendados;
   if (rotina.diasForcaAgendados !== forcaEsperada || rotina.dias.length !== forcaEsperada) {
     motivosEstruturais.push(`dias de força divergentes: fatos ${forcaEsperada}, contador ${rotina.diasForcaAgendados}, planos ${rotina.dias.length}`);
   }
@@ -759,28 +751,18 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
     || duracaoFinalTreinos.some((d, i) => !d || !duracoesIguais(rotina.duracaoDias![i]!, d))) {
     motivosEstruturais.push('duracaoDias diverge da projeção do plano final');
   }
-  const diasEditor: DiaDoEditor[] = rotina.dias.map((dia, treinoIdx) => {
-    const final = finais.find((d) => d.treinoIdx === treinoIdx);
-    return {
-      nome: dia.nome,
-      exercicios: dia.slots.map((s) => s.exercicio),
-      series: dia.slots.map((s) => s.series),
-      descansoSeg: dia.slots.map((s) => s.descansoSeg),
-      holdSeg: dia.slots.map((s) => s.holdSeg),
-      extraDoFoco: dia.slots.map((s) => s.extraDoFoco),
-      cardioSegundos: blocosCanonicos.get(final?.diaId ?? '')?.duracaoTotalSegundos,
-    };
-  });
+  const diasEditor: DiaDoEditor[] = rotina.dias.map((dia) => ({
+    nome: dia.nome,
+    exercicios: dia.slots.map((s) => s.exercicio),
+    series: dia.slots.map((s) => s.series),
+    descansoSeg: dia.slots.map((s) => s.descansoSeg),
+    holdSeg: dia.slots.map((s) => s.holdSeg),
+    extraDoFoco: dia.slots.map((s) => s.extraDoFoco),
+  }));
   const base = avaliarSemana(diasEditor, ctx);
   const conferencias = finais.map((dia) => {
     const treino = dia.treinoIdx != null ? rotina.dias[dia.treinoIdx] : undefined;
-    const cardioCanonicoSegundos = blocosCanonicos.get(dia.diaId)?.duracaoTotalSegundos ?? 0;
-    const cardioQualitativoEsperado = rotina.cardio.tipo === 'sessoes_moderadas'
-      && oferecidos.includes(dia.diaId as Weekday);
-    const critico = avaliarDuracaoFinalDoDia(
-      treino?.slots ?? [], ctx.nivel, orcamentoSeg, cardioCanonicoSegundos,
-      cardioQualitativoEsperado, rotina.limiteTempoEstrito,
-    );
+    const critico = avaliarDuracaoResistida(treino?.slots ?? [], ctx.nivel, orcamentoSeg, rotina.limiteTempoEstrito);
     return { diaId: dia.diaId, converge: duracoesIguais(dia.duracao, critico), gerador: dia.duracao, critico };
   });
   const convergiu = motivosEstruturais.length === 0 && conferencias.every((d) => d.converge);

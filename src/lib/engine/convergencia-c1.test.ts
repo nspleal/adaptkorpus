@@ -3,8 +3,9 @@
  * dependência/importação, que:
  *  - gerador (`treino-montador`) e crítico (`critico`) consomem a fórmula canônica de duração;
  *  - o adaptador de plano roteia para `avaliarDuracaoSessao` (não copia a aritmética);
- *  - o construtor semanal e a geração temporal consomem `calcularUsosCardioNaOrigem` / a canônica;
- *  - existe UMA só definição da constante de repetições e UMA só da primitiva de cardio.
+ *  - a geração temporal consome a canônica e a distribuição de cardio NÃO lê o tempo da musculação
+ *    (decisão do autor 2026-09-23: o tempo do perfil é só da musculação);
+ *  - existe UMA só definição da constante de repetições e UMA só do construtor semanal de cardio.
  * Igualdade apenas numérica não prova fonte única — este gate prova o CONSUMO da exportação.
  */
 import { readFileSync } from 'node:fs';
@@ -24,9 +25,9 @@ const ENGINE = join(__dirname);
 const ler = (arquivo: string) => readFileSync(join(ENGINE, arquivo), 'utf-8');
 
 describe('C1 §8.1 · fonte única de duração (gerador + crítico convergem)', () => {
-  it('o crítico importa a fórmula canônica do dia final', () => {
+  it('o crítico importa a fórmula canônica da sessão resistida', () => {
     const src = ler('critico.ts');
-    expect(src).toMatch(/import\s*\{[^}]*avaliarDuracaoFinalDoDia[^}]*\}\s*from\s*['"]\.\/duracao-plano['"]/);
+    expect(src).toMatch(/import\s*\{[^}]*avaliarDuracaoResistida[^}]*\}\s*from\s*['"]\.\/duracao-plano['"]/);
   });
 
   it('o gerador importa a fórmula canônica e reavalia o plano final', () => {
@@ -44,10 +45,17 @@ describe('C1 §8.1 · fonte única de duração (gerador + crítico convergem)',
   });
 });
 
-describe('C1 §8.1 · primitiva única de cardio (avaliador e construtor semanal a consomem)', () => {
-  it('o construtor semanal importa `calcularUsosCardioNaOrigem`', () => {
-    const src = ler('distribuicao-cardio-semana.ts');
-    expect(src).toMatch(/import\s*\{[^}]*calcularUsosCardioNaOrigem[^}]*\}\s*from\s*['"]\.\/cardio-sessao['"]/);
+describe('cardio fora do tempo da musculação (decisão 2026-09-23)', () => {
+  const codigo = (arquivo: string) => ler(arquivo).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ');
+  it('distribuição e ponte de cardio não leem orçamento, tempo do perfil nem duração resistida', () => {
+    for (const a of ['distribuicao-cardio-semana.ts', 'treino-cardio-semana.ts']) {
+      expect(codigo(a), a).not.toMatch(/orcamento|tempoPorSessaoMin|maxResistida|duracaoResistida|semLimite|capacidade/i);
+    }
+  });
+
+  it('o avaliador canônico não tem item de cardio (nada contínuo soma ao tempo do treino)', () => {
+    expect(codigo('duracao-sessao.ts')).not.toMatch(/CONTINUO|continuoSegundos|origemPlano/);
+    expect(codigo('duracao-plano.ts')).not.toMatch(/CONTINUO|cardio/i);
   });
 
   it('a geração temporal consome a canônica de duração', () => {
@@ -58,7 +66,7 @@ describe('C1 §8.1 · primitiva única de cardio (avaliador e construtor semanal
 
 describe('C1 §8.1 · uma única definição (proíbe cópia local)', () => {
   const arquivos = [
-    'duracao-sessao.ts', 'duracao-plano.ts', 'cardio-sessao.ts', 'distribuicao-cardio-semana.ts',
+    'duracao-sessao.ts', 'duracao-plano.ts', 'treino-cardio-semana.ts', 'distribuicao-cardio-semana.ts',
     'geracao-temporal.ts', 'critico.ts', 'treino-montador.ts',
   ];
 
@@ -67,9 +75,9 @@ describe('C1 §8.1 · uma única definição (proíbe cópia local)', () => {
     expect(defs).toEqual(['duracao-sessao.ts']);
   });
 
-  it('há exatamente UMA definição de calcularUsosCardioNaOrigem', () => {
-    const defs = arquivos.filter((a) => /export function calcularUsosCardioNaOrigem/.test(ler(a)));
-    expect(defs).toEqual(['cardio-sessao.ts']);
+  it('há exatamente UMA definição de construirDistribuicaoCardioSemana', () => {
+    const defs = arquivos.filter((a) => /export function construirDistribuicaoCardioSemana/.test(ler(a)));
+    expect(defs).toEqual(['distribuicao-cardio-semana.ts']);
   });
 
   it('nenhum consumidor recria o fallback proibido `series ?? 1` / `descanso ?? 90` no critério temporal', () => {
@@ -157,8 +165,6 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const fatosTruncados = {
       ...fatos,
       diasHorizonte: fatos.diasHorizonte.filter((d) => d.diaId !== diaIdRemovido),
-      planosResistidosTerminais: fatos.planosResistidosTerminais.filter((d) => d.diaId !== diaIdRemovido),
-      orcamentoPorDia: fatos.orcamentoPorDia.filter((d) => d.diaId !== diaIdRemovido),
       prescricoesCardio: fatos.prescricoesCardio.filter((p) => p.diaOrigemId !== diaIdRemovido),
     };
     adulterada.fatosDistribuicaoCardio = fatosTruncados;
@@ -290,7 +296,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     const presc = prescreverTreino(perfil, avaliarGateTreino(perfil));
     const rotina = montarRotina(presc, perfil, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [0, 4]);
     const distAdulterada = structuredClone(rotina);
-    distAdulterada.distribuicaoCardio!.contratosPorPrescricao[0]!.duracaoDescartadaSegundos += 1;
+    distAdulterada.distribuicaoCardio!.blocosPorDia[0]!.duracaoTotalSegundos += 1;
     const a = avaliarRotinaAutomaticaFinal(distAdulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
@@ -314,11 +320,11 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     expect(b.convergenciaPlanoFinal?.motivosEstruturais.join(' ')).toMatch(/duração de cardio inválida|diverge do bloco/);
   });
 
-  it('não confia nos fatos derivados publicados: recompõe MAX resistida a partir dos slots', () => {
+  it('não confia nos fatos derivados publicados: recompõe a prescrição de cardio a partir da oferta e da meta', () => {
     const presc = prescreverTreino(perfil, avaliarGateTreino(perfil));
     const rotina = montarRotina(presc, perfil, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [0, 4]);
     const adulterada = structuredClone(rotina);
-    adulterada.fatosDistribuicaoCardio!.planosResistidosTerminais[0]!.maxResistidaSegundos! += 1;
+    adulterada.fatosDistribuicaoCardio!.prescricoesCardio[0]!.duracaoPrescritaSegundos += 60;
     const avaliacao = avaliarRotinaAutomaticaFinal(adulterada, {
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
@@ -329,21 +335,26 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
     expect(avaliacao.convergenciaPlanoFinal?.motivosEstruturais.join(' ')).toMatch(/fatos publicados divergem/);
   });
 
-  it('gerador e crítico convergem em NAO_AVALIADO quando o cardio qualitativo não tem duração', () => {
+  it('cardio qualitativo sem duração não torna o TREINO não avaliado: gerador e crítico convergem na musculação', () => {
     const perfilMassa = { ...perfil, objetivo: 'massa' as const, diasDisponiveis: 6 };
     const presc = prescreverTreino(perfilMassa, avaliarGateTreino(perfilMassa));
-    const rotina = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [4, 5]);
+    // Sábado e domingo: a sexta é o dia complementar desta agenda, e oferecê-la muda a agenda de
+    // força por outra política (dia complementar), não pelo tempo.
+    const rotina = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [5, 6]);
+    const semOferta = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), []);
     const avaliacao = avaliarRotinaAutomaticaFinal(rotina, {
       nivel: perfilMassa.nivelExperiencia, objetivo: perfilMassa.objetivo,
       tempoPorSessaoMin: perfilMassa.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
       diasNoHorizonteEsperado: 7,
-      diasOferecidosCardioEsperados: [4, 5],
+      diasOferecidosCardioEsperados: [5, 6],
     });
-    expect(rotina.resultadoGeracao?.tipo).toBe('NAO_AVALIADO_ENTREGAVEL');
-    expect(rotina.planoFinalPorDia?.filter((d) => d.cardio).every((d) =>
-      d.duracao.estadoCalculo === 'NAO_AVALIADO')).toBe(true);
+    expect(rotina.resultadoGeracao).toEqual(semOferta.resultadoGeracao);
+    const comCardio = rotina.planoFinalPorDia!.filter((d) => d.cardio);
+    expect(comCardio.map((d) => d.diaId)).toEqual(['sab', 'dom']);
+    expect(comCardio.every((d) => d.cardio!.minutos === null && d.duracao.estadoCalculo === 'CALCULADO')).toBe(true);
+    expect(rotina.duracaoDias).toEqual(semOferta.duracaoDias);
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('CONVERGIU');
     expect(avaliacao.convergenciaPlanoFinal?.dias.filter((d) =>
-      d.critico.estadoCalculo === 'NAO_AVALIADO')).toHaveLength(2);
+      d.critico.estadoCalculo === 'NAO_AVALIADO')).toHaveLength(0);
   });
 });

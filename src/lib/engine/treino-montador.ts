@@ -44,7 +44,7 @@ import { creditar, creditoAtual, gruposSemEspaco, MARCA_PODA_SESSAO, MARCA_PODA_
 import { declararExcessoDeSessao, frasesDaExcecao, tentarAlternativasDeSessao, type AlternativaExaminada, type ExcecaoDeSessao } from './excecao-sessao';
 import { secundariosDe } from './secundarios';
 import { avaliarDuracaoSessao, FORMULA_DURACAO_VERSION } from './duracao-sessao';
-import { avaliarDuracaoFinalDoDia, avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
+import { avaliarDuracaoResistida, execucaoResistidaDe } from './duracao-plano';
 import { distribuirCardioDaRotina, fatosDistribuicaoCardioDaRotina } from './treino-cardio-semana';
 import { avaliarInvariantes, executarReduceToFit, fatosReducao, type FatosReducao, type ItemPlanoTemporal, type Padrao } from './geracao-temporal';
 import { TEMPO_EXECUCAO_SERIE_REPS_SEG } from './duracao-sessao';
@@ -240,7 +240,7 @@ export function montarRotina(
    * 🔒 C1.1-B — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: dias reais da semana. É a menor
    * fronteira funcional nova — transiente
    * por geração, NÃO uma preferência permanente do perfil. Distinto de `diasDisponiveis` (contagem).
-   * Cardio próprio pode vir após musculação; parcela redistribuída nunca cai em dia de treino.
+   * O cardio do dia oferecido vem após a musculação, com a própria duração: não usa o tempo do treino.
    * Entra, em ordem canônica, no `canonical_input_hash` da distribuição.
    */
   diasOferecidosCardio: readonly (Weekday | number)[] = [],
@@ -2601,10 +2601,8 @@ export function montarRotina(
         : cardioSemDuracao
           ? { nome: 'Cardio', padrao: 'cardio', modalidade, minutos: null, diaId, ordemNoHorizonte }
           : undefined;
-      const duracao = avaliarDuracaoFinalDoDia(
-        treino?.slots ?? [], perfil.nivelExperiencia, limiteCertificacao, bloco?.duracaoTotalSegundos ?? 0,
-        cardioSemDuracao, automatico,
-      );
+      // O tempo do dia é só o da musculação: o bloco de cardio acima guarda a própria duração.
+      const duracao = avaliarDuracaoResistida(treino?.slots ?? [], perfil.nivelExperiencia, limiteCertificacao, automatico);
       const tipo: PlanoFinalDia['tipo'] = treino
         ? (cardio ? 'TREINO_E_CARDIO' : 'TREINO')
         : (cardio ? 'CARDIO' : 'VAZIO');
@@ -2650,7 +2648,6 @@ export function montarRotina(
       return { ...r, distribuicao, avisos: [...avisos], fatosReducao: fatos, resultadoGeracao: rg };
     }
 
-    const diasResistidos = r.duracaoResistidaDias ?? r.duracaoDias ?? [];
     const oferecidos = ORDEM_SEMANA.filter((dia, indice) =>
       diasOferecidosCardio.includes(dia) || diasOferecidosCardio.includes(indice));
     const cardioPrescritoPorDiaSegundos =
@@ -2658,13 +2655,7 @@ export function montarRotina(
         ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
         : 0;
     const entradaCardioViva = {
-      diasComMusculacao: r.dias.map((dia, treinoIdx) => ({
-        diaId: diaIdDaRotina(dia, treinoIdx),
-        duracao: diasResistidos[treinoIdx]!,
-      })),
       diasOferecidosCardio: oferecidos,
-      orcamentoSegundos: limiteCertificacao,
-      ...(perfil.limiteTempoTreino === 'sem_limite' ? { semLimite: true } : {}),
       cardioPrescritoPorDiaSegundos,
       aggregateId: 'rotina-cardio',
       expectedRevision: 0,
@@ -2676,40 +2667,20 @@ export function montarRotina(
       ? new Set(oferecidos)
       : new Set<Weekday>();
     const final = materializarPlanoFinal(r, distribuicaoCardio, diasCardioSemDuracao);
-    /**
-     * 🔴 D4 — A PERDA É DITA. O corte pelo orçamento de cada dia já acontecia e já era
-     * medido; o que faltava era sair do objeto e virar número e frase. Medido no SHA
-     * `34b2ede`: oferta de 4 dias prescrevia 160 min e entregava 123, sem aviso nenhum.
-     *
-     * 🔒 Nada é redistribuído para consertar o número: cardio só vai a dia OFERECIDO, e
-     * oferecer por conta própria seria prescrever em dia que a pessoa não deu. A conta é dita
-     * como está.
-     */
+    // 🔴 2026-09-23 — o cardio conserva a duração prescrita inteira: não há corte a declarar.
     const prescritoSegundos = fatosDistribuicaoCardio.prescricoesCardio
-      .reduce((n, p) => n + (p.duracaoPrescritaSegundos > 0 ? p.duracaoPrescritaSegundos : 0), 0);
-    const entregueSegundos = distribuicaoCardio.blocosPorDia
-      .reduce((n, b) => n + b.duracaoTotalSegundos, 0);
-    const cardioSemana = prescritoSegundos > 0
-      ? { prescritoSegundos, entregueSegundos, faltanteSegundos: Math.max(0, prescritoSegundos - entregueSegundos) }
-      : undefined;
-    if (cardioSemana && cardioSemana.faltanteSegundos > 0) {
-      const min = (seg: number) => Math.round(seg / 60);
-      avisos.push(
-        `Cardio: o plano pede ${min(cardioSemana.prescritoSegundos)} min nesta semana e couberam `
-        + `${min(cardioSemana.entregueSegundos)} min nos dias que você ofereceu — faltam `
-        + `${min(cardioSemana.faltanteSegundos)} min. O cardio entra só em dia que você ofereceu e `
-        + `nunca tira tempo da musculação.`,
-      );
-    }
+      .reduce((n, p) => n + p.duracaoPrescritaSegundos, 0);
+    const cardioSemana = prescritoSegundos > 0 ? { prescritoSegundos } : undefined;
     /**
      * 🔴 D3 — a INVARIANTE do certificado, num único ponto que cobre os DOIS produtores
      * (alocador automático e editor guiado): `CERTIFICADO` afirma *"todo dia cabe"*, então um
      * dia MEDIDO acima do limite operacional o desqualifica. O plano continua entregue e
      * intacto — o que muda é o rótulo, e ele passa a nomear os dias que estouram.
      *
-     * No caminho automático isto nunca deve morder (o `reduceToFit` degrada até caber); é o
-     * ramo manual, que por política não reduz, quem produz o caso. Se um dia morder no
-     * automático, o rótulo honesto é este e não o falso verde.
+     * No caminho automático isto não deve morder: a musculação acima do orçamento já sai
+     * `INCOMPATIVEL` antes de chegar aqui, e o cardio não entra nesta conta (decisão de
+     * 2026-09-23). É o ramo manual, que por política não reduz, quem produz o caso. Se um dia
+     * morder no automático, o rótulo honesto é este e não o falso verde.
      */
     const acimaDoLimite = (final.duracaoDias ?? [])
       .map((d, i) => (d.estadoLimite === 'ACIMA_DO_LIMITE_OPERACIONAL' ? i : -1))
@@ -2722,7 +2693,9 @@ export function montarRotina(
     const podemUltrapassar = (final.duracaoDias ?? [])
       .map((d, i) => (d.estadoLimite === 'LIMITE_INDETERMINADO' ? i : -1))
       .filter((i) => i >= 0);
-    const rgCertificado: ResultadoGeracaoRotina =
+    // O cardio sem duração (meta em sessões) é dito no próprio bloco (`minutos: null`); o
+    // veredito do TREINO mede só a musculação (decisão de 2026-09-23).
+    const resultadoFinal: ResultadoGeracaoRotina =
       rg.tipo === 'CERTIFICADO' && (acimaDoLimite.length > 0 || podemUltrapassar.length > 0)
         ? {
             tipo: 'ENTREGUE_SEM_CERTIFICACAO',
@@ -2730,20 +2703,6 @@ export function montarRotina(
             ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
           }
         : rg;
-    const resultadoFinal: ResultadoGeracaoRotina =
-      prescricao.cardio.tipo === 'sessoes_moderadas' && oferecidos.length > 0 && rgCertificado.tipo !== 'INCOMPATIVEL'
-        ? {
-            tipo: 'NAO_AVALIADO_ENTREGAVEL',
-            ...(acimaDoLimite.length > 0 ? { diasAcimaDoLimite: acimaDoLimite } : {}),
-            // 🔴 D12 — estado combinado: cardio sem duração E dia que pode estourar. Os dois
-            // fatos convivem no mesmo terminal; suprimir um deles é escolher qual verdade contar.
-            ...(podemUltrapassar.length > 0 ? { diasPodemUltrapassar: podemUltrapassar } : {}),
-            motivos: [...new Set([
-              ...(rgCertificado.tipo === 'NAO_AVALIADO_ENTREGAVEL' ? rgCertificado.motivos : []),
-              'CARDIO_SEM_DURACAO',
-            ])],
-          }
-        : rgCertificado;
     return {
       ...r, ...final, limiteTempoEstrito: automatico, limiteTempoTreino: perfil.limiteTempoTreino ?? 'limitado', distribuicao, fatosReducao: fatos, fatosDistribuicaoCardio, distribuicaoCardio, resultadoGeracao: resultadoFinal,
       ...(cardioSemana ? { cardioSemana } : {}),
