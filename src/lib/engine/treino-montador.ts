@@ -240,7 +240,8 @@ export function montarRotina(
    * 🔒 C1.1-B — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: dias reais da semana. É a menor
    * fronteira funcional nova — transiente
    * por geração, NÃO uma preferência permanente do perfil. Distinto de `diasDisponiveis` (contagem).
-   * O cardio do dia oferecido vem após a musculação, com a própria duração: não usa o tempo do treino.
+   * O cardio do dia oferecido vem após a musculação, com a própria duração: não usa o tempo do treino
+   * e não decide dias de força, divisão, exercícios, séries, descansos nem veredito da musculação.
    * Entra, em ordem canônica, no `canonical_input_hash` da distribuição.
    */
   diasOferecidosCardio: readonly (Weekday | number)[] = [],
@@ -441,8 +442,9 @@ export function montarRotina(
   const dias = diasDaAgenda.length;
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
-  const diaComplementar = automatico ? diasDaAgenda.slice(diasForca).find(d =>
-    !diasOferecidosCardio.includes(d) && !diasOferecidosCardio.includes(ORDEM_SEMANA.indexOf(d))) : undefined;
+  // A oferta de cardio não escolhe o dia complementar: nesse dia o cardio vem depois da
+  // musculação, sem tirar um dia de força (Nicolas, 2026-09-23).
+  const diaComplementar = automatico ? diasDaAgenda[diasForca] : undefined;
   const diasCardioRecuperacao = Math.max(0, dias - diasForca - Number(diaComplementar != null));
   /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
   const diasForcaDaSemana = [...diasDaAgenda.slice(0, diasForca), ...(diaComplementar ? [diaComplementar] : [])];

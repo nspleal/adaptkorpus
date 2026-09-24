@@ -5,7 +5,7 @@ import { prescreverTreino } from './treino';
 import { montarRotina, type OpcoesSemana } from './treino-montador';
 import { arredondar5, duracaoDoDiaDeCardio } from './dia-de-cardio';
 import { EXERCISES } from '../data/exercises';
-import { montarSemana } from '../semana';
+import { diasPadrao, montarSemana } from '../semana';
 import { sessoesResistidas, sessoesTreino, type SessaoHistorico } from '../treino-historico';
 import { semanaDoCiclo } from './treino-mesociclo';
 import type { FlagsSaude } from './types';
@@ -33,16 +33,20 @@ function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
   };
 }
 
-/** Uma rotina com dias EXCEDENTES de verdade (mais dias disponíveis que o teto de força). */
+/**
+ * Uma rotina com dias EXCEDENTES de verdade: os que sobram depois das sessões de força e do dia
+ * complementar. Por isso seis dias: com cinco, o intermediário usa todos para a musculação. Só
+ * esses dias vagos são oferecidos para cardio (a oferta não muda os dias de força, 2026-09-23).
+ */
+const SEIS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
 function rotinaComExcedente(over: Partial<PerfilTreino> = {}) {
-  const p = perfil(over);
+  const p = perfil({ diasDisponiveis: 6, ...over });
   const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
   const prescricao = prescreverTreino(p, avaliarGateTreino(p));
-  const dias = Math.max(0, Math.floor(p.diasDisponiveis));
-  const diasForca = dias < 1 ? 0 : Math.min(dias, prescricao.sessoesForcaSemana.max);
-  const diasVagosOferecidos = Array.from({ length: dias - diasForca }, (_, i) => diasForca + i);
+  const agenda = diasPadrao(p.diasDisponiveis);
+  const vagos = montarRotina(prescricao, p, EXERCISES, undefined, opc).diasCardioRecuperacao;
   return montarRotina(
-    prescricao, p, EXERCISES, undefined, opc, undefined, undefined, diasVagosOferecidos,
+    prescricao, p, EXERCISES, undefined, opc, undefined, undefined, agenda.slice(agenda.length - vagos),
   );
 }
 
@@ -57,7 +61,7 @@ describe('🔴 ① o dia de cardio não é rotulado `treino`', () => {
   it('`montarSemana` não chama de treino um dia que não tem sessão de força', () => {
     const r = rotinaComExcedente();
     const nomes = r.dias.map((d) => d.nome);
-    const semana = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], nomes, 0);
+    const semana = montarSemana(SEIS, nomes, 0);
     const ativos = semana.filter((d) => d.isTraining);
     const forca = ativos.filter((d) => d.tipo === 'treino');
     // 🔒 Dias rotulados 'treino' NUNCA podem exceder as sessões de força do motor: cada um
@@ -72,7 +76,7 @@ describe('🔴 ① o dia de cardio não é rotulado `treino`', () => {
 
   it('nenhum dia de força fica sem sessão correspondente (o inverso do defeito)', () => {
     const r = rotinaComExcedente();
-    const semana = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], r.dias.map((d) => d.nome), 0);
+    const semana = montarSemana(SEIS, r.dias.map((d) => d.nome), 0);
     for (const d of semana.filter((x) => x.tipo === 'treino')) {
       expect(d.sessionIdx, `${d.full} é treino mas não aponta sessão`).not.toBeUndefined();
       expect(r.dias[d.sessionIdx!], `${d.full} aponta sessão inexistente`).toBeTruthy();
@@ -180,7 +184,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔴 2026-09-23 — o tempo do perfil é só da musculação: o único teto do cardio é o próprio (90). */
   it('a duração é a meta ÷ dias limitada só ao teto próprio do cardio, nunca ao tempo do treino', () => {
-    const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 5 });
+    const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 6 });
     const n = r.diasCardio.length;
     expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
     expect(r.cardio.tipo).toBe('minutos_semana');
@@ -192,7 +196,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
   it('emagrecimento usa o PISO da faixa — o teto daria o dobro', () => {
-    const r = rotinaComExcedente({ objetivo: 'emagrecimento', diasDisponiveis: 6 });
+    const r = rotinaComExcedente({ objetivo: 'emagrecimento', diasDisponiveis: 7 });
     const c = r.cardio as { tipo: string; min: number; max: number };
     expect(c.tipo).toBe('minutos_semana');
     expect(c.min, 'a faixa mudou — reveja o número da prova').toBe(150);
@@ -206,7 +210,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔒 Massa é meta qualitativa: sem duração explícita, não existe bloco canônico materializável. */
   it('massa preserva a meta em sessões como item explícito, sem inventar duração nem bloco', () => {
-    const r = rotinaComExcedente({ objetivo: 'massa', diasDisponiveis: 6 });
+    const r = rotinaComExcedente({ objetivo: 'massa', diasDisponiveis: 7 });
     expect(r.cardio.tipo).toBe('sessoes_moderadas');
     expect(r.distribuicaoCardio?.blocosPorDia).toEqual([]);
     expect(r.diasCardio).toHaveLength(2);
@@ -228,7 +232,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exercitado)', () => {
   it('o dia emitido é rotulado `cardio`, e sem `sessionIdx`', () => {
     const r = rotinaComExcedente();
-    const semana = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], r.dias.map((d) => d.nome), 0, r.diasCardio);
+    const semana = montarSemana(SEIS, r.dias.map((d) => d.nome), 0, r.diasCardio);
     const cardios = semana.filter((d) => d.tipo === 'cardio');
     expect(cardios.length, 'a emissão não chegou à faixa da semana').toBe(r.diasCardio.length);
     for (const d of cardios) {
@@ -243,7 +247,7 @@ describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exer
 
   it('sem `diasCardio`, o comportamento anterior é byte-idêntico (excedente = recuperação)', () => {
     const r = rotinaComExcedente();
-    const antes = montarSemana(['seg', 'ter', 'qua', 'qui', 'sex'], r.dias.map((d) => d.nome), 0);
+    const antes = montarSemana(SEIS, r.dias.map((d) => d.nome), 0);
     expect(antes.filter((d) => d.tipo === 'recuperacao').length).toBe(r.diasCardioRecuperacao);
     expect(antes.filter((d) => d.tipo === 'cardio')).toHaveLength(0);
   });

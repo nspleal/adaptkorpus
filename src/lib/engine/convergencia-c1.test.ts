@@ -276,7 +276,9 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
 
   it('reconstrói a distribuição: dia/bloco perdido não converge mesmo com contador adulterado', () => {
     const presc = prescreverTreino(perfil, avaliarGateTreino(perfil));
-    const rotina = montarRotina(presc, perfil, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [0, 4]);
+    // Domingo fica fora da agenda: é o dia só de cardio que o teste remove. A sexta é o dia
+    // complementar e, oferecida, leva cardio depois da musculação.
+    const rotina = montarRotina(presc, perfil, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [0, 6]);
     const adulterada = structuredClone(rotina);
     const puro = adulterada.planoFinalPorDia?.find((d) => d.tipo === 'CARDIO');
     expect(puro).toBeTruthy();
@@ -286,7 +288,7 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
       nivel: perfil.nivelExperiencia, objetivo: perfil.objetivo,
       tempoPorSessaoMin: perfil.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
       diasNoHorizonteEsperado: 7,
-      diasOferecidosCardioEsperados: [0, 4],
+      diasOferecidosCardioEsperados: [0, 6],
     });
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('DIVERGIU');
     expect(avaliacao.convergenciaPlanoFinal?.motivosEstruturais.join(' ')).toMatch(/recuperação divergentes|horizonte final|bloco canônico fora/);
@@ -338,19 +340,18 @@ describe('C1 §8.1 · convergência COMPORTAMENTAL gerador × crítico (mesmo SH
   it('cardio qualitativo sem duração não torna o TREINO não avaliado: gerador e crítico convergem na musculação', () => {
     const perfilMassa = { ...perfil, objetivo: 'massa' as const, diasDisponiveis: 6 };
     const presc = prescreverTreino(perfilMassa, avaliarGateTreino(perfilMassa));
-    // Sábado e domingo: a sexta é o dia complementar desta agenda, e oferecê-la muda a agenda de
-    // força por outra política (dia complementar), não pelo tempo.
-    const rotina = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [5, 6]);
+    // A sexta é o dia complementar desta agenda: recebe o cardio depois da musculação.
+    const rotina = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), [4, 5]);
     const semOferta = montarRotina(presc, perfilMassa, EXERCISES, new Set(), { semana: 1 }, undefined, new Map(), []);
     const avaliacao = avaliarRotinaAutomaticaFinal(rotina, {
       nivel: perfilMassa.nivelExperiencia, objetivo: perfilMassa.objetivo,
       tempoPorSessaoMin: perfilMassa.tempoPorSessaoMin, seriesPadrao: presc.seriesPorExercicio.min,
       diasNoHorizonteEsperado: 7,
-      diasOferecidosCardioEsperados: [5, 6],
+      diasOferecidosCardioEsperados: [4, 5],
     });
     expect(rotina.resultadoGeracao).toEqual(semOferta.resultadoGeracao);
     const comCardio = rotina.planoFinalPorDia!.filter((d) => d.cardio);
-    expect(comCardio.map((d) => d.diaId)).toEqual(['sab', 'dom']);
+    expect(comCardio.map((d) => [d.diaId, d.tipo])).toEqual([['sex', 'TREINO_E_CARDIO'], ['sab', 'CARDIO']]);
     expect(comCardio.every((d) => d.cardio!.minutos === null && d.duracao.estadoCalculo === 'CALCULADO')).toBe(true);
     expect(rotina.duracaoDias).toEqual(semOferta.duracaoDias);
     expect(avaliacao.convergenciaPlanoFinal?.estado).toBe('CONVERGIU');
