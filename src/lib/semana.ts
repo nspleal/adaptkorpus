@@ -46,14 +46,15 @@ export function diasPadrao(n: number): Weekday[] {
 /**
  * `treino` = sessão de FORÇA do motor · `cardio` = dia excedente COM item emitido ·
  * `recuperacao` = dia excedente sem item (massa com sessões batidas, `ROTEAR`) ·
- * `descanso` = folga.
+ * `sem_sessao` = dia de força planejado que o motor declarou não atendido (D14) — não é
+ * recuperação nem folga programada · `descanso` = folga.
  *
  * 🔴 `cardio` é rótulo PRÓPRIO, e essa é a metade visível do guard ①: chamar o dia de
  * `'treino'` faria cada um deles abrir a sessão guiada — e abrir cardio como sessão de
  * força corromperia a métrica de ATIVAÇÃO (`sessao_iniciada`), que acabou de ser medida
  * pela primeira vez em produção.
  */
-export type DiaTipo = 'treino' | 'cardio' | 'recuperacao' | 'descanso';
+export type DiaTipo = 'treino' | 'cardio' | 'recuperacao' | 'sem_sessao' | 'descanso';
 
 export interface DiaDaSemana {
   idx: number;            // 0=Seg … 6=Dom
@@ -90,10 +91,12 @@ export function montarSemana(
    */
   diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
   sessoesDias: readonly (Weekday | undefined)[] = [],
+  /** Dias de força planejados que o motor declarou não atendidos (`rotina.diasNaoAtendidos`). */
+  naoAtendidos: readonly { diaId?: string; nome: string }[] = [],
 ): DiaDaSemana[] {
   // A sessão explícita não muda de dia quando a disponibilidade do perfil muda.
   if (sessoesNomes.length > 0 && sessoesDias.length === sessoesNomes.length && sessoesDias.every(d => d != null)) {
-    const semana = montarSemana(treinoDias, [], hojeIdx, diasCardio);
+    const semana = montarSemana(treinoDias, [], hojeIdx, diasCardio, [], naoAtendidos);
     return semana.map(d => {
       const sessionIdx = sessoesDias.indexOf(d.weekday);
       return sessionIdx < 0 ? d : { ...d, tipo: 'treino' as const, isTraining: true, sessionIdx, sessionLabel: sessoesNomes[sessionIdx] };
@@ -152,6 +155,9 @@ export function montarSemana(
         sessionLabel: item.minutos != null ? `Cardio · ${formatarDuracaoMinutos(item.minutos)}` : 'Cardio',
       };
     }
+    // 🔴 D14 — o dia pedido que ficou sem sessão não vira recuperação na faixa.
+    const naoAtendido = naoAtendidos.find((d) => d.diaId === weekday);
+    if (naoAtendido) return { ...base, isTraining: false, tipo: 'sem_sessao' as const, sessionLabel: naoAtendido.nome };
     return { ...base, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' };
   });
 }
