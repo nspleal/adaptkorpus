@@ -10,6 +10,10 @@
  * dias de força e supunha que cardio e força não dividem o dia. O cardio é independente da
  * musculação (DEC-007): o motivo de não haver minutos é não haver dia escolhido.
  *
+ * 🔴 2026-09-24 (Nicolas) — o fator de retomada 0 continua aceito: com ele a meta da semana é
+ * zero e não há minutos mesmo com dias escolhidos. A frase então diz que a meta é zero, e não
+ * que nenhum dia foi escolhido.
+ *
  * Guard estático (padrão da casa para componentes), ancorado nas TRÊS proibições da DF:
  * sem "Faltam X", sem tom de falha, e o registro continua à mão.
  */
@@ -20,8 +24,8 @@ const fonte = readFileSync('src/components/painel/Cardio.tsx', 'utf8');
 const semComentarios = fonte.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
 const bloco = semComentarios.match(/function SemDiaDeCardio[\s\S]*?\n\}/)?.[0] ?? '';
 
-describe('🔒 C3 — cardio sem dia excedente', () => {
-  it('existe um ramo próprio para "não sobrou dia"', () => {
+describe('🔒 C3 — cardio sem minutos prescritos', () => {
+  it('existe um ramo próprio para "não há minutos no plano"', () => {
     expect(bloco, 'o componente SemDiaDeCardio sumiu').not.toBe('');
     expect(semComentarios, 'o ramo não está ligado ao cartão').toMatch(/<SemDiaDeCardio/);
   });
@@ -30,6 +34,11 @@ describe('🔒 C3 — cardio sem dia excedente', () => {
     expect(bloco).toMatch(/Nenhum dia está escolhido para a sugestão automática de cardio/);
     expect(bloco, 'voltou a pôr a musculação como motivo').not.toMatch(/ocupad|treino de força/);
     expect(semComentarios, 'o ramo voltou a depender dos dias de força').not.toMatch(/diasDeForca/);
+  });
+
+  it('meta zero (fator 0 da retomada) é dita como meta zero, não como falta de dia escolhido', () => {
+    expect(semComentarios).toMatch(/<SemDiaDeCardio metaZero=\{meta\.alvo <= 0\} \/>/);
+    expect(bloco).toMatch(/metaZero\s*\?\s*'Nesta semana a meta de cardio é zero/);
   });
 
   /** 🔒 As três proibições da DF, uma asserção cada. */

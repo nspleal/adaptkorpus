@@ -17,7 +17,8 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
  * ①②③ de 2026-08-12 (contagem ponderada · cobertura · divisões).
  *
  * Garantias (travadas na spec):
- *  - dias de força = min(dias_disponíveis, teto do nível); excedente → cardio/recuperação;
+ *  - dias de força = min(dias_disponíveis, teto do nível); excedente → recuperação; o cardio
+ *    sai só dos dias oferecidos para ele (DEC-007);
  *  - slots do dia = orçamento de TEMPO (`orcamentoSlotsDoDia`); cada slot vai ao grupo com
  *    maior DÉFICIT PONDERADO do template do dia (`alocarSemana`);
  *  - puxar ≥ empurrar (saúde do ombro); dobradiça presente; core 2–3×/semana;
@@ -30,7 +31,7 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
 import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload } from './treino';
 import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
-import { freqMaxPorGrupo, metaCardioDaRetomada, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
+import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
 import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
@@ -54,7 +55,7 @@ import { ROTULO_GRUPO } from '../frequencia-grupos';
 import { selecionarDivisao, contarRecortesEntregues } from './selecao-divisao';
 import { distribuirGruposNoCalendario, distribuirComplementares, diasConsecutivos } from './calendario-grupos';
 import { ehComplementar, ehDiaDisponivel } from './selecao-referencia';
-import type { ModalidadeCardio } from './cardio';
+import { metaCardioComRetomada } from './cardio';
 import { DELOAD_SEMANAS_DEFAULT, DESCANSO_COMPOSTO_TETO_SEG, SERIES_MANUAIS_MAX } from './treino-constants';
 import type { DiaCardio, DiaNaoAtendido, Faixa, FaseVolume, FatoCoberturaGrupo, FatoCorteTempo, FatoInvariantePadrao, FeedbackGrupo, NivelExperiencia, PerfilTreino, PrescricaoFITT, DiaTreino, PlanoFinalDia, ResultadoGeracaoRotina, RotinaSemanal, SemanaCiclo, SlotExercicio } from './treino-types';
 import type { EquipamentoDisp, Exercise, ExecucaoLateralidade, GrupoPrimario, LocalExercicio, PadraoMovimento } from '../data/types';
@@ -143,38 +144,6 @@ export interface OpcoesSemana {
   budgetSlotsOverride?: number;
   /** Flag estritamente interna: monta uma tentativa resistida, sem finalizar/distribuir cardio. */
   tentativaTemporalInterna?: true;
-}
-
-/**
- * 🔴 OS DIAS EXCEDENTES VIRAM DIAS DE CARDIO (spec §🏃, leva própria de 2026-08-01).
- *
- * O Passo 3 sempre mandou "dias excedentes → cardio/recuperação"; o motor CONTAVA os dias e
- * não construía nada, e era isso que mantinha a entrada unificada de cardio dormente desde
- * a Leva 2.
- *
- * 🔒 Só regra travada, recombinada — nenhum número novo entra por esta porta:
- *  · duração = **meta semanal ÷ nº de dias excedentes**, arredondada ao múltiplo de 5 mais
- *    próximo com **empate para CIMA** (150 ÷ 4 = 37,5 → 40), e **limitada a 90 min/dia**;
- *  · **emagrecimento usa o PISO da faixa** (`min`), nunca o teto — 150 ÷ 3 = 50 min/dia
- *    contra 300 ÷ 3 = 100, fator 2 sem base;
- *  · **massa é meta em SESSÕES**: `minutos: null`, porque dizer um número seria inventar.
- *
- * ⚠️ A virada "batidas as sessões → recuperação" NÃO mora aqui: depende de quantas sessões
- * de cardio a pessoa já registrou nesta semana, e o montador é PURO — não vê histórico.
- * Ela vive onde o histórico está (`conteudoDoDiaExcedente`, chamado pelo Painel).
- */
-function montarDiasCardio(quantos: number, meta: PrescricaoFITT['cardio'], modalidade: ModalidadeCardio = MODALIDADE_PADRAO_DIA): DiaCardio[] {
-  if (quantos < 1) return [];
-  // 🔒 O PISO da faixa é o alvo (`min`), e é o mesmo número que `metaCardioSemanal` usa.
-  // 🔒 A MESMA função do conteúdo do dia: divide, arredonda (empate p/ cima) e aplica o
-  // teto de 90. Dividir aqui por conta própria faria o teto valer num caminho e não no outro.
-  const minutos = meta.tipo === 'minutos_semana' ? duracaoDoDiaDeCardio(meta.min, quantos) : null;
-  return Array.from({ length: quantos }, (_, i) => ({
-    nome: quantos > 1 ? `Cardio ${i + 1}` : 'Cardio',
-    padrao: 'cardio' as const,
-    modalidade,
-    minutos: minutos != null && minutos > 0 ? minutos : null,
-  }));
 }
 
 /** Padrões independentes que o adaptador temporal exige de toda realocação. */
@@ -449,8 +418,10 @@ export function montarRotina(
   /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
   const diasForcaDaSemana = [...diasDaAgenda.slice(0, diasForca), ...(diaComplementar ? [diaComplementar] : [])];
 
+  // Agenda vazia (as bordas exigem ≥ 1 dia): sem força e sem cardio automático; nada nasce de
+  // dia excedente.
   if (diasForca === 0) {
-    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito), cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
+    return { diasForcaAgendados: 0, diasCardioRecuperacao, split: '—', dias: [], diasCardio: [], cardio: prescricao.cardio, avisos: ['Sem dias disponíveis para treino de força.'] };
   }
 
   // Pool elegível: equipamento (modelo 2 níveis — checklist de casa) + dificuldade
@@ -2345,7 +2316,8 @@ export function montarRotina(
     return {
       diasForcaAgendados: diasEntregues.length,
       diasCardioRecuperacao,
-      diasCardio: montarDiasCardio(diasCardioRecuperacao, prescricao.cardio, perfil.cardioFavorito),
+      // O cardio nasce em `finalizar`, dos dias oferecidos; o dia vago da agenda é recuperação.
+      diasCardio: [],
       split,
       dias: diasEntregues,
       ...(diasNaoAtendidos.length > 0 ? { diasNaoAtendidos } : {}),
@@ -2663,19 +2635,14 @@ export function montarRotina(
       + (distribuicao.adaptada ? 'Mantivemos a organização vigente para o nível ou a retomada. ' : '')
       + `Recortes principais entregues: ${recortesEntregues} de ${distribuicao.recortesPlanejados}. Confira os limites de cobertura do plano.`,
     );
-    if (rg.tipo === 'ERRO_ALOCADOR') {
-      return { ...r, distribuicao, avisos: [...avisos], fatosReducao: fatos, resultadoGeracao: rg };
-    }
-
     const oferecidos = ORDEM_SEMANA.filter((dia, indice) =>
       diasOferecidosCardio.includes(dia) || diasOferecidosCardio.includes(indice));
-    // Na rampa de retomada a meta de cardio cai pelo fator da semana, como o cartão já diz
-    // (claim `motor-treino-cardio-dia-excedente--011`); o dia oferecido recebe a parte dela.
+    // Na rampa de retomada a meta de cardio cai pelo fator da semana, pela mesma função do
+    // cartão (claim `motor-treino-cardio-dia-excedente--011`); o dia oferecido recebe a parte dela.
     const cardioPrescritoPorDiaSegundos =
       prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-        ? duracaoDoDiaDeCardio(semanaCiclo?.retomada
-          ? metaCardioDaRetomada(prescricao.cardio.min, semanaCiclo.retomada.fator)
-          : prescricao.cardio.min, oferecidos.length) * 60
+        ? duracaoDoDiaDeCardio(metaCardioComRetomada({ tipo: 'minutos', alvo: prescricao.cardio.min },
+          semanaCiclo?.retomada?.fator ?? null)!.alvo, oferecidos.length) * 60
         : 0;
     const entradaCardioViva = {
       diasOferecidosCardio: oferecidos,
@@ -2694,6 +2661,11 @@ export function montarRotina(
     const prescritoSegundos = fatosDistribuicaoCardio.prescricoesCardio
       .reduce((n, p) => n + p.duracaoPrescritaSegundos, 0);
     const cardioSemana = prescritoSegundos > 0 ? { prescritoSegundos } : undefined;
+    // A falha do alocador é da musculação: o plano de força não sai, mas o cardio dos dias
+    // oferecidos é o mesmo de sempre (independente da força, DEC-007).
+    if (rg.tipo === 'ERRO_ALOCADOR') {
+      return { ...r, diasCardio: final.diasCardio, ...(cardioSemana ? { cardioSemana } : {}), distribuicao, avisos: [...avisos], fatosReducao: fatos, resultadoGeracao: rg };
+    }
     /**
      * 🔴 D3 — a INVARIANTE do certificado, num único ponto que cobre os DOIS produtores
      * (alocador automático e editor guiado): `CERTIFICADO` afirma *"todo dia cabe"*, então um

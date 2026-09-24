@@ -12,7 +12,8 @@ import type { FlagsSaude } from './types';
 import type { PerfilTreino } from './treino-types';
 
 /**
- * 🔴 3.4 — DIA EXCEDENTE = DIA DE CARDIO: **os três guards, escritos ANTES do código.**
+ * 🔴 3.4 — O DIA DE CARDIO NA SEMANA: **os três guards, escritos ANTES do código.** Desde a
+ * DEC-007 o dia de cardio é o dia OFERECIDO para ele, nunca o dia vago da agenda de força.
  *
  * O lote exige que estes três existam antes da emissão do slot, e o motivo é histórico: a
  * armadilha 2 da Leva 2 (cardio caindo no balde do mesociclo) foi fechada por ESTRUTURA e
@@ -34,32 +35,33 @@ function perfil(over: Partial<PerfilTreino> = {}): PerfilTreino {
 }
 
 /**
- * Uma rotina com dias EXCEDENTES de verdade: os que sobram depois das sessões de força e do dia
- * complementar. Por isso seis dias: com cinco, o intermediário usa todos para a musculação. Só
- * esses dias vagos são oferecidos para cardio (a oferta não muda os dias de força, 2026-09-23).
+ * Uma rotina com dias de cardio que NÃO são de força: os dias vagos da agenda (os que sobram
+ * depois das sessões e do dia complementar) oferecidos para cardio. Por isso seis dias: com
+ * cinco, o intermediário usa todos para a musculação (a oferta não muda os dias de força).
  */
 const SEIS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab'] as const;
-function rotinaComExcedente(over: Partial<PerfilTreino> = {}) {
+function rotinaComDiaDeCardio(over: Partial<PerfilTreino> = {}, oferecer = true) {
   const p = perfil({ diasDisponiveis: 6, ...over });
   const opc: OpcoesSemana = { semana: 1, feedbackGrupos: new Map() };
   const prescricao = prescreverTreino(p, avaliarGateTreino(p));
   const agenda = diasPadrao(p.diasDisponiveis);
   const vagos = montarRotina(prescricao, p, EXERCISES, undefined, opc).diasCardioRecuperacao;
   return montarRotina(
-    prescricao, p, EXERCISES, undefined, opc, undefined, undefined, agenda.slice(agenda.length - vagos),
+    prescricao, p, EXERCISES, undefined, opc, undefined, undefined, oferecer ? agenda.slice(agenda.length - vagos) : [],
   );
 }
 
 describe('🔴 o caso existe (senão os três guards são decorativos)', () => {
-  it('há dia excedente de verdade nesta configuração', () => {
-    const r = rotinaComExcedente();
-    expect(r.diasCardioRecuperacao, 'sem excedente não há o que guardar').toBeGreaterThan(0);
+  it('há dia vago de verdade nesta configuração, oferecido para cardio', () => {
+    const r = rotinaComDiaDeCardio();
+    expect(r.diasCardioRecuperacao, 'sem dia vago não há o que guardar').toBeGreaterThan(0);
+    expect(r.diasCardio.length).toBe(r.diasCardioRecuperacao);
   });
 });
 
 describe('🔴 ① o dia de cardio não é rotulado `treino`', () => {
   it('`montarSemana` não chama de treino um dia que não tem sessão de força', () => {
-    const r = rotinaComExcedente();
+    const r = rotinaComDiaDeCardio();
     const nomes = r.dias.map((d) => d.nome);
     const semana = montarSemana(SEIS, nomes, 0);
     const ativos = semana.filter((d) => d.isTraining);
@@ -75,7 +77,7 @@ describe('🔴 ① o dia de cardio não é rotulado `treino`', () => {
   });
 
   it('nenhum dia de força fica sem sessão correspondente (o inverso do defeito)', () => {
-    const r = rotinaComExcedente();
+    const r = rotinaComDiaDeCardio();
     const semana = montarSemana(SEIS, r.dias.map((d) => d.nome), 0);
     for (const d of semana.filter((x) => x.tipo === 'treino')) {
       expect(d.sessionIdx, `${d.full} é treino mas não aponta sessão`).not.toBeUndefined();
@@ -99,20 +101,20 @@ describe('🔴 ② `sessao_iniciada` não dispara para cardio', () => {
     const disparos = s.match(/registrarEvento\('sessao_iniciada'/g) ?? [];
     expect(disparos, 'o disparo de ativação se espalhou').toHaveLength(1);
     // E o corpo de `iniciarSessaoGuiada` não pode ser alcançável a partir do dia de cardio:
-    // o botão do dia excedente abre o REGISTRO, não a sessão.
+    // o botão do dia de cardio abre o REGISTRO, não a sessão.
     const i = s.indexOf('function iniciarSessaoGuiada');
     const corpo = s.slice(i, s.indexOf('\n  }', i));
     expect(corpo, 'a sessão guiada passou a registrar cardio').not.toMatch(/cardio_registrado|setRegistrandoCardio/);
   });
 
-  it('o botão do dia excedente abre o registro de cardio, não a sessão guiada', () => {
+  it('o botão do dia de cardio abre o registro de cardio, não a sessão guiada', () => {
     const s = painel();
     // ⚠️ Âncora no `<SuaSemana`, não no 1º `onRegistrarCardio=` do arquivo: a sessão guiada
     // também recebe essa prop, e o extrator ingênuo pegava ELA. (Falhou assim na 1ª escrita.)
     const i = s.indexOf('<SuaSemana');
     expect(i, 'a faixa da semana sumiu do Painel').toBeGreaterThanOrEqual(0);
     const tag = s.slice(i, s.indexOf('/>', i));
-    expect(tag, 'o dia excedente não oferece registro de cardio').toMatch(/onRegistrarCardio=/);
+    expect(tag, 'o dia de cardio não oferece registro de cardio').toMatch(/onRegistrarCardio=/);
     // ⚠️ A asserção é sobre O VALOR da prop de cardio, não sobre a tag inteira: `onIrSessao`
     // legitimamente chama `iniciarSessaoGuiada` — é o handler dos dias de FORÇA, e proibi-lo
     // na tag toda acusaria o comportamento certo. (Foi o que aconteceu na 1ª escrita.)
@@ -172,9 +174,11 @@ describe('🔴 ③ o relógio do mesociclo não se move com cardio', () => {
 /* ══════════════ A EMISSÃO — agora os três guards são exercitados de verdade ══════════════ */
 
 describe('🔴 o montador EMITE o dia de cardio', () => {
-  it('emite um dia por excedente, e a contagem bate com `diasCardioRecuperacao`', () => {
-    const r = rotinaComExcedente();
-    expect(r.diasCardio, 'o dia excedente continua sendo só um número').toHaveLength(r.diasCardioRecuperacao);
+  it('emite um dia de cardio por dia OFERECIDO, e só neles', () => {
+    const r = rotinaComDiaDeCardio();
+    const agenda = diasPadrao(6);
+    expect(r.diasCardio.map((d) => d.diaId), 'o cardio saiu fora dos dias oferecidos')
+      .toEqual(agenda.slice(agenda.length - r.diasCardioRecuperacao));
     expect(r.diasCardio.length).toBeGreaterThan(0);
     for (const d of r.diasCardio) {
       expect(d.padrao, 'o slot precisa ser de padrão cardio').toBe('cardio');
@@ -184,9 +188,9 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔴 2026-09-23 — o tempo do perfil é só da musculação: o único teto do cardio é o próprio (90). */
   it('a duração é a meta ÷ dias limitada só ao teto próprio do cardio, nunca ao tempo do treino', () => {
-    const r = rotinaComExcedente({ objetivo: 'saude', diasDisponiveis: 6 });
+    const r = rotinaComDiaDeCardio({ objetivo: 'saude', diasDisponiveis: 6 });
     const n = r.diasCardio.length;
-    expect(n, 'sem excedente o caso não discrimina').toBeGreaterThan(0);
+    expect(n, 'sem dia de cardio o caso não discrimina').toBeGreaterThan(0);
     expect(r.cardio.tipo).toBe('minutos_semana');
     // 🔒 A MESMA função do módulo puro — inclusive o teto de 90 (DF 2026-08-01).
     const alvoDoDia = duracaoDoDiaDeCardio((r.cardio as { min: number }).min, n);
@@ -196,7 +200,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔴 O PISO da faixa, não o teto: 150 ÷ 3 = 50 min/dia contra 300 ÷ 3 = 100. Fator 2. */
   it('emagrecimento usa o PISO da faixa — o teto daria o dobro', () => {
-    const r = rotinaComExcedente({ objetivo: 'emagrecimento', diasDisponiveis: 7 });
+    const r = rotinaComDiaDeCardio({ objetivo: 'emagrecimento', diasDisponiveis: 7 });
     const c = r.cardio as { tipo: string; min: number; max: number };
     expect(c.tipo).toBe('minutos_semana');
     expect(c.min, 'a faixa mudou — reveja o número da prova').toBe(150);
@@ -210,7 +214,7 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
 
   /** 🔒 Massa é meta qualitativa: sem duração explícita, não existe bloco canônico materializável. */
   it('massa preserva a meta em sessões como item explícito, sem inventar duração nem bloco', () => {
-    const r = rotinaComExcedente({ objetivo: 'massa', diasDisponiveis: 7 });
+    const r = rotinaComDiaDeCardio({ objetivo: 'massa', diasDisponiveis: 7 });
     expect(r.cardio.tipo).toBe('sessoes_moderadas');
     expect(r.distribuicaoCardio?.blocosPorDia).toEqual([]);
     expect(r.diasCardio).toHaveLength(2);
@@ -222,16 +226,24 @@ describe('🔴 o montador EMITE o dia de cardio', () => {
     expect(r.resultadoGeracao?.tipo).not.toBe('NAO_AVALIADO_ENTREGAVEL');
   });
 
-  it('sem dia excedente, nenhum dia de cardio é emitido', () => {
-    const r = rotinaComExcedente({ diasDisponiveis: 3 });
+  it('sem dia oferecido, nenhum dia de cardio é emitido', () => {
+    const r = rotinaComDiaDeCardio({ diasDisponiveis: 3 });
     expect(r.diasCardioRecuperacao).toBe(0);
     expect(r.diasCardio).toEqual([]);
+  });
+
+  /** 🔑 O PAR da regra (DEC-007): o dia vago da agenda, sem oferta, é recuperação — não cardio. */
+  it('dia vago da agenda sem oferta não vira dia de cardio', () => {
+    const r = rotinaComDiaDeCardio({}, false);
+    expect(r.diasCardioRecuperacao, 'sem dia vago o caso não discrimina').toBeGreaterThan(0);
+    expect(r.diasCardio).toEqual([]);
+    expect(r.cardioSemana).toBeUndefined();
   });
 });
 
 describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exercitado)', () => {
   it('o dia emitido é rotulado `cardio`, e sem `sessionIdx`', () => {
-    const r = rotinaComExcedente();
+    const r = rotinaComDiaDeCardio();
     const semana = montarSemana(SEIS, r.dias.map((d) => d.nome), 0, r.diasCardio);
     const cardios = semana.filter((d) => d.tipo === 'cardio');
     expect(cardios.length, 'a emissão não chegou à faixa da semana').toBe(r.diasCardio.length);
@@ -245,8 +257,8 @@ describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exer
     expect(semana.filter((d) => d.tipo === 'treino')).toHaveLength(r.dias.length);
   });
 
-  it('sem `diasCardio`, o comportamento anterior é byte-idêntico (excedente = recuperação)', () => {
-    const r = rotinaComExcedente();
+  it('sem cardio emitido, o dia vago da agenda é recuperação', () => {
+    const r = rotinaComDiaDeCardio();
     const antes = montarSemana(SEIS, r.dias.map((d) => d.nome), 0);
     expect(antes.filter((d) => d.tipo === 'recuperacao').length).toBe(r.diasCardioRecuperacao);
     expect(antes.filter((d) => d.tipo === 'cardio')).toHaveLength(0);
@@ -255,7 +267,7 @@ describe('🔴 ① a EMISSÃO não faz o dia virar `treino` (o guard, agora exer
 
 describe('🔴 ②/③ a emissão NÃO abriu caminho para a sessão guiada nem para o relógio', () => {
   it('🔒 `rotina.dias` continua só com força — é o que torna ② e ③ impossíveis', () => {
-    const r = rotinaComExcedente();
+    const r = rotinaComDiaDeCardio();
     // `iniciarSessaoGuiada(idx)` indexa ESTE array. Um dia de cardio aqui dispararia
     // `sessao_iniciada` e, ao concluir, entraria no balde de `sessoesResistidas`.
     expect(r.dias.length, 'o dia de cardio entrou no array das sessões de força').toBe(r.diasForcaAgendados);
@@ -268,7 +280,7 @@ describe('🔴 ②/③ a emissão NÃO abriu caminho para a sessão guiada nem p
   });
 
   it('e os dois arrays são disjuntos — nenhum dia de cardio aparece em `dias`', () => {
-    const r = rotinaComExcedente();
+    const r = rotinaComDiaDeCardio();
     const nomesForca = new Set(r.dias.map((d) => d.nome));
     for (const c of r.diasCardio) {
       expect(nomesForca.has(c.nome), `${c.nome} está nos dois arrays`).toBe(false);
@@ -286,7 +298,7 @@ describe('🔴 o teto morde sem o app mentir sobre a semana', () => {
 
   it('a copy NÃO explica mais a fórmula — ela virou falsa quando o teto corta', () => {
     const s = semana();
-    expect(s, 'a frase da divisão voltou e mente com 1 dia excedente')
+    expect(s, 'a frase da divisão voltou e mente com 1 dia de cardio')
       .not.toMatch(/meta da semana dividida/);
     expect(s).toMatch(/Dia ativo de cardio\. Pode trocar a modalidade/);
   });

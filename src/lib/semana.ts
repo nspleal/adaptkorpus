@@ -44,8 +44,9 @@ export function diasPadrao(n: number): Weekday[] {
 }
 
 /**
- * `treino` = sessão de FORÇA do motor · `cardio` = dia excedente COM item emitido ·
- * `recuperacao` = dia excedente sem item (massa com sessões batidas, `ROTEAR`) ·
+ * `treino` = sessão de FORÇA do motor (o dia misto carrega o cardio em `cardio`) · `cardio` =
+ * dia só de cardio, um dia oferecido em que o motor emitiu item · `recuperacao` = dia vago da
+ * agenda de força, sem item ·
  * `sem_sessao` = dia de força planejado que o motor declarou não atendido (D14) — não é
  * recuperação nem folga programada · `descanso` = folga.
  *
@@ -77,17 +78,17 @@ export interface DiaDaSemana {
 
 /**
  * Monta os 7 dias (Seg→Dom). As `n` sessões de FORÇA do motor vão nos primeiros `n` dias de
- * treino (ordem da semana); os dias ativos EXCEDENTES viram **recuperação** (cardio/recuperação
- * que o motor prescreve como `diasCardioRecuperacao`) — nunca repetimos uma sessão de força nem
- * rotulamos errado. `hojeIdx` vem da UI (relógio), fora do motor.
+ * treino (ordem da semana), ou no dia explícito de cada uma; o cardio fica no dia que o motor
+ * emitiu; os dias vagos da agenda viram **recuperação** — nunca repetimos uma sessão de força
+ * nem rotulamos errado. `hojeIdx` vem da UI (relógio), fora do motor.
  */
 export function montarSemana(
   treinoDias: readonly Weekday[],
   sessoesNomes: readonly string[],
   hojeIdx: number,
   /**
-   * Dias de cardio EMITIDOS pelo motor (`rotina.diasCardio`). Ausente = comportamento
-   * anterior, byte a byte: o excedente vira `recuperacao`, sem item.
+   * Dias de cardio EMITIDOS pelo motor (`rotina.diasCardio`), cada um no seu dia. Ausente =
+   * nenhum cardio: o dia vago vira `recuperacao`, sem item.
    */
   diasCardio: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[] = [],
   sessoesDias: readonly (Weekday | undefined)[] = [],
@@ -104,14 +105,13 @@ export function montarSemana(
   }
   const treino = new Set(treinoDias);
   const n = sessoesNomes.length;
-  const temOrdemCanonica = diasCardio.some((d) => d.ordemNoHorizonte != null);
   const cardioPorDia = new Map<Weekday, { item: (typeof diasCardio)[number]; indice: number }>();
-  const cardioPorOrdem = new Map<number, { item: (typeof diasCardio)[number]; indice: number }>();
   diasCardio.forEach((item, indice) => {
-    if (item.diaId != null && (ORDEM_SEMANA as readonly string[]).includes(item.diaId)) {
-      cardioPorDia.set(item.diaId as Weekday, { item, indice });
-    }
-    if (item.ordemNoHorizonte != null) cardioPorOrdem.set(item.ordemNoHorizonte, { item, indice });
+    // `ordemNoHorizonte` é a posição na semana (seg = 0), a mesma do motor e do crítico — não
+    // a posição entre os dias de treino, que só coincide numa agenda contígua a partir de seg.
+    // Item sem dia não tem onde ficar: o cardio nunca ocupa um dia vago por conta própria.
+    const dia = item.diaId ?? (item.ordemNoHorizonte != null ? ORDEM_SEMANA[item.ordemNoHorizonte] : undefined);
+    if (dia != null && (ORDEM_SEMANA as readonly string[]).includes(dia)) cardioPorDia.set(dia as Weekday, { item, indice });
   });
   let li = 0;
   return ORDEM_SEMANA.map((weekday, idx) => {
@@ -121,43 +121,29 @@ export function montarSemana(
       idx, weekday, abbr: DIA_LABEL[weekday].abbr, full: DIA_LABEL[weekday].full,
       isTraining: ativo || cardioExato != null, isToday: idx === hojeIdx,
     };
-    if (!ativo) {
-      if (cardioExato) {
-        const item = cardioExato.item;
-        return {
-          ...base, tipo: 'cardio' as const, cardioIdx: cardioExato.indice, cardio: item,
-          sessionLabel: item.minutos != null ? `Cardio · ${formatarDuracaoMinutos(item.minutos)}` : 'Cardio',
-        };
-      }
-      return { ...base, tipo: 'descanso' as const };
-    }
-    const ordemAtiva = li;
-    const cardioLegado = cardioExato ?? cardioPorOrdem.get(ordemAtiva);
     // 🔒 As `n` sessões de FORÇA primeiro, sempre. Cardio canônico pode coexistir no MESMO dia,
     // mas nunca recebe `sessionIdx` próprio nem desloca a musculação.
-    if (li < n) {
-      const sessionIdx = li;
-      li++;
+    if (ativo && li < n) {
+      const sessionIdx = li++;
       return {
         ...base, tipo: 'treino' as const, sessionIdx, sessionLabel: sessoesNomes[sessionIdx],
-        ...(cardioLegado ? { cardioIdx: cardioLegado.indice, cardio: cardioLegado.item } : {}),
+        ...(cardioExato ? { cardioIdx: cardioExato.indice, cardio: cardioExato.item } : {}),
       };
     }
-    // Excedente: dia de CARDIO quando o motor emitiu item; senão, recuperação (que não
-    // prescreve nada). 🔴 Nunca `sessionIdx` — o índice é do outro array.
-    const indiceLegado = li - n;
-    const cardioIdx = cardioExato?.indice ?? (temOrdemCanonica ? cardioPorOrdem.get(ordemAtiva)?.indice : indiceLegado);
-    li++;
-    const item = cardioExato?.item ?? (temOrdemCanonica ? cardioPorOrdem.get(ordemAtiva)?.item : diasCardio[indiceLegado]);
-    if (item && cardioIdx != null) {
+    // Dia só de cardio: o dia oferecido em que o motor emitiu item. 🔴 Nunca `sessionIdx` — o
+    // índice é do outro array.
+    if (cardioExato) {
+      const item = cardioExato.item;
       return {
-        ...base, tipo: 'cardio' as const, cardioIdx, cardio: item,
+        ...base, tipo: 'cardio' as const, cardioIdx: cardioExato.indice, cardio: item,
         sessionLabel: item.minutos != null ? `Cardio · ${formatarDuracaoMinutos(item.minutos)}` : 'Cardio',
       };
     }
+    if (!ativo) return { ...base, tipo: 'descanso' as const };
     // 🔴 D14 — o dia pedido que ficou sem sessão não vira recuperação na faixa.
     const naoAtendido = naoAtendidos.find((d) => d.diaId === weekday);
     if (naoAtendido) return { ...base, isTraining: false, tipo: 'sem_sessao' as const, sessionLabel: naoAtendido.nome };
+    // Dia vago da agenda de força: recuperação, que não prescreve nada.
     return { ...base, tipo: 'recuperacao' as const, sessionLabel: 'Recuperação' };
   });
 }

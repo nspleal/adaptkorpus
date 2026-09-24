@@ -427,9 +427,10 @@ export interface DiaNaoAtendido {
 }
 
 /**
- * 🔴 O DIA EXCEDENTE, EMITIDO (Leva própria do 3.4, 2026-08-01). Um item de cardio: a
- * MODALIDADE (default caminhada) e a duração do dia. `minutos: null` = meta em sessões
- * (massa), em que dizer um número seria inventar o que a spec não dá.
+ * O DIA DE CARDIO, EMITIDO num dia oferecido para cardio (DEC-007; nunca num dia vago da
+ * agenda de força). Um item de cardio: a MODALIDADE (default caminhada) e a duração do dia.
+ * `minutos: null` = meta em sessões (massa), em que dizer um número seria inventar o que a
+ * spec não dá.
  *
  * ⚠️ Por que MODALIDADE e não exercício da biblioteca: **não existe "Caminhada" no
  * catálogo.** Os 14 de `padrao: 'cardio'` não incluem a modalidade default — o `e109`

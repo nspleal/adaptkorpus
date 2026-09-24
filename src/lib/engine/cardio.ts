@@ -161,6 +161,8 @@ export function metaCardioSemanal(objetivo: Objetivo, roteado: boolean): MetaCar
  * 60 dias ver o treino cortado pela metade e o app ainda pedindo 150 min. A rampa foi
  * escrita para condicionamento: o cardio é o caso mais literal dela.
  *
+ * 🔒 FONTE ÚNICA do fator sobre o cardio: o cartão, o montador e o crítico chamam esta
+ * função (claim `motor-treino-cardio-dia-excedente--011`). Minutos arredondam ao inteiro.
  * Massa continua CONTAGEM (nunca vira barra) e cai para o piso da faixa: 1 sessão.
  */
 export function metaCardioComRetomada(meta: MetaCardio | null, fator: number | null): MetaCardio | null {
@@ -212,8 +214,9 @@ export function resumoCardioSemana(registros: readonly RegistroCardio[]): Resumo
   return { minutosNaMeta: min, sessoesNaMeta: contam.length, kcal, contam, leves };
 }
 
-/** A meta foi cumprida? (`>=` do alvo — 300 NÃO é teto: passar dele não dispara nada.) */
+/** A meta foi cumprida? (`>=` do alvo — 300 NÃO é teto: passar dele não dispara nada.) Meta
+ *  zero (fator 0 da retomada) não se cumpre: não há o que cumprir. */
 export function metaCumprida(meta: MetaCardio | null, resumo: ResumoCardioSemana): boolean {
-  if (!meta) return false;
+  if (!meta || !(meta.alvo > 0)) return false;
   return meta.tipo === 'sessoes' ? resumo.sessoesNaMeta >= meta.alvo : resumo.minutosNaMeta >= meta.alvo;
 }

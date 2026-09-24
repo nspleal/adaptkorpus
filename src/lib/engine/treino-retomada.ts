@@ -230,13 +230,3 @@ export function aplicarRetomada<
     retomada: true as const,
   };
 }
-
-/**
- * Meta de cardio durante a rampa: também multiplicada pelo fator (uso LITERAL da fonte —
- * a rampa 50/30/20/10 foi escrita para condicionamento; a musculação é que ganhou a regra
- * FIT). Minutos arredondam ao inteiro; contagem de sessões nunca desce abaixo de 1.
- */
-export function metaCardioDaRetomada(meta: number, fator: number, emSessoes = false): number {
-  if (!Number.isFinite(meta) || meta <= 0) return emSessoes ? 1 : 0;
-  return emSessoes ? Math.max(1, Math.floor(meta * fator)) : Math.round(meta * fator);
-}

@@ -35,8 +35,7 @@ import { medirEntregaDoFoco } from '@/lib/foco-entrega';
 import { fraseDoFoco } from '@/lib/foco-copy';
 import { ROTULO_GRUPO } from '@/lib/frequencia-grupos';
 import { identidadesDe } from '@/lib/exercicio-identidade';
-import { metaCardioComRetomada, metaCardioSemanal, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
-import { conteudoDoDiaExcedente } from '@/lib/engine/dia-de-cardio';
+import { metaCardioComRetomada, metaCardioSemanal, metaCumprida, resumoCardioSemana, ROTULO_INTENSIDADE, ROTULO_MODALIDADE, type IntensidadeCardio, type MetaCardio, type ModalidadeCardio } from '@/lib/engine/cardio';
 import { elegibilidade } from '@/lib/engine/tecnicas-avancadas';
 import { minutosAcumulados, registrosDaSemana } from '@/lib/cardio-semana';
 import RegistrarCardio, { CardioSemana } from './Cardio';
@@ -1351,14 +1350,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       : undefined,
   };
   /**
-   * 🔒 DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃). O motor conta esses dias desde
-   * sempre (`diasCardioRecuperacao`) e nunca construía nada — a pessoa era informada de N
-   * dias de cardio e não recebia item nenhum. É o que mantinha a entrada unificada dormente.
-   *
-   * ⚠️ A meta que entra é a JÁ ESCALADA pela rampa: na retomada o dia existe com duração
-   * menor, sem regra nova. E `sessoesFeitas` só é lida na meta em sessões (massa).
-   */
-  /**
    * 🔒 O PORTÃO das técnicas avançadas (Leva F, §🥊) — resolvido UMA vez, aqui, e distribuído.
    * O Editar perfil e a sessão guiada leem o MESMO valor: duas resoluções seriam duas
    * respostas para "quem pode", e uma delas envelheceria em silêncio.
@@ -1390,12 +1381,12 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       registrarEvento('tecnica_elegivel', { sessoes: nSessoesResistidas, nivel: perfil.nivelExperiencia });
     }
   }, [portaoTecnicas, nSessoesResistidas, perfil.nivelExperiencia]);
-  const diaExcedente = conteudoDoDiaExcedente({
-    meta: metaCardio,
-    diasExcedentes: treino.rotina?.diasCardioRecuperacao ?? 0,
-    roteado: treino.gate.comportamento === 'ROTEAR',
-    sessoesFeitas: resumoCardioSemana(registrosCardioSemana).sessoesNaMeta,
-  });
+  /**
+   * 🔒 Massa: batida a meta semanal de sessões, "Sua semana" e a lista "Ver sugestão automática"
+   * deixam de sugerir cardio em todos os dias, inclusive depois da musculação (Nicolas,
+   * 2026-09-24). O plano e os registros não mudam.
+   */
+  const cardioEncerrado = metaCardio?.tipo === 'sessoes' && metaCumprida(metaCardio, resumoCardioSemana(registrosCardioSemana));
   /**
    * 🔒 A SESSÃO DE **HOJE** — fonte única com a faixa "Sua semana" (DF 2026-08-04).
    *
@@ -1821,7 +1812,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onIrSessao={(idx) => (rotinaDias[idx] ? iniciarSessaoGuiada(idx) : irAbaHist('treino'))}
               onVerDieta={() => irAba('dieta')}
               onEditarPerfil={() => setEditando(true)}
-              diaExcedente={diaExcedente}
+              cardioEncerrado={cardioEncerrado}
               diasCardio={treino.rotina?.diasCardio ?? []}
               naoAtendidos={treino.rotina?.diasNaoAtendidos ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
@@ -1895,14 +1886,16 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               }}
             />
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, margin: '20px 0' }}>
+              {cardioEncerrado
+                ? <p role="status" style={{ ...cardSoft, padding: 20, margin: '20px 0', fontWeight: 700 }}>Meta da semana cumprida</p>
+                : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, margin: '20px 0' }}>
                 {(treino.rotina?.diasCardio ?? []).map((dia, i) => <article key={dia.diaId ?? i} style={{ ...cardSoft, padding: 20 }}>
                   <div style={kicker}>{dia.diaId ? DIA_LABEL[dia.diaId as Weekday]?.full : 'Cardio planejado'}</div>
                   <h3 style={{ margin: '10px 0' }}>{ROTULO_MODALIDADE[dia.modalidade as ModalidadeCardio]}</h3>
                   <p>{dia.minutos != null ? formatarDuracaoMinutos(dia.minutos) : 'Duração conforme o plano'}</p>
                   <button type="button" onClick={() => { setCardioPre(dia); setRegistrandoCardio(true); window.scrollTo(0, 0); }} style={{ padding: '10px 16px', borderRadius: 10, background: '#BDFF00', color: '#0D2818', border: 'none', fontWeight: 700 }}>Registrar cardio</button>
                 </article>)}
-              </div>
+              </div>}
               </details>
             </>}
             <CardioSemana {...propsCardio} />
