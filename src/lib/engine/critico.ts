@@ -22,6 +22,8 @@ import type { Faixa, FaseVolume, NivelExperiencia, RotinaSemanal } from './trein
 import type { Objetivo } from './types';
 import { creditoPonderadoDaSemana, GRUPOS_GRANDES } from './alocador';
 import { INTERVALO_MIN_HORAS_MESMO_GRUPO, maxSemanalSemFoco, mev, mrv, tetoPonderadoNaSessao } from './trilhos';
+import { VOLUME_NIVEL } from './treino-constants';
+import { metaCardioDaRetomada } from './treino-retomada';
 import { avaliarDuracaoResistida } from './duracao-plano';
 import { FORMULA_DURACAO_VERSION, type ResultadoDuracao } from './duracao-sessao';
 import { validarDistribuicaoCardioSemana } from './distribuicao-cardio-semana';
@@ -260,6 +262,8 @@ export interface ContextoCriticoAutomatico extends ContextoCritico {
   diasOferecidosCardioEsperados: readonly (Weekday | number)[];
   /** Agenda real fornecida pelo perfil; ausente só para leitura de agregados legados. */
   diasTreinoEsperados?: readonly Weekday[];
+  /** Fator da rampa de retomada que disparou a geração; ausente fora dela. */
+  fatorRetomadaEsperado?: number;
 }
 
 const rotulo = (g: GrupoPrimario) => ROTULO_GRUPO[g] ?? g;
@@ -596,17 +600,30 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   // Agregado anterior ao C1.1-B não carregava a agenda. Só nesse caso de compatibilidade,
   // recompomos a agenda padrão a partir dos contadores publicados; o caminho vivo sempre injeta
   // `diasTreinoEsperados` a partir do perfil e nunca aprende a agenda da saída auditada.
+  const naoAtendidosInformados = rotina.diasNaoAtendidos ?? [];
   const agendaExterna = [...(ctx.diasTreinoEsperados
-    ?? diasPadrao(rotina.dias.length + rotina.diasCardioRecuperacao))];
+    ?? diasPadrao(rotina.dias.length + naoAtendidosInformados.length + rotina.diasCardioRecuperacao))];
   const agendaExternaValida = agendaExterna.every((d) => ORDEM_SEMANA.includes(d))
     && new Set(agendaExterna).size === agendaExterna.length;
   if (!agendaExternaValida) motivosEstruturais.push('agenda externa de treino inválida');
   const diasTreino = agendaExternaValida
     ? [...agendaExterna].sort((a, b) => ORDEM_SEMANA.indexOf(a) - ORDEM_SEMANA.indexOf(b))
     : [];
-  const diasForcaEsperados = diasTreino.slice(0, rotina.dias.length);
+  /**
+   * 🔴 D14 — o calendário PLANEJADO vem da agenda externa e do teto do nível (tabela da spec), não
+   * da rotina julgada: as sessões do teto e, havendo sobra na agenda, o dia complementar logo depois.
+   * Cada dia planejado é entregue ou declarado não atendido; nunca some nem vira recuperação.
+   */
+  const diasPlanejados = diasTreino.slice(0, VOLUME_NIVEL[ctx.nivel].sessoesForca.max + 1);
+  const naoAtendidosIds = naoAtendidosInformados.map((d) => d.diaId);
+  for (const id of naoAtendidosIds) {
+    if (!id || !diasPlanejados.includes(id) || naoAtendidosIds.indexOf(id) !== naoAtendidosIds.lastIndexOf(id)) {
+      motivosEstruturais.push(`dia não atendido fora do calendário planejado: ${String(id)}`);
+    }
+  }
+  const diasForcaEsperados = diasPlanejados.filter((d) => !naoAtendidosIds.includes(d));
   if (diasForcaEsperados.length !== rotina.dias.length) {
-    motivosEstruturais.push('agenda externa não comporta as sessões de força da rotina');
+    motivosEstruturais.push(`sessões divergem do calendário planejado: ${diasPlanejados.length} planejadas, ${naoAtendidosIds.length} não atendidas, ${rotina.dias.length} entregues`);
   }
   const oferecidosInformados = fatosInformados?.diasHorizonte
     .filter((d) => d.oferecido)
@@ -618,7 +635,9 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
   const duracaoResistidaCritico = rotina.dias.map((d) =>
     avaliarDuracaoResistida(d.slots, ctx.nivel, orcamentoSeg, rotina.limiteTempoEstrito));
   const cardioPrescritoPorDiaSegundos = rotina.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-      ? duracaoDoDiaDeCardio(rotina.cardio.min, oferecidos.length) * 60
+      ? duracaoDoDiaDeCardio(ctx.fatorRetomadaEsperado != null
+        ? metaCardioDaRetomada(rotina.cardio.min, ctx.fatorRetomadaEsperado)
+        : rotina.cardio.min, oferecidos.length) * 60
     : 0;
   const fatosReconstruidos = fatosInformados
       ? fatosDistribuicaoCardioDaRotina({
@@ -648,9 +667,9 @@ export function avaliarRotinaAutomaticaFinal(rotina: RotinaSemanal, ctx: Context
    * apareceria aqui como "recuperação" — que é justamente a redistribuição silenciosa que a
    * decisão proíbe.
    */
-  const naoAtendidos = rotina.diasNaoAtendidos?.length ?? 0;
-  if (rotina.diasCardioRecuperacao !== diasTreino.length - forcaEsperada - naoAtendidos) {
-    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${diasTreino.length - forcaEsperada - naoAtendidos}, contador ${rotina.diasCardioRecuperacao}`);
+  const recuperacaoEsperada = diasTreino.length - diasPlanejados.length;
+  if (rotina.diasCardioRecuperacao !== recuperacaoEsperada) {
+    motivosEstruturais.push(`dias de recuperação divergentes: agenda ${recuperacaoEsperada}, contador ${rotina.diasCardioRecuperacao}`);
   }
   if (finais.length !== horizonteEsperado) {
     motivosEstruturais.push(`horizonte final: esperado ${horizonteEsperado}, recebido ${finais.length}`);

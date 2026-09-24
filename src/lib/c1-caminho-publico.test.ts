@@ -339,14 +339,15 @@ describe('C1.1 · diasOferecidosCardio entra pelo ponto de entrada público (rec
   });
 
   it('a duração FINAL do dia misto é só a resistida; o dia só de cardio não tem tempo de treino', () => {
-    // 🔴 2026-09-23 — o tempo do perfil mede só a musculação. Segunda é mista e sexta é só
-    // cardio; os dois blocos guardam a própria duração (75 min = 150 ÷ 2) fora da conta do treino.
-    const rot = gerar([0, 4]);
+    // 🔴 2026-09-23 — o tempo do perfil mede só a musculação. Segunda é mista e domingo, fora da
+    // agenda, é só cardio; os dois blocos guardam a própria duração (75 min = 150 ÷ 2) fora da
+    // conta do treino. (A sexta não serve de dia só de cardio: é o dia complementar da agenda.)
+    const rot = gerar([0, 6]);
     const finais = rot.planoFinalPorDia ?? [];
     const mistos = finais.filter((d) => d.tipo === 'TREINO_E_CARDIO');
     const puros = finais.filter((d) => d.tipo === 'CARDIO');
     expect(mistos.map((d) => d.diaId)).toEqual(['seg']);
-    expect(puros.map((d) => d.diaId)).toEqual(['sex']);
+    expect(puros.map((d) => d.diaId)).toEqual(['dom']);
 
     for (const dia of mistos) {
       expect(dia.duracao).toEqual(rot.duracaoResistidaDias![dia.treinoIdx!]);

@@ -30,7 +30,7 @@ import {reduzirDiaPorTempo,removerExtrasPorTempo} from './ajuste-tempo-estrutura
 import { aplicarDeload, dificuldadesLiberadas, seriesEmDeload } from './treino';
 import { exercicioDisponivel } from './equipamento';
 import { alvoDaSemana } from './treino-mesociclo';
-import { freqMaxPorGrupo, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
+import { freqMaxPorGrupo, metaCardioDaRetomada, tetoSeriesDaRetomada, volumeDaRetomada } from './treino-retomada';
 import { temCarga } from './equipamento';
 import { classeDeDescanso, DESCANSO_PISO_DURO_SEG, descansoDoExercicio } from './descanso';
 import { rirAlvoDaSemana } from './treino-mesociclo';
@@ -240,7 +240,8 @@ export function montarRotina(
    * 🔒 C1.1-B — DIAS OFERECIDOS PELO USUÁRIO PARA CARDIO: dias reais da semana. É a menor
    * fronteira funcional nova — transiente
    * por geração, NÃO uma preferência permanente do perfil. Distinto de `diasDisponiveis` (contagem).
-   * O cardio do dia oferecido vem após a musculação, com a própria duração: não usa o tempo do treino.
+   * O cardio do dia oferecido vem após a musculação, com a própria duração: não usa o tempo do treino
+   * e não decide dias de força, divisão, exercícios, séries, descansos nem veredito da musculação.
    * Entra, em ordem canônica, no `canonical_input_hash` da distribuição.
    */
   diasOferecidosCardio: readonly (Weekday | number)[] = [],
@@ -441,8 +442,9 @@ export function montarRotina(
   const dias = diasDaAgenda.length;
   const teto = prescricao.sessoesForcaSemana.max;
   const diasForca = dias < 1 ? 0 : Math.min(dias, teto);
-  const diaComplementar = automatico ? diasDaAgenda.slice(diasForca).find(d =>
-    !diasOferecidosCardio.includes(d) && !diasOferecidosCardio.includes(ORDEM_SEMANA.indexOf(d))) : undefined;
+  // A oferta de cardio não escolhe o dia complementar: nesse dia o cardio vem depois da
+  // musculação, sem tirar um dia de força (Nicolas, 2026-09-23).
+  const diaComplementar = automatico ? diasDaAgenda[diasForca] : undefined;
   const diasCardioRecuperacao = Math.max(0, dias - diasForca - Number(diaComplementar != null));
   /** As sessões de força ocupam os primeiros dias efetivamente escolhidos, na semana real. */
   const diasForcaDaSemana = [...diasDaAgenda.slice(0, diasForca), ...(diaComplementar ? [diaComplementar] : [])];
@@ -606,11 +608,22 @@ export function montarRotina(
       .map((d) => ({ nome: d.nome, ...(d.diaId ? { diaId: d.diaId } : {}), motivo: 'DESENHO_VAZIO' as const })));
     const diasUsuarioComExercicio = diasUsuario.filter((d) => d.slots.length > 0);
     if (diasUsuarioComExercicio.length > 0 || custom.dias.some(d => d.exercicioIds.length > 0)) {
-      // O teto vigente orienta a recomendação; não apaga o desenho manual.
-      const cortados = diasUsuarioComExercicio.slice(diasForca);
+      /**
+       * O teto vigente orienta a recomendação; não apaga o desenho manual. A recomendação é a do
+       * automático: até `diasForca` sessões principais e, havendo dia livre na agenda, um dia só de
+       * complementares (a mesma régua do dia dedicado). Copiar o automático nunca excede.
+       */
+      const desenhados = diasUsuarioComExercicio.length;
+      const principais = diasUsuarioComExercicio.filter((d) =>
+        !ehDiaDisponivel(d.slots.flatMap((s) => s.exercicio.grupoPrimario ? [s.exercicio.grupoPrimario] : []))).length;
+      const complementarCabe = dias > diasForca;
+      const excedentes = Math.max(0, principais - diasForca, desenhados - diasForca - Number(complementarCabe));
       const mantidos = diasUsuarioComExercicio;
-      if (cortados.length > 0) {
-        avisosCustom.push(`Seu treino tem ${diasUsuarioComExercicio.length} dias e o seu nível comporta ${diasForca} por semana — os ${cortados.length} dias excedem a recomendação atual. Seu desenho foi preservado.`);
+      if (excedentes > 0) {
+        const recomendacao = diasForca < teto
+          ? `a recomendação é de até ${diasForca} ${diasForca === 1 ? 'sessão' : 'sessões'}, uma por dia de treino escolhido`
+          : `o seu nível comporta até ${diasForca} ${diasForca === 1 ? 'sessão principal' : 'sessões principais'} por semana${complementarCabe ? ', mais um dia só de complementares' : ''}`;
+        avisosCustom.push(`Seu treino tem ${desenhados} ${desenhados === 1 ? 'dia' : 'dias'}, ${principais} com grupos principais, e ${recomendacao} — ${excedentes === 1 ? '1 dia excede' : `${excedentes} dias excedem`} a recomendação atual. Seu desenho foi preservado.`);
       }
       // DF②: exercícios, ordem e quantidade do usuário ficam intactos. O caminho canônico
       // certifica duração e recomenda cardio mais abaixo; nunca aplica reduce-to-fit ao manual.
@@ -1504,7 +1517,13 @@ export function montarRotina(
        * foi do DELOAD. A fase A desta semana registra os seus próprios cortes, contra a dose
        * já reduzida, e cada causa fica com o que é dela.
        */
-      if(rotinaBaseDoDeload) diasTreino=rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,seriesAntesDoCorteDeTempo:undefined,series:seriesEmDeload(s.series??0)}))}));
+      if(rotinaBaseDoDeload) diasTreino=[
+        ...rotinaBaseDoDeload.dias.map(d=>({...d,slots:d.slots.map(s=>({...s,seriesAntesDoDeload:s.series,seriesAntesDoCorteDeTempo:undefined,series:seriesEmDeload(s.series??0)}))})),
+        // 🔴 D14 — o dia que a semana cheia não conseguiu montar continua pedido e declarado na
+        // semana de alívio; sem isto ele sumia da estrutura e o crítico acusava o dia perdido.
+        ...(rotinaBaseDoDeload.diasNaoAtendidos??[]).map((d):DiaTreino=>({nome:d.nome,...(d.diaId?{diaId:d.diaId}:{}),slots:[],
+          ...(d.motivo!=='DESENHO_VAZIO'?{motivoDoCorte:d.motivo}:{}),...(d.slotsPedidos!=null?{slotsNaoPreenchidos:d.slotsPedidos}:{})})),
+      ].sort((a,b)=>diasForcaDaSemana.indexOf(a.diaId!)-diasForcaDaSemana.indexOf(b.diaId!));
       /**
        * 🔒 O AJUSTE DO PLANO-BASE TAMBÉM É DITO NA SEMANA 6.
        *
@@ -2650,9 +2669,13 @@ export function montarRotina(
 
     const oferecidos = ORDEM_SEMANA.filter((dia, indice) =>
       diasOferecidosCardio.includes(dia) || diasOferecidosCardio.includes(indice));
+    // Na rampa de retomada a meta de cardio cai pelo fator da semana, como o cartão já diz
+    // (claim `motor-treino-cardio-dia-excedente--011`); o dia oferecido recebe a parte dela.
     const cardioPrescritoPorDiaSegundos =
       prescricao.cardio.tipo === 'minutos_semana' && oferecidos.length > 0
-        ? duracaoDoDiaDeCardio(prescricao.cardio.min, oferecidos.length) * 60
+        ? duracaoDoDiaDeCardio(semanaCiclo?.retomada
+          ? metaCardioDaRetomada(prescricao.cardio.min, semanaCiclo.retomada.fator)
+          : prescricao.cardio.min, oferecidos.length) * 60
         : 0;
     const entradaCardioViva = {
       diasOferecidosCardio: oferecidos,

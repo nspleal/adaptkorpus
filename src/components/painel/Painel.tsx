@@ -1349,9 +1349,6 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     prescritoMin: treino.rotina?.cardioSemana
       ? Math.round(treino.rotina.cardioSemana.prescritoSegundos / 60) || undefined
       : undefined,
-    // 🔒 C3: com todos os dias oferecidos virando força, não sobra dia de cardio — e o cartão
-    // precisa DESCREVER esse arranjo em vez de cobrar uma meta que o plano não prescreveu.
-    diasDeForca: treino.rotina?.diasForcaAgendados ?? 0,
   };
   /**
    * 🔒 DIA EXCEDENTE = DIA DE CARDIO (Leva E, spec §🏃). O motor conta esses dias desde
@@ -1590,6 +1587,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       diasNoHorizonteEsperado: ORDEM_SEMANA.length,
       diasOferecidosCardioEsperados: diasOferecidosCardio,
       diasTreinoEsperados: perfil.treinoDias ?? [],
+      ...(retomada ? { fatorRetomadaEsperado: retomada.fator } : {}),
       diasDaSemanaIdx: rotinaDias.map((d, i) => ORDEM_SEMANA.indexOf(d.diaId ?? perfil.treinoDias?.[i] ?? ORDEM_SEMANA[i]!)),
       seriesPadrao: prescricaoEfetiva.seriesPorExercicio.min,
       // 🔴 A régua da FASE vem do motor (mesma correção do editor): no deload/retomada o piso
@@ -1825,6 +1823,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
               onEditarPerfil={() => setEditando(true)}
               diaExcedente={diaExcedente}
               diasCardio={treino.rotina?.diasCardio ?? []}
+              naoAtendidos={treino.rotina?.diasNaoAtendidos ?? []}
               onRegistrarCardio={(item) => { setCardioPre(item ?? null); setRegistrandoCardio(true); window.scrollTo(0, 0); }}
             />
             {/* 🔒 C1.1-B: o seletor controlado nomeia dias reais e fica isolado nesta montagem. */}

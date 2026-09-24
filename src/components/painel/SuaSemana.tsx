@@ -17,7 +17,7 @@ import type { ConteudoDiaExcedente } from '@/lib/engine/dia-de-cardio';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], onRegistrarCardio }: {
+export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrSessao, onVerDieta, onEditarPerfil, diaExcedente, diasCardio = [], naoAtendidos = [], onRegistrarCardio }: {
   treinoDias: Weekday[];
   sessoesDias?: readonly (Weekday | undefined)[];
   sessoesNomes: string[];              // nomes das sessões (rotina.dias[].nome), na ordem do motor
@@ -32,6 +32,8 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
   diaExcedente?: ConteudoDiaExcedente;
   /** Dias de cardio EMITIDOS pelo motor — rotulam a faixa e trazem o item do dia. */
   diasCardio?: readonly { modalidade: string; minutos: number | null; diaId?: string; ordemNoHorizonte?: number }[];
+  /** Dias de força planejados que o motor declarou não atendidos (`rotina.diasNaoAtendidos`). */
+  naoAtendidos?: readonly { diaId?: string; nome: string }[];
   /**
    * Abre o registro UNIFICADO de cardio, pré-preenchido com o item do dia.
    * 🔴 NUNCA a sessão guiada: `sessao_iniciada` é a métrica de ATIVAÇÃO, e dispará-la para
@@ -42,7 +44,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
   const hojeIdx = weekdayHojeIdx();
   // 🔒 O dia de cardio vem do MOTOR (`rotina.diasCardio`). A tela não decide se o excedente
   // é cardio ou recuperação, nem calcula duração — se decidisse, existiriam duas respostas.
-  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio, sessoesDias);
+  const semana = montarSemana(treinoDias, sessoesNomes, hojeIdx, diasCardio, sessoesDias, naoAtendidos);
   const [selDay, setSelDay] = useState(hojeIdx);
   const sd = semana[selDay]!;
   const proximo = proximoTreinoIdx(semana, hojeIdx);
@@ -87,7 +89,7 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
               {d.isToday && <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: '.58rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#0D2818', background: '#BDFF00', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>Hoje</span>}
               <span style={{ fontWeight: 700, fontSize: '.95rem', color: d.isTraining ? '#EAE5DB' : 'rgba(234,229,219,.7)' }}>{d.abbr}</span>
               <span style={d.tipo === 'treino' ? { width: 7, height: 7, borderRadius: '50%', background: '#BDFF00', boxShadow: '0 0 8px rgba(189,255,0,.7)' } : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? { width: 7, height: 7, borderRadius: '50%', background: '#16A34A' } : { width: 7, height: 7, borderRadius: '50%', border: '1.5px solid rgba(234,229,219,.3)' }} />
-              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'cardio' ? (d.sessionLabel ?? 'Cardio') : d.tipo === 'recuperacao' ? 'Recuperação' : 'Descanso'}</span>
+              <span style={{ lineHeight: 1.2, fontSize: '.74rem', fontWeight: d.tipo === 'descanso' ? 600 : 700, color: d.tipo === 'treino' ? '#BDFF00' : d.tipo === 'recuperacao' || d.tipo === 'cardio' ? 'rgba(234,229,219,.78)' : 'rgba(234,229,219,.45)' }}>{d.tipo === 'treino' ? (d.sessionLabel ?? 'Treino') : d.tipo === 'cardio' ? (d.sessionLabel ?? 'Cardio') : d.tipo === 'recuperacao' ? 'Recuperação' : d.tipo === 'sem_sessao' ? 'Sem sessão' : 'Descanso'}</span>
               {d.tipo === 'treino' && d.cardio?.minutos != null && d.cardio.minutos > 0 && (
                 <span style={{ fontSize: '.74rem', lineHeight: 1.4, color: 'rgba(234,229,219,.85)' }}>Cardio · {formatarDuracaoMinutos(d.cardio.minutos)}</span>
               )}
@@ -119,6 +121,14 @@ export default function SuaSemana({ treinoDias, sessoesNomes, sessoesDias, onIrS
                 )}
               </div>
             </div>
+          </div>
+        ) : sd.tipo === 'sem_sessao' ? (
+          <div style={{ background: 'rgba(234,229,219,.03)', border: '1px solid rgba(234,179,8,.45)', borderRadius: 18, padding: 24, animation: `evkStepIn .35s ease` }}>
+            {/* 🔴 D14 — o dia pedido que ficou sem exercício elegível não é descanso nem recuperação
+                programados: a faixa diz o que aconteceu e aponta o motivo, que a aba Treino já dá. */}
+            <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(234,229,219,.6)', marginBottom: 6 }}>{`${sd.isToday ? 'Hoje' : cap(sd.full)} · Sem sessão`}</div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.3rem', fontWeight: 700, letterSpacing: '-.02em' }}>{sd.sessionLabel}</h3>
+            <p style={{ margin: 0, fontSize: '.93rem', color: 'rgba(234,229,219,.64)', lineHeight: 1.5 }}>Este dia da sua agenda não virou sessão nesta semana. O motivo está na aba Treino.</p>
           </div>
         ) : (sd.tipo === 'recuperacao' || sd.tipo === 'cardio') ? (
           <div style={{ background: 'linear-gradient(160deg, rgba(22,163,74,.09), rgba(15,15,14,.4))', border: '1px solid rgba(22,163,74,.28)', borderRadius: 18, padding: 24, animation: `evkStepIn .35s ease` }}>
