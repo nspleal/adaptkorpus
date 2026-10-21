@@ -155,7 +155,6 @@ describe('🔑 CALL SITES — cada evento sai do ato que ele mede', () => {
    * transformou em varredura — a suíte prova função, não montagem.
    */
   const painel = fonte(join('src', 'components', 'painel', 'Painel.tsx'));
-  const appPage = fonte(join('src', 'app', 'app', 'page.tsx'));
   const onboarding = fonte(join('src', 'app', 'onboarding', 'page.tsx'));
   const refeicao = fonte(join('src', 'components', 'painel', 'RegistroRefeicao.tsx'));
 
@@ -210,9 +209,11 @@ describe('🔑 CALL SITES — cada evento sai do ato que ele mede', () => {
     expect(corpoDe(painel, 'aplicarEx')).toMatch(/registrarEvento\('exercicio_substituido'/);
   });
 
-  it('`app_aberto` sai quando o painel monta de verdade', () => {
-    expect(appPage).toMatch(/registrarEvento\('app_aberto', \{ rota: '\/app' \}\)/);
-    expect(appPage).toMatch(/setPronto\(true\);[\s\S]{0,120}registrarEvento\('app_aberto'/);
+  it("`app_aberto` sai quando o painel monta de verdade", () => {
+    const hook=fonte(join('src','lib','persistencia','use-conta-sync.ts'));
+    expect(hook).toContain("registrarEvento('app_aberto', { rota: '/app' })");
+    expect(hook.indexOf('setVisivel(mostra);')).toBeLessThan(hook.indexOf("registrarEvento('app_aberto'"));
+    expect(hook.indexOf('if (!remoto)')).toBeLessThan(hook.indexOf("registrarEvento('app_aberto'"));
   });
 
   it('`plano_gerado` sai junto do plano, no onboarding', () => {
@@ -302,11 +303,11 @@ describe('🔒 a migration `0009` cria a tabela certa', () => {
 describe('🔒 export e exclusão — o que a LGPD promete', () => {
   const exportar = fonte(join('src', 'app', 'api', 'lgpd', 'exportar', 'route.ts'));
 
-  it('o export traz `eventos` como seção própria', () => {
-    expect(exportar).toMatch(/from\('eventos'\)\.select\('\*'\)/);
-    expect(exportar).toMatch(/eventos: eventos\.data \?\? \[\]/);
-    // E continua trazendo o histórico, separado.
-    expect(exportar).toMatch(/logs: logs\.data \?\? \[\]/);
+  it("o export traz `eventos` como seção própria", () => {
+    expect(exportar).toContain("lerColecaoCompleta(ctx,'eventos',limite)");
+    expect(exportar).toContain("lerColecaoCompleta(ctx,'logs',limite)");
+    expect(exportar).toContain('Promise.allSettled');expect(exportar).toContain('if (falharam.length) return');
+    expect(exportar).toContain('Object.fromEntries(resultados.map');
   });
 
   /**

@@ -46,6 +46,11 @@ const ISENTAS_BYTES: Record<string, string> = {
   [join(RAIZ, 'dados', 'peso', 'route.ts')]: 'corpo é { pesoKg, dataISO } — ambos validados por faixa',
 };
 
+const BLOQUEADAS = ['perfil','historico','peso','aderencia'].map(p=>join(RAIZ,'dados',p,'route.ts'));
+for(const f of BLOQUEADAS){
+  ISENTAS_RATE[f]='writer legado desativado: apenas 426, sem DML/RPC';
+  ISENTAS_BYTES[f]='não consome corpo nem executa mutação';
+}
 const arquivos = rotas(RAIZ);
 const fonte = new Map(arquivos.map((f) => [f, readFileSync(f, 'utf8')]));
 const escritoras = arquivos.filter((f) => ESCREVE.test(fonte.get(f)!));
@@ -55,6 +60,13 @@ describe('🔴 rotas de escrita: rate limit e teto de bytes', () => {
     expect(escritoras.length).toBeGreaterThanOrEqual(8);
   });
 
+  it('as exceções legadas não escrevem e nunca consomem o corpo',()=>{
+    for(const f of BLOQUEADAS){
+      const s=fonte.get(f)!;const m=s.match(/export async function (PUT|POST)/)!;
+      expect(m).toBeTruthy();const writer=s.slice(m.index);
+      expect(writer).toContain('status: 426');expect(writer).not.toMatch(/\.rpc\(|\.(insert|upsert|update|delete)\(|req\.json\(/);
+    }
+  });
   it('toda rota que escreve declara um rate limit', () => {
     const sem = escritoras
       .filter((f) => !ISENTAS_RATE[f])

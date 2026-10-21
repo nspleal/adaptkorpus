@@ -68,7 +68,7 @@ function handlersNomeados(): string[] {
 const EFEITOS_DE_SUCESSO = ['setNome(', 'baixarArquivo(', 'limparDadosLocais(', 'limparSessao(', "router.replace('/')"] as const;
 
 /** Sinais de que a chamada pode falhar de verdade (rede/backend), não estado local. */
-const CHAMADA_FALIVEL = ['await fetch(', '.auth.updateUser(', '.auth.signOut(', 'await sairDaConta('] as const;
+const CHAMADA_FALIVEL = ['await fetch(', '.auth.updateUser(', '.auth.signOut(', 'await sairDaConta(', 'await baixarDadosCompletosDaConta('] as const;
 
 describe('/conta — nenhum controle confirma sucesso sem uma chamada que possa falhar', () => {
   const comEfeito = handlersNomeados().filter((h) => {
@@ -82,6 +82,13 @@ describe('/conta — nenhum controle confirma sucesso sem uma chamada que possa 
     for (const esperado of ['salvarEdicao', 'excluirConta', 'baixarMeusDados']) {
       expect(comEfeito, `handler ${esperado} saiu da varredura`).toContain(esperado);
     }
+  });
+
+  it('o helper de download espera a API, verifica falha e confere o dono antes do arquivo',()=>{
+    const helper=readFileSync('src/lib/persistencia/baixar-dados-conta.ts','utf8');
+    expect(helper).toContain('await fetch(');expect(helper).toContain('if (!resposta.ok) throw');
+    expect(helper).toContain('!await mesmaContaNaAba(subject)');
+    expect(helper.indexOf('if (!resposta.ok)')).toBeLessThan(helper.indexOf("baixarArquivo('adaptkorpus"));
   });
 
   it.each(['salvarEdicao', 'excluirConta', 'baixarMeusDados'])('%s: aguarda uma chamada que pode falhar', (nome) => {

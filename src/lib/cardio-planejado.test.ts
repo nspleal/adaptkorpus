@@ -33,8 +33,9 @@ describe('montagem de cardio importada do laboratório', () => {
     salvarCardioPlanejado([{ diaId: 'qua', modalidade: 'corrida', minutos: 15 }]);
     definirEscopoLocal('conta-A');
     expect(lerCardioPlanejado()[0]?.diaId).toBe('seg');
-    limparDadoPessoalLocal();
-    expect(data.size).toBe(0);
+    limparDadoPessoalLocal('conta-A');
+    expect(lerCardioPlanejado()).toEqual([]);
+    definirEscopoLocal('conta-B'); expect(lerCardioPlanejado()[0]?.diaId).toBe('qua');
   });
 
   it('propaga erro de armazenamento para que a tela não anuncie salvamento falso', () => {

@@ -266,6 +266,15 @@ export default function Onboarding() {
             if (!resultado.ok) { setErro(resultado.mensagem); setFase('wizard'); return; }
             entradaCorrigida = resultado.entradaPlano;
           }
+          // Antes de deixar o formulário, cadastro e consentimentos precisam estar duráveis.
+          if (!anterior && supabaseConfigurado()) {
+            const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
+            const gravado = await salvarPerfilServidor(resumo, 0, undefined, consent, { aguardarConfirmacao: false });
+            if (gravado.tipo === 'FALHA') {
+              setErro('Não foi possível guardar o cadastro neste aparelho. Seus campos continuam aqui; tente novamente.');
+              setFase('wizard'); return;
+            }
+          }
           // 🔒 Cofre, DF 2026-07-27 ("`ROTEAR` = MODO DIÁRIO"): TODO desfecho cria sessão e
           // perfil — inclusive o Gate B. Antes o ROTEAR não criava nada, e a pessoa ficava
           // presa na porta: era por isso que ela não entrava. O que o roteado não recebe é
@@ -286,11 +295,7 @@ export default function Onboarding() {
             dias_declarados: resumo.diasDisponiveis,
           });
           salvarSessao(resumo, entradaCorrigida);
-          // LGPD quer o REGISTRO do consentimento, não só o checkbox: sobe o perfil +
-          // aceite_18/termos/lgpd (o servidor carimba aceite_em). Fire-and-forget —
-          // no modo mock é no-op; o /app re-tenta a migração se esta escrita falhar.
-          const consent = { aceite18: terms[0], aceiteTermos: terms[1], aceiteLgpd: terms[2] };
-          if (!anterior) void salvarPerfilServidor(resumo, 0, undefined, consent);
+          // No backend, a outbox já confirmou o commit local; /app exibe a pendência até ACK.
           // Gate B → encaminhamento, com a porta do diário aberta. Desfecho A/C → direto.
           if (d.gate.comportamento === 'ROTEAR') setFase('resultado');
           else router.replace('/app');

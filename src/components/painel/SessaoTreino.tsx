@@ -3,6 +3,9 @@
 import { seriesDoSlot } from '@/lib/series-treino';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { registrarDesempenho, type DesempenhoRegistrado } from '@/lib/persistencia/carga-estados';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
+import { useRascunhoSessao } from '@/lib/persistencia/rascunho-sessao';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import { aceitaTecnica, DESCRICAO_TECNICA, serieDaTecnica, TECNICAS, type TecnicaAvancada } from '@/lib/engine/tecnicas-avancadas';
 import { ListaErrosComuns, temErrosComuns } from './ErrosComuns';
@@ -44,8 +47,8 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 
-type SetRow = { reps: string; kg: string; rir: string; done: boolean };
-type ExState = { sets: SetRow[]; fb: Feedback | null; paused: boolean };
+type SetRow = { id?: string; reps: string; kg: string; rir: string; done: boolean; falhou?: boolean };
+type ExState = { exercicioId?: string; sets: SetRow[]; fb: Feedback | null; paused: boolean };
 
 interface ExView {
   id: string;
@@ -71,6 +74,7 @@ interface ExView {
   metaFaixa: string | null; // contexto quando há alvo único: "faixa 8–15"
   placeholderAlvo: string;  // placeholder do input
   cargaHint: string | null; // "tente ~42,5 kg"
+  cargaRecomendadaKg?: number;
   evoluiuHint: string | null;
   /** Hint de escada (V8.3): direção + degrau-alvo ({id,nome}); null = sem sugestão. */
   hintDirecao: 'sobe' | 'desce' | null;
@@ -99,6 +103,8 @@ function fmt(seg: number): string {
 }
 
 export interface ResumoSessao {
+  id?: string;
+  origemPlano?: { schemaVersion: 1; tipo: 'oficial' | 'rascunho' | 'legado'; referencia?: string; generation: string; formulaDuracaoVersion: string };
   dia: string;
   series: number;
   volumeKg: number;
@@ -115,6 +121,7 @@ export interface ResumoSessao {
      *  a autorregulação (`feedbackRefinado`). O `rir` por exercício (legado do manual) segue lido. */
     id: string; nome: string; loaded: boolean; fb: Feedback | null; sets: { reps: string; kg: string; rir?: string }[];
     custom?: boolean; rir?: string; variacao?: string;
+    desempenho?: DesempenhoRegistrado;
     /** true se o exercício foi pausado por dor nesta sessão (re-check de runtime) —
      *  persiste p/ o motivo "em pausa por dor" dos favoritos (B5, DF 2026-07-04). */
     pausado?: boolean;
@@ -133,7 +140,8 @@ export interface ResumoSessao {
   tecnica?: { exercicioId: string; tecnica: TecnicaAvancada; serie: number };
 }
 
-export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir, onRegistrarCardio, pesoKg, tecnicasLiberadas }: {
+export default function SessaoTreino({ dia, prescricao, progresso, deload, exercicioPorId, onCalibrar, onSair, onConcluir, onRegistrarCardio, pesoKg, tecnicasLiberadas, origemPlano }: {
+  origemPlano?: ResumoSessao['origemPlano'];
   dia: DiaTreino;
   prescricao: PrescricaoFITT;
   /** Alvo progredido por exercício (Bloco B), derivado do histórico; ausente na 1ª sessão. */
@@ -143,12 +151,12 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   /** Resolve um exercício da biblioteca por id (overlay de adoção + "Ver variação"). */
   exercicioPorId?: (id: string) => Exercise | undefined;
   /** Grava calibração/adoção de degrau como evento no histórico (B2/B3, DF 2026-07-04). */
-  onCalibrar?: (itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) => void;
+  onCalibrar?: (itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) => void | Promise<void>;
   onSair: () => void;
-  onConcluir: (resumo: ResumoSessao) => void;
+  onConcluir: (resumo: ResumoSessao) => void | Promise<void>;
   /** 🔒 CAMINHO ÚNICO de registro de cardio (DF 2026-07-27): o item da rotina sai pelo
    *  MESMO `registrarCardio` da tela avulsa. Ausente = a sessão não oferece o registro. */
-  onRegistrarCardio?: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
+  onRegistrarCardio?: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void | Promise<void>;
   /** Peso do usuário — entra só na estimativa de kcal do registro de cardio. */
   pesoKg?: number;
   /**
@@ -235,6 +243,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       metaFaixa,
       placeholderAlvo,
       cargaHint,
+      ...(modo === 'carga' && estado?.cargaKg ? { cargaRecomendadaKg: estado.cargaKg } : {}),
       evoluiuHint,
       hintDirecao,
       hintAlvo,
@@ -251,6 +260,11 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   const seriesMin = exs.length ? Math.min(...exs.map((e) => e.nSetsEx)) : nSets;
   const seriesMax = exs.length ? Math.max(...exs.map((e) => e.nSetsEx)) : prescricao.seriesPorExercicio.max;
 
+  const sessaoId = useRef(crypto.randomUUID());
+  const origemRef = useRef(origemPlano);
+  const recomendadasRef = useRef(Object.fromEntries(exs.map((e) => [e.id, e.cargaRecomendadaKg])));
+  const guardandoRef = useRef(false);
+  const [erroGravacao, setErroGravacao] = useState(false), [guardando, setGuardando] = useState(false);
   const [fase, setFase] = useState<'intro' | 'exec' | 'summary'>('intro');
   // 🔒 Registro de cardio UNIFICADO (DF 2026-07-27): índice do item de cardio cujo registro
   // está aberto. Ele é o MESMO componente da tela avulsa — não existe segunda fonte.
@@ -264,8 +278,24 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   const [showRM, setShowRM] = useState(false);
   const [dorOpen, setDorOpen] = useState(false);
   const [estados, setEstados] = useState<ExState[]>(
-    exs.map((e) => ({ sets: Array.from({ length: e.nSetsEx }, () => ({ reps: '', kg: '', rir: '', done: false })), fb: null, paused: false })),
+    exs.map((e) => ({ exercicioId: e.id, sets: Array.from({ length: e.nSetsEx }, (_, i) => ({ id: `${e.id}:${i}`, reps: '', kg: '', rir: '', done: false })), fb: null, paused: false })),
   );
+  const parcial = useRascunhoSessao({
+    origem: 'guiada', chave: dia.diaId ?? dia.nome, sessaoId: sessaoId.current,
+    dados: { estados, fase, cur, tecnica, recomendadas: recomendadasRef.current, exercicioIds: exs.map((e) => e.id) },
+    contexto: { dia, prescricao, ...(origemRef.current ? { origemPlano: origemRef.current } : {}) },
+    restaurar: (r) => {
+      const d = r.dados;
+      if (!Array.isArray(d.estados) || d.estados.length !== exs.length || JSON.stringify(d.exercicioIds) !== JSON.stringify(exs.map((e) => e.id))) return false;
+      if (!d.estados.every((e: ExState) => e && Array.isArray(e.sets) && e.sets.every((s) => typeof s.kg === 'string' && typeof s.reps === 'string' && typeof s.done === 'boolean'))) return false;
+      sessaoId.current = r.sessaoId;
+      if (d.recomendadas && typeof d.recomendadas === 'object') recomendadasRef.current = d.recomendadas as Record<string, number | undefined>;
+      if (r.contexto?.origemPlano) origemRef.current = r.contexto.origemPlano as ResumoSessao['origemPlano'];
+      setEstados(d.estados as ExState[]); setFase(['intro','exec','summary'].includes(String(d.fase)) ? d.fase as typeof fase : 'exec');
+      setCur(Math.max(0, Math.min(exs.length - 1, Number(d.cur) || 0)));
+      setTecnica((d.tecnica ?? null) as typeof tecnica); return true;
+    },
+  });
 
   // Timer de descanso.
   const [rest, setRest] = useState<{ left: number; total: number } | null>(null);
@@ -289,12 +319,13 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
   const total = exs.length;
 
   function setSet(i: number, patch: Partial<SetRow>) {
-    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, sets: e.sets.map((s, si) => (si === i ? { ...s, ...patch } : s)) } : e)));
+    const valoresMudaram = 'kg' in patch || 'reps' in patch;
+    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, fb: null, sets: e.sets.map((s, si) => (si === i ? { ...s, ...patch, ...(valoresMudaram ? { done: false, falhou: false } : {}) } : s)) } : e)));
   }
   function toggleSet(i: number) {
     const ser = est.sets[i]!;
     const ligando = !ser.done;
-    setSet(i, { done: ligando });
+    setSet(i, { done: ligando, falhou: false });
     if (ligando) iniciarDescanso(ex.restSeg); else pararDescanso();
   }
   function setFb(f: Feedback) {
@@ -310,7 +341,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, fb: f } : e)));
   }
   function pausarEx() {
-    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, paused: true } : e)));
+    setEstados((prev) => prev.map((e, ei) => (ei === cur ? { ...e, fb: null, paused: true } : e)));
     setDorOpen(false);
   }
 
@@ -343,7 +374,11 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     return n + e.sets.filter((s) => s.done).reduce((v, s) => v + (Number(s.reps) || 0) * (Number(s.kg) || 0), 0);
   }, 0);
 
-  function concluir() {
+  const gravacaoAdocao = useGravacaoLocal();
+  async function concluir() {
+    const ativo = gravacaoAdocao.capturarContinuacao(); if (!ativo()) return;
+    if (guardandoRef.current) return;
+    if (!estados.some((e) => e.paused || e.sets.some((s) => s.done || s.falhou))) return;
     const fbMap: Record<string, Feedback> = {};
     estados.forEach((e, ei) => { if (e.fb) fbMap[exs[ei]!.id] = e.fb; });
     const exercicios = exs.map((ex, ei) => ({
@@ -351,6 +386,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
       nome: ex.nome,
       loaded: ex.loaded,
       fb: estados[ei]!.fb,
+      desempenho: registrarDesempenho(`${sessaoId.current}:${ex.id}`, estados[ei]!.sets, estados[ei]!.fb, estados[ei]!.paused, recomendadasRef.current[ex.id]),
       sets: estados[ei]!.sets.filter((s) => s.done).map((s) => ({ reps: s.reps, kg: s.kg, ...(s.rir !== '' ? { rir: s.rir } : {}) })),
       // Pausa por dor PERSISTE no histórico (insumo do motivo "em pausa por dor" — B5).
       ...(estados[ei]!.paused ? { pausado: true } : {}),
@@ -359,15 +395,17 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
     // série existe. Guardar uma técnica órfã seria registrar algo que não aconteceu.
     const idxTec = tecnica ? exs.findIndex((e) => e.id === tecnica.exercicioId) : -1;
     const serieTec = idxTec >= 0 ? serieDaTecnica(exs[idxTec]!.nSetsEx) : null;
-    onConcluir({
-      dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios,
+    guardandoRef.current = true; setGuardando(true); setErroGravacao(false);
+    try { await onConcluir({
+      id: sessaoId.current, ...(origemRef.current ? { origemPlano: origemRef.current } : {}), dia: dia.nome, series: totalDoneSets, volumeKg: totalVol, feedback: fbMap, exercicios,
       ...(prescricao.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}),
       ...(tecnica && serieTec != null ? { tecnica: { ...tecnica, serie: serieTec } } : {}),
-    });
+    }); } catch { if (ativo()) setErroGravacao(true); } finally { guardandoRef.current = false; if (ativo()) setGuardando(false); }
   }
 
   // 🔒 Registro de cardio aberto DE DENTRO da sessão: mesma peça, mesmo `onSalvar`. Sai
   // pelo `registrarCardio` do Painel, exatamente como a tela avulsa.
+  if (!parcial.pronto) return <section style={{ padding: 24 }}><p role="status">{parcial.outro ? 'Há outro treino em andamento. Começar este substitui a prévia da sessão anterior.' : parcial.erro ? 'Não foi possível abrir o armazenamento. Seus dados não foram confirmados.' : 'Carregando sessão em andamento…'}</p>{parcial.outro ? <button onClick={parcial.iniciarNovo}>Começar este treino</button> : null}<button onClick={onSair}>Voltar</button></section>;
   if (cardioAberto != null && onRegistrarCardio) {
     const item = exs[cardioAberto]!;
     return (
@@ -377,7 +415,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
           modalidadeInicial={item.cardio?.modalidade}
           nomeDoItem={item.nome}
           embutido
-          onSalvar={(payload) => { onRegistrarCardio(payload); setCardioAberto(null); avancar(); }}
+          onSalvar={async (payload) => { await onRegistrarCardio(payload); }}
+          onConfirmado={() => { setCardioAberto(null); avancar(); }}
           onCancelar={() => setCardioAberto(null)}
         />
       </div>
@@ -471,12 +510,13 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
             {ex.evoluiuHint && <p style={{ margin: '0 0 10px 2px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.8rem', color: '#BDFF00' }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M4 18 10 12 14 16 20 8M20 8h-5M20 8v5" stroke="#BDFF00" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></svg>{ex.evoluiuHint}</p>}
             {/* Escada de dificuldade (V8.3 Estados 4/5): cartão de sugestão — subir/descer é a
                 mesma família, só a seta inverte. O app sugere, você decide (B3: adoção explícita). */}
+            {gravacaoAdocao.erro && <p role="alert">Não foi possível guardar a calibração. Tente novamente.</p>}
             {ex.hintDirecao && ex.hintAlvo && (
               <HintVariacao
                 direcao={ex.hintDirecao === 'sobe' ? 'sobe' : 'desce'}
                 nomeVariacao={ex.hintAlvo.nome}
                 onVerVariacao={() => { const alvo = exercicioPorId?.(ex.hintAlvo!.id); if (alvo) setVerVariacao(alvo); }}
-                onAssumir={() => onCalibrar?.([{ id: ex.id, nome: ex.nome, calibracao: { degrauId: ex.hintAlvo!.id, ...(progresso?.[ex.id]?.estado.repsAlvo != null && ex.repUnit !== 'segundos' ? { reps: progresso[ex.id]!.estado.repsAlvo } : {}) } }])}
+                onAssumir={() => { void gravacaoAdocao.gravar(() => onCalibrar?.([{ id: ex.id, nome: ex.nome, calibracao: { degrauId: ex.hintAlvo!.id, ...(progresso?.[ex.id]?.estado.repsAlvo != null && ex.repUnit !== 'segundos' ? { reps: progresso[ex.id]!.estado.repsAlvo } : {}) } }])); }}
               />
             )}
             {/* Glosa amigável do RIR (jargão → linguagem simples). Não se aplica a isométricos. */}
@@ -528,6 +568,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
                   {ex.loaded && <input type="number" inputMode="numeric" value={r.kg} onChange={(e) => setSet(i, { kg: e.target.value })} placeholder="kg" style={inputCelula} />}
                   {ex.repUnit !== 'segundos' && <input type="number" inputMode="numeric" min={0} max={5} value={r.rir} onChange={(e) => setSet(i, { rir: e.target.value })} placeholder={ex.rirAlvoSemana != null ? String(ex.rirAlvoSemana) : 'RIR'} style={inputCelula} />}
                   <button onClick={() => toggleSet(i)} style={{ width: 36, minWidth: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .25s ease', border: `1px solid ${r.done ? '#BDFF00' : 'rgba(234,229,219,.2)'}`, background: r.done ? '#BDFF00' : 'transparent', color: r.done ? '#0D2818' : 'rgba(234,229,219,.3)' }}><svg width={16} height={16} viewBox="0 0 24 24"><path d="M5 12l5 5 9-11" stroke="currentColor" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                  <button type="button" aria-pressed={!!r.falhou} onClick={() => { setSet(i, { done: false, falhou: !r.falhou }); pararDescanso(); }} style={{ background: 'none', color: '#EAE5DB', border: '1px solid rgba(234,229,219,.3)', borderRadius: 8, padding: 8 }}>{r.falhou ? 'Tentativa sem completar' : 'Não completei'}</button>
                 </div>
               ))}
               <div style={{ fontSize: '.82rem', color: 'rgba(234,229,219,.5)', paddingTop: 12 }}>{doneCount} de {est.sets.length} séries concluídas</div>
@@ -682,7 +723,8 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
               })}
             </div>
 
-            <button onClick={concluir} className="hov-btn" style={btnNeon}>Concluir treino</button>
+            {erroGravacao ? <p role="alert">Não foi possível guardar esta sessão. Mantenha a tela aberta e tente novamente.</p> : null}
+            <button disabled={guardando || !estados.some((e) => e.paused || e.sets.some((s) => s.done || s.falhou))} onClick={() => void concluir()} className="hov-btn" style={btnNeon}>{guardando ? 'Guardando…' : 'Concluir treino'}</button>
           </div>
         )}
       </div>
@@ -718,7 +760,7 @@ export default function SessaoTreino({ dia, prescricao, progresso, deload, exerc
             estado={progresso?.[exC.id]?.estado}
             exercicioPorId={exercicioPorId}
             onFechar={() => setCalibrando(null)}
-            onSalvar={(payload) => { onCalibrar([{ id: exC.id, nome: efetivoC.nomePt, calibracao: payload }]); setCalibrando(null); }}
+            onSalvar={(payload) => onCalibrar([{ id: exC.id, nome: efetivoC.nomePt, calibracao: payload }])}
           />
         );
       })()}

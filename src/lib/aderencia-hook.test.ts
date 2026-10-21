@@ -21,13 +21,14 @@ function montar() {
     '@/lib/escopo-local': { chaveLocal: () => `aderencia:${conta}`, escopoLocal: () => conta },
     '@/lib/supabase/env': { supabaseConfigurado: () => true },
     '@/lib/aderencia-persistencia': persistencia,
+    '@/lib/persistencia/sync-contrato': { EVENTO_FATOS: 'evk:fatos-v2' },
   };
   const fonte = readFileSync('src/components/painel/RegistroRefeicao.tsx', 'utf8');
   const fim = fonte.indexOf('const EASE'); expect(fim).toBeGreaterThan(0);
   const js = ts.transpileModule(fonte.slice(0, fim), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: { useRegistro?: () => { setStatus: (id: string, s: string) => void } } = {};
   new Function('require', 'exports', 'window', 'localStorage', js)(
-    (nome: string) => { if (!(nome in deps)) throw new Error(nome); return deps[nome]; }, exports, {},
+    (nome: string) => { if (!(nome in deps)) throw new Error(nome); return deps[nome]; }, exports, { addEventListener: vi.fn(), removeEventListener: vi.fn() },
     { getItem: () => texto, setItem: gravar },
   );
   const hook = exports.useRegistro!();

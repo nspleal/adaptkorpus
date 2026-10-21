@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+vi.mock('server-only', () => ({}));
 
 /**
  * 🔴 D8c (verificação de 2026-09-07, reconfirmada no diagnóstico de 2026-09-10, §6.9.3) —
@@ -17,41 +19,51 @@ type Resposta = { data: unknown; error: unknown };
 
 /** Uma consulta encadeada do supabase-js: `.select().order()` e `.select().maybeSingle()`. */
 function consulta(resposta: Resposta) {
+  let consumida = false;
   const encadeavel = {
     select: () => encadeavel,
-    order: () => Promise.resolve(resposta),
+    eq: () => encadeavel,
+    lte: () => encadeavel,
+    order: () => encadeavel,
+    limit: () => encadeavel,
+    or: () => encadeavel,
+    then: (resolver: (v: Resposta) => unknown) => { const r = consumida && !resposta.error ? { data: [], error: null } : resposta; consumida = true; return Promise.resolve(r).then(resolver); },
     maybeSingle: () => Promise.resolve(resposta),
   };
   return encadeavel;
 }
 
 const respostas = new Map<string, Resposta>();
+const lidas = new Set<string>();
 const OK: Resposta = { data: null, error: null };
 
 vi.mock('@/lib/persistencia/servidor', () => ({
   contextoUsuario: async () => ({
     user: { id: 'u1', email: 'a@b.c' },
-    supabase: { from: (tabela: string) => consulta(respostas.get(tabela) ?? OK) },
+    supabase: { from: (tabela: string) => { const r = respostas.get(tabela) ?? OK; const pagina = lidas.has(tabela) && !r.error ? { data: [], error: null } : r; lidas.add(tabela); return consulta(pagina); } },
   }),
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ barreiraDados: () => null }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ rpc: async (nome: string) => nome === 'ler_revisao_exportacao_sync_v2' ? { data: { subject: 'u1', revision: '0' }, error: null } : respostas.get(nome === 'ler_rascunho_sync_v2' ? 'rascunho' : 'recibos') ?? OK }) }));
 
-const TABELAS = ['profile', 'plans', 'logs', 'feedback', 'subscription', 'eventos'] as const;
+const TABELAS = ['profile', 'plans', 'logs', 'feedback', 'subscription', 'eventos', 'plano_cas', 'rascunho', 'recibos'] as const;
 
 async function exportar() {
   const { GET } = await import('./route');
-  const res = await GET();
+  const res = await GET(new NextRequest('http://localhost/api/lgpd/exportar'));
   return { status: res.status, corpo: await res.json() as Record<string, unknown> };
 }
 
 beforeEach(() => {
-  respostas.clear();
-  for (const t of TABELAS) respostas.set(t, { data: t === 'profile' || t === 'subscription' ? { x: 1 } : [{ x: 1 }], error: null });
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'fixture-placeholder');
+  respostas.clear(); lidas.clear();
+  for (const t of TABELAS) respostas.set(t, { data: t === 'profile' || t === 'subscription' ? { x: 1 } : [{ x: 1, id: '11111111-1111-4111-8111-111111111111', created_at: '2026-10-18T00:00:00Z' }], error: null });
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('GET /api/lgpd/exportar — consulta que falha não vira seção vazia', () => {
-  it('caminho de SUCESSO: 200 com as seis seções preenchidas (senão nada abaixo prova nada)', async () => {
+  it('caminho de SUCESSO: 200 com todas as nove seções preenchidas (senão nada abaixo prova nada)', async () => {
     const { status, corpo } = await exportar();
     expect(status).toBe(200);
     for (const t of TABELAS) expect(corpo[t], `seção ${t} veio vazia no caminho feliz`).toBeTruthy();

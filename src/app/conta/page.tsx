@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Backdrop } from '@/components/auth/ui';
 import { baixarArquivo } from '@/lib/export';
-import { limparDadosLocais, limparSessao } from '@/lib/session';
+import { limparSessao } from '@/lib/session';
 import { sairDaConta } from '@/lib/auth/sair';
 import { inicialDe } from '@/lib/auth/usuario';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { escopoLocal, definirEscopoLocal } from '@/lib/escopo-local';
+import { continuacaoDaConta } from '@/lib/persistencia/continuidade-conta';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
+import { limparDadoPessoalLocal } from '@/lib/escopo-local';
+import { bancoSync } from '@/lib/persistencia/sync-cliente';
+import { baixarDadosCompletosDaConta, mesmaContaNaAba } from '@/lib/persistencia/baixar-dados-conta';
+import { cabecalhosSync } from '@/lib/persistencia/sync-contrato';
 
 /**
  * Conta e meus dados: dados da conta (nome, e-mail, senha) e os direitos LGPD —
@@ -21,6 +28,14 @@ import { supabaseConfigurado } from '@/lib/supabase/env';
  */
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
+const LIMPEZA_PENDENTE = 'Sua conta foi excluída no servidor. A limpeza neste aparelho está pendente; tente novamente para concluir somente a limpeza local.';
+
+/** Exclusão já confirmada: alvo fixo, independente da conta que assuma a aba depois. */
+async function limparContaConfirmada(subject: string): Promise<void> {
+  limparDadoPessoalLocal(subject);
+  const db = await bancoSync();
+  await db.apagarConta(subject);
+}
 
 /**
  * 🔒 SEM SUCESSO SIMULADO (DF 2026-07-29). Esta tela tinha um estado de assinatura em
@@ -41,29 +56,47 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
 export default function ContaPage() {
   const router = useRouter();
   const [menu, setMenu] = useState(false);
+  const [subject, setSubject] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   // Placeholder só no modo MOCK; com backend, os dados reais chegam do getUser() abaixo.
   const [nome, setNome] = useState(supabaseConfigurado() ? '' : 'Lucas Almeida');
   const [email, setEmail] = useState(supabaseConfigurado() ? '' : 'lucas@email.com');
+  const continuidade = useGravacaoLocal();
+  const donoDaTelaRef = useRef<string | null>(null);
+  const alvoLimpezaRef = useRef<{ subject: string; ocupado: boolean; ativo: () => boolean; aoPausar: (pausado: () => boolean) => void } | null>(null);
   useEffect(() => {
     if (!supabaseConfigurado()) return;
-    let vivo = true;
+    let vivo = true, subscription: { unsubscribe: () => void } | undefined;
+    const inicio = continuacaoDaConta(escopoLocal, escopoLocal(), () => vivo);
     void (async () => {
-      try {
-        // Fix bloqueador 2026-07-08: sessão LOCAL primeiro (getSession — sem rede; uso
-        // só de EXIBIÇÃO); getUser (rede) apenas se não houver sessão no storage.
-        const { createClient } = await import('@/lib/supabase/client');
-        const auth = createClient().auth;
-        const { data: { session } } = await auth.getSession();
-        let u = session?.user ?? null;
-        if (!u) u = (await auth.getUser()).data.user;
-        if (!vivo || !u) return;
-        setEmail(u.email ?? '');
-        const n = (u.user_metadata as { nome?: string } | null)?.nome;
-        setNome(n || u.email?.split('@')[0] || 'Sua conta');
-      } catch { /* mantém o estado atual */ }
-    })();
-    return () => { vivo = false; };
+      const { createClient } = await import('@/lib/supabase/client');
+      if (!inicio()) return;
+      const auth = createClient().auth;
+      const mostrar = (u: { id: string; email?: string; user_metadata?: { nome?: string } } | null) => {
+        if (!vivo) return;
+        const alvo = alvoLimpezaRef.current;
+        const limpezaAtiva = !!alvo?.ativo();
+        const pausaConfirmada = !u && limpezaAtiva && alvo?.subject === escopoLocal();
+        const mudou = donoDaTelaRef.current !== (u?.id ?? null);
+        donoDaTelaRef.current = u?.id ?? null;
+        definirEscopoLocal(u?.id ?? null); setSubject(u?.id ?? null);
+        if (pausaConfirmada) alvo?.aoPausar(continuacaoDaConta(escopoLocal, null));
+        if (mudou) {
+          setEditar(null); setSenhaExclusao(''); setSalvandoNome(false); setErroNome(null); setErroExportacao(null);
+          // SIGNED_OUT conserva a tentativa em curso; retry só existe após confirmação.
+          if (u || !limpezaAtiva) {
+            alvoLimpezaRef.current = null; setDeleteOpen(false); setContaExcluida(null); setExcluindo(false); setErroExclusao(null);
+          }
+        }
+        if (u) { setEmail(u.email ?? ''); setNome(u.user_metadata?.nome || u.email?.split('@')[0] || ''); }
+        else { setEmail(''); setNome(''); }
+      };
+      subscription = auth.onAuthStateChange((_event, session) => mostrar(session?.user ?? null)).data.subscription;
+      const ativo = continuacaoDaConta(escopoLocal, escopoLocal(), () => vivo);
+      const { data: { session } } = await auth.getSession();
+      if (ativo()) mostrar(session?.user ?? null);
+    })().catch(() => undefined);
+    return () => { vivo = false; subscription?.unsubscribe(); };
   }, []);
   /**
    * 🔒 Só `'nome'`. O tipo tinha `'email'` e o modal tinha as duas metades da copy, mas
@@ -86,6 +119,8 @@ export default function ContaPage() {
    * ⚠️ Só o NOME. O e-mail não passa por aqui — ver o comentário na linha do e-mail.
    */
   async function salvarEdicao() {
+    const ativo = continuidade.capturarContinuacao();
+    if (!ativo() || (supabaseConfigurado() && (!subject || escopoLocal() !== subject))) return;
     if (!editar) return;
     const v = editar.valor.trim();
     if (!v) { setEditar(null); return; }
@@ -94,28 +129,31 @@ export default function ContaPage() {
     setSalvandoNome(true);
     try {
       const { createClient } = await import('@/lib/supabase/client');
+      if (!ativo() || !subject || !await mesmaContaNaAba(subject) || !ativo()) return;
       const { error } = await createClient().auth.updateUser({ data: { nome: v } });
+      if (!ativo()) return;
       if (error) { setErroNome('Não foi possível salvar o nome. Tente de novo.'); return; }
       setNome(v);
       setEditar(null);
     } catch {
-      setErroNome('Não foi possível salvar o nome agora. Tente de novo.');
+      if (ativo()) setErroNome('Não foi possível salvar o nome agora. Tente de novo.');
     } finally {
-      setSalvandoNome(false);
+      if (ativo()) setSalvandoNome(false);
     }
   }
 
+  const [erroExportacao, setErroExportacao] = useState<string | null>(null);
   async function baixarMeusDados() {
-    // Portabilidade LGPD: com backend, exporta TUDO (profile+plans+logs+feedback+
-    // subscription, via RLS); sem backend, o parcial honesto de sempre (modo mock).
+    const ativo = continuidade.capturarContinuacao(); if (!ativo()) return;
+    setErroExportacao(null);
     if (supabaseConfigurado()) {
       try {
-        const r = await fetch('/api/lgpd/exportar', { cache: 'no-store' });
-        if (r.ok) {
-          baixarArquivo('adaptkorpus-meus-dados.json', JSON.stringify(await r.json(), null, 2));
-          return;
-        }
-      } catch { /* cai no parcial local */ }
+        if (!subject) throw new Error('conta_nao_validada');
+        await baixarDadosCompletosDaConta(subject, ativo);
+      } catch {
+        if (ativo()) setErroExportacao('Não foi possível baixar os dados completos desta conta. Confira a conexão e a conta conectada e tente novamente. Nenhum arquivo parcial foi baixado.');
+      }
+      return;
     }
     const dados = {
       exportadoEm: new Date().toISOString(),
@@ -127,38 +165,76 @@ export default function ContaPage() {
 
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+  const [contaExcluida, setContaExcluida] = useState<string | null>(null);
   // 🔒 Re-autenticação (auditoria 2026-07-29): exclusão é irreversível e cascateia; o
   // servidor exige a senha. Sessão aberta em navegador compartilhado não basta.
   const [senhaExclusao, setSenhaExclusao] = useState('');
   async function excluirConta() {
+    const ativo = continuidade.capturarContinuacao(); if (!ativo()) return;
+    const vidaDaAcao = continuidade.capturarVida();
+    let publicar = ativo;
+    const acompanharPausa = (pausado: () => boolean) => { publicar = () => vidaDaAcao() && pausado(); };
+    const anterior = alvoLimpezaRef.current;
+    if (anterior?.ativo() && anterior.ocupado) return;
+    if (contaExcluida && (!anterior || anterior.subject !== contaExcluida || !anterior.ativo())) return;
+    if (!contaExcluida && subject && escopoLocal() !== subject) return;
+    const alvo = contaExcluida ?? subject;
+    const tentativa = alvo ? { subject: alvo, ocupado: true, ativo: () => publicar(), aoPausar: acompanharPausa } : null;
+    if (tentativa) alvoLimpezaRef.current = tentativa;
     setErroExclusao(null);
+    let exclusaoConfirmada = contaExcluida;
     // Sem backend (mock): comportamento demo de sempre — limpa o local e sai.
     if (!supabaseConfigurado()) { setDeleteOpen(false); limparSessao(); router.replace('/'); return; }
     setExcluindo(true);
     try {
+      if (contaExcluida) {
+        await limparContaConfirmada(contaExcluida);
+        if (publicar()) { alvoLimpezaRef.current = null; setContaExcluida(null); router.replace('/'); }
+        return;
+      }
+      if (!subject) throw new Error('conta_nao_validada');
+      if (!await mesmaContaNaAba(subject) || !ativo()) return;
       const r = await fetch('/api/lgpd/excluir', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: cabecalhosSync(subject),
         body: JSON.stringify({ senha: senhaExclusao }),
       });
       if (r.ok) {
-        // Conta excluída no servidor (cascata FK) → encerra sessão e limpa TODO o local.
-        await sairDaConta();
-        limparDadosLocais();
-        router.replace('/');
+        exclusaoConfirmada = subject;
+        if (publicar()) { setContaExcluida(subject); setSenhaExclusao(''); }
+        // Conta excluída no servidor: encerra sessão e limpa somente esta conta local.
+        const mesmaConta = await mesmaContaNaAba(subject).catch(() => false);
+        // A limpeza autorizada continua pelo UUID excluído; não encerra uma conta nova.
+        let saiu = false;
+        if (ativo() && mesmaConta) {
+          saiu = await sairDaConta(acompanharPausa);
+          if (!saiu) publicar = () => false;
+        }
+        await limparContaConfirmada(subject);
+        if (publicar()) {
+          alvoLimpezaRef.current = null; setContaExcluida(null);
+          if (saiu || escopoLocal() === null) router.replace('/');
+          else setErroExclusao('A conta solicitada foi excluída e sua cópia local foi removida. A sessão conectada agora foi preservada.');
+        }
         return;
       }
       // 503 = service_role ausente neste ambiente — honestidade: NÃO fingir exclusão.
-      setErroExclusao(
+      if (publicar()) setErroExclusao(
         r.status === 401 ? 'Senha incorreta. Tente de novo.'
         : r.status === 400 ? 'Digite sua senha para confirmar.'
         : r.status === 429 ? 'Muitas tentativas. Espere um pouco e tente de novo.'
         : r.status === 503 ? 'A exclusão está temporariamente indisponível. Tente de novo mais tarde ou fale com o suporte.'
         : 'Não foi possível excluir agora. Tente de novo.');
     } catch {
-      setErroExclusao('Não foi possível excluir agora. Tente de novo.');
+      if (publicar()) setErroExclusao(exclusaoConfirmada
+        ? LIMPEZA_PENDENTE
+        : 'Não foi possível excluir agora. Tente de novo.');
     } finally {
-      setExcluindo(false);
+      if (tentativa) tentativa.ocupado = false;
+      if (publicar()) {
+        if (!exclusaoConfirmada && alvoLimpezaRef.current === tentativa) alvoLimpezaRef.current = null;
+        setExcluindo(false);
+      }
     }
   }
 
@@ -182,7 +258,7 @@ export default function ContaPage() {
                 <div style={{ position: 'absolute', top: 48, right: 0, width: 190, background: '#10241a', border: '1px solid rgba(234,229,219,.14)', borderRadius: 14, padding: 7, boxShadow: '0 24px 50px -20px rgba(0,0,0,.7)', animation: `evkPop .25s ease`, zIndex: 60 }}>
                   <button onClick={() => router.push('/app')} style={menuItem(false)}>Meu perfil</button>
                   <button onClick={() => setMenu(false)} aria-current="page" style={{ ...menuItem(false), background: 'rgba(189,255,0,.08)', color: '#BDFF00', fontWeight: 600 }}>Conta e meus dados</button>
-                  <button onClick={() => { void sairDaConta().finally(() => router.replace('/')); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
+                  <button onClick={() => { void sairDaConta().then((saiu) => { if (saiu) router.replace('/'); }); }} style={{ ...menuItem(false), color: 'rgba(234,229,219,.75)' }}>Sair</button>
                 </div>
               )}
             </div>
@@ -232,6 +308,7 @@ export default function ContaPage() {
                 <h3 style={{ ...cardH, marginBottom: 6 }}>Privacidade e seus dados</h3>
                 <p style={{ margin: '0 0 16px', fontSize: '.86rem', color: 'rgba(234,229,219,.55)', lineHeight: 1.5 }}>Você controla seus dados. Atendemos às suas solicitações conforme a LGPD.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {erroExportacao ? <p role="alert">{erroExportacao}</p> : null}
                   <button onClick={baixarMeusDados} className="evk-troca" style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.12)', color: '#EAE5DB', fontWeight: 600, fontSize: '.92rem', padding: '13px 15px', borderRadius: 12, cursor: 'pointer' }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="#BDFF00" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Baixar meus dados</button>
                   <button onClick={() => setDeleteOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'none', border: '1px solid rgba(229,72,77,.35)', color: '#E5484D', fontWeight: 600, fontSize: '.92rem', padding: '13px 15px', borderRadius: 12, cursor: 'pointer' }}><svg width={17} height={17} viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13" stroke="#E5484D" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg>Excluir minha conta e meus dados</button>
                 </div>
@@ -255,17 +332,21 @@ export default function ContaPage() {
       {/* 🔒 Saíram os modais "Cancelar assinatura" e "Atualizar cartão": os dois
           confirmavam sucesso sem NENHUMA chamada — `setSub('cancelled')` e um form de
           cartão que não enviava nada. Ver o guard em `honestidade-tela.test.ts`. */}
+      {contaExcluida && !deleteOpen ? <section role="status" style={{ padding: 20 }}>
+        <p>{excluindo ? 'Concluindo a limpeza deste aparelho.' : LIMPEZA_PENDENTE}</p>
+        <button onClick={() => setDeleteOpen(true)}>Retomar limpeza neste aparelho</button>
+      </section> : null}
       {deleteOpen && (
         <Modal onClose={() => setDeleteOpen(false)} maxW={440} perigo>
           <div style={{ width: 48, height: 48, borderRadius: 13, background: 'rgba(229,72,77,.14)', border: '1px solid rgba(229,72,77,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><svg width={24} height={24} viewBox="0 0 24 24" fill="none"><path d="M12 8.5v4M12 16h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="#E5484D" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></svg></div>
-          <h2 style={{ ...modalH, marginBottom: 10 }}>Excluir minha conta</h2>
-          <p style={{ margin: '0 0 16px', fontSize: '.94rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Isso apaga <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>permanentemente</strong> sua conta, seu plano e todo o seu histórico. Esta ação não pode ser desfeita.</p>
+          <h2 style={{ ...modalH, marginBottom: 10 }}>{contaExcluida ? 'Concluir limpeza neste aparelho' : 'Excluir minha conta'}</h2>
+          {contaExcluida ? <p>Sua conta já foi excluída no servidor. Esta ação conclui somente a limpeza local dessa conta.</p> : <p style={{ margin: '0 0 16px', fontSize: '.94rem', color: 'rgba(234,229,219,.7)', lineHeight: 1.6 }}>Isso apaga <strong style={{ color: '#EAE5DB', fontWeight: 600 }}>permanentemente</strong> sua conta, seu plano e todo o seu histórico. Esta ação não pode ser desfeita.</p>}
           {/* 🔒 Saiu "Cancelar a assinatura não exige excluir a conta.": não existe
               assinatura para cancelar, e a frase apontava para um controle que não existe. */}
-          <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes.</p>
+          {!contaExcluida ? <p style={{ margin: '0 0 22px', fontSize: '.86rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.55 }}>Se quiser, você pode <strong style={{ color: 'rgba(234,229,219,.7)', fontWeight: 600 }}>baixar seus dados</strong> antes.</p> : null}
           {erroExclusao && <p style={{ margin: '0 0 14px', fontSize: '.88rem', color: '#E5C04D', lineHeight: 1.5 }}>{erroExclusao}</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {supabaseConfigurado() && (
+            {supabaseConfigurado() && !contaExcluida && (
               <div style={{ marginBottom: 12 }}>
                 <label htmlFor="evk-senha-exclusao" style={{ display: 'block', fontSize: '.86rem', fontWeight: 600, color: 'rgba(234,229,219,.72)', marginBottom: 8 }}>Confirme sua senha</label>
                 <input
@@ -279,8 +360,8 @@ export default function ContaPage() {
                 />
               </div>
             )}
-            <button onClick={excluirConta} disabled={excluindo || (supabaseConfigurado() && senhaExclusao.length === 0)} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: excluindo ? 'wait' : 'pointer', opacity: excluindo || (supabaseConfigurado() && senhaExclusao.length === 0) ? 0.6 : 1 }}>{excluindo ? 'Excluindo…' : 'Excluir definitivamente'}</button>
-            <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Manter minha conta</button>
+            <button onClick={excluirConta} disabled={excluindo || (supabaseConfigurado() && !contaExcluida && senhaExclusao.length === 0)} style={{ width: '100%', background: '#E5484D', color: '#0D0D0C', fontWeight: 700, fontSize: '1rem', padding: 14, border: 'none', borderRadius: 13, cursor: excluindo ? 'wait' : 'pointer', opacity: excluindo || (supabaseConfigurado() && !contaExcluida && senhaExclusao.length === 0) ? 0.6 : 1 }}>{excluindo ? 'Aguarde…' : contaExcluida ? 'Concluir limpeza neste aparelho' : 'Excluir definitivamente'}</button>
+            <button onClick={() => setDeleteOpen(false)} className="evk-voltar" style={{ width: '100%', background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '1rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>{contaExcluida ? 'Fechar' : 'Manter minha conta'}</button>
           </div>
         </Modal>
       )}

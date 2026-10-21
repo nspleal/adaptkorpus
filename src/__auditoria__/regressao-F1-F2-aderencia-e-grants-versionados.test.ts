@@ -37,49 +37,33 @@ const sql = (arq: string) => readFileSync(`${MIGRACOES}/${arq}`, 'utf8');
 const semComentariosSql = (s: string) => s.replace(/^\s*--.*$/gm, '');
 
 // ────────────────────────────────── F1 ──────────────────────────────────────
-vi.mock('../lib/supabase/env', () => ({ supabaseConfigurado: () => true }));
-const { salvarAderenciaDia } = await import('../lib/persistencia/sync');
-afterEach(() => vi.unstubAllGlobals());
-
-describe('F1 — a rota de aderência não mascara falha de escrita como sucesso', () => {
-  it('a rota devolve 500 `falha_gravacao` quando a RPC erra, e nada além disso', () => {
-    const rota = readFileSync('src/app/api/dados/aderencia/route.ts', 'utf8');
-    // O ramo de erro existe e responde 500 — nenhum `ok: true` antes de conferir o erro.
-    expect(rota).toContain("if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });");
-    const put = rota.slice(rota.indexOf('export async function PUT'));
-    const posErro = put.indexOf("'falha_gravacao'");
-    const posOk = put.indexOf('{ ok: true }');
-    expect(posErro, 'o ramo de erro desapareceu do PUT').toBeGreaterThan(-1);
-    expect(posOk, 'o sucesso é respondido ANTES de conferir o erro da RPC').toBeGreaterThan(posErro);
+import 'fake-indexeddb/auto';
+import { OutboxDB } from '../lib/persistencia/outbox-db';
+import { drenarOutbox } from '../lib/persistencia/outbox-sync';
+import { novoComando,STORAGE_GENERATION } from '../lib/persistencia/sync-contrato';
+afterEach(()=>vi.unstubAllGlobals());
+describe('F1 — protocolo v2 nunca mascara falha como sucesso',()=>{
+  it('a rota só responde ACK após a transação; falha permanece explícita',()=>{
+    const r=readFileSync('src/app/api/dados/sync/route.ts','utf8');
+    expect(r).toContain("if (error || !data || typeof data !== 'object') return NextResponse.json({ error: 'falha_atomica' }, { status: 503 })");
+    expect(r.indexOf('executar_comando_sync_v2')).toBeLessThan(r.indexOf("recibo.tipo === 'ACK' ? 200"));
   });
-
-  it('a garantia de concorrência segue no lugar: RPC atômica com o predicado do índice', () => {
-    const rota = readFileSync('src/app/api/dados/aderencia/route.ts', 'utf8');
-    expect(rota).toContain("rpc('registrar_aderencia_dia'");
-    const m = semComentariosSql(sql('0018_aderencia_uma_linha_por_dia.sql'));
+  it('unicidade por dia e RPC invoker continuam preservadas no SQL versionado',()=>{
+    const m=semComentariosSql(sql('0018_aderencia_uma_linha_por_dia.sql'));
     expect(m).toContain('create unique index if not exists logs_refeicao_por_dia_unico');
     expect(m).toMatch(/on conflict \(user_id, tipo, data\) where tipo = 'refeicao'/);
-    expect(m, 'a trava de autenticação dentro da função saiu').toContain("raise exception 'autenticacao_obrigatoria'");
+    expect(m).toContain("raise exception 'autenticacao_obrigatoria'");
+    expect(sql('0021_sync_v2_candidata.sql')).toContain("where tipo='refeicao'");
   });
-
-  it('500 do servidor NÃO é reportado como gravado ao cliente (offline-first preservado)', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: 'falha_gravacao' }), { status: 500 }),
-    ));
-    // `false` = a cópia local continua sendo a fonte; nada é descartado.
-    expect(await salvarAderenciaDia('2026-09-12', {}, {})).toBe(false);
+  it.each([500,504])('%s não remove cópia durável nem inventa sucesso',async status=>{
+    const db=await OutboxDB.abrir('f1-'+status);const c=novoComando('A',{tipo:'ADERENCIA',payload:{dia:'2026-09-12',logs:{},notes:{},base:{logs:{},notes:{}}}});await db.enfileirar(c);
+    await drenarOutbox(db,'A',()=>true,async(_u,i)=>new Response(JSON.stringify(i?.body?{}:{subject:'A',generation:STORAGE_GENERATION}),{status:i?.body?status:200}));
+    expect((await db.listar('A'))[0]?.comando).toEqual(c);expect(await db.ler('A','ultimoRecibo')).toBeUndefined();db.fechar();
   });
-
-  it('504 do gateway (o caso medido) também chega como não-gravado, não como sucesso', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 504 })));
-    expect(await salvarAderenciaDia('2026-09-12', {}, {})).toBe(false);
-  });
-
-  it('e o PUT seguinte grava — a escrita é idempotente por dia, então converge', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 })));
-    expect(await salvarAderenciaDia('2026-09-12', {}, {})).toBe(true);
-    const m = semComentariosSql(sql('0018_aderencia_uma_linha_por_dia.sql'));
-    expect(m, 'reenviar o dia deixou de ser idempotente').toContain('do update set payload = excluded.payload');
+  it('retorno da rede envia o MESMO comando e só o ACK encerra a fila',async()=>{
+    const db=await OutboxDB.abrir('f1-retry');const c=novoComando('A',{tipo:'ADERENCIA',payload:{dia:'2026-09-12',logs:{},notes:{},base:{logs:{},notes:{}}}});await db.enfileirar(c);
+    const f=vi.fn(async(_u:string,i?:RequestInit)=>new Response(JSON.stringify(i?.body?{tipo:'ACK',operationId:c.operationId}:{subject:'A',generation:STORAGE_GENERATION})));
+    await drenarOutbox(db,'A',()=>true,f);expect(JSON.parse(String(f.mock.calls[1]![1]!.body))).toEqual(c);expect(await db.listar('A')).toEqual([]);db.fechar();
   });
 });
 

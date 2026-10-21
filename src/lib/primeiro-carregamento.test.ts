@@ -48,11 +48,10 @@ describe('D7 — anti-vacuidade: o caminho v1 realmente entrega plano incompleto
 });
 
 describe('D7 — o primeiro carregamento hidrata pela MESMA porta do servidor', () => {
-  it('anti-vacuidade: a varredura está lendo as duas funções que montam opções', () => {
-    // O diagnóstico media só `montar()`; `recarregarVersaoSalva()` tinha o MESMO fallback.
-    expect(codigo, 'montar() sumiu de app/page.tsx — a varredura perdeu o alvo').toMatch(/function montar\(/);
-    expect(codigo, 'recarregarVersaoSalva() sumiu').toMatch(/async function recarregarVersaoSalva\(/);
-    expect((codigo.match(/opcoesDeEntradaPlano\(/g) ?? []).length).toBe(2);
+  it("anti-vacuidade: um único caminho monta o plano no boot e em atualizações", () => {
+    expect(codigo).toContain('const plano = useMemo(');
+    expect(codigo.split('recomputarPlano(').length - 1).toBe(1);
+    expect(codigo).toContain('opcoesDeEntradaPlano(entrada)');
   });
 
   it('nenhum call site monta opções sem semanaCiclo (o fallback v1 saiu dos DOIS)', () => {
@@ -60,8 +59,9 @@ describe('D7 — o primeiro carregamento hidrata pela MESMA porta do servidor', 
       'o fallback `: { pesoEfetivoKg }` voltou — esse render cai no caminho v1').toBe(false);
   });
 
-  it('os dois call sites usam normalizarEntradaPlanoVisivel quando não há entradaPlano', () => {
-    expect((codigo.match(/normalizarEntradaPlanoVisivel\(/g) ?? []).length).toBe(2);
+  it("a porta única normaliza o fallback e preserva a entrada confirmada", () => {
+    expect(codigo).toContain('estado.entradaPlano ?? normalizarEntradaPlanoVisivel(estado.perfil, { pesoEfetivoKg })');
+    expect(codigo.split('normalizarEntradaPlanoVisivel(').length - 1).toBe(1);
   });
 
   /** O que a porta única entrega, medido — não só a presença do nome no arquivo. */

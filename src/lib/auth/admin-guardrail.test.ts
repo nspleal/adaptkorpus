@@ -27,7 +27,7 @@ describe('guard-rail: createAdminClient (service_role) só em rotas confiáveis'
     const permitido = (f: string) =>
       f.includes(`${join('api', 'webhooks')}`) ||          // webhooks (uso legítimo)
       f.includes(`${join('api', 'lgpd')}`) ||              // exclusão LGPD (deleteUser — auditado)
-      f.includes(join('api', 'dados', 'perfil', 'route.ts')) || // C1.1-C: CAS server-only após contextoUsuario
+      f.endsWith(join('api', 'dados', 'sync', 'route.ts')) || // C1.1-C: CAS server-only após contextoUsuario
       f.endsWith(join('lib', 'supabase', 'admin.ts')) ||   // a própria definição
       f.endsWith('admin-guardrail.test.ts');               // este teste
     const violacoes = refs.filter((f) => !permitido(f)).map((f) => f.replace(process.cwd(), ''));

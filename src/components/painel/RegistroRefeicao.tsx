@@ -7,6 +7,7 @@ import { carregarAderenciaServidor, salvarAderenciaDia, type DiaAderencia } from
 import { registrarEvento } from '@/lib/metricas/registrar';
 import { chaveLocal, escopoLocal } from '@/lib/escopo-local';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { EVENTO_FATOS } from '@/lib/persistencia/sync-contrato';
 import { criarPersistenciaAderencia, mesclarAderencia, type EstadoSyncAderencia } from '@/lib/aderencia-persistencia';
 
 /**
@@ -48,6 +49,15 @@ export function useRegistro() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [estadoSync, setEstadoSync] = useState<EstadoSyncAderencia>('local');
   const persistencia = useRef<ReturnType<typeof criarPersistenciaAderencia> | null>(null);
+  useEffect(() => {
+    const conta = escopoLocal();
+    const receber = () => {
+      if (escopoLocal() !== conta) return;
+      const d = lerTudo()[hojeISO()]; if (!d) return;
+      setLogs(d.logs); setNotes(d.notes); setEstadoSync(d.pendenteSync ? 'pendente' : 'salvo');
+    };
+    window.addEventListener(EVENTO_FATOS, receber); return () => window.removeEventListener(EVENTO_FATOS, receber);
+  }, []);
 
   useEffect(() => {
     const conta = escopoLocal();

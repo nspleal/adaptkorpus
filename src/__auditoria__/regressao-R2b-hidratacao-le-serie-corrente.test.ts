@@ -25,6 +25,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { reconciliarSeriePesos } from '../lib/peso-reconciliacao';
 import type { RegistroPeso } from '../lib/treino-historico';
 import type { ResultadoPesoServidor } from '../lib/persistencia/sync';
+import { continuacaoDaConta } from '../lib/persistencia/continuidade-conta';
 
 const HOJE = '2026-09-11';
 const ONTEM = '2026-09-10';
@@ -69,6 +70,8 @@ function cenario(opts: {
   const painelVivoRef = { current: true };
 
   const deps = {
+    // O efeito real passou a usar o helper de epoch; injeta a implementação real.
+    continuacaoDaConta,
     useEffect: (f: () => void | (() => void)) => { limpeza = f() as (() => void) | undefined; },
     perfil: { pesoKg: 63 },
     // 🔒 `lerPesos` devolve o storage VIVO: é exatamente isto que distingue ler no mount de

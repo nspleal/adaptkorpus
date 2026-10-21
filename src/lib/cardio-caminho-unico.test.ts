@@ -108,7 +108,8 @@ describe('🔒 um único caminho grava cardio', () => {
     const sessao = semComentarios(readFileSync(join(SRC, 'components', 'painel', 'SessaoTreino.tsx'), 'utf8'));
     expect(sessao).not.toMatch(/kcalLiquida|(?<![A-Za-z])registrarCardio\(|tipo:\s*'cardio'/);
     // ela só repassa o payload que a peça de registro produziu
-    expect(sessao).toMatch(/onSalvar=\{\(payload\) => \{ onRegistrarCardio\(payload\)/);
+    expect(sessao).toMatch(/onSalvar=\{async \(payload\) => \{[^}]*await onRegistrarCardio\(payload\)/);
+    expect(sessao.indexOf('await onRegistrarCardio(payload)')).toBeLessThan(sessao.indexOf('setCardioAberto(null); avancar();'));
   });
 });
 

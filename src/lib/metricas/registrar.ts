@@ -1,6 +1,8 @@
 'use client';
 
 import { montarPayload, type PayloadPorEvento, type TipoEvento } from './eventos';
+import { escopoLocal } from '@/lib/escopo-local';
+import { cabecalhosSync } from '@/lib/persistencia/sync-contrato';
 
 /**
  * O ÚNICO caminho de escrita da telemetria (Leva C2).
@@ -18,6 +20,8 @@ import { montarPayload, type PayloadPorEvento, type TipoEvento } from './eventos
  */
 export function registrarEvento<T extends TipoEvento>(tipo: T, dados: PayloadPorEvento[T]): void {
   if (typeof window === 'undefined') return;
+  const subject = escopoLocal();
+  if (!subject) return;
   let payload: Record<string, unknown>;
   try {
     // Poda e valida contra a denylist. Se lançar, o defeito é de quem chamou — e não pode
@@ -29,7 +33,7 @@ export function registrarEvento<T extends TipoEvento>(tipo: T, dados: PayloadPor
   try {
     void fetch('/api/metricas', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: cabecalhosSync(subject),
       body: JSON.stringify({ tipo, payload }),
       keepalive: true, // sobrevive à navegação que dispara o evento
     }).catch(() => { /* telemetria não fala */ });

@@ -51,10 +51,10 @@ describe('a chave carrega o dono', () => {
 
   it('com escopo, cada usuário tem a sua gaveta', () => {
     definirEscopoLocal(A);
-    expect(chaveLocal('evk_treinos')).toBe(`evk_treinos:${A}`);
+    expect(chaveLocal('evk_treinos')).toBe(`evk_treinos:s2:mock:${A}`);
     definirEscopoLocal(B);
-    expect(chaveLocal('evk_treinos')).toBe(`evk_treinos:${B}`);
-    expect(chaveLocal('evk_treinos')).not.toBe(`evk_treinos:${A}`);
+    expect(chaveLocal('evk_treinos')).toBe(`evk_treinos:s2:mock:${B}`);
+    expect(chaveLocal('evk_treinos')).not.toBe(`evk_treinos:s2:mock:${A}`);
   });
 
   it('o aviso de privacidade NÃO recebe escopo — é do dispositivo, não da pessoa', () => {
@@ -95,7 +95,7 @@ describe('🔴 ACEITE 1 — A → logout → B: nada de A é lido nem re-subido 
     expect(ls.getItem(chaveLocal('evk_treinos'))).toBe('["de A"]');
   });
 
-  it('⚠️ as chaves LEGADAS são apagadas SEM leitura ao entrar num escopo', () => {
+  it('as chaves legadas ficam em quarentena, sem importar para a conta nova', () => {
     // Dado de dono desconhecido, gravado antes de o escopo existir. Reconciliá-lo É o
     // vazamento — então o único uso seguro é o descarte.
     ls.setItem('evk_treinos', '["de dono desconhecido"]');
@@ -104,16 +104,16 @@ describe('🔴 ACEITE 1 — A → logout → B: nada de A é lido nem re-subido 
     ls.setItem('evk_privacy_ack_v1', '1'); // esta NÃO tem dado pessoal — sobrevive
 
     const apagadas = definirEscopoLocal(B);
-    expect(apagadas).toBe(3);
-    expect(ls.getItem('evk_treinos')).toBeNull();
-    expect(ls.getItem('evk_pesos')).toBeNull();
-    expect(ls.getItem('evk_aderencia')).toBeNull();
+    expect(apagadas).toBe(0);
+    expect(ls.getItem('evk_treinos')).toBe('["de dono desconhecido"]');
+    expect(ls.getItem('evk_pesos')).toBe('[61.4]');
+    expect(ls.getItem('evk_aderencia')).toBe('{}');
     expect(ls.getItem('evk_privacy_ack_v1')).toBe('1');
     // E B continua com a gaveta vazia — nada foi "migrado" para ela.
     expect(ls.getItem(chaveLocal('evk_treinos'))).toBeNull();
   });
 
-  it('o logout apaga o dado pessoal de TODOS os escopos, não só do atual', () => {
+  it('limpeza explícita só remove a conta corrente e preserva outras byte a byte', () => {
     definirEscopoLocal(A);
     ls.setItem(chaveLocal('evk_treinos'), '["A"]');
     // Chave APOSENTADA, com escopo, gravada por uma versão antiga do app.
@@ -126,8 +126,9 @@ describe('🔴 ACEITE 1 — A → logout → B: nada de A é lido nem re-subido 
     limparDadoPessoalLocal();
 
     const restantes = ls.chaves();
-    expect(restantes.filter((k) => k.startsWith('evk_treinos'))).toEqual([]);
-    expect(restantes.filter((k) => k.startsWith('evk_notif'))).toEqual([]);
+    expect(restantes.filter((k) => k.startsWith('evk_treinos'))).toEqual([`evk_treinos:s2:mock:${A}`]);
+    expect(ls.getItem(`evk_treinos:s2:mock:${A}`)).toBe('["A"]');
+    expect(ls.getItem(`evk_notif:${A}`)).toBe('{"optIn":true}');
     // o ack do dispositivo fica (não é dado pessoal); o e-mail da sessionStorage sai
     expect(restantes).toContain('evk_privacy_ack_v1');
     expect(ss.getItem('evk_email')).toBeNull();
@@ -182,11 +183,11 @@ describe('🔴 ACEITE 2 — a lista de chaves é fonte única', () => {
 
 describe('os pontos de entrada resolvem o escopo ANTES de ler o local', () => {
   it('/app resolve o escopo antes de qualquer leitura', () => {
-    const src = readFileSync('src/app/app/page.tsx', 'utf8');
+    const src = readFileSync('src/lib/persistencia/use-conta-sync.ts', 'utf8');
     const iEscopo = src.indexOf('await resolverEscopoLocal()');
     // O modo mock lê sem sufixo por desenho; no caminho com backend, a leitura completa
     // precisa ocorrer DEPOIS da resolução da conta que nomeia a gaveta local.
-    const iLerServidor = src.indexOf('const local = lerSessaoCompleta();', iEscopo);
+    const iLerServidor = src.indexOf("db.ler<SnapshotConta>(subject, 'snapshot')", iEscopo);
     expect(iEscopo).toBeGreaterThan(-1);
     expect(iLerServidor).toBeGreaterThan(iEscopo);
   });
@@ -222,23 +223,24 @@ describe('🔒 CHAVES APOSENTADAS — a feature sai, o dado dela não fica em re
     expect([...CHAVES_LOCAIS] as string[]).not.toContain('evk_notif');
   });
 
-  it('o logout varre as aposentadas, em qualquer escopo e sem escopo', () => {
+  it('limpeza explícita inclui aposentadas só da conta especificada', () => {
     for (const k of CHAVES_APOSENTADAS) {
       definirEscopoLocal(A);
       ls.setItem(`${k}:${A}`, 'x');
       ls.setItem(`${k}:${B}`, 'x');
       ls.setItem(k, 'x'); // legado, sem sufixo
       limparDadoPessoalLocal();
-      expect(ls.chaves().filter((c) => c.startsWith(k)), `${k} sobreviveu ao logout`).toEqual([]);
+      expect(ls.getItem(`${k}:${A}`)).toBeNull();
+      expect(ls.getItem(`${k}:${B}`)).toBe('x'); expect(ls.getItem(k)).toBe('x');
     }
   });
 
-  it('entrar num escopo descarta a aposentada legada (sem ler)', () => {
+  it('entrar num escopo mantém legado isolado sem apagar', () => {
     for (const k of CHAVES_APOSENTADAS) {
       definirEscopoLocal(null);
       ls.setItem(k, 'x');
       definirEscopoLocal(B);
-      expect(ls.getItem(k), `${k} legada sobreviveu ao definirEscopoLocal`).toBeNull();
+      expect(ls.getItem(k)).toBe('x');
     }
   });
 

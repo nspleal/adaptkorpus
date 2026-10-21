@@ -32,7 +32,7 @@ export const runtime = 'nodejs';
 const limitador = criarRateLimit({ limite: 5, janelaMs: 60 * 60_000 });
 
 export async function POST(req: NextRequest) {
-  const ctx = await contextoUsuario();
+  const ctx = await contextoUsuario(req, true);
   if (ctx instanceof NextResponse) return ctx;
   const barra = barreiraDados(ctx.user.id, limitador);
   if (barra) return barra;

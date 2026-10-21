@@ -41,26 +41,19 @@ describe('item 3 — teto de payload jsonb', () => {
     expect(sessaoHistoricoSchema.safeParse({ ...ok, dataISO: 'ontem' }).success).toBe(false);
   });
 
-  it('as duas rotas de escrita aplicam schema E teto', () => {
-    for (const p of ['src/app/api/dados/aderencia/route.ts', 'src/app/api/dados/historico/route.ts']) {
-      const src = FONTE(p);
-      expect(src, p).toMatch(/safeParse/);
-      expect(src, p).toMatch(/payloadCabe\(/);
-      expect(src, p).toMatch(/status: 413/);
+  it("writer v2 aplica schema/teto e as quatro escritas legadas só recusam", () => {
+    const src=FONTE('src/app/api/dados/sync/route.ts');
+    expect(src).toContain('comandoSyncSchema.safeParse(body)');expect(src).toContain('payloadCabe(');expect(src).toContain('status: 413');
+    for(const p of ['perfil','peso','aderencia','historico']){
+      const antiga=FONTE('src/app/api/dados/'+p+'/route.ts');
+      const writer=antiga.slice(antiga.indexOf('export async function '+(p==='perfil'||p==='aderencia'?'PUT':'POST')));
+      expect(writer).toContain('status: 426');expect(writer).not.toMatch(/\.rpc\(|\.(insert|upsert|update|delete)\(/);
     }
   });
 
-  it('as rotas de dados e a exportação têm limitador', () => {
-    for (const p of [
-      'src/app/api/dados/aderencia/route.ts',
-      'src/app/api/dados/historico/route.ts',
-      'src/app/api/dados/peso/route.ts',
-      'src/app/api/lgpd/exportar/route.ts',
-      'src/app/api/lgpd/excluir/route.ts',
-    ]) {
-      const src = FONTE(p);
-      expect(src, p).toMatch(/criarRateLimit\(/);
-      expect(src, p).toMatch(/barreiraDados\(ctx\.user\.id, limitador\)/);
+  it("writer v2, exportação e exclusão têm limitador por usuário", () => {
+    for(const p of ['src/app/api/dados/sync/route.ts','src/app/api/lgpd/exportar/route.ts','src/app/api/lgpd/excluir/route.ts']){
+      const src=FONTE(p);expect(src,p).toContain('criarRateLimit(');expect(src,p).toContain('barreiraDados(ctx.user.id, limitador)');
     }
   });
 

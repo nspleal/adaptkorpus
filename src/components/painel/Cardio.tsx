@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
 import {
   DESCRICAO_INTENSIDADE, MODALIDADES_CARDIO, ROTULO_INTENSIDADE, ROTULO_MODALIDADE,
   classeDoMet, intensidadesDe, kcalExibida, kcalLiquida, metDe, metaCumprida, minutosNaMeta,
@@ -306,10 +307,11 @@ export function CardioSemana({ registros, meta, retomada, hojeISO, acumuladoMin,
 
 const ATALHOS_MIN = [15, 30, 45, 60] as const;
 
-export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalidadeInicial, minutosInicial, embutido, nomeDoItem }: {
+export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalidadeInicial, minutosInicial, embutido, nomeDoItem, onConfirmado }: {
   pesoKg: number;
-  onSalvar: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void;
+  onSalvar: (payload: { modalidade: ModalidadeCardio; intensidade: IntensidadeCardio; minutos: number; met: number; kcal: number }) => void | Promise<void>;
   onCancelar: () => void;
+  onConfirmado?: () => void;
   /** 🔒 Registro UNIFICADO: o item de cardio da rotina pré-preenche a modalidade. */
   modalidadeInicial?: ModalidadeCardio;
   /**
@@ -329,19 +331,22 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalida
   const [intensidade, setIntensidade] = useState<IntensidadeCardio>('moderado');
   const [minutos, setMinutos] = useState(minutosInicial && minutosInicial > 0 ? minutosInicial : 30);
   const [salvo, setSalvo] = useState<null | { minutos: number; met: number; kcal: number; naMeta: number; intensidade: IntensidadeCardio; modalidade: ModalidadeCardio }>(null);
+  const gravacao = useGravacaoLocal();
 
   // "Leve" some em pular corda — sem mensagem de erro. Se estava selecionada, cai em moderado.
   const intensidadeEfetiva = opcoes.includes(intensidade) ? intensidade : 'moderado';
   const met = metDe(modalidade, intensidadeEfetiva) ?? 0;
   const soDoisBaldes = opcoes.length === 2;
 
-  function salvar() {
+  async function salvar() {
     const kcal = kcalLiquida(met, pesoKg, minutos);
     // 🔒 CAMINHO ÚNICO: tanto a tela avulsa quanto o item da rotina saem por aqui. Quem
     // grava é sempre o chamador, com `registrarCardio` — não há segunda fonte para divergir.
-    onSalvar({ modalidade, intensidade: intensidadeEfetiva, minutos, met, kcal });
-    if (embutido) return;   // a sessão guiada segue; a confirmação é da tela avulsa
-    setSalvo({ minutos, met, kcal, naMeta: minutosNaMeta(met, minutos), intensidade: intensidadeEfetiva, modalidade });
+    function confirmar() {
+      if (embutido) { onConfirmado?.(); return; }
+      if (!embutido) setSalvo({ minutos, met, kcal, naMeta: minutosNaMeta(met, minutos), intensidade: intensidadeEfetiva, modalidade });
+    }
+    await gravacao.gravar(() => onSalvar({ modalidade, intensidade: intensidadeEfetiva, minutos, met, kcal }), confirmar);
   }
 
   if (salvo) {
@@ -462,7 +467,8 @@ export default function RegistrarCardio({ pesoKg, onSalvar, onCancelar, modalida
         ))}
       </div>
 
-      <button type="button" onClick={salvar} className="hov-btn" style={{ width: '100%', background: NEON, color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer', minHeight: 44 }}>{embutido ? 'Salvar e continuar' : 'Salvar registro'}</button>
+      {gravacao.erro && <p role="alert">Não foi possível guardar o registro. Seus campos continuam aqui; tente novamente.</p>}
+      <button type="button" disabled={gravacao.gravando} onClick={salvar} className="hov-btn" style={{ width: '100%', background: NEON, color: '#0D2818', fontWeight: 700, fontSize: '.98rem', padding: 15, border: 'none', borderRadius: 13, cursor: 'pointer', minHeight: 44 }}>{gravacao.gravando ? 'Guardando…' : embutido ? 'Salvar e continuar' : 'Salvar registro'}</button>
     </div>
   );
 }

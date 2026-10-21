@@ -1,6 +1,9 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { registrarDesempenho } from '@/lib/persistencia/carga-estados';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
+import { useRascunhoSessao } from '@/lib/persistencia/rascunho-sessao';
 import type { DiaTreino, PrescricaoFITT, Feedback } from '@/lib/engine/treino-types';
 import type { Exercise } from '@/lib/data/types';
 import type { ResumoSessao } from './SessaoTreino';
@@ -41,8 +44,10 @@ export interface ExForm {
   dica: string;
   variacao: string;
   /** `rir` por série (v2 §3, DF 2026-07-08): RIR numérico opcional — alimenta a autorregulação. */
-  sets: { reps: string; kg: string; rir: string }[];
+  sets: { id?: string; reps: string; kg: string; rir: string }[];
   chip: Feedback | null;
+  resultado?: 'escolhida' | 'executada' | 'falhou';
+  recomendadaKg?: number;
 }
 
 const lbl: CSSProperties = { display: 'block', fontSize: '.74rem', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(234,229,219,.5)', marginBottom: 7 };
@@ -52,7 +57,7 @@ const setInput: CSSProperties = { flex: 1, width: '100%', minWidth: 0, boxSizing
 const chipStyle = (active: boolean): CSSProperties => ({ padding: '8px 12px', borderRadius: 9, fontSize: '.82rem', fontWeight: 600, cursor: 'pointer', transition: 'all .2s ease', border: `1px solid ${active ? 'rgba(189,255,0,.4)' : 'rgba(234,229,219,.16)'}`, background: active ? 'rgba(189,255,0,.12)' : 'none', color: active ? '#BDFF00' : 'rgba(234,229,219,.72)' });
 
 let seq = 0;
-const newUid = () => `exf${++seq}`;
+const newUid = () => `exf${++seq}-${crypto.randomUUID()}`;
 
 /**
  * 🔒 D18 — estado da LEITURA do plano, não do plano. Os três casos que o registro
@@ -154,7 +159,8 @@ export function linhasDoModelo(dia: DiaTreino, prescricao: PrescricaoFITT | null
   });
 }
 
-export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null, estadoPlano = 'pronto', prescricao, progresso, exercicioPorId, onCalibrar, onCancelar, onSalvar, onVerHistorico }: {
+export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null, estadoPlano = 'pronto', prescricao, progresso, exercicioPorId, onCalibrar, onCancelar, onSalvar, onVerHistorico, origemPlano }: {
+  origemPlano?: ResumoSessao['origemPlano'];
   /** Dia agendado para HOJE, quando hoje é dia de treino. Só rotula/ordena o modelo. */
   diaHoje?: DiaTreino;
   /**
@@ -169,10 +175,10 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
   progresso?: Record<string, ProgressoExercicio>;
   exercicioPorId?: (id: string) => Exercise | undefined;
   /** Grava calibração como evento no histórico (B2 — "Muito fácil" também vive aqui, V8.1). */
-  onCalibrar?: (itens: { id: string; nome: string; calibracao: PayloadCalibracao }[]) => void;
+  onCalibrar?: (itens: { id: string; nome: string; calibracao: PayloadCalibracao }[]) => void | Promise<void>;
   onCancelar: () => void;
-  /** Persiste a sessão (Painel: registrarSessaoEm + celebração do marco). Deve ser síncrono. */
-  onSalvar: (resumo: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) => void;
+  /** Persiste a sessão (Painel: registrarSessaoEm + celebração do marco). Só confirma após persistência durável local. */
+  onSalvar: (resumo: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) => void | Promise<void>;
   onVerHistorico: () => void;
 }) {
   // "Muito fácil" (V8.1): uid do exercício com o modal de calibração aberto.
@@ -191,6 +197,23 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
   const [fPadrao, setFPadrao] = useState('');
   const [customOpen, setCustomOpen] = useState(false);
   const [customName, setCustomName] = useState('');
+  const sessaoId = useRef(crypto.randomUUID());
+  const origemRef = useRef(origemPlano);
+  const salvandoRef = useRef(false);
+  const [erroGravacao, setErroGravacao] = useState(false);
+  const parcial = useRascunhoSessao({
+    origem: 'manual', chave: 'manual', sessaoId: sessaoId.current, ativo: status === 'editando',
+    dados: { dataISO, hora, startMode, modeloNome, exs, obs },
+    contexto: origemRef.current ? { origemPlano: origemRef.current } : undefined,
+    restaurar: (r) => {
+      const d = r.dados;
+      if (!Array.isArray(d.exs) || !d.exs.every((e: ExForm) => e && typeof e.uid === 'string' && Array.isArray(e.sets)) || typeof d.dataISO !== 'string') return false;
+      sessaoId.current = r.sessaoId; setExs(d.exs as ExForm[]); setDataISO(d.dataISO);
+      if (r.contexto?.origemPlano) origemRef.current = r.contexto.origemPlano as ResumoSessao['origemPlano'];
+      setHora(String(d.hora ?? '')); setObs(String(d.obs ?? ''));
+      setStartMode(d.startMode as typeof startMode); setModeloNome(d.modeloNome as typeof modeloNome); return true;
+    },
+  });
 
   const maxDate = hojeISO();
 
@@ -220,7 +243,10 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
   const equipOptions = useMemo(() => [...new Set(EXERCISES_SEED.map((e) => e.equipamentoDetalhe).filter(Boolean))] as string[], []);
   const padraoOptions = useMemo(() => [...new Set(EXERCISES_SEED.map((e) => e.padraoMovimento))], []);
 
-  const entradaDaBiblioteca = (ex: Exercise, prefill: boolean) => linhaDaBiblioteca(ex, prescricao, prefill);
+  const entradaDaBiblioteca = (ex: Exercise, prefill: boolean) => {
+    const e = linhaDaBiblioteca(ex, prescricao, prefill);
+    return { ...e, sets: e.sets.map((s) => ({ ...s, id: crypto.randomUUID() })) };
+  };
 
   /**
    * 🔒 D18 — escolher um modelo COPIA o dia para o formulário. `linhasDoModelo` devolve
@@ -233,7 +259,7 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
     if (!dia) { escolherZero(); return; }
     setStartMode('plano');
     setModeloNome(dia.nome);
-    setExs(linhasDoModelo(dia, prescricao));
+    setExs(linhasDoModelo(dia, prescricao).map((e) => ({ ...e, recomendadaKg: e.refId ? progresso?.[e.refId]?.estado.cargaKg : undefined, sets: e.sets.map((s) => ({ ...s, id: crypto.randomUUID() })) })));
   }
 
   function escolherZero() { setStartMode('zero'); setModeloNome(null); setExs([]); }
@@ -248,7 +274,12 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
     });
   }, [query, fEquip, fPadrao, addedRefs]);
 
-  const mut = (uid: string, patch: (e: ExForm) => ExForm) => setExs((s) => s.map((e) => (e.uid === uid ? patch(e) : e)));
+  const mut = (uid: string, patch: (e: ExForm) => ExForm) => setExs((s) => s.map((e) => {
+    if (e.uid !== uid) return e;
+    const novo = patch(e);
+    if (JSON.stringify(e.sets) !== JSON.stringify(novo.sets)) return { ...novo, resultado: 'escolhida', chip: null };
+    return e.resultado !== novo.resultado ? { ...novo, chip: null } : novo;
+  }));
   const mover = (uid: string, dir: -1 | 1) => setExs((s) => {
     const arr = s.slice(); const i = arr.findIndex((e) => e.uid === uid); const j = i + dir;
     if (i < 0 || j < 0 || j >= arr.length) return s;
@@ -262,17 +293,20 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
     setExs((s) => [...s, {
       uid: newUid(), refId: null, nome, custom: true, temCarga: true, repUnit: 'reps',
       dica: 'Exercício personalizado — sem instruções da biblioteca.', variacao: '',
-      sets: [{ reps: '', kg: '', rir: '' }], chip: null,
+      sets: [{ id: crypto.randomUUID(), reps: '', kg: '', rir: '' }], chip: null,
     }]);
     setCustomOpen(false); setCustomName('');
   }
 
   const temExercicios = exs.length > 0;
-  const canSave = temExercicios && status === 'editando';
+  const canSave = temExercicios && exs.some((e) => e.resultado === 'falhou' || (e.resultado === 'executada' && e.sets.some((r) => Number(r.reps) > 0))) && status === 'editando';
 
-  function salvar() {
-    if (!canSave) return;
-    // Persiste JÁ (localStorage é síncrono — o "Salvando…" é só a transição visual do design).
+  const gravacao = useGravacaoLocal();
+  async function salvar() {
+    const ativo = gravacao.capturarContinuacao(); if (!ativo()) return;
+    if (!canSave || salvandoRef.current) return;
+    salvandoRef.current = true;
+    // O sucesso visual só vem depois do commit local da outbox.
     const fbMap: Record<string, Feedback> = {};
     exs.forEach((e) => { if (e.refId && e.chip) fbMap[e.refId] = e.chip; });
     const exercicios = exs.map((e) => ({
@@ -280,22 +314,25 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
       nome: e.nome,
       loaded: e.temCarga,
       fb: e.chip,
-      sets: e.sets.filter((r) => r.reps !== '' || r.kg !== '').map((r) => ({ reps: r.reps, kg: r.kg, ...(r.rir !== '' ? { rir: r.rir } : {}) })),
+      desempenho: registrarDesempenho(`${sessaoId.current}:${e.uid}`, e.sets.map((r) => ({ ...r, done: e.resultado === 'executada', falhou: e.resultado === 'falhou' })), e.chip, false, e.recomendadaKg),
+      sets: e.resultado === 'executada' ? e.sets.filter((r) => Number(r.reps) > 0).map((r) => ({ reps: r.reps, kg: r.kg, ...(r.rir !== '' ? { rir: r.rir } : {}) })) : [],
       ...(e.custom ? { custom: true } : {}),
       ...(e.variacao.trim() !== '' ? { variacao: e.variacao.trim() } : {}),
     }));
     const series = exercicios.reduce((n, e) => n + e.sets.length, 0);
     const volumeKg = exercicios.reduce((n, e) => (e.loaded ? n + e.sets.reduce((v, r) => v + (Number(r.reps) || 0) * (Number(r.kg) || 0), 0) : n), 0);
-    onSalvar(
-      { dia: 'Treino registrado', series, volumeKg, feedback: fbMap, exercicios, ...(prescricao?.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}) },
+    setStatus('salvando'); setErroGravacao(false);
+    try { await onSalvar(
+      { id: sessaoId.current, ...(origemRef.current ? { origemPlano: origemRef.current } : {}), dia: 'Treino registrado', series, volumeKg, feedback: fbMap, exercicios, ...(prescricao?.rirAlvoSemana != null ? { rirAlvo: prescricao.rirAlvoSemana } : {}) },
       !dataISO || dataISO > maxDate ? maxDate : dataISO, // nunca futuro (regra do handoff)
       { hora, ...(obs.trim() ? { obs: obs.trim() } : {}) },
-    );
-    setStatus('salvando');
-    setTimeout(() => setStatus('salvo'), 900);
+    ); if (ativo()) setStatus('salvo'); }
+    catch { salvandoRef.current = false; if (ativo()) { setErroGravacao(true); setStatus('editando'); } }
   }
 
   function registrarOutro() {
+    salvandoRef.current = false;
+    sessaoId.current = crypto.randomUUID();
     setDataISO(hojeISO());
     const d = new Date(); setHora(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
     setStartMode(null); setModeloNome(null); setExs([]); setObs(''); setStatus('editando');
@@ -303,8 +340,11 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
     window.scrollTo(0, 0);
   }
 
+  if (!parcial.pronto) return <section style={{ padding: 24 }}><p>{parcial.outro ? 'Há outro treino em andamento. Começar este registro substitui a prévia anterior.' : parcial.erro ? 'O armazenamento não está disponível.' : 'Carregando registro…'}</p>{parcial.outro ? <button onClick={parcial.iniciarNovo}>Começar este registro</button> : null}<button onClick={onCancelar}>Voltar</button></section>;
   return (
     <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', animation: `evkScreenIn .5s ${EASE}` }}>
+      {erroGravacao ? <p role="alert">Não foi possível guardar o registro. Ele continua nesta tela; tente novamente antes de sair.</p> : null}
+      {parcial.erro ? <p role="alert">Não foi possível guardar a edição no aparelho.</p> : <p role="status">{parcial.guardado ? 'Edição guardada neste aparelho.' : 'Guardando edição…'}</p>}
       <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.85)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
         <div style={{ maxWidth: 680, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -490,6 +530,13 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
                       </div>
 
                       <div style={{ borderTop: '1px solid rgba(234,229,219,.08)', paddingTop: 14 }}>
+                        <label style={{ display: 'block', marginBottom: 14 }}>O que aconteceu com estas séries?{' '}
+                          <select value={e.resultado ?? 'escolhida'} onChange={(ev) => mut(e.uid, (x) => ({ ...x, resultado: ev.target.value as ExForm['resultado'] }))}>
+                            <option value="escolhida">Só escolhi os valores</option>
+                            <option value="executada">Executei as séries informadas</option>
+                            <option value="falhou">Tentei, mas não completei</option>
+                          </select>
+                        </label>
                         <div style={{ fontSize: '.78rem', color: 'rgba(234,229,219,.5)', marginBottom: 10 }}>Esforço (opcional)</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <button style={chipStyle(e.chip === 'facil')} onClick={() => mut(e.uid, (x) => ({ ...x, chip: x.chip === 'facil' ? null : 'facil' }))}>Fácil</button>
@@ -540,7 +587,7 @@ export default function RegistrarTreino({ diaHoje, diasDoPlano, idxDeHoje = null
             estado={progresso?.[entrada.refId]?.estado}
             exercicioPorId={exercicioPorId}
             onFechar={() => setCalibrando(null)}
-            onSalvar={(payload) => { onCalibrar([{ id: entrada.refId!, nome: efetivoC.nomePt, calibracao: payload }]); setCalibrando(null); }}
+            onSalvar={(payload) => onCalibrar([{ id: entrada.refId!, nome: efetivoC.nomePt, calibracao: payload }])}
           />
         );
       })()}

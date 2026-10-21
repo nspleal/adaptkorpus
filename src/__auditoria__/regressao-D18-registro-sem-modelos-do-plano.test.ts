@@ -206,12 +206,12 @@ describe('🔴 D18 ⑤ — só a confirmação grava', () => {
     }
   });
 
-  it('o segundo clique em salvar não grava de novo: o guard sai do estado "editando"', () => {
-    expect(codigo).toContain("const canSave = temExercicios && status === 'editando';");
-    const salvar = codigo.slice(codigo.indexOf('function salvar()'), codigo.indexOf('function registrarOutro'));
-    expect(salvar).toContain('if (!canSave) return;');
-    expect(salvar).toContain("setStatus('salvando')");
-    // grava → sai de 'editando' → canSave vira false → o onSalvar não roda duas vezes.
-    expect(salvar.indexOf('onSalvar(')).toBeLessThan(salvar.indexOf("setStatus('salvando')"));
+  it("o segundo clique em salvar não grava de novo: o guard sai do estado \"editando\"", () => {
+    expect(codigo).toMatch(/const canSave = temExercicios[^;]*status === 'editando'/);
+    const salvar=codigo.slice(codigo.indexOf('async function salvar()'),codigo.indexOf('function registrarOutro'));
+    expect(salvar).toContain('if (!canSave || salvandoRef.current) return;');
+    expect(salvar.indexOf('salvandoRef.current = true')).toBeLessThan(salvar.indexOf('onSalvar('));
+    expect(salvar.indexOf("setStatus('salvando')")).toBeLessThan(salvar.indexOf('onSalvar('));
+    expect(salvar).toContain('await onSalvar(');
   });
 });

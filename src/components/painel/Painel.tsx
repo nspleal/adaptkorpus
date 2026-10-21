@@ -18,9 +18,14 @@ import { recomputarPlano } from '@/lib/session';
 import { marcarPratoCansado, pratosCansadosAtivos, type PratoCansado } from '@/lib/rotacao-pratos';
 import { registrarCardio, registrarSessao, registrarSessaoEm, lerHistorico, lerPesos, hojeISO, novaSessaoDe, reconciliarHistorico, registrarPesoLocal, registrarSinalFadiga, salvarCalibracao, sessoesResistidas, sessoesTreino, substituirHistorico, substituirPesos, type RegistroPeso, type SessaoHistorico } from '@/lib/treino-historico';
 import { reancorarPesoDoPlanoLocal, resolverPesoDoPlanoLocal } from '@/lib/peso-plano';
-import { carregarHistoricoServidor, carregarPesosServidor, enviarSessaoTreino, registrarPesoServidor } from '@/lib/persistencia/sync';
+import { continuacaoDaConta } from '@/lib/persistencia/continuidade-conta';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
+import { carregarPesosServidor, registrarPesoServidor } from '@/lib/persistencia/sync';
 import { inicialDe } from '@/lib/auth/usuario';
 import { escopoLocal } from '@/lib/escopo-local';
+import { enfileirarOperacao } from '@/lib/persistencia/sync-cliente';
+import { EVENTO_FATOS, EVENTO_FECHAR_SESSAO } from '@/lib/persistencia/sync-contrato';
+import { EVENTO_RETOMAR_SESSAO } from './RetomarSessao';
 import { noDominioDoPeso } from '@/lib/peso-dominio';
 import { fraseSemComparacao, resumoPesoExibido, rotuloVariacao, type ResumoPesoExibido } from '@/lib/peso-progresso';
 import { reconciliarPerfilComPesoAceito, reconciliarSeriePesos } from '@/lib/peso-reconciliacao';
@@ -209,10 +214,12 @@ type Modal =
   | { tipo: 'exercicio'; d: number; s: number; base: string; opcoes: Exercise[]; excl: string[] }
   | null;
 
-export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, onPerfilChange, entradaPlanoInicial, desfechoC, modoDiario = false }: {
+export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: treinoProp, onSair, onPerfilChange, onOcupadoChange, origemPlano, entradaPlanoInicial, desfechoC, modoDiario = false }: {
   perfil: PerfilResumo; dieta: ResultadoMotor; treino: ResultadoTreino; onSair: () => void;
   /** Perfil + entradas que alteraram o plano visível viajam juntos para o CAS. */
   onPerfilChange?: (p: PerfilResumo, entrada: EntradaPlanoVisivel) => void;
+  onOcupadoChange?: (ocupado: boolean) => void;
+  origemPlano?: ResumoSessao['origemPlano'];
   entradaPlanoInicial?: EntradaPlanoVisivel; desfechoC?: boolean;
   /**
    * 🔒 MODO DIÁRIO (cofre, DF 2026-07-27 — gate `ROTEAR`): a pessoa registra e lê o próprio
@@ -237,8 +244,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const perfilRef = useRef(perfilProp);
   useEffect(() => { perfilRef.current = perfil; }, [perfil]);
   /** Conta dona da gaveta local; `null` = modo mock/deslogado. Ver `escopo-local.ts`. */
-  const contaLocalRef = useRef<string | null>(null);
-  useEffect(() => { contaLocalRef.current = escopoLocal(); });
+  const contaLocalRef = useRef(escopoLocal());
+  const continuidade = useGravacaoLocal();
   /**
    * 🔴 R1 — resposta que volta depois do unmount não escreve estado nem dispara persistência.
    * O ref é do PAINEL inteiro (não de um efeito), porque o callback nasce num handler de
@@ -292,14 +299,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   useEffect(() => {
     if (!supabaseConfigurado()) return;
     let vivo = true;
+    const ativo = continuacaoDaConta(escopoLocal, contaLocalRef.current, () => vivo);
     void (async () => {
       try {
         const { createClient } = await import('@/lib/supabase/client');
+        if (!ativo()) return;
         const auth = createClient().auth;
         const { data: { session } } = await auth.getSession();
+        if (!ativo()) return;
         let u = session?.user ?? null;
         if (!u) u = (await auth.getUser()).data.user; // sem sessão local → valida na rede
-        if (!vivo || !u) return;
+        if (!ativo() || !u || u.id !== contaLocalRef.current) return;
         const n = (u.user_metadata as { nome?: string } | null)?.nome;
         setInicial(inicialDe(n, u.email));
       } catch { /* mantém o estado atual */ }
@@ -348,7 +358,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     const hoje = hojeISO();
     // Conta fotografada na IDA: troca de conta durante a espera invalida a resposta.
     const contaDaChamada = escopoLocal();
-    const mesmaGaveta = () => vivo && painelVivoRef.current && contaDaChamada === contaLocalRef.current;
+    const mesmaGaveta = continuacaoDaConta(escopoLocal, contaDaChamada, () => vivo && painelVivoRef.current && contaDaChamada === contaLocalRef.current);
     void carregarPesosServidor().then((doServidor) => {
       // 🔴 A GUARDA VEM ANTES DA LEITURA, e não é ordem acidental: `lerPesos()` resolve a
       // chave pelo escopo VIGENTE (`chaveLocal`), então ler antes de conferir a conta seria
@@ -448,25 +458,35 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const [menu, setMenu] = useState(false);
   const [mostrarC, setMostrarC] = useState(desfechoC ?? (dieta.gate.comportamento === 'RESTRINGIR' || dieta.gate.comportamento === 'PISAR'));
   const [sessaoDia, setSessaoDia] = useState<number | null>(null);
+  const [sessaoRetomada, setSessaoRetomada] = useState<{ dia: import('@/lib/engine/treino-types').DiaTreino; prescricao: import('@/lib/engine/treino-types').PrescricaoFITT; origemPlano?: ResumoSessao['origemPlano'] } | null>(null);
+  const [erroRetomada, setErroRetomada] = useState(false);
+  useEffect(() => {
+    const retomar = (evento: Event) => {
+      const r = (evento as CustomEvent<import('@/lib/persistencia/rascunho-sessao').RascunhoLocal>).detail;
+      if (r.origem === 'manual') { setRegistrando(true); return; }
+      if (modoDiario) return;
+      const contexto = r.contexto as typeof sessaoRetomada;
+      const valido = contexto?.dia?.slots?.every((s) => s.exercicio && typeof s.exercicio.id === 'string')
+        && ['seriesPorExercicio','repsComposto','repsIsolado','descansoCompostoSeg','descansoIsoladoSeg','rir'].every((k) => {
+          const faixa = (contexto.prescricao as unknown as Record<string, { min?: unknown; max?: unknown }>)[k];
+          return faixa && Number.isFinite(faixa.min) && Number.isFinite(faixa.max);
+        });
+      if (!valido) { setErroRetomada(true); return; }
+      setSessaoRetomada(contexto); setErroRetomada(false);
+    };
+    window.addEventListener(EVENTO_RETOMAR_SESSAO, retomar); return () => window.removeEventListener(EVENTO_RETOMAR_SESSAO, retomar);
+  }, [modoDiario]);
   /** Carimbo de início da sessão guiada (ms). Só alimenta `duracao_real_min`. */
   const inicioSessaoRef = useRef<number | null>(null);
   const [sessoes, setSessoes] = useState<SessaoLog[]>([]);
-  // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
   useEffect(() => {
-    setSessoes(lerHistorico());
-    // Logado: RECONCILIAÇÃO local × servidor (fix bloqueador 2026-07-08 — antes um 200
-    // com [] APAGAVA o evk_treinos): o servidor vence nas chaves compartilhadas; sessões
-    // só-locais sobrevivem e são re-subidas (retry dos writes silenciosamente perdidos —
-    // paridade com o self-heal do profile). GET falho (null) → local fica (mock intacto).
-    let vivo = true;
-    void carregarHistoricoServidor().then((doServidor) => {
-      if (!vivo || !doServidor) return;
-      const { uniao, faltantes } = reconciliarHistorico(lerHistorico(), doServidor);
-      for (const s of faltantes) void enviarSessaoTreino(s);
-      setSessoes(substituirHistorico(uniao));
-    });
-    return () => { vivo = false; };
+    const conta = escopoLocal();
+    const receber = () => { if (escopoLocal() === conta) { setSessoes(lerHistorico()); setPesos(lerPesos()); } };
+    window.addEventListener(EVENTO_FATOS, receber); return () => window.removeEventListener(EVENTO_FATOS, receber);
   }, []);
+  // Histórico de treino persistido (evk_treinos) — alimenta marcos + progressão de carga.
+  // Hidratação compartilhada não reenvia fatos ao montar a UI.
+  useEffect(() => { setSessoes(lerHistorico()); }, []);
   // Edição que cai em zona clínica (ROTEAR) → tela de encaminhamento, sem aplicar o plano.
   const [encaminhamento, setEncaminhamento] = useState<string[] | null>(null);
   // V5 — registro de refeições (aderência, persistido em localStorage por dia).
@@ -488,10 +508,17 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   const diasTreinados = diasDeTreino(sessoesTreino(sessoes).map((s) => s.dataISO));
   const [celebrarToken, setCelebrarToken] = useState(0);
   const [celebrarPendente, setCelebrarPendente] = useState(false);
-  function aplicarNovoHistorico(novo: SessaoHistorico[]) {
+  async function aplicarNovoHistorico(novo: SessaoHistorico[]) {
+    const subject = escopoLocal(), ativo = continuidade.capturarContinuacao();
+    if (!ativo() || subject !== contaLocalRef.current) throw new Error('conta_mudou');
+    const sessao = novaSessaoDe(novo);
+    if (sessao && supabaseConfigurado()) {
+      const { comando } = await enfileirarOperacao({ tipo: 'SESSAO', payload: { sessao } }, { aguardarConfirmacao: false, expectedSubject: subject ?? undefined, ativo });
+      if (!comando || !ativo()) throw new Error('sessao_nao_guardada');
+    }
     const antes = bandaChama(diasTreinados);
     if (bandaChama(diasDeTreino(sessoesTreino(novo).map((s) => s.dataISO))) > antes) setCelebrarPendente(true);
-    setSessoes(novo);
+    setSessoes(substituirHistorico(reconciliarHistorico(lerHistorico(), novo).uniao));
     // "Fiquei doente" (Bloco 4): o reconhecimento LIMPA no primeiro treino registrado,
     // SEM MENSAGEM NENHUMA (nada de "bem-vindo de volta" — o silêncio é decisão de projeto).
     // Aqui está o ato do registro, que cobre inclusive o treino do MESMO dia do aviso; o
@@ -500,9 +527,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       const novaEntrada = novaSessaoDe(novo);
       if (novaEntrada && sessoesTreino([novaEntrada]).length > 0) limparReconhecimento();
     }
-    // Write-through p/ o servidor (um gancho cobre guiada/manual/calibração): a sessão
-    // recém-gravada é a de maior n. Fire-and-forget — o local já está persistido.
-    void enviarSessaoTreino(novaSessaoDe(novo));
+    // A intenção já está durável; o sincronizador cuida do ACK remoto.
   }
 
   // --- "Fiquei doente" — o RECONHECIMENTO (Leva 2 · Bloco 4, DF 2026-07-27) --------------
@@ -524,8 +549,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   // Calibração manual / adoção de degrau (B2/B3): grava o evento no histórico — o alvo
   // continua função pura do evk_treinos; o próximo render recomputa o progresso.
-  function calibrarExercicios(itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) {
-    aplicarNovoHistorico(salvarCalibracao(itens));
+  async function calibrarExercicios(itens: { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[]) {
+    await aplicarNovoHistorico(salvarCalibracao(itens, new Date(), false));
   }
 
   // Favoritos (⭐ V8.2, DF #12): alterna o conjunto, persiste na sessão e re-monta o
@@ -562,7 +587,10 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     setSessaoDia(idx);
   }
 
-  function concluirSessao(r: ResumoSessao) {
+  async function concluirSessao(r: ResumoSessao) {
+    const ativo = continuidade.capturarContinuacao();
+    await aplicarNovoHistorico(registrarSessao(r, new Date(), false)); // só confirma a UI depois da fila durável
+    if (!ativo()) return;
     registrarEvento('sessao_concluida', {
       sessao_id: `${dataHoje}-${sessaoDia ?? 0}`,
       // 🔒 Duração REAL medida na UI (início → conclusão). O motor não vê relógio; este
@@ -574,9 +602,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
       exercicios_feitos: r.exercicios?.length ?? 0,
       exercicios_planejados: sessaoDia != null ? (rotinaDias[sessaoDia]?.slots.length ?? 0) : 0,
     });
-    aplicarNovoHistorico(registrarSessao(r)); // carimba data + persiste (evk_treinos)
     setFeedback((p) => ({ ...p, ...r.feedback }));
-    setSessaoDia(null);
+    setSessaoDia(null); setSessaoRetomada(null);
     irAbaHist('progresso');
     window.scrollTo(0, 0);
   }
@@ -590,18 +617,29 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
    * 🔒 Nada aqui grava: o caminho de escrita continua sendo o `registrarCardio` único.
    */
   const [cardioPre, setCardioPre] = useState<{ modalidade: string; minutos: number | null } | null>(null);
-  function salvarCardio(payload: NonNullable<SessaoHistorico['cardio']>) {
+  async function salvarCardio(payload: NonNullable<SessaoHistorico['cardio']>) {
+    const ativo = continuidade.capturarContinuacao();
+    await aplicarNovoHistorico(registrarCardio(payload, new Date(), false));
+    if (!ativo()) return;
     registrarEvento('cardio_registrado', {
       modalidade: payload.modalidade, minutos: payload.minutos, origem: 'registro_manual',
     });
-    aplicarNovoHistorico(registrarCardio(payload));
   }
 
   // "Registrar treino feito" (formulário pós-fato) — grava na DATA REAL escolhida, no mesmo
   // formato da sessão guiada + origem manual (design_handoff_registro_e_contador_treino).
   const [registrando, setRegistrando] = useState(false);
-  function salvarTreinoManual(r: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) {
-    aplicarNovoHistorico(registrarSessaoEm(r, dataISO, { manual: true, ...extra }));
+  useEffect(() => {
+    onOcupadoChange?.(editando || modal !== null || editorDias !== null || sessaoDia !== null || sessaoRetomada !== null || registrando || registrandoCardio);
+  }, [editando, modal, editorDias, sessaoDia, sessaoRetomada, registrando, registrandoCardio, onOcupadoChange]);
+  useEffect(() => {
+    const fechar = () => { setSessaoDia(null); setSessaoRetomada(null); setRegistrando(false); };
+    window.addEventListener(EVENTO_FECHAR_SESSAO,fechar);return()=>window.removeEventListener(EVENTO_FECHAR_SESSAO,fechar);
+  },[]);
+  async function salvarTreinoManual(r: ResumoSessao, dataISO: string, extra: { hora: string; obs?: string }) {
+    const ativo = continuidade.capturarContinuacao();
+    await aplicarNovoHistorico(registrarSessaoEm(r, dataISO, { manual: true, ...extra }, false));
+    if (!ativo()) return;
     setFeedback((p) => ({ ...p, ...r.feedback }));
   }
   // Consome o cruzamento pendente com a Hoje visível: o 1º commit monta a Chama com o token
@@ -1247,50 +1285,38 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     | { tipo: 'REGISTRADO' }
     | { tipo: 'IDEMPOTENTE' }
     | { tipo: 'RECUSADO_DIA'; registradoKg: number }
-    | { tipo: 'INVALIDO' };
+    | { tipo: 'INVALIDO' }
+    | { tipo: 'PENDENTE' }
+    | { tipo: 'FALHA' };
 
-  const registrarPeso = (v: number): ResultadoPesoUI => {
-    // 🔒 Domínio do peso: fonte única (`lib/peso-dominio`), a MESMA faixa que a rota aplica.
+  const registrarPeso = async (v: number): Promise<ResultadoPesoUI> => {
     if (!noDominioDoPeso(v)) return { tipo: 'INVALIDO' };
-    // A data é carimbada aqui, na UI (o motor segue clock-free) e é a MESMA que vai para o
-    // servidor no campo `data` do log — é ela que permite a janela de 7 dias.
-    // 🔒 `hojeISO` = `diaLocalISO`: DIA CIVIL LOCAL, a mesma convenção do resto do app.
-    const dia = hojeISO();
-
-    const local = registrarPesoLocal(v, dia); // cópia local primeiro (offline-first — fix 2026-07-08)
-    if (local.tipo === 'RECUSADO_DIA') {
-      // 🔒 Não grava, não substitui o primeiro e NÃO toca o perfil.
-      setAvisoPeso(`Você já registrou ${local.registradoKg} kg hoje. Só um registro por dia — o próximo pode ser amanhã.`);
-      return { tipo: 'RECUSADO_DIA', registradoKg: local.registradoKg };
+    const dia = hojeISO(), contaDaChamada = contaLocalRef.current;
+    const ativo = continuidade.capturarContinuacao();
+    if (!supabaseConfigurado()) {
+      const local = registrarPesoLocal(v, dia);
+      if (local.tipo === 'RECUSADO_DIA') return { tipo: 'RECUSADO_DIA', registradoKg: local.registradoKg };
+      setPesos(lerPesos()); aplicarPesoNoPerfil(v);
+      return { tipo: local.tipo };
     }
-    if (local.tipo === 'IDEMPOTENTE') {
-      // Reenvio do mesmo peso no mesmo dia: nada a fazer, e não é erro.
-      setAvisoPeso(null);
-      return { tipo: 'IDEMPOTENTE' };
+    const r = await registrarPesoServidor(v, dia);
+    if (!ativo()) return { tipo: 'FALHA' };
+    if (r.tipo === 'PENDENTE') {
+      setAvisoPeso('Peso guardado neste aparelho. Aguardando confirmação da conta.');
+      return r;
     }
-
-    setAvisoPeso(null);
-    setPesos((p) => [...p, { dataISO: dia, kg: v }]);
-    aplicarPesoNoPerfil(v, { respostaDe: dia, governa: dia, contaDaChamada: contaLocalRef.current });
-    // 🔴 R1 — a conta é fotografada NA IDA: se a pessoa trocar de conta durante a espera, a
-    // resposta é da conta antiga e não pode escrever na gaveta da nova.
-    const contaDaChamada = contaLocalRef.current;
-    void registrarPesoServidor(v, dia).then((r) => {
-      // 🔒 Sem perda silenciosa: `FALHA` mantém o registro local pendente (offline-first) e
-      // a re-subida do mount o envia depois. Só a RECUSA do servidor reconcilia.
-      if (r.tipo !== 'RECUSADO_DIA') return;
-      if (!painelVivoRef.current || contaDaChamada !== contaLocalRef.current) return;
-      // 🔴 R4 — `pesoKg: null` é "não sei qual peso está registrado", não zero: não alinha
-      // série nem perfil, e não inventa aviso com um número que não existe.
-      const aceito = r.pesoKg;
-      if (aceito == null) return;
-      // Outra aba/dispositivo venceu a corrida e o banco manteve o PRIMEIRO registro do dia.
-      // O cliente se alinha ao que foi aceito — histórico e perfil juntos, nunca divergentes.
-      alinharSerieAoPesoAceito(dia, aceito);
-      aplicarPesoNoPerfil(aceito, { respostaDe: dia, governa: dia, contaDaChamada });
-      setAvisoPeso(`Outro dispositivo já havia registrado ${aceito} kg hoje. Mantivemos esse registro.`);
-    });
-    return { tipo: 'REGISTRADO' };
+    if (r.tipo === 'AGUARDANDO_DIA') {
+      setAvisoPeso(`Já há ${r.pesoKg} kg guardados para este dia, aguardando confirmação. O novo valor não foi gravado.`);
+      return { tipo: 'FALHA' };
+    }
+    if (r.tipo === 'FALHA') { setAvisoPeso('Não foi possível guardar o peso. Tente novamente.'); return r; }
+    const aceito = r.tipo === 'REGISTRADO' ? v : r.pesoKg;
+    if (aceito == null) { setAvisoPeso('A conta recusou outro peso neste dia; conecte-se para conferir o valor confirmado.'); return { tipo: 'FALHA' }; }
+    const serie = [...lerPesos().filter((p) => p.dataISO !== dia), { dataISO: dia, kg: aceito }];
+    substituirPesos(serie); setPesos(serie);
+    aplicarPesoNoPerfil(aceito, { respostaDe: dia, governa: dia, contaDaChamada });
+    setAvisoPeso(r.tipo === 'RECUSADO_DIA' ? `Outro dispositivo já havia registrado ${aceito} kg neste dia. Mantivemos esse registro.` : null);
+    return r.tipo === 'RECUSADO_DIA' ? { tipo: 'RECUSADO_DIA', registradoKg: aceito } : { tipo: r.tipo };
   };
 
   const prescricao = treino.prescricao;
@@ -1612,8 +1638,8 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
 
   // Botão de fadiga (v2 §6): grava o evento (não conta dia de treino) → o deload reativo
   // dispara na hora (sinaisFadiga → estadoDoCiclo antecipa a semana 6 e reancora).
-  function sinalizarFadiga() {
-    aplicarNovoHistorico(registrarSinalFadiga());
+  async function sinalizarFadiga() {
+    await aplicarNovoHistorico(registrarSinalFadiga(new Date(), false));
   }
   const tabs: { id: Aba; label: string }[] = [{ id: 'hoje', label: 'Hoje' }, { id: 'treino', label: 'Treino' }, { id: 'cardio', label: 'Cardio' }, { id: 'dieta', label: 'Dieta' }, { id: 'progresso', label: 'Progresso' }, { id: 'historico', label: 'Histórico' }, { id: 'perfil', label: 'Perfil' }];
   // 🔒 As 6 abas ficam em MODO DIÁRIO: todas continuam com conteúdo real (registro ou leitura
@@ -1688,6 +1714,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
             oferecia "Montar do zero". `rotinaDias` é a mesma lista que a aba Treino
             desenha, então o que se registra é o que se vê. */}
         <RegistrarTreino
+          origemPlano={origemPlano}
           diaHoje={diaDeHoje}
           diasDoPlano={rotinaDias}
           idxDeHoje={sessaoHojeIdx}
@@ -1721,11 +1748,11 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
   }
 
   // Sessão de treino guiada (tela cheia, fora do shell do painel).
-  if (sessaoDia !== null && prescricaoEfetiva && rotinaDias[sessaoDia]) {
+  if (sessaoRetomada || (sessaoDia !== null && prescricaoEfetiva && rotinaDias[sessaoDia])) {
     return (
       <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB' }}>
         <Backdrop />
-        <SessaoTreino dia={rotinaDias[sessaoDia]!} prescricao={prescricaoEfetiva} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => setSessaoDia(null)} onConcluir={concluirSessao} onRegistrarCardio={salvarCardio} pesoKg={perfil.pesoKg} tecnicasLiberadas={tecnicasLiberadas} />
+        <SessaoTreino origemPlano={sessaoRetomada?.origemPlano ?? origemPlano} dia={sessaoRetomada?.dia ?? rotinaDias[sessaoDia!]!} prescricao={sessaoRetomada?.prescricao ?? prescricaoEfetiva!} progresso={progresso} deload={deloadAtivo} exercicioPorId={(id) => EXERCISES_SEED.find((e) => e.id === id)} onCalibrar={calibrarExercicios} onSair={() => { setSessaoDia(null); setSessaoRetomada(null); }} onConcluir={concluirSessao} onRegistrarCardio={salvarCardio} pesoKg={perfil.pesoKg} tecnicasLiberadas={tecnicasLiberadas} />
       </div>
     );
   }
@@ -1734,6 +1761,7 @@ export default function Painel({ perfil: perfilProp, dieta: dietaProp, treino: t
     <div className="ak-app" style={{ position: 'relative', minHeight: '100vh', background: '#0D2818', color: '#EAE5DB', animation: `evkScreenIn .5s ${EASE}` }}>
       <Backdrop />
       {/* header */}
+      {erroRetomada ? <p role="alert">Não foi possível ler o contexto deste treino. O registro em andamento foi preservado; seus dados podem ser exportados na conta.</p> : null}
       <header style={{ position: 'sticky', top: 0, zIndex: 40, background: 'rgba(13,40,24,.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(234,229,219,.1)' }}>
         <div className="evk-painel-topo" style={{ maxWidth: 1080, margin: '0 auto', padding: '13px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
           <div className="evk-painel-marca" style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}><Logo size={26} /><Marca size="1.1rem" /></div>
@@ -2038,13 +2066,13 @@ function CartaoRetomada({ estado }: { estado: EstadoRetomada }) {
 
 function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegistrar, avisoPeso, onRegistrarTreino, deload, semanaCiclo, onSinalFadiga, retomada }: {
   dieta: ResultadoMotor; cardTotais: RecipeMacros | null; dia: DiaTreino | undefined;
-  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => { tipo: string } | void;
+  mostrarC: boolean; onFecharC: () => void; onComecar: () => void; onRegistrar: (v: number) => { tipo: string } | void | Promise<{ tipo: string } | void>;
   avisoPeso?: string | null;
   onRegistrarTreino: () => void; deload: boolean;
   /** Semana do mesociclo (v2 §6): contador "Semana X/6 do ciclo". */
   semanaCiclo?: number;
   /** Botão de fadiga (v2 §6): dispara o deload reativo (antecipa a semana de alívio). */
-  onSinalFadiga?: () => void;
+  onSinalFadiga?: () => void | Promise<void>;
   /** Rampa de retomada ativa (Leva 2 · Bloco 3) — substitui o contador do mesociclo. */
   retomada?: EstadoRetomada | null;
 }) {
@@ -2053,6 +2081,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
   const totK = plano.macros.kcalProteina + plano.macros.kcalCarboidrato + plano.macros.kcalGordura || 1;
   // Confirmação do sinal de fadiga (tom acolhedor, SEM vermelho — fadiga ≠ dor/lesão).
   const [fadigaOpen, setFadigaOpen] = useState(false);
+  const gravacaoFadiga = useGravacaoLocal();
   return (
     <div style={sec}>
       {mostrarC && (
@@ -2096,6 +2125,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
           </div>
         )}
         {/* Confirmação do sinal de fadiga — tom acolhedor, sem vermelho (fadiga ≠ dor/lesão). */}
+        {gravacaoFadiga.erro && <p role="alert">Não foi possível guardar o sinal de fadiga. Tente novamente.</p>}
         {fadigaOpen && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }} onClick={() => setFadigaOpen(false)}>
             <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: '100%', background: '#10241a', border: '1px solid rgba(189,255,0,.28)', borderRadius: 18, padding: '22px 22px 18px', animation: `evkPop .3s ${EASE}` }}>
@@ -2107,7 +2137,7 @@ function Hoje({ dieta, cardTotais, dia, mostrarC, onFecharC, onComecar, onRegist
               <p style={{ margin: '0 0 16px', fontSize: '.8rem', color: 'rgba(234,229,219,.5)', lineHeight: 1.5 }}>Se for dor localizada (não só cansaço), use o &quot;Senti dor&quot; do exercício e procure um profissional.</p>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setFadigaOpen(false)} style={{ flex: 1, background: 'rgba(234,229,219,.06)', border: '1px solid rgba(234,229,219,.16)', color: '#EAE5DB', fontWeight: 600, fontSize: '.9rem', padding: 12, borderRadius: 11, cursor: 'pointer' }}>Agora não</button>
-                <button onClick={() => { setFadigaOpen(false); onSinalFadiga?.(); }} style={{ flex: 1.4, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.9rem', padding: 12, border: 'none', borderRadius: 11, cursor: 'pointer' }}>Ativar semana de alívio</button>
+                <button disabled={gravacaoFadiga.gravando} onClick={() => { void gravacaoFadiga.gravar(() => onSinalFadiga?.(), () => setFadigaOpen(false)); }} style={{ flex: 1.4, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.9rem', padding: 12, border: 'none', borderRadius: 11, cursor: 'pointer' }}>Ativar semana de alívio</button>
               </div>
             </div>
           </div>
@@ -2481,7 +2511,7 @@ function DietaTab({ dieta, itens, totais, trocados, logs, notes, dataHoje, onSta
 
 /* ════════════════════ Progresso ════════════════════ */
 
-function Progresso({ resumo, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { resumo: ResumoPesoExibido; treinos: number; onRegistrar: (v: number) => { tipo: string } | void; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
+function Progresso({ resumo, treinos, onRegistrar, children, modoDiario, notaPesoPlano, avisoPeso }: { resumo: ResumoPesoExibido; treinos: number; onRegistrar: (v: number) => { tipo: string } | void | Promise<{ tipo: string } | void>; children?: ReactNode; modoDiario?: boolean; notaPesoPlano?: string | null; avisoPeso?: string | null }) {
   // 🔴 F3 — número só quando há duas pesagens datadas. Sem isso, a tela EXIBE a ausência
   // (`—` + frase), em vez de um valor tirado do peso do perfil.
   const variacao = rotuloVariacao(resumo.variacao);
@@ -2858,10 +2888,19 @@ function Stat({ rotulo, valor, un, cor }: { rotulo: string; valor: string; un?: 
  * conta o que aconteceu.
  */
 function RegistrarPesoRow({ onRegistrar, aviso }: {
-  onRegistrar: (v: number) => { tipo: string } | void;
+  onRegistrar: (v: number) => { tipo: string } | void | Promise<{ tipo: string } | void>;
   aviso?: string | null;
 }) {
   const [v, setV] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const gravacaoPeso = useGravacaoLocal();
+  async function registrar() {
+    const ativo = gravacaoPeso.capturarContinuacao();
+    if (guardando || !ativo()) return;
+    if (guardando) return; setGuardando(true);
+    try { const r = await onRegistrar(Number(v)); if (ativo() && r && ['REGISTRADO','IDEMPOTENTE','PENDENTE'].includes(r.tipo)) setV(''); }
+    finally { if (ativo()) setGuardando(false); }
+  }
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'rgba(234,229,219,.04)', border: '1px solid rgba(234,229,219,.1)', borderRadius: 16, padding: '18px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
@@ -2870,7 +2909,7 @@ function RegistrarPesoRow({ onRegistrar, aviso }: {
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="number" inputMode="decimal" placeholder="kg" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, background: 'rgba(234,229,219,.05)', border: '1px solid rgba(234,229,219,.14)', borderRadius: 11, padding: '10px 12px', color: '#EAE5DB', fontSize: '.95rem', outline: 'none' }} />
-        <button onClick={() => { const r = onRegistrar(Number(v)); if (!r || r.tipo !== 'RECUSADO_DIA') setV(''); }} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>Registrar peso</button>
+        <button disabled={guardando} onClick={() => void registrar()} style={{ background: 'none', border: '1px solid rgba(189,255,0,.4)', color: '#BDFF00', fontWeight: 600, fontSize: '.92rem', padding: '11px 20px', borderRadius: 11, cursor: 'pointer' }}>{guardando ? 'Guardando…' : 'Registrar peso'}</button>
       </div>
       {aviso && (
         <div role="status" style={{ flexBasis: '100%', fontSize: '.85rem', color: 'rgba(234,229,219,.75)' }}>{aviso}</div>

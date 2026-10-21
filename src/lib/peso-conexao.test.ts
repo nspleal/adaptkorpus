@@ -102,37 +102,22 @@ describe('🔒 a série de pesos carrega DATA — nas duas pontas', () => {
     expect(corpoDe(src, 'export function lerPesosKg(')).toMatch(/lerPesos\(\)\.map/);
   });
 
-  it('a ROTA mapeia a data PARA DENTRO — `data` primeiro, `created_at` só de reserva', () => {
-    const src = semComentarios(ROTA);
-    // 🔴 A regressão nomeada: o `select` voltar a pedir só o payload, ou o `map` a devolver
-    //    número cru. Qualquer uma das duas mata a janela sem quebrar nenhum outro teste.
-    expect(src, 'o select precisa trazer as duas colunas de data').toMatch(/select\(\s*['"]payload, data, created_at['"]\s*\)/);
-    const corpo = src.slice(src.indexOf('const pesos'), src.indexOf('const pesos') + 600);
-    expect(corpo, 'o objeto devolvido precisa ter dataISO').toMatch(/dataISO:/);
-    // A ORDEM é a spec: a data DECLARADA vence; `created_at` só quando não houver declarada
-    // (pesagem offline sincronizada dias depois — as duas divergem, e a certa é a declarada).
-    expect(corpo).toMatch(/declarada \?\? recebida/);
-    expect(corpo).not.toMatch(/recebida \?\? declarada/);
+  it("a ROTA mapeia a data PARA DENTRO — `data` primeiro, `created_at` só de reserva", () => {
+    const src=semComentarios(ROTA),paginacao=semComentarios('src/lib/persistencia/logs-paginados.ts');
+    expect(paginacao).toContain(".select('id,created_at,data,payload')");
+    const corpo=src.slice(src.indexOf('const pesos'));
+    expect(corpo).toContain('dataISO:'); expect(corpo).toContain('declarada ?? recebida');
+    expect(corpo).not.toContain('recebida ?? declarada');
   });
 
-  it('a SUBIDA leva o dia da pesagem — a re-subida offline não carimba tudo de hoje', () => {
-    const sync = semComentarios('src/lib/persistencia/sync.ts');
-    expect(sync).toMatch(/registrarPesoServidor\(pesoKg: number, dataISO\?: string \| null\)/);
-    expect(corpoDe(sync, 'export async function registrarPesoServidor(')).toMatch(/dataISO/);
-    // E o servidor tem de aceitar o campo — senão o cliente manda para o vazio.
-    const rota = semComentarios(ROTA);
-    expect(rota).toMatch(/dataISO\?: unknown/);
-    // 🔄 2026-09-11: a gravação passou a ser a RPC `registrar_peso_dia` (um registro por
-    // dia, sob índice único). A propriedade defendida é a MESMA — o dia do CLIENTE chega
-    // ao banco —, só mudou o nome do parâmetro: `data: dataOk` → `p_dia: dataOk`.
-    expect(rota, 'a data do cliente não chega à gravação').toMatch(/p_dia: dataOk/);
-    expect(rota, 'a gravação passa pela RPC que arbitra o dia').toMatch(/registrar_peso_dia/);
-    // 🔒 Continua BOUNDED: data muito futura cai no default do banco e nunca entra na
-    // janela. O teto virou `hoje_utc + 1` porque o dia é o CIVIL LOCAL da pessoa e quem
-    // vive em fuso à frente de UTC está legitimamente num dia maior que o do servidor —
-    // recusá-lo seria aplicar UTC à revelia da regra.
-    expect(rota).toMatch(/d <= amanhaUtc/);
-    expect(rota).toMatch(/amanhaUtc = new Date\(Date\.now\(\) \+ 86_400_000\)/);
+  it("a SUBIDA leva o dia da pesagem — a re-subida offline não carimba tudo de hoje", () => {
+    const sync=semComentarios('src/lib/persistencia/sync.ts');
+    expect(sync).toContain('registrarPesoServidor(pesoKg: number, dataISO?: string | null)');
+    expect(corpoDe(sync,'export async function registrarPesoServidor(')).toContain('dataISO: dia');
+    const contrato=semComentarios('src/lib/persistencia/sync-servidor.ts');
+    expect(contrato).toMatch(/dataISO: dia/); expect(contrato.replaceAll('_','')).toContain('Date.now() + 86400000');
+    const sql=readFileSync('supabase/migrations/0021_sync_v2_candidata.sql','utf8');
+    expect(sql).toContain("v_dia := (p_payload->>'dataISO')::date");
   });
 
   it('TODA subida do Painel leva a data — inclusive a re-subida do que ficou local', () => {
@@ -213,26 +198,10 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
     expect(entrada).toMatch(/pesoEfetivoKg: sobrescrever\?\.pesoEfetivoKg \?\? pesoMotorKg/);
   });
 
-  it('/app: mount e recarregamento de conflito usam peso resolvido quando não há snapshot C1', () => {
-    const cs = chamadas(APP);
-    expect(cs).toHaveLength(2);
-    for (const c of cs) expect(c, c).toMatch(/opcoes/);
-    const src = semComentarios(APP);
-    /**
-     * 🔴 D7 (2026-09-10) — a régua mudou de FORMA, não de conteúdo. Os dois call sites
-     * usavam `entradaPlano ? … : { pesoEfetivoKg }`: o peso resolvido chegava, mas a
-     * `semanaCiclo` não, e sem ela o motor devolve plano sem séries. Agora ambos passam pela
-     * porta única `normalizarEntradaPlanoVisivel(perfil, { pesoEfetivoKg })` — a mesma do
-     * servidor —, que carrega o peso resolvido E fixa a semana. O que este teste cobra
-     * continua sendo: nenhum dos dois volta ao peso cru quando não há snapshot C1.
-     */
-    const PORTA_UNICA = /opcoesDeEntradaPlano\([^)]*normalizarEntradaPlanoVisivel\([^)]*\{ pesoEfetivoKg \}\)\)/;
-    const montar = corpoDe(src, 'function montar(');
-    expect(montar).toMatch(PORTA_UNICA);
-    expect(montar, 'o fallback v1 voltou ao mount').not.toMatch(/:\s*\{ pesoEfetivoKg \}/);
-    const recarregar = corpoDe(src, 'async function recarregarVersaoSalva(');
-    expect(recarregar).toMatch(PORTA_UNICA);
-    expect(recarregar, 'o fallback v1 voltou ao recarregamento de conflito').not.toMatch(/:\s*\{ pesoEfetivoKg \}/);
+  it("/app: caminho único de montagem e atualização usa peso resolvido", () => {
+    const cs=chamadas(APP); expect(cs).toHaveLength(1);expect(cs[0]).toContain('opcoesDeEntradaPlano(entrada)');
+    const src=semComentarios(APP); expect(src).toContain('estado.entradaPlano ?? normalizarEntradaPlanoVisivel(estado.perfil, { pesoEfetivoKg })');
+    expect(src).toContain('resolverPesoDoPlanoLocal');
   });
 
   /**
@@ -240,12 +209,11 @@ describe('🔒 TODO call site do cliente passa o peso resolvido', () => {
    * explicitamente a entrada visível (inclusive peso resolvido) e o comando puro certifica
    * essa mesma fotografia antes de chamar o CAS.
    */
-  it('a rota do perfil certifica a entrada visível em vez de recomputar sem peso resolvido', () => {
-    const cs = chamadas('src/app/api/dados/perfil/route.ts');
-    expect(cs).toHaveLength(0);
-    const rota = readFileSync('src/app/api/dados/perfil/route.ts', 'utf8');
-    expect(rota).toMatch(/entradaPlanoVisivelSchema/);
-    expect(rota).toMatch(/comandoCommitDePlano\([^\n]+entrada\?\.data/);
+  it("a rota do perfil certifica a entrada visível em vez de recomputar sem peso resolvido", () => {
+    const src=semComentarios('src/lib/persistencia/sync-servidor.ts');
+    expect(src).toContain('entradaPlanoVisivelSchema.optional()');
+    expect(src).toContain('comandoCommitDePlano(subject, perfil, entrada.expectedRevision');
+    expect(src).toContain('opcoes, linha)');expect(chamadas('src/app/api/dados/sync/route.ts')).toHaveLength(0);
   });
 });
 

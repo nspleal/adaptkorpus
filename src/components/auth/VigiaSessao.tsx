@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { expirouSessao } from '@/lib/auth/sessao-expiracao';
 import { sairDaConta } from '@/lib/auth/sair';
 import { supabaseConfigurado } from '@/lib/supabase/env';
+import { escopoLocal } from '@/lib/escopo-local';
+import { continuacaoDaConta } from '@/lib/persistencia/continuidade-conta';
 
 /**
  * Vigia de sessão no app (tarefas 15–16 — dado de saúde/LGPD): encerra por INATIVIDADE
@@ -19,18 +21,21 @@ export default function VigiaSessao() {
 
   useEffect(() => {
     if (!supabaseConfigurado()) return;
+    let vivo = true;
+    const ativo = continuacaoDaConta(escopoLocal, escopoLocal(), () => vivo);
     const marcar = () => { ultimoAtivo.current = Date.now(); };
     const eventos: (keyof WindowEventMap)[] = ['pointerdown', 'keydown', 'scroll'];
     for (const ev of eventos) window.addEventListener(ev, marcar, { passive: true });
     document.addEventListener('visibilitychange', marcar); // voltar à aba conta como atividade
     const timer = setInterval(() => {
       const motivo = expirouSessao(Date.now(), ultimoAtivo.current, inicio.current);
-      if (motivo) {
+      if (motivo && ativo()) {
         clearInterval(timer);
-        void sairDaConta().finally(() => router.replace('/acesso-restrito?motivo=sessao'));
+        void sairDaConta().then((saiu) => { if (saiu) router.replace('/acesso-restrito?motivo=sessao'); });
       }
     }, 30_000);
     return () => {
+      vivo = false;
       clearInterval(timer);
       for (const ev of eventos) window.removeEventListener(ev, marcar);
       document.removeEventListener('visibilitychange', marcar);

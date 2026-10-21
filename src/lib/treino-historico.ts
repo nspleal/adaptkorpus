@@ -120,24 +120,27 @@ export function lerHistorico(): SessaoHistorico[] {
 export function registrarSessaoEm(
   resumo: ResumoSessao, dataISO: string,
   extra?: { id?: string; manual?: boolean; hora?: string; obs?: string; tipo?: SessaoHistorico['tipo']; cardio?: SessaoHistorico['cardio'] },
+  persistir = true,
 ): SessaoHistorico[] {
   const hist = lerHistorico();
+  const existente = resumo.id ? hist.find((s) => s.id === resumo.id) : undefined;
   // n único = maior n existente + 1 (length+1 duplicaria após qualquer entrada descartada).
   const nova: SessaoHistorico = {
     ...resumo, ...extra,
-    id: extra?.id ?? novoIdDeSessao(),
-    n: hist.reduce((m, s) => Math.max(m, s.n), 0) + 1,
+    id: extra?.id ?? resumo.id ?? novoIdDeSessao(),
+    n: existente?.n ?? hist.reduce((m, s) => Math.max(m, s.n), 0) + 1,
     dataISO,
   };
-  const i = hist.findIndex((s) => s.dataISO <= dataISO);
-  const todo = i === -1 ? [...hist, nova] : [...hist.slice(0, i), nova, ...hist.slice(i)];
-  try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(todo)); } catch { /* storage indisponível */ }
+  const anteriores = hist.filter((s) => !nova.id || s.id !== nova.id);
+  const i = anteriores.findIndex((s) => s.dataISO <= dataISO);
+  const todo = i === -1 ? [...anteriores, nova] : [...anteriores.slice(0, i), nova, ...anteriores.slice(i)];
+  if (persistir) { try { localStorage.setItem(chaveLocal(KEY), JSON.stringify(todo)); } catch { /* storage indisponível */ } }
   return todo;
 }
 
 /** Registra uma sessão guiada concluída hoje (carimba data + nº). */
-export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date()): SessaoHistorico[] {
-  return registrarSessaoEm(resumo, hojeISO(agora));
+export function registrarSessao(resumo: ResumoSessao, agora: Date = new Date(), persistir = true): SessaoHistorico[] {
+  return registrarSessaoEm(resumo, hojeISO(agora), undefined, persistir);
 }
 
 /**
@@ -312,6 +315,7 @@ export function substituirPesos(pesos: readonly (RegistroPeso | number)[]): Regi
 export function salvarCalibracao(
   itens: readonly { id: string; nome: string; calibracao: NonNullable<ResumoSessao['exercicios'][number]['calibracao']> }[],
   agora: Date = new Date(),
+  persistir = true,
 ): SessaoHistorico[] {
   const resumo: ResumoSessao = {
     dia: 'Calibração manual',
@@ -320,7 +324,7 @@ export function salvarCalibracao(
     feedback: {},
     exercicios: itens.map((it) => ({ id: it.id, nome: it.nome, loaded: false, fb: null, sets: [], calibracao: it.calibracao })),
   };
-  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'calibracao' });
+  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'calibracao' }, persistir);
 }
 
 /**
@@ -329,9 +333,9 @@ export function salvarCalibracao(
  * semana 6 e reancora o ciclo). `tipo: 'sinal_fadiga'` deixa a entrada fora da Chama,
  * das Cargas e da progressão (não é treino). Sincroniza pelo mesmo funil das sessões.
  */
-export function registrarSinalFadiga(agora: Date = new Date()): SessaoHistorico[] {
+export function registrarSinalFadiga(agora: Date = new Date(), persistir = true): SessaoHistorico[] {
   const resumo: ResumoSessao = { dia: 'Sinal de fadiga', series: 0, volumeKg: 0, feedback: {}, exercicios: [] };
-  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'sinal_fadiga' });
+  return registrarSessaoEm(resumo, hojeISO(agora), { tipo: 'sinal_fadiga' }, persistir);
 }
 
 /**
@@ -344,19 +348,21 @@ export function registrarCardioEm(
   payload: NonNullable<SessaoHistorico['cardio']>,
   dataISO: string,
   hora?: string,
+  persistir = true,
 ): SessaoHistorico[] {
   const resumo: ResumoSessao = { dia: 'Cardio', series: 0, volumeKg: 0, feedback: {}, exercicios: [] };
-  return registrarSessaoEm(resumo, dataISO, { tipo: 'cardio', ...(hora ? { hora } : {}), cardio: payload });
+  return registrarSessaoEm(resumo, dataISO, { tipo: 'cardio', ...(hora ? { hora } : {}), cardio: payload }, persistir);
 }
 
 /** Cardio de hoje (carimba dia local + hora — o relógio fica aqui, na UI). */
 export function registrarCardio(
   payload: NonNullable<SessaoHistorico['cardio']>,
   agora: Date = new Date(),
+  persistir = true,
 ): SessaoHistorico[] {
   const hh = String(agora.getHours()).padStart(2, '0');
   const mm = String(agora.getMinutes()).padStart(2, '0');
-  return registrarCardioEm(payload, hojeISO(agora), `${hh}:${mm}`);
+  return registrarCardioEm(payload, hojeISO(agora), `${hh}:${mm}`, persistir);
 }
 
 /**

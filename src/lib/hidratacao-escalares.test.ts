@@ -207,13 +207,12 @@ describe('D11 · a recuperação é utilizável e NÃO repete o mesmo erro', () 
   const appPage = readFileSync('src/app/app/page.tsx', 'utf8');
   const onboarding = readFileSync('src/app/onboarding/page.tsx', 'utf8');
 
-  it('o /app checa a suspensão ANTES de recomputar e NÃO limpa a sessão nesse caminho', () => {
-    expect(appPage).toMatch(/camposInvalidos\?\.length\)\s*\{\s*setPerfilSuspenso\(perfil\);[^}]*return;/);
-    // O guard que chama `limparSessao()` vem depois do recompute; a suspensão retorna antes dele.
-    const iSuspensao = appPage.indexOf('setPerfilSuspenso(perfil)');
-    const iRecompute = appPage.indexOf('recomputarPlano(perfil, opcoes)');
-    expect(iSuspensao).toBeGreaterThan(-1);
-    expect(iRecompute).toBeGreaterThan(iSuspensao);
+  it("o /app checa a suspensão ANTES de recomputar e NÃO limpa a sessão nesse caminho", () => {
+    const guard = appPage.indexOf('if (!estado || estado.perfil.camposInvalidos?.length) return null;');
+    expect(guard).toBeGreaterThan(-1);
+    expect(appPage.indexOf('recomputarPlano(estado.perfil')).toBeGreaterThan(guard);
+    expect(appPage).not.toContain('limparSessao(');
+    expect(appPage).toContain('camposInvalidos?.length) return <PerfilPrecisaDeCorrecao');
   });
 
   it('a tela de suspensão nomeia os campos e leva ao modo correção — sem botão de repetir', () => {

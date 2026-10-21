@@ -1,68 +1,18 @@
-/**
- * GET/PUT /api/dados/aderencia — registro de refeições por DIA local (`logs` tipo
- * `refeicao`, um registro por dia; payload = { logs, notes } como no `evk_aderencia`).
- * RPC atômica apoiada no índice único parcial `logs_refeicao_por_dia_unico`
- * (migration 0018): uma linha por (user_id, 'refeicao', data).
- */
 import { NextResponse, type NextRequest } from 'next/server';
 import { contextoUsuario } from '@/lib/persistencia/servidor';
-import { aderenciaDiaSchema, payloadCabe } from '@/lib/validation/api';
-import { barreiraDados } from '@/lib/auth/guard';
-import { criarRateLimit } from '@/lib/rate-limit';
-
-// 60 escritas / 5 min por usuário: folgado para o uso real (4 refeições/dia), apertado o
-// bastante para não virar laço de escrita.
-const limitador = criarRateLimit({ limite: 60, janelaMs: 5 * 60_000 });
-
+import { lerPaginaLogs } from '@/lib/persistencia/logs-paginados';
 export const runtime = 'nodejs';
-
-/** Metadados operacionais apenas: nunca payload, data da refeição, usuário ou erro bruto. */
-function registrarFalha(etapa: 'autenticacao' | 'rpc', inicio: number, status: number, upstreamStatus?: number) {
-  console.error(JSON.stringify({
-    evento: 'aderencia_falhou', etapa, status,
-    duracaoMs: Math.max(0, Date.now() - inicio),
-    ...(Number.isInteger(upstreamStatus) && upstreamStatus! >= 100 && upstreamStatus! <= 599
-      ? { upstreamStatus } : {}),
-  }));
-}
-
-export async function GET() {
-  const ctx = await contextoUsuario();
+export async function GET(req: NextRequest) {
+  const ctx = await contextoUsuario(req, true);
   if (ctx instanceof NextResponse) return ctx;
-  const { data, error } = await ctx.supabase.from('logs').select('data, payload').eq('tipo', 'refeicao');
-  if (error) return NextResponse.json({ error: 'falha_leitura' }, { status: 500 });
-  const dias: Record<string, unknown> = {};
-  for (const r of data ?? []) if (typeof r.data === 'string') dias[r.data] = r.payload;
-  return NextResponse.json({ dias });
-}
-
-export async function PUT(req: NextRequest) {
-  const inicio = Date.now();
-  const ctx = await contextoUsuario();
-  if (ctx instanceof NextResponse) {
-    registrarFalha('autenticacao', inicio, ctx.status);
-    return ctx;
-  }
-  const barra = barreiraDados(ctx.user.id, limitador);
-  if (barra) return barra;
-  const parsed = aderenciaDiaSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'entrada inválida' }, { status: 400 });
-  const body = parsed.data;
-  const payload = { logs: body.logs, notes: body.notes };
-  // 🔒 Teto de tamanho: o zod limita a FORMA, não o volume (um mapa válido pode ter 10 mil
-  // chaves). Os dois juntos fecham.
-  if (!payloadCabe(payload)) return NextResponse.json({ error: 'payload_grande' }, { status: 413 });
-  // A RPC inclui o predicado do índice parcial e resolve auth.uid() sob RLS.
   try {
-    const { error, status } = await ctx.supabase.rpc('registrar_aderencia_dia', {
-      p_dia: body.dia,
-      p_payload: payload,
-    });
-    if (error) registrarFalha('rpc', inicio, 500, status);
-    if (error) return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
-  } catch {
-    registrarFalha('rpc', inicio, 500);
-    return NextResponse.json({ error: 'falha_gravacao' }, { status: 500 });
-  }
-  return NextResponse.json({ ok: true });
+    const pagina = await lerPaginaLogs(ctx, req, 'refeicao');
+    if (!pagina) return NextResponse.json({ error: 'cursor_invalido' }, { status: 400 });
+    return NextResponse.json({ dias: Object.fromEntries(pagina.linhas.map((r) => [r.data, r.payload])), nextCursor: pagina.nextCursor });
+  } catch { return NextResponse.json({ error: 'falha_leitura' }, { status: 503 }); }
+}
+export async function PUT(req: NextRequest) {
+  const ctx = await contextoUsuario(req, true);
+  if (ctx instanceof NextResponse) return ctx;
+  return NextResponse.json({ error: 'atualizacao_necessaria' }, { status: 426 });
 }

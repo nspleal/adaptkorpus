@@ -18,6 +18,7 @@ import { estadoRetomada, type EstadoRetomada } from '@/lib/engine';
 import { DELOAD_SEMANAS_DEFAULT } from '@/lib/engine/treino-constants';
 import type { EquipamentoCasa, EquipamentoDisp, Exercise, GrupoPrimario } from '@/lib/data/types';
 import { sessoesResistidas, temSinalFadigaRecente, type SessaoHistorico } from '@/lib/treino-historico';
+import { execucaoEFeedbackDeclarados } from '@/lib/persistencia/carga-estados';
 
 /**
  * Adaptador client da progressão (Passo 2 / Bloco B). Deriva o alvo ATUAL de cada exercício
@@ -140,7 +141,22 @@ export function progressoDosExercicios(
         if (ex.calibracao.degrauId) degrauAdotadoPorId.set(ex.id, ex.calibracao.degrauId);
         continue;
       }
-      const fb = (s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
+      const fb = (ex.desempenho ? ex.fb ?? null : s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
+      // Contrato v2: escolha/falha/incompleta/dor não viram base de carga por terem ACK.
+      // Linhas legadas seguem a interpretação histórica, sem fabricar uma confirmação v2.
+      if (ex.desempenho && (!execucaoEFeedbackDeclarados(ex.desempenho, fb) || ex.desempenho.convencao === 'por_lado')) {
+        const d = ex.desempenho;
+        // Dificuldade declarada numa tentativa real continua chegando ao caminho negativo
+        // JÁ EXISTENTE, sem enviar como base a carga apenas escolhida/tentada e sem refinar
+        // para um feedback positivo. Não há fórmula nova de falha/incompleta.
+        // O motor atual não recebe convenção por lado. Preserva o fato sem converter
+        // esse número em carga total; dificuldade explícita mantém o caminho existente.
+        if (fb === 'dificil' && d.feedbackConfirmado && d.feedbackTentativaId === d.tentativaId && (['falhou','incompleta'].includes(d.resultado) || (d.convencao === 'por_lado' && d.resultado === 'concluida'))) {
+          const arr = eventosPorId.get(ex.id) ?? [];
+          arr.push({ fb }); eventosPorId.set(ex.id, arr);
+        }
+        continue;
+      }
       if (!fb) continue; // sessão sem feedback (ex.: só pausado por dor) não progride nada
       const arr = eventosPorId.get(ex.id) ?? [];
       const cargaMaxKg = cargaMaxDaSessao(s, ex.id);
@@ -300,7 +316,7 @@ export function feedbackAgregadoPorGrupo(
     if (s.tipo || !s.dataISO || s.dataISO < limiteISO || s.dataISO > hojeISO) continue;
     for (const ex of s.exercicios) {
       if (!ex.id) continue;
-      const fb = (s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
+      const fb = (ex.desempenho ? ex.fb ?? null : s.feedback?.[ex.id] ?? ex.fb ?? null) as Feedback | null;
       if (fb !== 'dificil') continue;
       const grupo = exercicioPorId(ex.id)?.grupoPrimario;
       if (!grupo) continue;

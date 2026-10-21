@@ -17,7 +17,7 @@
  * confere quando reproduzido offline. Network-first renova a cópia a cada visita online.
  * Para invalidar tudo, suba a VERSAO.
  */
-const VERSAO = 'v2';
+const VERSAO = 'v3';
 const CACHE_ESTATICO = `evk-static-${VERSAO}`;
 const CACHE_PAGINAS = `evk-pages-${VERSAO}`;
 
@@ -30,7 +30,7 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const manter = new Set([CACHE_ESTATICO, CACHE_PAGINAS]);
       for (const nome of await caches.keys()) {
-        if (nome.startsWith('evk-') && !manter.has(nome)) await caches.delete(nome);
+        if (/^evk-(static|pages)-v\d+$/.test(nome) && !manter.has(nome)) await caches.delete(nome);
       }
       await self.clients.claim();
     })(),
@@ -42,6 +42,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return; // nunca intercepta mutações
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // nunca intercepta terceiros (Supabase etc.)
+  if (url.pathname.startsWith('/api/')) return;
 
   // Estáticos imutáveis: cache-first.
   if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/') || url.pathname === '/manifest.webmanifest') {
@@ -64,7 +65,7 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         try {
           const resp = await fetch(req);
-          if (resp.ok && url.pathname === '/app') {
+          if (resp.ok && !resp.redirected && url.pathname === '/app' && new URL(resp.url || req.url).pathname === '/app') {
             const cache = await caches.open(CACHE_PAGINAS);
             cache.put(req, resp.clone());
           }

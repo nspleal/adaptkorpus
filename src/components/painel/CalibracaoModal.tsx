@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
+import { useGravacaoLocal } from '@/lib/persistencia/use-gravacao-local';
 import { escadaComNomes, indiceBase, modificacoesDe } from '@/lib/engine';
 import { PISO_ABSOLUTO_REPS, PISO_REPS_COM_CARGA } from '@/lib/engine/treino-constants';
 import { PISO_HOLD_SEG, repUnitDe } from '@/lib/engine/isometricos';
@@ -36,7 +37,7 @@ export default function CalibracaoModal({ exercicioEfetivo, loaded, nivel, estad
   /** Estado atual da progressão (pré-preenche os campos); ausente antes da 1ª sessão. */
   estado?: EstadoExercicio;
   exercicioPorId: (id: string) => Exercise | undefined;
-  onSalvar: (payload: PayloadCalibracao) => void;
+  onSalvar: (payload: PayloadCalibracao) => void | Promise<void>;
   onFechar: () => void;
 }) {
   const esSeg = repUnitDe(exercicioEfetivo.id) === 'segundos';
@@ -60,6 +61,7 @@ export default function CalibracaoModal({ exercicioEfetivo, loaded, nivel, estad
     return estado?.repsAlvo != null && !esSeg ? String(estado.repsAlvo) : '';
   });
   const [segundos, setSegundos] = useState(esSeg && estado?.repsAlvo != null ? String(estado.repsAlvo) : '');
+  const gravacao = useGravacaoLocal();
 
   // Trilhos travados (defesa em profundidade — o motor clampa de novo no fold):
   // piso ABSOLUTO = 5 p/ todos; iniciante = 6, campo somente-leitura.
@@ -70,26 +72,25 @@ export default function CalibracaoModal({ exercicioEfetivo, loaded, nivel, estad
     return String(Math.max(loaded ? pisoReps : 1, n));
   };
 
-  function salvar() {
+  function payload(): PayloadCalibracao {
     if (loaded) {
       const kg = Number(carga);
       const r = Math.max(pisoReps, Math.round(Number(reps) || pisoReps));
-      onSalvar({ ...(Number.isFinite(kg) && kg > 0 ? { cargaKg: kg } : {}), reps: r });
-      return;
+      return { ...(Number.isFinite(kg) && kg > 0 ? { cargaKg: kg } : {}), reps: r };
     }
     if (esSeg && mods) {
       const s = Math.max(PISO_HOLD_SEG, Math.round(Number(segundos) || PISO_HOLD_SEG));
       // topo: reancora só o tempo na modificação atual; senão assume a próxima mais difícil
-      onSalvar({ modificacaoIdx: topoIso ? modAtualIdx : modAtualIdx + 1, segundos: s });
-      return;
+      return { modificacaoIdx: topoIso ? modAtualIdx : modAtualIdx + 1, segundos: s };
     }
     const r = Math.max(1, Math.round(Number(reps) || 1));
     if (escada) {
-      onSalvar({ degrauId: escada.degraus[degrauSel]!.idRepresentativo, reps: r });
+      return { degrauId: escada.degraus[degrauSel]!.idRepresentativo, reps: r };
     } else {
-      onSalvar({ reps: r }); // peso corporal fora da malha (one-off): só reancora as reps
+      return { reps: r }; // peso corporal fora da malha (one-off): só reancora as reps
     }
   }
+  async function salvar() { const p = payload(); await gravacao.gravar(() => onSalvar(p), onFechar); }
 
   return (
     <div onClick={onFechar} style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(7,18,11,.72)', backdropFilter: 'blur(7px)', WebkitBackdropFilter: 'blur(7px)' }}>
@@ -220,7 +221,8 @@ export default function CalibracaoModal({ exercicioEfetivo, loaded, nivel, estad
 
         <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
           <button onClick={onFechar} className="evk-voltar" style={{ flex: 1, background: 'none', border: '1px solid rgba(234,229,219,.2)', color: '#EAE5DB', fontWeight: 600, fontSize: '.96rem', padding: 14, borderRadius: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={salvar} className="hov-btn" style={{ flex: 1.4, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>Salvar nova calibração</button>
+          {gravacao.erro && <p role="alert">Não foi possível guardar a calibração. Tente novamente.</p>}
+          <button disabled={gravacao.gravando} onClick={salvar} className="hov-btn" style={{ flex: 1.4, background: '#BDFF00', color: '#0D2818', fontWeight: 700, fontSize: '.96rem', padding: 14, border: 'none', borderRadius: 13, cursor: 'pointer' }}>{gravacao.gravando ? 'Guardando…' : 'Salvar nova calibração'}</button>
         </div>
       </div>
     </div>

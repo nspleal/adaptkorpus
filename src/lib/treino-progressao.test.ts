@@ -376,3 +376,32 @@ describe('retomadaDoHistorico — derivada, e o CARDIO não encerra a pausa', ()
     expect([...exerciciosRecentes(hist)]).toEqual(['e_sup']);
   });
 });
+
+// Integração do contrato novo com o adaptador, usando o motor vigente como referência.
+import { registrarDesempenho } from './persistencia/carga-estados';
+describe('armazenamento v2 não transforma ACK/escolha em base de progressão',()=>{
+ const p=prescricao(),base=[sessao('2026-10-01',[{id:'e_sup',fb:'facil',kg:'20'}])];
+ const estado=(h:SessaoHistorico[])=>progressoDosExercicios(h,p,byId);
+ function declarada(resultado:'escolhida'|'concluida'|'falhou'|'incompleta',fb:'facil'|'na_medida'|'dificil'|null){
+  const s=sessao('2026-10-02',[{id:'e_sup',fb:fb??'facil',kg:'26'}]);
+  const series=resultado==='incompleta'?[{kg:'26',reps:'10',done:true},{kg:'26',reps:'',done:false}]:[{kg:'26',reps:resultado==='concluida'?'10':'',done:resultado==='concluida',falhou:resultado==='falhou'}];
+  s.exercicios[0]!.desempenho=registrarDesempenho('nova',series,fb,false,22);
+  s.exercicios[0]!.fb=fb;s.feedback=fb?{e_sup:fb}:{};return s;
+ }
+ it('escolhida 26 com recomendada 22 e até feedback fácil isolado não muda a base confirmada',()=>{
+  const escolha=declarada('escolhida',null);expect(estado([escolha,...base])).toEqual(estado(base));
+  escolha.exercicios[0]!.fb='facil';escolha.feedback={e_sup:'facil'};expect(estado([escolha,...base])).toEqual(estado(base));
+ });
+ it.each(['falhou','incompleta'] as const)('%s não vira sucesso por número e feedback fácil',r=>expect(estado([declarada(r,'facil'),...base])).toEqual(estado(base)));
+ it('execução completa sem feedback continua sem par elegível',()=>expect(estado([declarada('concluida',null),...base])).toEqual(estado(base)));
+ it('par completo equivale à regra existente, sem fórmula de progressão nova',()=>{
+  const nova=declarada('concluida','facil'),referencia=sessao('2026-10-02',[{id:'e_sup',fb:'facil',kg:'26'}]);
+  expect(estado([nova,...base])).toEqual(estado([referencia,...base]));
+  const dificil=declarada('concluida','dificil');dificil.feedback={e_sup:'facil'};
+  expect(estado([dificil,...base])).toEqual(estado([sessao('2026-10-02',[{id:'e_sup',fb:'dificil',kg:'26'}]),...base]));
+ });
+ it('dor precede par positivo; convenção por lado fica armazenada sem conversão para total',()=>{
+  const dor=declarada('concluida','facil');dor.exercicios[0]!.desempenho!.resultado='dor';expect(estado([dor,...base])).toEqual(estado(base));
+  const lado=declarada('concluida','facil');lado.exercicios[0]!.desempenho!.convencao='por_lado';expect(estado([lado,...base])).toEqual(estado(base));expect(lado.exercicios[0]!.sets[0]!.kg).toBe('26');
+ });
+});

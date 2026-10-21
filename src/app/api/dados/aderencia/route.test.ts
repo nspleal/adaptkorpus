@@ -1,78 +1,38 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NextRequest, NextResponse } from 'next/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fixture, iniciarFixture, fecharFixture, pedido } from '../../../../../test-support/sync-http-fixture';
+import { CONTA_A,CONTA_B } from '../../../../../test-support/sync-fixture';
+import { POST } from '../sync/route';
+import { PUT } from './route';
 
-const { rpc, contexto } = vi.hoisted(() => ({ rpc: vi.fn(), contexto: vi.fn() }));
-vi.mock('@/lib/persistencia/servidor', () => ({
-  contextoUsuario: contexto,
-}));
-vi.mock('@/lib/auth/guard', () => ({ barreiraDados: () => null }));
+beforeAll(iniciarFixture,30_000);afterAll(fecharFixture);
+beforeEach(async()=>{fixture.erroAuth=0;await fixture.db.exec('truncate logs, app_private.sync_recibos cascade');});
+const vazio={logs:{},notes:{}};
+const gravar=async(payload:unknown)=>{const r=await POST(pedido('ADERENCIA',payload));return {status:r.status,body:await r.json()};};
+const p=(logs:Record<string,string>={cafe:'seguiu'},notes:Record<string,string>={},base:unknown=vazio)=>({dia:'2026-09-10',logs,notes,base});
+const linhas=async()=> (await fixture.db.query<{user_id:string;payload:Record<string,unknown>}>('select user_id,payload from logs where tipo=\'refeicao\'')).rows;
+async function falhar(){await fixture.db.exec("create or replace function pg_temp.falha_aderencia() returns trigger language plpgsql as $$ begin raise exception 'segredo-fixture'; end $$; create trigger fixture_fault before insert or update on logs for each row execute function pg_temp.falha_aderencia()");}
 
-const CORPO = { dia: '2026-09-10', logs: { cafe: 'seguiu' }, notes: {} };
-async function gravar(corpo: unknown = CORPO) {
-  const { PUT } = await import('./route');
-  const req = new NextRequest('https://app/api/dados/aderencia', {
-    method: 'PUT', body: JSON.stringify(corpo), headers: { 'content-type': 'application/json' },
+describe('aderência — protocolo v2 com transação real e conflito parcial',()=>{
+  it('grava no contrato v2 e o PUT legado não escreve',async()=>{expect((await gravar(p())).status).toBe(200);expect((await PUT(pedido('ADERENCIA',p()))).status).toBe(426);expect(await linhas()).toHaveLength(1);});
+  it('a identidade vem da sessão validada, nunca user_id do corpo',async()=>{
+    await gravar({...p(),user_id:CONTA_B});expect((await linhas())[0]!.user_id).toBe(CONTA_A);
+    expect((await POST(pedido('ADERENCIA',p(),CONTA_B))).status).toBe(409);expect(await linhas()).toHaveLength(1);
   });
-  const res = await PUT(req);
-  return { status: res.status, corpo: await res.json() as Record<string, unknown> };
-}
-beforeEach(() => {
-  rpc.mockReset().mockResolvedValue({ error: null, status: 204 });
-  contexto.mockReset().mockResolvedValue({ user: { id: 'u1' }, supabase: { rpc } });
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-});
-afterEach(() => vi.restoreAllMocks());
-
-describe('PUT /api/dados/aderencia — RPC com conflito parcial', () => {
-  it('grava com sucesso pelo contrato da RPC', async () => {
-    expect(await gravar()).toEqual({ status: 200, corpo: { ok: true } });
-    expect(rpc).toHaveBeenCalledExactlyOnceWith('registrar_aderencia_dia', {
-      p_dia: CORPO.dia, p_payload: { logs: CORPO.logs, notes: CORPO.notes },
-    });
+  it('falha da transação devolve erro explícito e nenhum recibo de sucesso',async()=>{
+    await falhar();try{expect(await gravar(p())).toEqual({status:503,body:{error:'falha_atomica'}});expect(await linhas()).toHaveLength(0);expect((await fixture.db.query('select * from app_private.sync_recibos')).rows).toHaveLength(0);}finally{await fixture.db.exec('drop trigger fixture_fault on logs');}
   });
-  it('não recebe identidade do corpo: a RPC resolve auth.uid()', async () => {
-    await gravar({ ...CORPO, user_id: 'outro-usuario' });
-    expect(rpc.mock.calls[0]![1]).toEqual({
-      p_dia: CORPO.dia, p_payload: { logs: CORPO.logs, notes: CORPO.notes },
-    });
+  it('entrada inválida é recusada antes do banco',async()=>{expect((await gravar({...p(),dia:'10/09/2026'})).status).toBe(422);expect((await gravar(p({cafe:'inventado'}))).status).toBe(422);expect(await linhas()).toHaveLength(0);});
+  it('campos independentes mesclam; o mesmo campo divergente pergunta sem perder nota',async()=>{
+    await gravar(p({cafe:'seguiu'},{cafe:'nota'}));expect((await gravar(p({almoco:'fora'}))).status).toBe(200);
+    expect((await gravar(p({cafe:'fora'}))).body).toMatchObject({tipo:'CONFLITO'});
+    expect((await linhas())[0]!.payload).toMatchObject({logs:{cafe:'seguiu',almoco:'fora'},notes:{cafe:'nota'}});
   });
-  it('falha da RPC vira 500 explícito', async () => {
-    rpc.mockResolvedValue({ error: { code: '42501' } });
-    expect(await gravar()).toEqual({ status: 500, corpo: { error: 'falha_gravacao' } });
+  it('falha não vaza exceção e retry do MESMO ID conclui uma vez',async()=>{
+    const id=crypto.randomUUID();await falhar();try{const r=await POST(pedido('ADERENCIA',p(),CONTA_A,id));expect(r.status).toBe(503);expect(await r.text()).not.toContain('segredo-fixture');}finally{await fixture.db.exec('drop trigger fixture_fault on logs');}
+    expect((await POST(pedido('ADERENCIA',p(),CONTA_A,id))).status).toBe(200);expect((await POST(pedido('ADERENCIA',p(),CONTA_A,id))).status).toBe(200);expect(await linhas()).toHaveLength(1);
   });
-  it('entrada inválida é recusada antes do banco', async () => {
-    expect((await gravar({ dia: '10/09/2026', logs: {}, notes: {} })).status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+  it('401 e 503 de autenticação são distintos e não gravam nem alegam exclusão',async()=>{
+    for(const status of [401,503]){fixture.erroAuth=status;const r=await gravar(p());expect(r.status).toBe(status);expect(JSON.stringify(r.body)).not.toMatch(/exclu|segredo/);}fixture.erroAuth=0;expect(await linhas()).toHaveLength(0);
   });
-
-  it('504 upstream é registrado sem dados pessoais e não vira sucesso nem retry de escrita', async () => {
-    rpc.mockResolvedValue({ error: { message: 'dado-saude-privado', details: 'token-secreto' }, status: 504 });
-    expect(await gravar()).toEqual({ status: 500, corpo: { error: 'falha_gravacao' } });
-    expect(rpc).toHaveBeenCalledTimes(1);
-    expect(console.error).toHaveBeenCalledTimes(1);
-    const evento = JSON.parse(vi.mocked(console.error).mock.calls[0]![0] as string);
-    expect(evento).toEqual({ evento: 'aderencia_falhou', etapa: 'rpc', status: 500, upstreamStatus: 504, duracaoMs: expect.any(Number) });
-    expect(evento.duracaoMs).toBeGreaterThanOrEqual(0);
-    expect(JSON.stringify(evento)).not.toMatch(/u1|2026-09|seguiu|saude|token|cafe/);
-  });
-
-  it('exceção de transporte mantém resposta de falha controlada sem vazar a exceção', async () => {
-    rpc.mockRejectedValue(new Error('segredo-na-url'));
-    expect(await gravar()).toEqual({ status: 500, corpo: { error: 'falha_gravacao' } });
-    expect(rpc).toHaveBeenCalledTimes(1);
-    expect(console.error).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(vi.mocked(console.error).mock.calls[0]![0] as string)).toEqual({ evento: 'aderencia_falhou', etapa: 'rpc', status: 500, duracaoMs: expect.any(Number) });
-  });
-
-  it('distingue recusa de autenticação de falha da RPC sem alegar a causa do 401', async () => {
-    contexto.mockResolvedValue(NextResponse.json({ error: 'nao_autenticado' }, { status: 401 }));
-    expect(await gravar()).toEqual({ status: 401, corpo: { error: 'nao_autenticado' } });
-    expect(rpc).not.toHaveBeenCalled();
-    expect(JSON.parse(vi.mocked(console.error).mock.calls[0]![0] as string)).toEqual({ evento: 'aderencia_falhou', etapa: 'autenticacao', status: 401, duracaoMs: expect.any(Number) });
-  });
-
-  it('sucesso não emite evento de falha', async () => {
-    expect((await gravar()).status).toBe(200);
-    expect(console.error).not.toHaveBeenCalled();
-  });
+  it('sucesso não emite logs pessoais',async()=>{const spy=vi.spyOn(console,'error');try{expect((await gravar(p())).status).toBe(200);expect(spy).not.toHaveBeenCalled();}finally{spy.mockRestore();}});
 });
